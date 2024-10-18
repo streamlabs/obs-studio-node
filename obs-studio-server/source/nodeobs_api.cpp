@@ -831,20 +831,17 @@ void addModulePaths()
 
 static void listEncoders(obs_encoder_type type)
 {
-	constexpr uint32_t hide_flags = OBS_ENCODER_CAP_DEPRECATED |
-									OBS_ENCODER_CAP_INTERNAL;
+	constexpr uint32_t hide_flags = OBS_ENCODER_CAP_DEPRECATED | OBS_ENCODER_CAP_INTERNAL;
 
 	size_t idx = 0;
 	const char *encoder_type;
 
 	while (obs_enum_encoder_types(idx++, &encoder_type)) {
-		if (obs_get_encoder_caps(encoder_type) & hide_flags ||
-			obs_get_encoder_type(encoder_type) != type) {
+		if (obs_get_encoder_caps(encoder_type) & hide_flags || obs_get_encoder_type(encoder_type) != type) {
 			continue;
 		}
 
-		blog(LOG_INFO, "\t- %s (%s)", encoder_type,
-				obs_encoder_get_display_name(encoder_type));
+		blog(LOG_INFO, "\t- %s (%s)", encoder_type, obs_encoder_get_display_name(encoder_type));
 	}
 };
 

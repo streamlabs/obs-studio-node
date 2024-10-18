@@ -1362,7 +1362,7 @@ void OBS_service::LoadRecordingPreset_Lossy(const char *encoderId)
 
 const char *get_simple_output_encoder(const char *encoder)
 {
-    if (strcmp(encoder, SIMPLE_ENCODER_X264) == 0) {
+	if (strcmp(encoder, SIMPLE_ENCODER_X264) == 0) {
 		return "obs_x264";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU) == 0) {
 		return "obs_x264";
@@ -1377,11 +1377,9 @@ const char *get_simple_output_encoder(const char *encoder)
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
 		return "av1_texture_amf";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) {
-		return EncoderAvailable("jim_nvenc") ? "jim_nvenc"
-						     : "ffmpeg_nvenc";
+		return EncoderAvailable("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC) == 0) {
-		return EncoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc"
-							  : "ffmpeg_hevc_nvenc";
+		return EncoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1) == 0) {
 		return "jim_av1_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_H264) == 0) {
