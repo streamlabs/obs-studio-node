@@ -1525,31 +1525,40 @@ export function createSources(sources: SourceInfo[]): IInput[] {
     if (Array.isArray(sources)) {
         sources.forEach(function (source) {
             let newSource: IInput | null = null;
+
             try {
+                // Attempt to create a new source
                 newSource = obs.Input.create(source.type, source.name, source.settings);
             } catch (error) {
-                console.error(`[OSN] Failed to create input: ${error}`);
+                // Log the error with additional context
+                console.error(`[OSN] Failed to create input for source "${source.name}" with type "${source.type}":`, error);
+                // Optionally, you can include a custom event or logging function here
             }
 
             if (newSource) {
+                // Apply additional settings if the input was successfully created
                 if (newSource.audioMixers) {
                     newSource.muted = (source.muted != null) ? source.muted : false;
                     newSource.volume = (source.volume != null) ? source.volume : 1;
-                    newSource.syncOffset =
-                    (source.syncOffset != null) ? source.syncOffset : {sec: 0, nsec: 0};
+                    newSource.syncOffset = (source.syncOffset != null) ? source.syncOffset : {sec: 0, nsec: 0};
                 }
+
                 newSource.deinterlaceMode = source.deinterlaceMode;
                 newSource.deinterlaceFieldOrder = source.deinterlaceFieldOrder;
                 items.push(newSource);
 
+                // Process filters for the source
                 const filters = source.filters;
                 if (Array.isArray(filters)) {
                     filters.forEach(function (filter) {
                         let ObsFilter: IFilter | null = null;
+
                         try {
+                            // Attempt to create a filter
                             ObsFilter = obs.Filter.create(filter.type, filter.name, filter.settings);
                         } catch (error) {
-                            console.error(`[OSN] Failed to create filter: ${error}`);
+                            // Log the error with filter context
+                            console.error(`[OSN] Failed to create filter "${filter.name}" for source "${source.name}" with type "${filter.type}":`, error);
                         }
 
                         if (ObsFilter) {
@@ -1560,7 +1569,8 @@ export function createSources(sources: SourceInfo[]): IInput[] {
                     });
                 }
             } else {
-                console.warn(`[OSN] Input creation failed for source: ${source.name}`);
+                // Log a warning if the source creation failed
+                console.warn(`[OSN] Input creation failed for source: ${source.name} (type: ${source.type})`);
             }
         });
     } else {
