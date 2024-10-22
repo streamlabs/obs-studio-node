@@ -1525,21 +1525,19 @@ export function createSources(sources: SourceInfo[]): IInput[] {
     if (Array.isArray(sources)) {
         sources.forEach(function (source) {
             let newSource: IInput | null = null;
-
             try {
                 newSource = obs.Input.create(source.type, source.name, source.settings);
             } catch (error) {
-                console.error(`[OSN] Failed to create input for source "${source.name}":`, error instanceof Error ? error.message : error);
-                return; // Skip the rest of this iteration if input creation fails
+                console.error(`[OSN] Failed to create input: ${error}`);
             }
 
             if (newSource) {
                 if (newSource.audioMixers) {
-                    newSource.muted = source.muted ?? false;
-                    newSource.volume = source.volume ?? 1;
-                    newSource.syncOffset = source.syncOffset ?? { sec: 0, nsec: 0 };
+                    newSource.muted = (source.muted != null) ? source.muted : false;
+                    newSource.volume = (source.volume != null) ? source.volume : 1;
+                    newSource.syncOffset =
+                    (source.syncOffset != null) ? source.syncOffset : {sec: 0, nsec: 0};
                 }
-
                 newSource.deinterlaceMode = source.deinterlaceMode;
                 newSource.deinterlaceFieldOrder = source.deinterlaceFieldOrder;
                 items.push(newSource);
@@ -1548,15 +1546,14 @@ export function createSources(sources: SourceInfo[]): IInput[] {
                 if (Array.isArray(filters)) {
                     filters.forEach(function (filter) {
                         let ObsFilter: IFilter | null = null;
-
                         try {
                             ObsFilter = obs.Filter.create(filter.type, filter.name, filter.settings);
-                        } catch (filterError) {
-                            console.error(`[OSN] Failed to create filter "${filter.name}" for source "${source.name}":`, filterError instanceof Error ? filterError.message : filterError);
+                        } catch (error) {
+                            console.error(`[OSN] Failed to create filter: ${error}`);
                         }
 
                         if (ObsFilter) {
-                            ObsFilter.enabled = filter.enabled ?? true;
+                            ObsFilter.enabled = (filter.enabled != null) ? filter.enabled : true;
                             newSource.addFilter(ObsFilter);
                             ObsFilter.release();
                         }
