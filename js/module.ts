@@ -1855,6 +1855,14 @@ export interface IAudioTrackFactory {
     saveLegacySettings(): void;
 }
 
+export const enum VCamOutputType {
+	Invalid,
+	SceneOutput,
+	SourceOutput,
+	ProgramView,
+	PreviewOutput,
+};
+
 // Initialization and other stuff which needs local data.
 const __dirnameApple = __dirname + '/bin';
 if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {

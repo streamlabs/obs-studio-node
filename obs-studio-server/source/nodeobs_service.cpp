@@ -26,6 +26,7 @@
 #include "shared.hpp"
 #include "utility.hpp"
 #include <osn-video.hpp>
+#include "osn-vcam.hpp"
 
 #ifdef __APPLE__
 #include <sys/types.h>
@@ -40,7 +41,15 @@ std::vector<obs_output_t *> streamingOutput = {nullptr, nullptr};
 obs_output_t *recordingOutput = nullptr;
 obs_output_t *replayBufferOutput = nullptr;
 
-obs_output_t *virtualWebcamOutput = nullptr;
+// Virtual cam
+OBSOutputAutoRelease virtualCam;
+bool vcamEnabled = false;
+bool virtualCamActive = false;
+VCamConfig vcamConfig;
+obs_view_t *virtualCamView = nullptr;
+video_t *virtualCamVideo = nullptr;
+obs_scene_t *vCamSourceScene = nullptr;
+obs_sceneitem_t *vCamSourceSceneItem = nullptr;
 
 obs_encoder_t *audioSimpleRecordingEncoder = nullptr;
 std::vector<obs_encoder_t *> audioStreamingEncoder = {nullptr, nullptr};
@@ -87,6 +96,30 @@ OBS_service::~OBS_service() {}
 
 extern bool EncoderAvailable(const std::string &encoder);
 
+static void logVCamChanged(const VCamConfig &config, bool starting)
+{
+	const char *action = starting ? "Starting" : "Changing";
+
+	switch (config.type) {
+	case VCamOutputType::Invalid:
+		break;
+	case VCamOutputType::ProgramView:
+		blog(LOG_INFO, "%s Virtual Camera output to Program", action);
+		break;
+	case VCamOutputType::PreviewOutput:
+		blog(LOG_INFO, "%s Virtual Camera output to Preview", action);
+		break;
+	case VCamOutputType::SceneOutput:
+		blog(LOG_INFO, "%s Virtual Camera output to Scene : %s", action,
+		     config.scene.c_str());
+		break;
+	case VCamOutputType::SourceOutput:
+		blog(LOG_INFO, "%s Virtual Camera output to Source : %s",
+		     action, config.source.c_str());
+		break;
+	}
+}
+
 void OBS_service::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("NodeOBS_Service");
@@ -110,11 +143,9 @@ void OBS_service::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastReplay", std::vector<ipc::type>{}, OBS_service_getLastReplay));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastRecording", std::vector<ipc::type>{}, OBS_service_getLastRecording));
 
-	cls->register_function(
-		std::make_shared<ipc::function>("OBS_service_createVirtualWebcam", std::vector<ipc::type>{ipc::type::String}, OBS_service_createVirtualWebcam));
-	cls->register_function(std::make_shared<ipc::function>("OBS_service_removeVirtualWebcam", std::vector<ipc::type>{}, OBS_service_removeVirtualWebcam));
-	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualWebcam", std::vector<ipc::type>{}, OBS_service_startVirtualWebcam));
-	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualWebcan", std::vector<ipc::type>{}, OBS_service_stopVirtualWebcan));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualCam", std::vector<ipc::type>{}, OBS_service_startVirtualCam));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualCam", std::vector<ipc::type>{}, OBS_service_stopVirtualCam));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String}, OBS_service_updateVirtualCam));
 
 	srv.register_collection(cls);
 }
@@ -2200,7 +2231,13 @@ void OBS_service::UpdateFFmpegCustomOutput(void)
 	}
 
 	obs_output_set_mixer(recordingOutput, aTrack - 1);
-	obs_output_set_media(recordingOutput, obs_video_mix_get(0, OBS_RECORDING_VIDEO_RENDERING), obs_get_audio());
+	obs_core_video_mix_t* video_mix = obs_video_mix_get(0, OBS_RECORDING_VIDEO_RENDERING);
+
+	if (video_mix) {
+		obs_output_set_media(recordingOutput, obs_video_mix_get_video(video_mix), obs_get_audio());
+	} else {
+		blog(LOG_ERROR, "UpdateFFmpegCustomOutput - no video mix for OBS_RECORDING_VIDEO_RENDERING");
+	}
 	obs_output_update(recordingOutput, settings);
 
 	obs_data_release(settings);
@@ -2478,15 +2515,12 @@ void OBS_service::setReplayBufferOutput(obs_output_t *output)
 
 obs_output_t *OBS_service::getVirtualWebcamOutput(void)
 {
-	return virtualWebcamOutput;
+	return virtualCam.Get();
 }
 
 void OBS_service::setVirtualWebcamOutput(obs_output_t *output)
 {
-	if (virtualWebcamOutput)
-		obs_output_release(virtualWebcamOutput);
-
-	virtualWebcamOutput = output;
+	virtualCam = output;
 }
 
 void OBS_service::updateStreamingOutput(StreamServiceId serviceId)
@@ -2808,58 +2842,236 @@ void OBS_service::waitReleaseWorker()
 	}
 }
 
-void OBS_service::OBS_service_createVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+bool OBS_service::VirtualCamActive()
 {
-	virtualWebcamOutput = nullptr;
-	std::string name = args[0].value_str;
-	if (name.empty())
-		return;
+	if (vcamEnabled) {
+		return obs_output_active(virtualCam);
+	}
 
-	struct obs_video_info ovi = {0};
-	obs_get_video_info(&ovi);
-
-	obs_data_t *settings = obs_data_create();
-	obs_data_set_string(settings, "name", name.c_str());
-	obs_data_set_int(settings, "width", ovi.output_width);
-	obs_data_set_int(settings, "height", ovi.output_height);
-	obs_data_set_double(settings, "fps", ovi.fps_num);
-
-#ifdef WIN32
-	const char *outputType = "virtualcam_output";
-#elif __APPLE__
-	const char *outputType = "virtual_output";
-#endif
-	virtualWebcamOutput = obs_output_create(outputType, "Virtual Webcam", settings, NULL);
-	obs_data_release(settings);
+	return false;
 }
 
-void OBS_service::OBS_service_removeVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void OBS_service::DestroyVirtualCamView()
 {
-	if (!virtualWebcamOutput)
+	blog(LOG_INFO, "DestroyVirtualCamView");
+	if (vcamConfig.type == VCamOutputType::ProgramView) {
+		virtualCamVideo = nullptr;
 		return;
+	}
 
-	obs_output_release(virtualWebcamOutput);
-	virtualWebcamOutput = nullptr;
+	obs_view_remove(virtualCamView);
+	obs_view_set_source(virtualCamView, 0, nullptr);
+	virtualCamVideo = nullptr;
+
+	obs_view_destroy(virtualCamView);
+	virtualCamView = nullptr;
+
+	DestroyVirtualCameraScene();
 }
 
-void OBS_service::OBS_service_startVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void OBS_service::DestroyVirtualCameraScene()
 {
-	if (!virtualWebcamOutput)
+	if (!vCamSourceScene)
 		return;
 
-	if (obs_output_start(virtualWebcamOutput))
-		blog(LOG_INFO, "Successfully started the Virtual Webcam Output");
-	else
-		blog(LOG_ERROR, "Failed to start the Virtual Webcam Output");
+	obs_deactivate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
+	obs_scene_release(vCamSourceScene);
+	vCamSourceScene = nullptr;
+	vCamSourceSceneItem = nullptr;
 }
 
-void OBS_service::OBS_service_stopVirtualWebcan(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void OBS_service::UpdateVirtualCamOutputSource()
 {
-	if (!virtualWebcamOutput)
+	if (!vcamEnabled || !virtualCamView)
 		return;
 
-	obs_output_stop(virtualWebcamOutput);
+	OBSSourceAutoRelease source;
+
+	switch (vcamConfig.type) {
+	case VCamOutputType::Invalid:
+	case VCamOutputType::ProgramView:
+		DestroyVirtualCameraScene();
+		return;
+	case VCamOutputType::PreviewOutput: {
+		// is not supported yet (Studio Mode VCam)
+		break;
+	}
+	case VCamOutputType::SceneOutput:
+		DestroyVirtualCameraScene();
+		source = obs_get_source_by_name(vcamConfig.scene.c_str());
+		obs_activate_scene_on_backstage(source);
+		break;
+	case VCamOutputType::SourceOutput:
+		OBSSourceAutoRelease s = obs_get_source_by_name(vcamConfig.source.c_str());
+
+		if (!vCamSourceScene) {
+			vCamSourceScene = obs_scene_create_private("vcam_source");
+			obs_activate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
+		}
+
+		source = obs_source_get_ref(obs_scene_get_source(vCamSourceScene));
+
+		if (vCamSourceSceneItem &&
+		    (obs_sceneitem_get_source(vCamSourceSceneItem) != s)) {
+			obs_sceneitem_remove(vCamSourceSceneItem);
+			vCamSourceSceneItem = nullptr;
+		}
+
+		if (!vCamSourceSceneItem) {
+			vCamSourceSceneItem = obs_scene_add(vCamSourceScene, s);
+
+			obs_sceneitem_set_bounds_type(vCamSourceSceneItem,
+						      OBS_BOUNDS_SCALE_INNER);
+			obs_sceneitem_set_bounds_alignment(vCamSourceSceneItem,
+							   OBS_ALIGN_CENTER);
+
+			const struct vec2 size = {
+				(float)obs_source_get_width(source),
+				(float)obs_source_get_height(source),
+			};
+			obs_sceneitem_set_bounds(vCamSourceSceneItem, &size);
+		}
+		break;
+	}
+
+	OBSSourceAutoRelease current = obs_view_get_source(virtualCamView, 0);
+	if (source != current) {
+		obs_view_set_source(virtualCamView, 0, source);
+	}
 }
+
+void OBS_service::StartVirtualCam() {
+	blog(LOG_INFO, "StartVirtualCam");
+
+	if (!virtualCam) {
+		virtualCam = obs_output_create(VIRTUAL_CAM_ID, "Virtual Webcam", nullptr, nullptr);
+		vcamEnabled = (obs_get_output_flags(VIRTUAL_CAM_ID) & OBS_OUTPUT_VIDEO) != 0;
+	}
+
+	if (VirtualCamActive()) {
+		return;
+	}
+
+	if (!vcamEnabled) {
+		return;
+	}
+
+	const bool typeIsProgram = vcamConfig.type == VCamOutputType::ProgramView;
+
+	if (!virtualCamView && !typeIsProgram) {
+		virtualCamView = obs_view_create();
+	}
+
+	if (vCamSourceScene) {
+		obs_activate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
+	}
+
+	UpdateVirtualCamOutputSource();
+
+	if (!virtualCamVideo) {
+		virtualCamVideo = typeIsProgram ? obs_get_video()
+						: obs_view_add(virtualCamView);
+
+		if (!virtualCamVideo) {
+			blog(LOG_ERROR, "Failed to create virtual camera video");
+			return;
+		}
+	}
+
+	obs_output_set_media(virtualCam, virtualCamVideo, obs_get_audio());
+
+	bool success = obs_output_start(virtualCam);
+	if (!success) {
+		const char *error = obs_output_get_last_error(virtualCam);
+		blog(LOG_ERROR, "Virtual Camera output start failed. Error: '%s'", error);
+		DestroyVirtualCamView();
+	}
+
+	virtualCamActive = true;
+	logVCamChanged(vcamConfig, true);
+}
+
+void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	if (virtualCamActive) {
+		return;
+	}
+
+	StartVirtualCam();
+}
+
+void OBS_service::StopVirtualCam() {
+	blog(LOG_INFO, "StopVirtualCam");
+
+	virtualCamActive = false;
+
+	if (vCamSourceScene) {
+		obs_deactivate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
+	}
+
+	if (vcamEnabled) {
+		obs_output_stop(virtualCam);
+	}
+}
+
+void OBS_service::OBS_service_stopVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	if (!virtualCamActive) {
+		return;
+	}
+
+	StopVirtualCam();
+	// TODO: There might be better solution for this, but this is how it's done inside OBS.
+	std::this_thread::sleep_for(std::chrono::milliseconds(100));
+	DestroyVirtualCamView();
+
+	DeactivateSources();
+}
+
+void OBS_service::DeactivateSources() {
+	if (vcamConfig.type == VCamOutputType::SceneOutput) {
+		OBSSourceAutoRelease source = obs_get_source_by_name(vcamConfig.scene.c_str());
+		if (source) {
+			obs_deactivate_scene_on_backstage(source);
+		}
+	}
+}
+
+void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+	const auto outputType = static_cast<VCamOutputType>(args[0].value_union.i32);
+	const auto objectName = args[1].value_str;
+
+	blog(LOG_INFO, "OBS_service_updateVirtualCam - %d, '%s'", outputType, objectName.c_str());
+
+	DeactivateSources();
+
+	const bool needRestart = vcamConfig.type != outputType;
+	vcamConfig.type = outputType;
+
+	if (outputType == VCamOutputType::SceneOutput) {
+		vcamConfig.scene = objectName;
+	} else if (outputType == VCamOutputType::SourceOutput) {
+		vcamConfig.source = objectName;
+	}
+
+	if (!virtualCamActive) {
+		return;
+	}
+
+	if (needRestart) {
+		// Synchronization via sleep is an approach taken from OBS, here we are just following their best practices
+		StopVirtualCam();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		DestroyVirtualCamView();
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		StartVirtualCam();
+	} else {
+		UpdateVirtualCamOutputSource();
+	}
+
+	logVCamChanged(vcamConfig, false);
+}
+
 void OBS_service::stopAllOutputs()
 {
 	if (isStreamingOutputActive(StreamServiceId::Main))

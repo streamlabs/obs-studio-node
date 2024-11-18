@@ -167,6 +167,7 @@ private:
 	static std::vector<SubCategory> getAudioSettings();
 	static std::vector<SubCategory> getVideoSettings();
 	static std::vector<SubCategory> getAdvancedSettings();
+	static std::vector<SubCategory> getVirtualCamSettings();
 
 	// Save each category
 	static void saveGeneralSettings(std::vector<SubCategory> generalSettings, std::string pathConfigDirectory);
@@ -175,6 +176,7 @@ private:
 	static void saveAudioSettings(std::vector<SubCategory> audioSettings);
 	static void saveVideoSettings(std::vector<SubCategory> videoSettings);
 	static void saveAdvancedSettings(std::vector<SubCategory> advancedSettings);
+	static void saveVirtualCamSettings(std::vector<SubCategory> settings);
 
 	static SubCategory serializeSettingsData(const std::string &nameSubCategory, std::vector<std::vector<std::pair<std::string, ipc::value>>> &entries,
 						 config_t *config, const std::string &section, bool isVisible, bool isEnabled);
