@@ -3042,7 +3042,9 @@ void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, con
 
 	blog(LOG_INFO, "OBS_service_updateVirtualCam - %d, '%s'", outputType, objectName.c_str());
 
-	DeactivateSources();
+	if (virtualCamActive) {
+		DeactivateSources();
+	}
 
 	const bool needRestart = vcamConfig.type != outputType;
 	vcamConfig.type = outputType;
