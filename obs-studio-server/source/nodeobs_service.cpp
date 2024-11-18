@@ -110,12 +110,10 @@ static void logVCamChanged(const VCamConfig &config, bool starting)
 		blog(LOG_INFO, "%s Virtual Camera output to Preview", action);
 		break;
 	case VCamOutputType::SceneOutput:
-		blog(LOG_INFO, "%s Virtual Camera output to Scene : %s", action,
-		     config.scene.c_str());
+		blog(LOG_INFO, "%s Virtual Camera output to Scene : %s", action, config.scene.c_str());
 		break;
 	case VCamOutputType::SourceOutput:
-		blog(LOG_INFO, "%s Virtual Camera output to Source : %s",
-		     action, config.source.c_str());
+		blog(LOG_INFO, "%s Virtual Camera output to Source : %s", action, config.source.c_str());
 		break;
 	}
 }
@@ -145,7 +143,8 @@ void OBS_service::Register(ipc::server &srv)
 
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualCam", std::vector<ipc::type>{}, OBS_service_startVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualCam", std::vector<ipc::type>{}, OBS_service_stopVirtualCam));
-	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String}, OBS_service_updateVirtualCam));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String},
+							       OBS_service_updateVirtualCam));
 
 	srv.register_collection(cls);
 }
@@ -2231,7 +2230,7 @@ void OBS_service::UpdateFFmpegCustomOutput(void)
 	}
 
 	obs_output_set_mixer(recordingOutput, aTrack - 1);
-	obs_core_video_mix_t* video_mix = obs_video_mix_get(0, OBS_RECORDING_VIDEO_RENDERING);
+	obs_core_video_mix_t *video_mix = obs_video_mix_get(0, OBS_RECORDING_VIDEO_RENDERING);
 
 	if (video_mix) {
 		obs_output_set_media(recordingOutput, obs_video_mix_get_video(video_mix), obs_get_audio());
@@ -2911,8 +2910,7 @@ void OBS_service::UpdateVirtualCamOutputSource()
 
 		source = obs_source_get_ref(obs_scene_get_source(vCamSourceScene));
 
-		if (vCamSourceSceneItem &&
-		    (obs_sceneitem_get_source(vCamSourceSceneItem) != s)) {
+		if (vCamSourceSceneItem && (obs_sceneitem_get_source(vCamSourceSceneItem) != s)) {
 			obs_sceneitem_remove(vCamSourceSceneItem);
 			vCamSourceSceneItem = nullptr;
 		}
@@ -2920,10 +2918,8 @@ void OBS_service::UpdateVirtualCamOutputSource()
 		if (!vCamSourceSceneItem) {
 			vCamSourceSceneItem = obs_scene_add(vCamSourceScene, s);
 
-			obs_sceneitem_set_bounds_type(vCamSourceSceneItem,
-						      OBS_BOUNDS_SCALE_INNER);
-			obs_sceneitem_set_bounds_alignment(vCamSourceSceneItem,
-							   OBS_ALIGN_CENTER);
+			obs_sceneitem_set_bounds_type(vCamSourceSceneItem, OBS_BOUNDS_SCALE_INNER);
+			obs_sceneitem_set_bounds_alignment(vCamSourceSceneItem, OBS_ALIGN_CENTER);
 
 			const struct vec2 size = {
 				(float)obs_source_get_width(source),
@@ -2940,7 +2936,8 @@ void OBS_service::UpdateVirtualCamOutputSource()
 	}
 }
 
-void OBS_service::StartVirtualCam() {
+void OBS_service::StartVirtualCam()
+{
 	blog(LOG_INFO, "StartVirtualCam");
 
 	if (!virtualCam) {
@@ -2969,8 +2966,7 @@ void OBS_service::StartVirtualCam() {
 	UpdateVirtualCamOutputSource();
 
 	if (!virtualCamVideo) {
-		virtualCamVideo = typeIsProgram ? obs_get_video()
-						: obs_view_add(virtualCamView);
+		virtualCamVideo = typeIsProgram ? obs_get_video() : obs_view_add(virtualCamView);
 
 		if (!virtualCamVideo) {
 			blog(LOG_ERROR, "Failed to create virtual camera video");
@@ -3000,7 +2996,8 @@ void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, cons
 	StartVirtualCam();
 }
 
-void OBS_service::StopVirtualCam() {
+void OBS_service::StopVirtualCam()
+{
 	blog(LOG_INFO, "StopVirtualCam");
 
 	virtualCamActive = false;
@@ -3028,7 +3025,8 @@ void OBS_service::OBS_service_stopVirtualCam(void *data, const int64_t id, const
 	DeactivateSources();
 }
 
-void OBS_service::DeactivateSources() {
+void OBS_service::DeactivateSources()
+{
 	if (vcamConfig.type == VCamOutputType::SceneOutput) {
 		OBSSourceAutoRelease source = obs_get_source_by_name(vcamConfig.scene.c_str());
 		if (source) {
@@ -3037,7 +3035,8 @@ void OBS_service::DeactivateSources() {
 	}
 }
 
-void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {
+void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
 	const auto outputType = static_cast<VCamOutputType>(args[0].value_union.i32);
 	const auto objectName = args[1].value_str;
 

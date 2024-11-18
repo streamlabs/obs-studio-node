@@ -3797,7 +3797,7 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 		}
 
 		OBS_API::setAudioDeviceMonitoring();
-	}  else if (nameCategory.compare("Virtual Webcam") == 0) {
+	} else if (nameCategory.compare("Virtual Webcam") == 0) {
 		saveVirtualCamSettings(settings);
 	}
 	return ret;
