@@ -941,4 +941,11 @@ export interface IAudioTrackFactory {
     importLegacySettings(): void;
     saveLegacySettings(): void;
 }
+export declare const enum VCamOutputType {
+	Invalid,
+	SceneOutput,
+	SourceOutput,
+	ProgramView,
+	PreviewOutput,
+};
 export declare const NodeObs: any;

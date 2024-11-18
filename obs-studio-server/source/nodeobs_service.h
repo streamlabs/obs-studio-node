@@ -145,10 +145,9 @@ public:
 	static void OBS_service_splitFile(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
-	static void OBS_service_createVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static void OBS_service_removeVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static void OBS_service_startVirtualWebcam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static void OBS_service_stopVirtualWebcan(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_service_startVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_service_stopVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 private:
 	static bool startStreaming(StreamServiceId serviceId);
@@ -170,6 +169,14 @@ private:
 	static void UpdateStreamingSettings_amd(obs_data_t *settings, int bitrate);
 	static void UpdateRecordingSettings_amd_cqp(int cqp);
 	static void updateVideoRecordingEncoderSettings(void);
+
+	static bool VirtualCamActive();
+	static void UpdateVirtualCamOutputSource();
+	static void DestroyVirtualCameraScene();
+	static void DestroyVirtualCamView();
+	static void StopVirtualCam();
+	static void StartVirtualCam();
+	static void DeactivateSources();
 
 public:
 	// Service

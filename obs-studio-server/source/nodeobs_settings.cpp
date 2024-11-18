@@ -3632,6 +3632,22 @@ std::vector<SubCategory> OBS_settings::getAdvancedSettings()
 	return advancedSettings;
 }
 
+std::vector<SubCategory> OBS_settings::getVirtualCamSettings()
+{
+	std::vector<SubCategory> settings;
+	std::vector<std::vector<std::pair<std::string, ipc::value>>> entries;
+
+	entries.push_back(createSettingEntry("OutputType", "OBS_PROPERTY_INT", "Virtual camera output type", "", 0, 3, 1));
+	settings.push_back(serializeSettingsData("OutputType", entries, ConfigManager::getInstance().getBasic(), "Virtual Webcam", true, true));
+	entries.clear();
+
+	entries.push_back(createSettingEntry("OutputSelection", "OBS_PROPERTY_EDIT_TEXT", "Virtual camera output selection"));
+	settings.push_back(serializeSettingsData("OutputSelection", entries, ConfigManager::getInstance().getBasic(), "Virtual Webcam", true, true));
+	entries.clear();
+
+	return settings;
+}
+
 void OBS_settings::saveAdvancedSettings(std::vector<SubCategory> advancedSettings)
 {
 	uint32_t index = 0;
@@ -3702,6 +3718,22 @@ void OBS_settings::saveAdvancedSettings(std::vector<SubCategory> advancedSetting
 	MemoryManager::GetInstance().updateSourcesCache();
 }
 
+void OBS_settings::saveVirtualCamSettings(std::vector<SubCategory> settings)
+{
+	SubCategory sc = settings.at(0);
+
+	Parameter outputType = sc.params.at(0);
+	uint64_t *ot_value = reinterpret_cast<uint64_t *>(outputType.currentValue.data());
+	config_set_uint(ConfigManager::getInstance().getBasic(), "Virtual Webcam", "OutputType", *ot_value);
+
+	sc = settings.at(1);
+	Parameter outputSelection = sc.params.at(0);
+	std::string os(outputSelection.currentValue.data(), outputSelection.currentValue.size());
+	config_set_string(ConfigManager::getInstance().getBasic(), "Virtual Webcam", "OutputSelection", os.c_str());
+
+	config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+}
+
 std::vector<SubCategory> OBS_settings::getSettings(std::string nameCategory, CategoryTypes &type)
 {
 	std::vector<SubCategory> settings;
@@ -3720,6 +3752,8 @@ std::vector<SubCategory> OBS_settings::getSettings(std::string nameCategory, Cat
 		settings = getVideoSettings();
 	} else if (nameCategory.compare("Advanced") == 0) {
 		settings = getAdvancedSettings();
+	} else if (nameCategory.compare("Virtual Webcam") == 0) {
+		settings = getVirtualCamSettings();
 	}
 
 	return settings;
@@ -3763,6 +3797,8 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 		}
 
 		OBS_API::setAudioDeviceMonitoring();
+	}  else if (nameCategory.compare("Virtual Webcam") == 0) {
+		saveVirtualCamSettings(settings);
 	}
 	return ret;
 }

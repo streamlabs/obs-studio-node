@@ -67,10 +67,10 @@ void OBS_service_splitFile(const Napi::CallbackInfo &info);
 int getServiceIdByName(std::string serviceName);
 std::string getServiceNameById(int serviceId);
 
-Napi::Value OBS_service_createVirtualWebcam(const Napi::CallbackInfo &info);
-Napi::Value OBS_service_removeVirtualWebcam(const Napi::CallbackInfo &info);
-Napi::Value OBS_service_startVirtualWebcam(const Napi::CallbackInfo &info);
-Napi::Value OBS_service_stopVirtualWebcam(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_startVirtualCam(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_stopVirtualCam(const Napi::CallbackInfo &info);
+Napi::Value OBS_service_updateVirtualCam(const Napi::CallbackInfo &info);
+
 Napi::Value OBS_service_installVirtualCamPlugin(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_isVirtualCamPluginInstalled(const Napi::CallbackInfo &info);
