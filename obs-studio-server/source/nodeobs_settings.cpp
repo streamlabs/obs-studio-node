@@ -1050,9 +1050,9 @@ std::vector<EncoderSettings> encoders_set = {
 	// QuickSync H.264 (v2, new)
 	{"QuickSync H.264", "obs_qsv11_v2", "Hardware (QSV, H.264)", "qsv", "obs_qsv11_v2", true, true, true, false, true, false},
 	// QuickSync AV1
-	{"QuickSync AV1", "obs_qsv11_av1", "Hardware (QSV, AV1)", "obs_qsv11_av1", "", true, true, true, false, true, false},
+	{"QuickSync AV1", "obs_qsv11_av1", "", "", "", true, true, true, false, true, false},
 	// QuickSync HEVC
-	{"QuickSync HEVC", "obs_qsv11_hevc", "Hardware (QSV, HEVC)", "obs_qsv11_hevc", "", true, true, true, false, true, false},
+	{"QuickSync HEVC", "obs_qsv11_hevc", "", "", "", true, true, true, false, true, false},
 	// NVIDIA NVENC H.264
 	{"NVIDIA NVENC H.264", "ffmpeg_nvenc", "NVIDIA NVENC H.264", "nvenc", "ffmpeg_nvenc", true, true, true, false, true, true},
 	// NVIDIA NVENC H.264 (new)
@@ -1077,9 +1077,9 @@ std::vector<EncoderSettings> encoders_set = {
 	// AMD HW AV1
 	{"AMD HW AV1", "amd_av1", "Hardware (AMD, AV1)", "av1", "amd_av1", true, true, true, true, true, false},
 	// AOM AV1
-	{"AOM AV1", "ffmpeg_aom_av1", "AOM AV1", "ffmpeg_aom_av1", "", true, true, true, false, true, false},
+	{"AOM AV1", "ffmpeg_aom_av1", "", "", "", true, true, true, false, true, false},
 	// SVT-AV1
-	{"SVT-AV1", "ffmpeg_svt_av1", "SVT-AV1", "ffmpeg_svt_av1", "", true, true, true, false, true, false}};
+	{"SVT-AV1", "ffmpeg_svt_av1", "", "", "", true, true, true, false, true, false}};
 
 void OBS_settings::getSimpleAvailableEncoders(std::vector<std::pair<std::string, ipc::value>> *list, bool recording, const std::string &container)
 {
