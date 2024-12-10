@@ -207,16 +207,27 @@ void osn::Volmeter::getAudioData(uint64_t id, std::vector<ipc::value> &rval)
 {
 	std::unique_lock<std::mutex> ulockMutex(mtx);
 
+	// Client expects that we send at least some minimal data related to the volmeter back
+	const auto createMinimalResponse = [&]() {
+		rval.push_back(ipc::value(""));
+		rval.push_back(ipc::value(2));
+		rval.push_back(ipc::value(true));
+	};
+
 	auto meter = Manager::GetInstance().find(id);
 	if (!meter) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Meter reference.");
+		createMinimalResponse();
+		blog(LOG_ERROR, "Invalid AudioMeter reference: %" PRIu64, id);
+		return;
 	}
 
 	std::unique_lock<std::mutex> ulock(meter->current_data_mtx);
 
 	const auto source = osn::Source::Manager::GetInstance().find(meter->uid_source);
 	if (!source) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Volmeter source not found.");
+		createMinimalResponse();
+		blog(LOG_ERROR, "Volmeter source not found.: %" PRIu64, meter->uid_source);
+		return;
 	}
 
 	bool isMuted = obs_source_muted(source);
