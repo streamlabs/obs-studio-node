@@ -1376,7 +1376,7 @@ const char *get_simple_output_encoder(const char *encoder)
 		return "h265_texture_amf";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
 		return "av1_texture_amf";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) {
+	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
 		return EncoderAvailable("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC) == 0) {
 		return EncoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
@@ -1387,6 +1387,8 @@ const char *get_simple_output_encoder(const char *encoder)
 	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC) == 0) {
 		return "com.apple.videotoolbox.videoencoder.ave.hevc";
 	}
+
+	blog(LOG_WARNING, "get_simple_output_encoder - encoder %s is not found, creating default one", encoder);
 
 	return "obs_x264";
 }
