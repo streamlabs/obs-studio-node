@@ -247,20 +247,13 @@ static void StopTwitchSoundtrackAudio(osn::Streaming *streaming)
 
 void UpdateStreamingSettings_amd(obs_data_t *settings, int bitrate)
 {
-	// Static Properties
-	obs_data_set_int(settings, "Usage", 0);
-	obs_data_set_int(settings, "Profile", 100); // High
-
-	// Rate Control Properties
-	obs_data_set_int(settings, "RateControlMethod", 3);
-	obs_data_set_int(settings, "Bitrate.Target", bitrate);
-	obs_data_set_int(settings, "FillerData", 1);
-	obs_data_set_int(settings, "VBVBuffer", 1);
-	obs_data_set_int(settings, "VBVBuffer.Size", bitrate);
-
-	// Picture Control Properties
-	obs_data_set_double(settings, "KeyframeInterval", 2.0);
-	obs_data_set_int(settings, "BFrame.Pattern", 0);
+	obs_data_set_string(settings, "profile", "high");
+	obs_data_set_string(settings, "preset", "quality");
+	obs_data_set_string(settings, "rate_control", "CBR");
+	obs_data_set_int(settings, "bitrate", bitrate);
+	obs_data_set_int(settings, "keyint_sec", 2);
+	obs_data_set_int(settings, "cqp", 20);
+	obs_data_set_int(settings, "bf", 3);
 }
 
 void osn::SimpleStreaming::UpdateEncoders()
@@ -280,7 +273,7 @@ void osn::SimpleStreaming::UpdateEncoders()
 	uint32_t aBitrate = obs_data_get_int(audioEncSettings, "bitrate");
 
 	std::string id = obs_encoder_get_id(videoEncoder);
-	if (id.compare("amd_amf_h264") == 0)
+	if (id.compare("h264_texture_amf") == 0)
 		UpdateStreamingSettings_amd(videoEncSettings, vBitrate);
 
 	obs_data_set_string(videoEncSettings, "rate_control", "CBR");
@@ -442,7 +435,7 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
 		encIdOBS = "obs_qsv11";
 	} else if (strcmp(encId, SIMPLE_ENCODER_AMD) == 0 || strcmp(encId, ADVANCED_ENCODER_AMD) == 0) {
 		presetType = "AMDPreset";
-		encIdOBS = "amd_amf_h264";
+		encIdOBS = "h264_texture_amf";
 	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
 		presetType = "NVENCPreset";
 		encIdOBS = "ffmpeg_nvenc";
@@ -549,7 +542,7 @@ void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder
 	if (strcmp(encIdOBS, "obs_qsv11") == 0) {
 		presetType = "QSVPreset";
 		encId = SIMPLE_ENCODER_QSV;
-	} else if (strcmp(encIdOBS, "amd_amf_h264") == 0) {
+	} else if (strcmp(encIdOBS, "h264_texture_amf") == 0) {
 		presetType = "AMDPreset";
 		encId = SIMPLE_ENCODER_AMD;
 	} else if (strcmp(encIdOBS, "ffmpeg_nvenc") == 0) {

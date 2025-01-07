@@ -165,7 +165,7 @@ void autoConfig::TestHardwareEncoding(void)
 			hardwareEncodingAvailable = jimnvencAvailable = true;
 		else if (strcmp(id, "obs_qsv11") == 0)
 			hardwareEncodingAvailable = qsvAvailable = true;
-		else if (strcmp(id, "amd_amf_h264") == 0)
+		else if (strcmp(id, "h264_texture_amf") == 0)
 			hardwareEncodingAvailable = vceAvailable = true;
 		else if (strcmp(id, APPLE_HARDWARE_VIDEO_ENCODER) == 0 || strcmp(id, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0)
 			hardwareEncodingAvailable = appleHWAvailable = true;
@@ -1255,7 +1255,7 @@ inline const char *GetEncoderId(Encoder enc)
 	case Encoder::QSV:
 		return "obs_qsv11";
 	case Encoder::AMD:
-		return "amd_amf_h264";
+		return "h264_texture_amf";
 	case Encoder::appleHW:
 		return APPLE_HARDWARE_VIDEO_ENCODER;
 	case Encoder::appleHWM1:

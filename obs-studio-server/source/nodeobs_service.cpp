@@ -1864,7 +1864,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 			} else if (strcmp(encoder, SIMPLE_ENCODER_AMD) == 0 || strcmp(encoder, ADVANCED_ENCODER_AMD) == 0) {
 				presetType = "AMDPreset";
 				UpdateStreamingSettings_amd(h264Settings, videoBitrate);
-				encoderID = "amd_amf_h264";
+				encoderID = "h264_texture_amf";
 			} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ADVANCED_ENCODER_NVENC) == 0) {
 				presetType = "NVENCPreset";
 				encoderID = "ffmpeg_nvenc";
@@ -2322,41 +2322,23 @@ void UpdateRecordingSettings_apple(int quality)
 
 void OBS_service::UpdateStreamingSettings_amd(obs_data_t *settings, int bitrate)
 {
-	// Static Properties
-	obs_data_set_int(settings, "Usage", 0);
-	obs_data_set_int(settings, "Profile", 100); // High
-
-	// Rate Control Properties
-	obs_data_set_int(settings, "RateControlMethod", 3);
-	obs_data_set_int(settings, "Bitrate.Target", bitrate);
-	obs_data_set_int(settings, "FillerData", 1);
-	obs_data_set_int(settings, "VBVBuffer", 1);
-	obs_data_set_int(settings, "VBVBuffer.Size", bitrate);
-
-	// Picture Control Properties
-	obs_data_set_double(settings, "KeyframeInterval", 2.0);
-	obs_data_set_int(settings, "BFrame.Pattern", 0);
+	obs_data_set_string(settings, "profile", "high");
+	obs_data_set_string(settings, "preset", "quality");
+	obs_data_set_string(settings, "rate_control", "CBR");
+	obs_data_set_int(settings, "bitrate", bitrate);
+	obs_data_set_int(settings, "keyint_sec", 2);
+	obs_data_set_int(settings, "cqp", 20);
+	obs_data_set_int(settings, "bf", 3);
 }
 
 void OBS_service::UpdateRecordingSettings_amd_cqp(int cqp)
 {
 	obs_data_t *settings = obs_data_create();
 
-	// Static Properties
-	obs_data_set_int(settings, "Usage", 0);
-	obs_data_set_int(settings, "Profile", 100); // High
-
-	// Rate Control Properties
-	obs_data_set_int(settings, "RateControlMethod", 0);
-	obs_data_set_int(settings, "QP.IFrame", cqp);
-	obs_data_set_int(settings, "QP.PFrame", cqp);
-	obs_data_set_int(settings, "QP.BFrame", cqp);
-	obs_data_set_int(settings, "VBVBuffer", 1);
-	obs_data_set_int(settings, "VBVBuffer.Size", 100000);
-
-	// Picture Control Properties
-	obs_data_set_double(settings, "KeyframeInterval", 2.0);
-	obs_data_set_int(settings, "BFrame.Pattern", 0);
+	obs_data_set_string(settings, "rate_control", "CQP");
+	obs_data_set_string(settings, "profile", "high");
+	obs_data_set_string(settings, "preset", "quality");
+	obs_data_set_int(settings, "cqp", cqp);
 
 	// Update and release
 	obs_encoder_update(videoRecordingEncoder, settings);
