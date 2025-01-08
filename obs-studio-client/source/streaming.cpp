@@ -86,7 +86,7 @@ void osn::Streaming::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call(className, "SetVideoContext", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	conn->call(className, "SetVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
 }
 Napi::Value osn::Streaming::GetVideoEncoder(const Napi::CallbackInfo &info)
 {

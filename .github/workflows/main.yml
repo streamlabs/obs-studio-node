@@ -22,7 +22,7 @@ env:
   SLGenerator: Visual Studio 17 2022
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 30.2.4sl7
+  LibOBSVersion: 30.2.4sl12
   PACKAGE_NAME: osn
 
 jobs:
@@ -117,7 +117,7 @@ jobs:
 
   win64:
     name: 'Windows 64-bit'
-    runs-on: windows-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         ReleaseName: [release]
@@ -151,8 +151,10 @@ jobs:
           submodules: 'recursive'
       - name: Get the version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-        shell: bash
+        run: |
+          $version = $env:GITHUB_REF -replace 'refs/tags/', ''
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        shell: pwsh
       - name: Install dependencies
         run: |
           yarn install --immutable --immutable-cache --check-cache
@@ -169,49 +171,6 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-      - name: Cache build
-        uses: actions/cache@v3
-        with:
-          path: |
-            ${{env.SLBUILDDIRECTORY}}
-            tests/
-          key: ${{ runner.os }}-build-${{ matrix.ReleaseName }}-${{ github.sha }}
-
-  win64_tests:
-    name: 'Windows 64-bit tests'
-    runs-on: windows-latest
-    needs: [win64]
-    strategy:
-      matrix:
-        ReleaseName: [release]
-        include:
-        - ReleaseName: release
-          ReleaseConfig: RelWithDebInfo
-    env:
-      OS_TAG: "win64"
-    steps:
-      - name: 'Add msbuild to PATH'
-        uses: microsoft/setup-msbuild@v1
-      - name: 'Checkout'
-        uses: actions/checkout@v3
-        with:
-          submodules: 'recursive'
-      - name: Get the version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-        shell: bash
-      - name: Install dependencies
-        run: |
-          yarn install --immutable --immutable-cache --check-cache
-          yarn add electron@${{env.ElectronVersion}} -D
-
-      - name: Get build from cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            ${{env.SLBUILDDIRECTORY}}
-            tests/
-          key: ${{ runner.os }}-build-${{ matrix.ReleaseName }}-${{ github.sha }}
 
       - name: 'Run tests'
         continue-on-error: false
