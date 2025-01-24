@@ -117,7 +117,7 @@ jobs:
 
   win64:
     name: 'Windows 64-bit'
-    runs-on: self-hosted
+    runs-on: windows-latest
     strategy:
       matrix:
         ReleaseName: [release]
