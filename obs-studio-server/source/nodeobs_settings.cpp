@@ -1357,16 +1357,17 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 	obs_properties_t *encoderProperties = obs_encoder_properties(encoder);
 	obs_property_t *property = obs_properties_first(encoderProperties);
 
+	std::string bitrate_param_name = "bitrate";
 	OBSData service_default_settings;
 	if (applyServiceSettings && obs_encoder_get_type(encoder) == OBS_ENCODER_VIDEO) {
 		service_default_settings = obs_data_create();
 		// INT_MAX value is needed to get actual upper bound of service-default bitrate
-		obs_data_set_int(service_default_settings, "bitrate", INT_MAX);
+		obs_data_set_int(service_default_settings, bitrate_param_name.c_str(), INT_MAX);
 		obs_service_apply_encoder_settings(OBS_service::getService(StreamServiceId::Main), service_default_settings, nullptr);
 	}
 
-	Parameter param;
 	while (property) {
+		Parameter param;
 		param.name = obs_property_name(property);
 		obs_property_type typeProperty = obs_property_get_type(property);
 
@@ -1396,6 +1397,9 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 			param.minVal = obs_property_int_min(property);
 			param.maxVal = obs_property_int_max(property);
 			param.stepVal = obs_property_int_step(property);
+			if (param.name == bitrate_param_name) {
+				param.maxVal = INT_MAX;
+			}
 			break;
 		}
 		case OBS_PROPERTY_FLOAT: {
@@ -1589,7 +1593,7 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 						param.sizeOfCurrentValue = val_len;
 					} else if (obsType == OBS_DATA_NUMBER) {
 						const auto obs_val = obs_data_item_get_int(data_item);
-						if (param.name == "bitrate") {
+						if (param.name == bitrate_param_name) {
 							param.visible = true;
 							int64_t cur_settings_value = obs_data_get_int(settings, param.name.c_str());
 
@@ -1623,7 +1627,7 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 			// Restoring back prev value if any
 			const auto vbitrate_abs_max = obs_data_get_int(settings, "vbitrate_abs_max");
 			obs_data_erase(settings, "vbitrate_abs_max");
-			if (param.name == "bitrate" && vbitrate_abs_max) {
+			if (param.name == bitrate_param_name && vbitrate_abs_max) {
 				param.maxVal = vbitrate_abs_max;
 			}
 		}
