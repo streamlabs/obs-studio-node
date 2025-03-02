@@ -168,10 +168,12 @@ void globalCallback::worker()
 		if (!conn)
 			return;
 
-		std::unique_lock lock(globalCallback::mtx_volmeters);
+		size_t volmeters_size = 0; 
 		std::vector<char> volmeters_ids;
 		{
 			uint32_t index = 0;
+			std::unique_lock lock(globalCallback::mtx_volmeters);
+			size_t volmeters_size = volmeters.size();
 			volmeters_ids.resize(sizeof(uint64_t) * volmeters.size());
 			for (auto vol : volmeters) {
 				*reinterpret_cast<uint64_t *>(volmeters_ids.data() + index) = vol;
@@ -210,7 +212,7 @@ void globalCallback::worker()
 			index++;
 
 			auto volmeterDataArray = new VolmeterDataArray;
-			for (auto vol : volmeters) {
+			while(volmeters_size--) {
 				VolmeterData *item = new VolmeterData{{}, {}, {}};
 
 				item->source_name = response[index++].value_str;
