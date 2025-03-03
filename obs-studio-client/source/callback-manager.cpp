@@ -168,7 +168,7 @@ void globalCallback::worker()
 		if (!conn)
 			return;
 
-		size_t volmeters_size = 0; 
+		size_t volmeters_size = 0;
 		std::vector<char> volmeters_ids;
 		{
 			uint32_t index = 0;
@@ -212,7 +212,7 @@ void globalCallback::worker()
 			index++;
 
 			auto volmeterDataArray = new VolmeterDataArray;
-			while(volmeters_size--) {
+			while (volmeters_size--) {
 				VolmeterData *item = new VolmeterData{{}, {}, {}};
 
 				item->source_name = response[index++].value_str;
