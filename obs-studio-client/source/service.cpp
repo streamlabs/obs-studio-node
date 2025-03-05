@@ -28,15 +28,15 @@ Napi::FunctionReference osn::Service::constructor;
 Napi::Object osn::Service::Init(Napi::Env env, Napi::Object exports)
 {
 	Napi::HandleScope scope(env);
-	Napi::Function func = DefineClass(
-		env, "Service",
-		{StaticMethod("types", &osn::Service::Types), StaticMethod("destroy", &osn::Service::Destroy), StaticMethod("create", &osn::Service::Create),
-		 InstanceMethod("update", &osn::Service::Update),
+	Napi::Function func =
+		DefineClass(env, "Service",
+			    {StaticMethod("types", &osn::Service::Types), StaticMethod("destroy", &osn::Service::Destroy),
+			     StaticMethod("create", &osn::Service::Create), InstanceMethod("update", &osn::Service::Update),
 
-		 InstanceAccessor("name", &osn::Service::GetName, nullptr), InstanceAccessor("properties", &osn::Service::GetProperties, nullptr),
-		 InstanceAccessor("settings", &osn::Service::GetSettings, nullptr),
+			     InstanceAccessor("name", &osn::Service::GetName, nullptr), InstanceAccessor("properties", &osn::Service::GetProperties, nullptr),
+			     InstanceAccessor("settings", &osn::Service::GetSettings, nullptr),
 
-		 StaticAccessor("legacySettings", &osn::Service::GetLegacySettings, &osn::Service::SetLegacySettings)});
+			     StaticAccessor("legacySettings", &osn::Service::GetLegacySettings, &osn::Service::SetLegacySettings)});
 	exports.Set("Service", func);
 	osn::Service::constructor = Napi::Persistent(func);
 	osn::Service::constructor.SuppressDestruct();
