@@ -173,7 +173,7 @@ void globalCallback::worker()
 		{
 			uint32_t index = 0;
 			std::unique_lock lock(globalCallback::mtx_volmeters);
-			size_t volmeters_size = volmeters.size();
+			volmeters_size = volmeters.size();
 			volmeters_ids.resize(sizeof(uint64_t) * volmeters.size());
 			for (auto vol : volmeters) {
 				*reinterpret_cast<uint64_t *>(volmeters_ids.data() + index) = vol;
