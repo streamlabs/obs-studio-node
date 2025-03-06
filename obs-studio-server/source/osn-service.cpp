@@ -32,6 +32,7 @@ void osn::Service::Register(ipc::server &srv)
 		std::make_shared<ipc::function>("Create", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String}, Create));
 	cls->register_function(std::make_shared<ipc::function>(
 		"Create", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String, ipc::type::String}, Create));
+	cls->register_function(std::make_shared<ipc::function>("Destroy", std::vector<ipc::type>{ipc::type::UInt64}, Destroy));
 	cls->register_function(std::make_shared<ipc::function>("CreatePrivate", std::vector<ipc::type>{ipc::type::String, ipc::type::String}, CreatePrivate));
 	cls->register_function(std::make_shared<ipc::function>("CreatePrivate", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String},
 							       CreatePrivate));
@@ -90,6 +91,21 @@ void osn::Service::Create(void *data, const int64_t id, const std::vector<ipc::v
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
+	AUTO_DEBUG;
+}
+
+void osn::Service::Destroy(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	obs_service_t *service = static_cast<obs_service_t *>(osn::Service::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!service) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Service reference is not valid.");
+	}
+
+	osn::Service::Manager::GetInstance().free(service);
+
+	obs_service_release(service);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

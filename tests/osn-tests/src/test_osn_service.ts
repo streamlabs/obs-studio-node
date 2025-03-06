@@ -72,6 +72,7 @@ describe(testName, () => {
             if (prop && prop.name == 'server')
                 expect(prop.details.items).to.have.lengthOf.above(1);
         }
+        osn.ServiceFactory.destroy(service);
     });
 
     it('Create rtmp custom', () => {
@@ -91,5 +92,6 @@ describe(testName, () => {
         expect(settings.key).to.equal('key', 'Error while updating the service key');
         expect(settings.username).to.equal('username', 'Error while updating the service username');
         expect(settings.password).to.equal('password', 'Error while updating the service password');
+        osn.ServiceFactory.destroy(service);
     });
 });
