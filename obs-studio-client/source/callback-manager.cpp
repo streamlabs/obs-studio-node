@@ -161,6 +161,10 @@ void globalCallback::worker()
 
 	size_t totalSleepMS = 0;
 
+	// Using a "snapshot" multithreading pattern to reduce lock time while we process data,
+	// otherwise UI hangs on start for quite a long time (dozens of seconds)
+	decltype(globalCallback::volmeters) volmeters_copy;
+
 	while (!worker_stop && !m_all_workers_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -168,14 +172,16 @@ void globalCallback::worker()
 		if (!conn)
 			return;
 
-		size_t volmeters_size = 0;
+		{
+			std::unique_lock lock(globalCallback::mtx_volmeters);
+			volmeters_copy = globalCallback::volmeters;
+		}
+
 		std::vector<char> volmeters_ids;
 		{
 			uint32_t index = 0;
-			std::unique_lock lock(globalCallback::mtx_volmeters);
-			size_t volmeters_size = volmeters.size();
-			volmeters_ids.resize(sizeof(uint64_t) * volmeters.size());
-			for (auto vol : volmeters) {
+			volmeters_ids.resize(sizeof(uint64_t) * volmeters_copy.size());
+			for (auto vol : volmeters_copy) {
 				*reinterpret_cast<uint64_t *>(volmeters_ids.data() + index) = vol;
 				index += sizeof(uint64_t);
 			}
@@ -212,7 +218,7 @@ void globalCallback::worker()
 			index++;
 
 			auto volmeterDataArray = new VolmeterDataArray;
-			while (volmeters_size--) {
+			for (auto vol : volmeters_copy) {
 				VolmeterData *item = new VolmeterData{{}, {}, {}};
 
 				item->source_name = response[index++].value_str;
