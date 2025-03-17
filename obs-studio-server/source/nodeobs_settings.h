@@ -34,9 +34,9 @@ struct Parameter {
 	std::string description;
 	std::string type;
 	std::string subType;
-	bool enabled;
-	bool masked;
-	bool visible;
+	bool enabled = false;
+	bool masked = false;
+	bool visible = false;
 	double minVal = -200;
 	double maxVal = 200;
 	double stepVal = 1;

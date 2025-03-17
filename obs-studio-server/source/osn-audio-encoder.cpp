@@ -85,7 +85,7 @@ void osn::AudioEncoder::GetBitrate(void *data, const int64_t id, const std::vect
 	}
 
 	obs_data_t *settings = obs_encoder_get_settings(audioEncoder);
-	uint32_t bitrate = obs_data_get_int(settings, "bitrate");
+	uint32_t bitrate = static_cast<uint32_t>(obs_data_get_int(settings, "bitrate"));
 	obs_data_release(settings);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));

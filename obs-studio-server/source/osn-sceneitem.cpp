@@ -581,7 +581,7 @@ void osn::SceneItem::GetTransformInfo(void *data, const int64_t id, const std::v
 	}
 
 	obs_transform_info info;
-	obs_sceneitem_get_info(item, &info);
+	obs_sceneitem_get_info2(item, &info);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(info.pos.x));
@@ -616,7 +616,7 @@ void osn::SceneItem::SetTransformInfo(void *data, const int64_t id, const std::v
 	info.bounds_alignment = args[8].value_union.ui32;
 	info.bounds.x = args[9].value_union.fp32;
 	info.bounds.y = args[10].value_union.fp32;
-	obs_sceneitem_set_info(item, &info);
+	obs_sceneitem_set_info2(item, &info);
 
 	AUTO_DEBUG;
 }

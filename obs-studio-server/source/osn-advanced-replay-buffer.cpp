@@ -223,9 +223,9 @@ void osn::IAdvancedReplayBuffer::GetLegacySettings(void *data, const int64_t id,
 
 	replayBuffer->prefix = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecRBPrefix"));
 	replayBuffer->suffix = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecRBSuffix"));
-	replayBuffer->duration = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecRBTime");
+	replayBuffer->duration = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecRBTime"));
 
-	replayBuffer->mixer = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecTracks");
+	replayBuffer->mixer = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecTracks"));
 
 	replayBuffer->usesStream = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "replayBufferUseStreamOutput");
 

@@ -144,7 +144,7 @@ static void SaveAudioSettings(obs_audio_info audio)
 
 void osn::Audio::GetLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	uint32_t sampleRate = config_get_uint(ConfigManager::getInstance().getBasic(), "Audio", "SampleRate");
+	uint64_t sampleRate = config_get_uint(ConfigManager::getInstance().getBasic(), "Audio", "SampleRate");
 	std::string channelSetup = config_get_string(ConfigManager::getInstance().getBasic(), "Audio", "ChannelSetup");
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));

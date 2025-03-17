@@ -20,7 +20,7 @@
 #include "properties.hpp"
 
 struct SceneInfo {
-	uint64_t id;
+	uint64_t id = 0;
 	std::vector<std::pair<int64_t, uint64_t>> items;
 	bool itemsOrderCached = false;
 	std::string name;

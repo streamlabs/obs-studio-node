@@ -70,7 +70,7 @@ osn::AdvancedRecording::AdvancedRecording(const Napi::CallbackInfo &info) : Napi
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -92,7 +92,7 @@ Napi::Value osn::AdvancedRecording::Create(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::AdvancedRecording::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::AdvancedRecording::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -243,7 +243,7 @@ Napi::Value osn::AdvancedRecording::GetLegacySettings(const Napi::CallbackInfo &
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::AdvancedRecording::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::AdvancedRecording::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -278,7 +278,7 @@ Napi::Value osn::AdvancedRecording::GetStreaming(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::AdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::AdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 	return instance;
 }
 

@@ -178,7 +178,7 @@ Napi::Value api::OBS_API_QueryHotkeys(const Napi::CallbackInfo &info)
 
 		object.Set(Napi::String::New(info.Env(), "HotkeyDesc"), Napi::String::New(info.Env(), hotkeyDesc));
 
-		object.Set(Napi::String::New(info.Env(), "HotkeyId"), Napi::Number::New(info.Env(), hotkeyId));
+		object.Set(Napi::String::New(info.Env(), "HotkeyId"), Napi::Number::New(info.Env(), static_cast<double>(hotkeyId)));
 
 		hotkeyInfos.Set(i, object);
 	}

@@ -21,7 +21,10 @@
 #include "osn-error.hpp"
 #include "utility-v8.hpp"
 
+#pragma warning(push, 0)
 #include <node.h>
+#pragma warning(pop)
+//#include <node.h>
 #include <sstream>
 #include <string>
 #include "shared.hpp"
@@ -476,7 +479,6 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	}
 
 	DWORD dwRet = 0;
-	DWORD cbData;
 	TCHAR buf[TOTALBYTES] = {0};
 	DWORD dwBufSize = sizeof(buf);
 	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}\\InprocServer32", 0, KEY_READ | KEY_QUERY_VALUE, &OpenResult);

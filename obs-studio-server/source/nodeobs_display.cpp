@@ -644,16 +644,7 @@ bool isNewerThanWindows7()
 	static bool versionIsHigherThan7 = false;
 	static bool versionIsChecked = false;
 	if (!versionIsChecked) {
-		OSVERSIONINFO osvi;
-		BOOL bIsWindowsXPorLater;
-
-		ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
-		osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-
-		GetVersionEx(&osvi);
-
-		versionIsHigherThan7 = ((osvi.dwMajorVersion > 6) || ((osvi.dwMajorVersion == 6) && (osvi.dwMinorVersion > 1)));
-
+		versionIsHigherThan7 = IsWindows7OrGreater();
 		versionIsChecked = true;
 	}
 	return versionIsHigherThan7;
@@ -669,7 +660,7 @@ void OBS::Display::setSizeCall(int step)
 #if defined(_WIN32)
 	int use_x, use_y;
 	int use_width, use_height;
-	const float presizes[] = {1, 1.05, 1.25, 1.5, 2.0, 3.0};
+	const double presizes[] = {1, 1.05, 1.25, 1.5, 2.0, 3.0};
 
 	switch (step) {
 	case -1:
@@ -689,8 +680,8 @@ void OBS::Display::setSizeCall(int step)
 	case 3:
 	case 4:
 	case 5:
-		use_width = float(m_gsInitData.cx) / presizes[step];
-		use_height = float(m_gsInitData.cy) / presizes[step];
+		use_width = static_cast<int>(double(m_gsInitData.cx) / presizes[step]);
+		use_height = static_cast<int>(double(m_gsInitData.cy) / presizes[step]);
 		use_x = m_position.first + (m_gsInitData.cx - use_width) / 2;
 		use_y = m_position.second + (m_gsInitData.cy - use_height) / 2;
 		break;
@@ -930,7 +921,7 @@ void OBS::Display::DrawCropOutline(float x1, float y1, float x2, float y2, vec2 
 	float ySide = (y1 == y2) ? (y1 < 0.5f ? 1.0f : -1.0f) : 0.0f;
 	float xSide = (x1 == x2) ? (x1 < 0.5f ? 1.0f : -1.0f) : 0.0f;
 
-	float dist = sqrt(pow((x1 - x2) * scale.x, 2) + pow((y1 - y2) * scale.y, 2));
+	float dist = static_cast<float>(sqrt(pow((x1 - x2) * scale.x, 2) + pow((y1 - y2) * scale.y, 2)));
 	float offX = (x2 - x1) / dist;
 	float offY = (y2 - y1) / dist;
 
@@ -1051,10 +1042,10 @@ inline void DrawGuideline(OBS::Display *dp, bool rot45, float_t x, float_t y, ma
 	vec3 up, dn, lt, rt;
 
 	if (rot45) {
-		up = {-0.2, 1.0, 0};
-		dn = {0.2, -1.0, 0};
-		lt = {-1.0, -0.2, 0};
-		rt = {1.0, 0.2, 0};
+		up = {(float)-0.2, (float)1.0, 0};
+		dn = {(float)0.2, (float)-1.0, 0};
+		lt = {(float)-1.0, (float)-0.2, 0};
+		rt = {(float)1.0, (float)0.2, 0};
 	} else {
 		up = {0, 1.0, 0};
 		dn = {0, -1.0, 0};
@@ -1195,7 +1186,6 @@ bool OBS::Display::DrawSelectedSource(obs_scene_t *scene, obs_sceneitem_t *item,
 			return true;
 	}
 
-	vec4 color;
 	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 	gs_eparam_t *solid_color = gs_effect_get_param_by_name(solid, "color");
 
@@ -1264,8 +1254,8 @@ bool OBS::Display::DrawSelectedSource(obs_scene_t *scene, obs_sceneitem_t *item,
 			vec3 alignLeft, alignTop;
 
 			if (rot45) {
-				alignLeft = {-1, -0.2, 0};
-				alignTop = {0.2, -1, 0};
+				alignLeft = {-1, (float)-0.2, 0};
+				alignTop = {(float)0.2, -1, 0};
 			} else {
 				alignLeft = {-1, 0, 0};
 				alignTop = {0, -1, 0};
@@ -1436,7 +1426,6 @@ void OBS::Display::DisplayCallback(void *displayPtr, uint32_t cx, uint32_t cy)
 	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 	gs_eparam_t *solid_color = gs_effect_get_param_by_name(solid, "color");
 	gs_technique_t *solid_tech = gs_effect_get_technique(solid, "Solid");
-	vec4 color;
 
 	if (dp->m_canvas)
 		obs_set_video_rendering_canvas(dp->m_canvas);
@@ -1602,7 +1591,7 @@ obs_source_t *OBS::Display::GetSourceForUIEffects()
 
 void OBS::Display::UpdatePreviewArea()
 {
-	int32_t offsetX = 0, offsetY = 0;
+	uint32_t offsetX = 0, offsetY = 0;
 	uint32_t sourceW = 0, sourceH = 0;
 	if (m_source) {
 		sourceW = obs_source_get_width(m_source);
@@ -1624,7 +1613,7 @@ void OBS::Display::UpdatePreviewArea()
 					     m_previewSize.first, m_previewSize.second);
 
 	offsetX = m_paddingSize;
-	offsetY = float_t(offsetX) * float_t(sourceH) / float_t(sourceW);
+	offsetY = static_cast<uint32_t>(float_t(offsetX) * float_t(sourceH) / float_t(sourceW));
 
 	m_previewOffset.first += offsetX;
 	m_previewSize.first -= offsetX * 2;

@@ -24,7 +24,7 @@ namespace osn {
 class FileOutput {
 public:
 	uint64_t uid;
-	FileOutput(){};
+	FileOutput() { uid = 0; };
 
 protected:
 	Napi::Value GetPath(const Napi::CallbackInfo &info);

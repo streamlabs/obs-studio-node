@@ -74,15 +74,15 @@ Napi::Value osn::Global::getOutputSource(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 
 	if (response[2].value_union.i32 == 0) {
-		auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+		auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 		return instance;
 	} else if (response[2].value_union.i32 == 2) {
-		auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+		auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 		return instance;
 	} else if (response[2].value_union.i32 == 3) {
-		auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+		auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 		return instance;
 	}

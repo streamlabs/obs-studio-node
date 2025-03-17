@@ -81,7 +81,7 @@ public:
 		*
 		* \param other
 		*/
-	VertexBuffer(VertexBuffer const &&other);
+	VertexBuffer(VertexBuffer const &&other) noexcept;
 
 	/*!
 		* \brief Move Assignment
@@ -89,7 +89,7 @@ public:
 		*
 		* \param other
 		*/
-	void operator=(VertexBuffer const &&other);
+	void operator=(VertexBuffer const &&other) noexcept;
 
 	void Resize(uint32_t new_size);
 

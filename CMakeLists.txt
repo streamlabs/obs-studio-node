@@ -82,6 +82,9 @@ include(FetchContent)
 if(MSVC)
 	add_definitions(/MP)
 	add_link_options(/debug:fastlink)
+	#ignore security warnings and deprecation warnings
+	add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+	add_definitions(-D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
 endif()
 
 if (WIN32)

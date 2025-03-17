@@ -78,7 +78,7 @@ osn::Transition::Transition(const Napi::CallbackInfo &info) : Napi::ObjectWrap<o
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -103,7 +103,7 @@ Napi::Value osn::Transition::Types(const Napi::CallbackInfo &info)
 	Napi::Array types = Napi::Array::New(info.Env(), count);
 
 	for (size_t idx = 0; idx < count; idx++) {
-		types.Set(idx, Napi::String::New(info.Env(), response[1 + idx].value_str));
+		types.Set(static_cast<uint32_t>(idx), Napi::String::New(info.Env(), response[1 + idx].value_str));
 	}
 
 	return types;
@@ -145,7 +145,7 @@ Napi::Value osn::Transition::Create(const Napi::CallbackInfo &info)
 
 	CacheManager<SourceDataInfo *>::getInstance().Store(response[1].value_union.ui64, name, sdi);
 
-	auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -186,7 +186,7 @@ Napi::Value osn::Transition::CreatePrivate(const Napi::CallbackInfo &info)
 
 	CacheManager<SourceDataInfo *>::getInstance().Store(response[1].value_union.ui64, name, sdi);
 
-	auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -206,7 +206,7 @@ Napi::Value osn::Transition::FromName(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Transition::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -226,12 +226,12 @@ Napi::Value osn::Transition::GetActiveSource(const Napi::CallbackInfo &info)
 
 	if (response[2].value_union.ui32 == 0) {
 		// Input
-		auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+		auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 		return instance;
 	} else if (response[2].value_union.ui32 == 3) {
 		// Scene
-		auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+		auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 		return instance;
 	}

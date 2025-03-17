@@ -21,7 +21,9 @@
 #include "osn-error.hpp"
 #include "utility-v8.hpp"
 
+#pragma warning(push, 0)
 #include <node.h>
+#pragma warning(pop)
 #include <sstream>
 #include <string>
 #include "shared.hpp"
@@ -114,7 +116,7 @@ void globalCallback::worker()
 				obj.Set("width", Napi::Number::New(env, data->items[i]->width));
 				obj.Set("height", Napi::Number::New(env, data->items[i]->height));
 				obj.Set("flags", Napi::Number::New(env, data->items[i]->flags));
-				result.Set(i, obj);
+				result.Set(static_cast<uint32_t>(i), obj);
 			}
 			jsCallback.Call({result});
 		} catch (...) {
@@ -135,13 +137,13 @@ void globalCallback::worker()
 				Napi::Array input_peak = Napi::Array::New(env);
 
 				for (size_t j = 0; j < item->magnitude.size(); j++) {
-					magnitude.Set(j, Napi::Number::New(env, item->magnitude[j]));
+					magnitude.Set(static_cast<uint32_t>(j), Napi::Number::New(env, item->magnitude[j]));
 				}
 				for (size_t j = 0; j < item->peak.size(); j++) {
-					peak.Set(j, Napi::Number::New(env, item->peak[j]));
+					peak.Set(static_cast<uint32_t>(j), Napi::Number::New(env, item->peak[j]));
 				}
 				for (size_t j = 0; j < item->input_peak.size(); j++) {
-					input_peak.Set(j, Napi::Number::New(env, item->input_peak[j]));
+					input_peak.Set(static_cast<uint32_t>(j), Napi::Number::New(env, item->input_peak[j]));
 				}
 
 				obj.Set("sourceName", Napi::String::New(env, item->source_name));
@@ -149,7 +151,7 @@ void globalCallback::worker()
 				obj.Set("peak", peak);
 				obj.Set("inputPeak", input_peak);
 
-				result.Set(i, obj);
+				result.Set(static_cast<uint32_t>(i), obj);
 			}
 
 			jsCallback.Call({result});
@@ -191,7 +193,7 @@ void globalCallback::worker()
 			uint32_t index = 1;
 
 			SourceSizeInfoData *data = new SourceSizeInfoData{{}};
-			for (int i = 2; i < (response[1].value_union.ui32 * 4) + 2; i++) {
+			for (uint32_t i = 2; i < (response[1].value_union.ui32 * 4) + 2; i++) {
 				SourceSizeInfo *item = new SourceSizeInfo;
 
 				item->name = response[i++].value_str;
@@ -230,7 +232,7 @@ void globalCallback::worker()
 						item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
 					}
 
-					index += (3 * channels);
+					index += static_cast<uint32_t>((3 * channels));
 
 					volmeterDataArray->items.emplace_back(item);
 				}

@@ -114,7 +114,7 @@ GS::VertexBuffer::VertexBuffer(VertexBuffer const &other) : VertexBuffer(other.m
 	}
 }
 
-GS::VertexBuffer::VertexBuffer(VertexBuffer const &&other)
+GS::VertexBuffer::VertexBuffer(VertexBuffer const &&other) noexcept
 {
 	// Move Constructor
 	m_capacity = other.m_capacity;
@@ -132,7 +132,7 @@ GS::VertexBuffer::VertexBuffer(VertexBuffer const &&other)
 	m_colors = other.m_colors;
 }
 
-void GS::VertexBuffer::operator=(VertexBuffer const &&other)
+void GS::VertexBuffer::operator=(VertexBuffer const &&other) noexcept
 {
 	// Move Assignment
 	/// First self-destruct (semi-destruct itself).

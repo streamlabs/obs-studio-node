@@ -63,8 +63,10 @@ void osn::Transition::Create(void *data, const int64_t id, const std::vector<ipc
 	switch (args.size()) {
 	case 4:
 		hotkeys = obs_data_create_from_json(args[3].value_str.c_str());
+		[[fallthrough]];
 	case 3:
 		settings = obs_data_create_from_json(args[2].value_str.c_str());
+		[[fallthrough]];
 	case 2:
 		name = args[1].value_str;
 		sourceId = args[0].value_str;
@@ -96,6 +98,7 @@ void osn::Transition::CreatePrivate(void *data, const int64_t id, const std::vec
 	switch (args.size()) {
 	case 3:
 		settings = obs_data_create_from_json(args[2].value_str.c_str());
+		//[[fallthrough]];
 	case 2:
 		name = args[1].value_str;
 		sourceId = args[0].value_str;

@@ -46,8 +46,8 @@ struct Property {
 	std::string description;
 	std::string long_description;
 
-	bool enabled;
-	bool visible;
+	bool enabled = false;
+	bool visible = false;
 
 	Type type;
 };
@@ -103,17 +103,17 @@ struct ListProperty : Property {
 
 	struct Item {
 		std::string name;
-		bool disabled;
+		bool disabled = false;
 
 		union {
-			int64_t value_int;
+			int64_t value_int = 0;
 			double_t value_float;
 		};
 		std::string value_str;
 	};
 
 	union {
-		int64_t current_value_int;
+		int64_t current_value_int = 0;
 		double_t current_value_float;
 	};
 	std::string current_value_str;
@@ -127,8 +127,8 @@ struct FontProperty : Property {
 	std::string face;
 	std::string style;
 	std::string path;
-	int64_t sizeF;
-	uint32_t flags;
+	int64_t sizeF = 0;
+	uint32_t flags = 0;
 };
 
 // Contrary to the name, not compatible with the ListProperty. Actually more comparable to PathProperty.

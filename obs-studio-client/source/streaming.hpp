@@ -24,7 +24,7 @@ namespace osn {
 class Streaming : public WorkerSignals {
 public:
 	uint64_t uid;
-	Streaming() : WorkerSignals(){};
+	Streaming() : WorkerSignals() { uid = 0; };
 
 protected:
 	Napi::Function signalHandler;

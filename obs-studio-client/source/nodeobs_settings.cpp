@@ -21,7 +21,10 @@
 #include "osn-error.hpp"
 #include "utility-v8.hpp"
 
+#pragma warning(push, 0)
 #include <node.h>
+#pragma warning(pop)
+//#include <node.h>
 #include <sstream>
 #include <string>
 #include "shared.hpp"
@@ -45,7 +48,7 @@ std::vector<settings::SubCategory> serializeCategory(uint32_t subCategoriesCount
 		indexData += sizeof(uint32_t);
 
 		settings::Parameter param;
-		for (int j = 0; j < *paramsCount; j++) {
+		for (uint32_t j = 0; j < *paramsCount; j++) {
 			uint64_t *sizeName = reinterpret_cast<uint64_t *>(buffer.data() + indexData);
 			indexData += sizeof(uint64_t);
 
@@ -175,13 +178,13 @@ Napi::Value settings::OBS_settings_getSettings(const Napi::CallbackInfo &info)
 					parameter.Set("currentValue", Napi::String::New(info.Env(), value));
 				} else if (params.at(j).type.compare("OBS_PROPERTY_INT") == 0) {
 					int64_t value = *reinterpret_cast<int64_t *>(params.at(j).currentValue.data());
-					parameter.Set("currentValue", Napi::Number::New(info.Env(), value));
+					parameter.Set("currentValue", Napi::Number::New(info.Env(), static_cast<double>(value)));
 					parameter.Set("minVal", Napi::Number::New(info.Env(), params.at(j).minVal));
 					parameter.Set("maxVal", Napi::Number::New(info.Env(), params.at(j).maxVal));
 					parameter.Set("stepVal", Napi::Number::New(info.Env(), params.at(j).stepVal));
 				} else if (params.at(j).type.compare("OBS_PROPERTY_UINT") == 0 || params.at(j).type.compare("OBS_PROPERTY_BITMASK") == 0) {
 					uint64_t value = *reinterpret_cast<uint64_t *>(params.at(j).currentValue.data());
-					parameter.Set("currentValue", Napi::Number::New(info.Env(), value));
+					parameter.Set("currentValue", Napi::Number::New(info.Env(), static_cast<double>(value)));
 					parameter.Set("minVal", Napi::Number::New(info.Env(), params.at(j).minVal));
 					parameter.Set("maxVal", Napi::Number::New(info.Env(), params.at(j).maxVal));
 					parameter.Set("stepVal", Napi::Number::New(info.Env(), params.at(j).stepVal));
@@ -197,7 +200,7 @@ Napi::Value settings::OBS_settings_getSettings(const Napi::CallbackInfo &info)
 				} else if (params.at(j).type.compare("OBS_PROPERTY_LIST") == 0) {
 					if (params.at(j).subType.compare("OBS_COMBO_FORMAT_INT") == 0) {
 						int64_t value = *reinterpret_cast<int64_t *>(params.at(j).currentValue.data());
-						parameter.Set("currentValue", Napi::Number::New(info.Env(), value));
+						parameter.Set("currentValue", Napi::Number::New(info.Env(), static_cast<double>(value)));
 						parameter.Set("minVal", Napi::Number::New(info.Env(), params.at(j).minVal));
 						parameter.Set("maxVal", Napi::Number::New(info.Env(), params.at(j).maxVal));
 						parameter.Set("stepVal", Napi::Number::New(info.Env(), params.at(j).stepVal));
@@ -233,7 +236,7 @@ Napi::Value settings::OBS_settings_getSettings(const Napi::CallbackInfo &info)
 
 					indexData += sizeof(int64_t);
 
-					valueObject.Set(name, Napi::Number::New(info.Env(), value));
+					valueObject.Set(name, Napi::Number::New(info.Env(), static_cast<double>(value)));
 				} else if (params.at(j).subType.compare("OBS_COMBO_FORMAT_FLOAT") == 0) {
 					uint64_t *sizeName = reinterpret_cast<uint64_t *>(params.at(j).values.data() + indexData);
 					indexData += sizeof(uint64_t);
@@ -304,7 +307,7 @@ std::vector<char> deserializeCategory(uint32_t *subCategoriesCount, uint32_t *si
 		Napi::Array parameters = subCategoryObject.Get("parameters").As<Napi::Array>();
 
 		sc.paramsCount = parameters.Length();
-		for (int j = 0; j < sc.paramsCount; j++) {
+		for (uint32_t j = 0; j < sc.paramsCount; j++) {
 			settings::Parameter param;
 			Napi::Object parameterObject = parameters.Get(j).ToObject();
 
@@ -424,7 +427,7 @@ Napi::Value settings::OBS_settings_getListCategories(const Napi::CallbackInfo &i
 	Napi::Array categories = Napi::Array::New(info.Env());
 	std::vector<std::string> settings = getListCategories();
 
-	size_t index = 0;
+	uint32_t index = 0;
 	for (auto &category : settings)
 		categories.Set(index++, Napi::String::New(info.Env(), category));
 

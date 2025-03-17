@@ -176,7 +176,7 @@ std::vector<SubCategory> serializeCategory(uint32_t subCategoriesCount, uint32_t
 		indexData += sizeof(uint32_t);
 
 		Parameter param;
-		for (int j = 0; j < *paramsCount; j++) {
+		for (uint32_t j = 0; j < *paramsCount; j++) {
 			uint64_t *sizeName = reinterpret_cast<std::uint64_t *>(buffer.data() + indexData);
 			indexData += sizeof(uint64_t);
 
@@ -415,7 +415,7 @@ SubCategory OBS_settings::serializeSettingsData(const std::string &nameSubCatego
 		sc.params.push_back(param);
 	}
 
-	sc.paramsCount = sc.params.size();
+	sc.paramsCount = static_cast<uint32_t>(sc.params.size());
 	sc.name = nameSubCategory;
 	return sc;
 }
@@ -577,7 +577,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 	streamType.masked = false;
 
 	service.params.push_back(streamType);
-	service.paramsCount = service.params.size();
+	service.paramsCount = static_cast<uint32_t>(service.params.size());
 
 	streamSettings.push_back(service);
 
@@ -694,7 +694,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 				param.sizeOfCurrentValue = strlen(bearer_token);
 			}
 			if (strcmp(obs_property_name(property), "key") == 0) {
-				const char *stream_key = obs_service_get_key(currentService);
+				const char *stream_key = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
 				formatString = "OBS_PROPERTY_EDIT_TEXT";
 
 				if (stream_key == NULL)
@@ -713,7 +713,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 				param.sizeOfCurrentValue = sizeof(show_all);
 			}
 			if (strcmp(obs_property_name(property), "server") == 0) {
-				const char *server = obs_service_get_url(currentService);
+				const char *server = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
 				if (strcmp(obs_service_get_type(currentService), "rtmp_common") == 0) {
 					formatString = "OBS_PROPERTY_LIST";
 				} else {
@@ -728,7 +728,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 				param.sizeOfCurrentValue = strlen(server);
 			}
 			if (strcmp(obs_property_name(property), "username") == 0) {
-				const char *username = obs_service_get_username(currentService);
+				const char *username = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_USERNAME);
 				formatString = "OBS_PROPERTY_EDIT_TEXT";
 
 				if (username == NULL)
@@ -739,7 +739,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 				param.sizeOfCurrentValue = strlen(username);
 			}
 			if (strcmp(obs_property_name(property), "password") == 0) {
-				const char *password = obs_service_get_password(currentService);
+				const char *password = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_PASSWORD);
 				formatString = "OBS_PROPERTY_EDIT_TEXT";
 
 				if (password == NULL)
@@ -784,7 +784,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 		param.visible = obs_property_visible(property);
 		param.enabled = isCategoryEnabled;
 
-		param.masked = formatString.compare("OBS_PROPERTY_EDIT_TEXT") == 0 && obs_proprety_text_type(property) == OBS_TEXT_PASSWORD;
+		param.masked = formatString.compare("OBS_PROPERTY_EDIT_TEXT") == 0 && obs_property_text_type(property) == OBS_TEXT_PASSWORD;
 
 		serviceConfiguration.params.push_back(param);
 
@@ -793,7 +793,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 	}
 
 	serviceConfiguration.name = "Untitled";
-	serviceConfiguration.paramsCount = serviceConfiguration.params.size();
+	serviceConfiguration.paramsCount = static_cast<uint32_t>(serviceConfiguration.params.size());
 	streamSettings.push_back(serviceConfiguration);
 
 	obs_properties_destroy(properties);
@@ -1596,10 +1596,10 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 							const auto vbitrate_abs_max = obs_data_get_int(settings, "vbitrate_abs_max");
 							if (!vbitrate_abs_max) {
 								// Contains value of '10000000' deeply hardcoded inside OBS
-								obs_data_set_int(settings, "vbitrate_abs_max", param.maxVal);
+								obs_data_set_int(settings, "vbitrate_abs_max", static_cast<long long>(param.maxVal));
 							}
 
-							param.maxVal = obs_val;
+							param.maxVal = static_cast<double>(obs_val);
 							if (cur_settings_value > obs_val) {
 								cur_settings_value = obs_val;
 								param.currentValue.resize(sizeof(cur_settings_value));
@@ -1624,7 +1624,7 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 			const auto vbitrate_abs_max = obs_data_get_int(settings, "vbitrate_abs_max");
 			obs_data_erase(settings, "vbitrate_abs_max");
 			if (param.name == "bitrate" && vbitrate_abs_max) {
-				param.maxVal = vbitrate_abs_max;
+				param.maxVal = static_cast<double>(vbitrate_abs_max);
 			}
 		}
 
@@ -2003,7 +2003,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	}
 
 	getEncoderSettings(streamingEncoder, settings, &(streamingSettings.params), index, isCategoryEnabled, applyServiceSettingsValue, false);
-	streamingSettings.paramsCount = streamingSettings.params.size();
+	streamingSettings.paramsCount = static_cast<uint32_t>(streamingSettings.params.size());
 	return streamingSettings;
 }
 
@@ -2502,7 +2502,7 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 		getEncoderSettings(recordingEncoder, settings, &(subCategoryParameters->params), index, isCategoryEnabled, false, true);
 	}
 
-	subCategoryParameters->paramsCount = subCategoryParameters->params.size();
+	subCategoryParameters->paramsCount = static_cast<uint32_t>(subCategoryParameters->params.size());
 }
 
 SubCategory OBS_settings::getAdvancedOutputRecordingSettings(config_t *config, bool isCategoryEnabled)
@@ -2567,7 +2567,7 @@ SubCategory OBS_settings::getAdvancedOutputRecordingSettings(config_t *config, b
 	getStandardRecordingSettings(&recordingSettings, config, isCategoryEnabled);
 
 	recordingSettings.name = "Recording";
-	recordingSettings.paramsCount = recordingSettings.params.size();
+	recordingSettings.paramsCount = static_cast<uint32_t>(recordingSettings.params.size());
 
 	return recordingSettings;
 }
@@ -2575,7 +2575,7 @@ SubCategory OBS_settings::getAdvancedOutputRecordingSettings(config_t *config, b
 void OBS_settings::getAdvancedOutputAudioSettings(std::vector<SubCategory> *outputSettings, config_t *config, bool isCategoryEnabled)
 {
 	std::vector<std::vector<std::pair<std::string, ipc::value>>> entries;
-	uint32_t initialSettingsIndex = outputSettings->size();
+	uint32_t initialSettingsIndex = static_cast<uint32_t>(outputSettings->size());
 
 	auto &bitrateMap = GetAACEncoderBitrateMap();
 	UpdateAudioSettings(true);

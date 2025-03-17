@@ -439,7 +439,7 @@ void osn::Video::GetLegacySettings(void *data, const int64_t id, const std::vect
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
-	uint32_t fpsType = config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType");
+	uint64_t fpsType = config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType");
 	switch (fpsType) {
 	case 0: {
 		std::string fpsCommon = config_get_string(ConfigManager::getInstance().getBasic(), "Video", "FPSCommon");

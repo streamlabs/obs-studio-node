@@ -36,7 +36,7 @@ Napi::Value osn::Streaming::GetService(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Service::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Service::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -68,7 +68,7 @@ Napi::Value osn::Streaming::GetCanvas(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Video::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Video::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -99,7 +99,7 @@ Napi::Value osn::Streaming::GetVideoEncoder(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::VideoEncoder::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::VideoEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -177,7 +177,7 @@ Napi::Value osn::Streaming::GetDelay(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Delay::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Delay::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -209,7 +209,7 @@ Napi::Value osn::Streaming::GetReconnect(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Reconnect::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Reconnect::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -241,7 +241,7 @@ Napi::Value osn::Streaming::GetNetwork(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Network::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Network::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }

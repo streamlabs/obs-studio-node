@@ -56,7 +56,8 @@ osn::Module::Module(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Modu
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
+	this->moduleId = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -80,7 +81,7 @@ Napi::Value osn::Module::Open(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Module::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Module::constructor.New({Napi::Number::New(info.Env(), static_cast<uint32_t>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -100,7 +101,7 @@ Napi::Value osn::Module::Modules(const Napi::CallbackInfo &info)
 	Napi::Array modules = Napi::Array::New(info.Env(), size);
 
 	for (uint64_t i = 2; i < (size + 2); i++)
-		modules.Set(i - 2, Napi::String::New(info.Env(), response.at(i).value_str.c_str()));
+		modules.Set(static_cast<uint32_t>(i - 2), Napi::String::New(info.Env(), response.at(i).value_str.c_str()));
 
 	return modules;
 }

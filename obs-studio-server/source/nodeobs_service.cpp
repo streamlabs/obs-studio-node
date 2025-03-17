@@ -290,7 +290,7 @@ bool OBS_service::resetAudioContext(bool reload)
 	if (reload)
 		ConfigManager::getInstance().reloadConfig();
 
-	ai.samples_per_sec = config_get_uint(ConfigManager::getInstance().getBasic(), "Audio", "SampleRate");
+	ai.samples_per_sec = static_cast<uint32_t>(config_get_uint(ConfigManager::getInstance().getBasic(), "Audio", "SampleRate"));
 	const char *channelSetupStr = config_get_string(ConfigManager::getInstance().getBasic(), "Audio", "ChannelSetup");
 
 	if (strcmp(channelSetupStr, "Mono") == 0)
@@ -1341,9 +1341,9 @@ void OBS_service::updateAudioStreamingEncoder(bool isSimpleMode, StreamServiceId
 	} else {
 		uint64_t trackIndex = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex");
 		const char *id = FindAudioEncoderFromCodec(codec);
-		int audioBitrate = GetAdvancedAudioBitrate(trackIndex - 1);
+		int audioBitrate = GetAdvancedAudioBitrate(static_cast<int>(trackIndex - 1));
 		obs_data_t *settings = obs_data_create();
-		obs_data_set_int(settings, "bitrate", audioBitrate);
+		obs_data_set_int(settings, "bitrate", static_cast<long long>(audioBitrate));
 
 		enc = obs_audio_encoder_create(id, "alt_audio_enc", nullptr, isSimpleMode ? 0 : trackIndex - 1, nullptr);
 		if (!(enc))
@@ -1985,7 +1985,7 @@ void OBS_service::updateService(StreamServiceId serviceId)
 	obs_data_t *settings = obs_service_get_settings(services[serviceId]);
 	const char *platform = obs_data_get_string(settings, "service");
 
-	const char *server = obs_service_get_url(services[serviceId]);
+	const char *server = obs_service_get_connect_info(services[serviceId], OBS_SERVICE_CONNECT_INFO_SERVER_URL);
 
 	if (platform && strcmp(platform, "Twitch") == 0) {
 		if (!server || strcmp(server, "") == 0) {
@@ -2092,7 +2092,7 @@ void OBS_service::updateRecordingAudioTracks()
 	for (size_t i = 0; i < MAX_AUDIO_MIXES; i++) {
 		if (AdvancedRecordingAudioTracks[i] && !obs_encoder_active(AdvancedRecordingAudioTracks[i])) {
 			settings[i] = obs_data_create();
-			obs_data_set_int(settings[i], "bitrate", GetAdvancedAudioBitrate(i));
+			obs_data_set_int(settings[i], "bitrate", GetAdvancedAudioBitrate(static_cast<int>(i)));
 
 			const char *name = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", configTracksNames[i]);
 			if (name)
@@ -2520,8 +2520,8 @@ void OBS_service::updateStreamingOutput(StreamServiceId serviceId)
 	}
 
 	bool reconnect = config_get_bool(ConfigManager::getInstance().getBasic(), "Output", "Reconnect");
-	int retryDelay = config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "RetryDelay");
-	int maxRetries = config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "MaxRetries");
+	uint64_t retryDelay = config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "RetryDelay");
+	uint64_t maxRetries = config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "MaxRetries");
 
 	bool useDelay = config_get_bool(ConfigManager::getInstance().getBasic(), "Output", "DelayEnable");
 	int64_t delaySec = config_get_int(ConfigManager::getInstance().getBasic(), "Output", "DelaySec");
@@ -2548,7 +2548,7 @@ void OBS_service::updateStreamingOutput(StreamServiceId serviceId)
 
 	obs_output_set_delay(streamingOutput[serviceId], useDelay ? uint32_t(delaySec) : 0, preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
 
-	obs_output_set_reconnect_settings(streamingOutput[serviceId], maxRetries, retryDelay);
+	obs_output_set_reconnect_settings(streamingOutput[serviceId], static_cast<int>(maxRetries), static_cast<int>(retryDelay));
 }
 
 std::vector<SignalInfo> streamingSignals;

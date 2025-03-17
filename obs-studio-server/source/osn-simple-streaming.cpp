@@ -220,7 +220,7 @@ static void SetupTwitchSoundtrackAudio(osn::SimpleStreaming *streaming)
 	obs_data_t *settings = obs_data_create();
 
 	obs_data_t *settingsEnc = obs_encoder_get_settings(streaming->audioEncoder);
-	uint32_t bitrate = obs_data_get_int(settingsEnc, "bitrate");
+	int64_t bitrate = obs_data_get_int(settingsEnc, "bitrate");
 	obs_data_release(settingsEnc);
 
 	obs_data_set_int(settings, "bitrate", bitrate);
@@ -269,8 +269,8 @@ void osn::SimpleStreaming::UpdateEncoders()
 
 	obs_data_t *videoEncSettings = obs_encoder_get_settings(videoEncoder);
 	obs_data_t *audioEncSettings = obs_encoder_get_settings(audioEncoder);
-	uint32_t vBitrate = obs_data_get_int(videoEncSettings, "bitrate");
-	uint32_t aBitrate = obs_data_get_int(audioEncSettings, "bitrate");
+	int vBitrate = static_cast<int>(obs_data_get_int(videoEncSettings, "bitrate"));
+	int aBitrate = static_cast<int>(obs_data_get_int(audioEncSettings, "bitrate"));
 
 	std::string id = obs_encoder_get_id(videoEncoder);
 	if (id.compare("h264_texture_amf") == 0)
@@ -476,8 +476,8 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyAudioEncoderSettings()
 {
 	obs_data_t *audioEncData = obs_data_create();
 	obs_data_set_string(audioEncData, "rate_control", "CBR");
-	obs_data_set_int(audioEncData, "bitrate",
-			 FindClosestAvailableAACBitrate(config_get_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "ABitrate")));
+	int bitrate = (static_cast<int>(config_get_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "ABitrate")));
+	obs_data_set_int(audioEncData, "bitrate", FindClosestAvailableAACBitrate(bitrate));
 
 	bool advanced = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "UseAdvanced");
 
@@ -532,7 +532,7 @@ void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder
 	const char *encIdOBS = obs_encoder_get_id(encoder);
 
 	obs_data_t *settings = obs_encoder_get_settings(encoder);
-	uint32_t bitrate = obs_data_get_int(settings, "bitrate");
+	uint64_t bitrate = obs_data_get_int(settings, "bitrate");
 	config_set_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", bitrate);
 
 	const char *custom = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "x264Settings"));
@@ -566,7 +566,7 @@ void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder
 void osn::ISimpleStreaming::SetLegacyAudioEncoderSettings(obs_encoder_t *encoder)
 {
 	obs_data_t *settings = obs_encoder_get_settings(encoder);
-	uint32_t bitrate = obs_data_get_int(settings, "bitrate");
+	uint64_t bitrate = obs_data_get_int(settings, "bitrate");
 	config_set_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "ABitrate", bitrate);
 
 	obs_data_release(settings);
