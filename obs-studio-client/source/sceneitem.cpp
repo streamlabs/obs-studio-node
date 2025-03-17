@@ -341,7 +341,7 @@ Napi::Value osn::SceneItem::GetPosition(const Napi::CallbackInfo &info)
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
 	if (sid == nullptr)
-		return;
+		return info.Env().Undefined();
 	if (!sid->posChanged) {
 		Napi::Object obj = Napi::Object::New(info.Env());
 		obj.Set("x", Napi::Number::New(info.Env(), sid->posX));

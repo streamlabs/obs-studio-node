@@ -1360,7 +1360,6 @@ BOOL ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo)
 		if (SetEvent(lpo->hEvent))
 			break;
 	default: {
-		[[fallthrough]];
 		return 0;
 	}
 	}
