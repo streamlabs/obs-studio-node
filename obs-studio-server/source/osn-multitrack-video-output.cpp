@@ -122,9 +122,6 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 			return false;
 		}
 
-		// TODO: do we need this?????
-		//obs_encoder_set_video_mix(videoStreamingEncoder[serviceId], obs_video_mix_get(videoInfo[serviceId], OBS_STREAMING_VIDEO_RENDERING));
-
 		if (!obs_encoder_set_group(encoder, encoder_group.get())) {
 			blog(LOG_ERROR, "Failed to set encoder to group");
 			return false;

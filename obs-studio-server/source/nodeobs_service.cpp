@@ -1252,7 +1252,6 @@ const char *OBS_service::getStreamOutputType(const obs_service_t *service)
 	return nullptr;
 }
 
-// TODO: extract this????
 static int GetAudioBitrate()
 {
 	const char *audio_encoder_id = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamAudioEncoder");
@@ -2158,7 +2157,7 @@ void OBS_service::updateService(StreamServiceId serviceId)
 
 	obs_output_set_service(streamingOutput[serviceId], services[serviceId]);
 }
-// TODO: reuse code from streaming file?
+
 bool OBS_service::isTwitchStream(StreamServiceId serviceId)
 {
 	OBSDataAutoRelease settings = obs_service_get_settings(services[serviceId]);
