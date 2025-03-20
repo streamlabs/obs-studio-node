@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 IF(CLANG_ANALYZE_CONFIG)
 	set(CMAKE_C_COMPILER_WORKS 1)
 	set(CMAKE_CXX_COMPILER_WORKS 1)
-	
+
 	SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -fexceptions -Xclang -fcxx-exceptions")
 ENDIF()
 
@@ -97,7 +97,7 @@ if (WIN32)
 	FetchContent_GetProperties(stackwalker)
 	if(NOT stackwalker_POPULATED)
 	FetchContent_Populate(stackwalker)
-	add_subdirectory(${stackwalker_SOURCE_DIR} ${stackwalker_BINARY_DIR})
+	add_subdirectory(${stackwalker_SOURCE_DIR} ${stackwalker_BINARY_DIR} EXCLUDE_FROM_ALL)
 	endif()
 endif()
 
@@ -112,6 +112,39 @@ FetchContent_GetProperties(nlohmannjson)
 if(NOT nlohmannjson_POPULATED)
   FetchContent_Populate(nlohmannjson)
 endif()
+
+FetchContent_Declare(
+	libcurl
+	URL https://curl.se/download/curl-7.88.1.tar.gz
+	DOWNLOAD_EXTRACT_TIMESTAMP true
+	OVERRIDE_FIND_PACKAGE
+)
+
+FetchContent_GetProperties(libcurl)
+if(NOT libcurl_POPULATED)
+  FetchContent_Populate(libcurl)
+  #message(FATAL_ERROR, "!!! ${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR}")
+  add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)
+  #set_target_properties(libcurl PROPERTIES EXCLUDE_FROM_ALL TRUE)
+endif()
+
+#FetchContent_MakeAvailable(curl)
+#find_package(curl)
+
+#FetchContent_GetProperties(curl)
+#if(NOT curl_POPULATED)
+#  FetchContent_Populate(curl)
+#  add_subdirectory(${curl_SOURCE_DIR})
+#endif()
+
+#FetchContent_MakeAvailable(curl)
+
+#find_package(curl)
+
+#target_link_libraries(${EXECUTABLE_NAME}
+#	INTERFACE
+#	CURL::libcurl CURL::curl
+#)
 
 add_subdirectory(lib-streamlabs-ipc)
 add_subdirectory(obs-studio-client)
