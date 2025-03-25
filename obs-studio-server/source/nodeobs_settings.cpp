@@ -4083,12 +4083,16 @@ void OBS_settings::OBS_settings_isEnhancedBroadcasting(void *data, const int64_t
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(config_get_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo")));
+
+	AUTO_DEBUG;
 }
 
 void OBS_settings::OBS_settings_setEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	config_set_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo", args[0].value_union.ui32);
+
+	AUTO_DEBUG;
 }
 
 void convert_nvenc_h264_presets(obs_data_t *data)
