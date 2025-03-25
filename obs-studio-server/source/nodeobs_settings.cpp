@@ -78,6 +78,11 @@ void OBS_settings::Register(ipc::server &srv)
 		std::make_shared<ipc::function>("OBS_settings_getOutputAudioDevices", std::vector<ipc::type>{}, OBS_settings_getOutputAudioDevices));
 	cls->register_function(std::make_shared<ipc::function>("OBS_settings_getVideoDevices", std::vector<ipc::type>{}, OBS_settings_getVideoDevices));
 
+	cls->register_function(
+		std::make_shared<ipc::function>("OBS_settings_isEnhancedBroadcasting", std::vector<ipc::type>{}, OBS_settings_isEnhancedBroadcasting));
+	cls->register_function(std::make_shared<ipc::function>("OBS_settings_setEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt32},
+							       OBS_settings_setEnhancedBroadcasting));
+
 	srv.register_collection(cls);
 }
 
@@ -1209,27 +1214,6 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 		const char *serviceName = obs_data_get_string(settings, "service");
 		obs_data_release(settings);
 
-		if (serviceName && strcmp(serviceName, "Twitch") == 0) {
-			bool soundtrackSourceExists = false;
-			obs_enum_sources(
-				[](void *param, obs_source_t *source) {
-					auto id = obs_source_get_id(source);
-					if (strcmp(id, "soundtrack_source") == 0) {
-						*reinterpret_cast<bool *>(param) = true;
-						return false;
-					}
-					return true;
-				},
-				&soundtrackSourceExists);
-			std::string twitchVODDesc = "Twitch VOD Track (Uses Track 2).";
-			if (soundtrackSourceExists)
-				twitchVODDesc += " Remove Twitch Soundtrack in order to enable this.";
-
-			//Twitch VOD
-			auto twitchVOD = createSettingEntry("VodTrackEnabled", "OBS_PROPERTY_BOOL", twitchVODDesc);
-			entries.push_back(twitchVOD);
-		}
-
 		//Encoder Preset
 		const char *defaultPreset;
 		const char *encoder = config_get_string(config, "SimpleOutput", "StreamEncoder");
@@ -1711,26 +1695,11 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	obs_data_release(serviceSettings);
 
 	if (serviceName && strcmp(serviceName, "Twitch") == 0) {
-		bool soundtrackSourceExists = false;
-		obs_enum_sources(
-			[](void *param, obs_source_t *source) {
-				auto id = obs_source_get_id(source);
-				if (strcmp(id, "soundtrack_source") == 0) {
-					*reinterpret_cast<bool *>(param) = true;
-					return false;
-				}
-				return true;
-			},
-			&soundtrackSourceExists);
-		std::string twitchVODDesc = "Twitch VOD";
-		if (soundtrackSourceExists)
-			twitchVODDesc += ". Remove Twitch Soundtrack in order to enable this.";
-
 		// Twitch VOD : boolean
 		Parameter twiwchVOD;
 		twiwchVOD.name = "VodTrackEnabled";
 		twiwchVOD.type = "OBS_PROPERTY_BOOL";
-		twiwchVOD.description = twitchVODDesc;
+		twiwchVOD.description = "Twitch VOD";
 
 		bool doTwiwchVOD = config_get_bool(config, "AdvOut", "VodTrackEnabled");
 
@@ -4106,6 +4075,22 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	const char *property_name = "device";
 	getDevices(source_id, property_name, rval);
 #endif
+
+	AUTO_DEBUG;
+}
+
+void OBS_settings::OBS_settings_isEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(config_get_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo")));
+
+	AUTO_DEBUG;
+}
+
+void OBS_settings::OBS_settings_setEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	config_set_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo", args[0].value_union.ui32);
 
 	AUTO_DEBUG;
 }
