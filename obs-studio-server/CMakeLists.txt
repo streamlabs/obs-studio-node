@@ -226,6 +226,7 @@ if (WIN32)
 		lib-streamlabs-ipc
 		OBS::libobs
 		dwmapi.lib
+        dxgi.lib
 	)
 	set(PROJECT_INCLUDE_PATHS
 		"${CMAKE_SOURCE_DIR}/source"
@@ -286,6 +287,15 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-input.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-module.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-module.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-configuration.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-configuration.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-data-model.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-output.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-output.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-audio-bitrate.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-audio-bitrate.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-output.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-output.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-properties.cpp"
@@ -366,12 +376,15 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/util-memory.cpp"
     "${PROJECT_SOURCE_DIR}/source/util-memory.h"
 
+    ###### json utlities ######
+    "${PROJECT_SOURCE_DIR}/source/util-json.h"
+
     ###### crash-manager ######
     "${PROJECT_SOURCE_DIR}/source/util-crashmanager.cpp"
     "${PROJECT_SOURCE_DIR}/source/util-crashmanager.h"
     "${PROJECT_SOURCE_DIR}/source/util-metricsprovider.cpp"
     "${PROJECT_SOURCE_DIR}/source/util-metricsprovider.h"
-    
+
     ###### callback-manager ######
     "${PROJECT_SOURCE_DIR}/source/callback-manager.cpp"
     "${PROJECT_SOURCE_DIR}/source/callback-manager.h"
@@ -409,12 +422,19 @@ if(WIN32)
     target_sources(${PROJECT_NAME} PUBLIC "${PROJECT_BINARY_DIR}/version.rc")
 endif()
 
+#target_link_libraries(${PROJECT_NAME} CURL::libcurl)
+target_link_libraries(${PROJECT_NAME} libcurl)
+
 if(WIN32)
     target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE_PATHS})
     target_link_libraries(${PROJECT_NAME} ${PROJECT_LIBRARIES} optimized crashpad strmiids)
 else()
     target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE_PATHS} ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
     target_link_libraries(${PROJECT_NAME} ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
+endif()
+
+if(MSVC)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
 endif()
 
 #Define the OSN_VERSION

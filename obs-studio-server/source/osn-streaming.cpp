@@ -285,20 +285,7 @@ bool osn::Streaming::isTwitchVODSupported()
 	if (serviceName && strcmp(serviceName, "Twitch") != 0)
 		return false;
 
-	bool sourceExists = false;
-	obs_enum_sources(
-		[](void *param, obs_source_t *source) {
-			auto id = obs_source_get_id(source);
-			if (strcmp(id, "soundtrack_source") == 0) {
-				*reinterpret_cast<bool *>(param) = true;
-				return false;
-			}
-			return true;
-		},
-		&sourceExists);
-
-	if (!sourceExists)
-		return false;
+	return true;
 }
 
 void osn::IStreaming::Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

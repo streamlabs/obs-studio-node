@@ -31,6 +31,7 @@ public:
 
 	static Napi::Value Types(const Napi::CallbackInfo &info);
 	static Napi::Value Create(const Napi::CallbackInfo &info);
+	static void Destroy(const Napi::CallbackInfo &info);
 
 	Napi::Value GetName(const Napi::CallbackInfo &info);
 	Napi::Value GetProperties(const Napi::CallbackInfo &info);

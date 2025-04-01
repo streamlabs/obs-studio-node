@@ -168,10 +168,12 @@ void globalCallback::worker()
 		if (!conn)
 			return;
 
-		mtx_volmeters.lock();
+		size_t volmeters_size = 0;
 		std::vector<char> volmeters_ids;
 		{
 			uint32_t index = 0;
+			std::unique_lock lock(globalCallback::mtx_volmeters);
+			volmeters_size = volmeters.size();
 			volmeters_ids.resize(sizeof(uint64_t) * volmeters.size());
 			for (auto vol : volmeters) {
 				*reinterpret_cast<uint64_t *>(volmeters_ids.data() + index) = vol;
@@ -210,7 +212,7 @@ void globalCallback::worker()
 			index++;
 
 			auto volmeterDataArray = new VolmeterDataArray;
-			for (auto vol : volmeters) {
+			while (volmeters_size--) {
 				VolmeterData *item = new VolmeterData{{}, {}, {}};
 
 				item->source_name = response[index++].value_str;
@@ -243,7 +245,6 @@ void globalCallback::worker()
 		}
 
 	do_sleep:
-		mtx_volmeters.unlock();
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
 		totalSleepMS = sleepIntervalMS - dur.count();
@@ -255,10 +256,12 @@ void globalCallback::worker()
 
 void globalCallback::add_volmeter(uint64_t id)
 {
+	std::unique_lock lock(globalCallback::mtx_volmeters);
 	volmeters.insert(id);
 }
 
 void globalCallback::remove_volmeter(uint64_t id)
 {
+	std::unique_lock lock(globalCallback::mtx_volmeters);
 	volmeters.erase(id);
 }
