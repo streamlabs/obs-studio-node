@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.13.0 FATAL_ERROR)
+﻿cmake_minimum_required(VERSION 3.24.0 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
