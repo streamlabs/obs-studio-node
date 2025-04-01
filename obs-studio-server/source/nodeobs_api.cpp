@@ -611,23 +611,23 @@ std::vector<char> registerMemoryDump(void)
 
 	//str
 	std::wstring eventName_Start = util::CrashManager::GetMemoryDumpEventName_Start();
-	size_t eventName_Start_Size = (eventName_Start.size() + 1) * sizeof(wchar_t);
+	uint32_t eventName_Start_Size = static_cast<uint32_t>((eventName_Start.size() + 1) * sizeof(wchar_t));
 
 	//str
 	std::wstring eventName_Fail = util::CrashManager::GetMemoryDumpEventName_Fail();
-	size_t eventName_Fail_Size = (eventName_Fail.size() + 1) * sizeof(wchar_t);
+	uint32_t eventName_Fail_Size = static_cast<uint32_t>((eventName_Fail.size() + 1) * sizeof(wchar_t));
 
 	//str
 	std::wstring eventName_Success = util::CrashManager::GetMemoryDumpEventName_Success();
-	size_t eventName_Success_Size = (eventName_Success.size() + 1) * sizeof(wchar_t);
+	uint32_t eventName_Success_Size = static_cast<uint32_t>((eventName_Success.size() + 1) * sizeof(wchar_t));
 
 	//str
 	std::wstring dumpPath = util::CrashManager::GetMemoryDumpPath();
-	size_t dumpPathSize = (dumpPath.size() + 1) * sizeof(wchar_t);
+	uint32_t dumpPathSize = static_cast<uint32_t>((dumpPath.size() + 1) * sizeof(wchar_t));
 
 	//str
 	std::wstring dumpName = util::CrashManager::GetMemoryDumpName();
-	size_t dumpNameSize = (dumpName.size() + 1) * sizeof(wchar_t);
+	uint32_t dumpNameSize = static_cast<uint32_t>((dumpName.size() + 1) * sizeof(wchar_t));
 
 	// Buffer
 	std::vector<char> buffer;
@@ -712,8 +712,10 @@ std::vector<char> crashedModuleInfo(const std::string &moduleName, const std::st
 
 	// Prepare
 	const std::uint8_t messageAction = crashHandlerCommand::CRASHED_MODULE_INFO;
-	size_t messageModuleNameSize = (moduleName.size() + 1) * sizeof(std::remove_reference<decltype(moduleName)>::type::value_type);
-	size_t messageBinaryPathSize = (binaryPath.size() + 1) * sizeof(std::remove_reference<decltype(binaryPath)>::type::value_type);
+	const std::uint32_t messageModuleNameSize =
+		static_cast<uint32_t>((moduleName.size() + 1) * sizeof(std::remove_reference<decltype(moduleName)>::type::value_type));
+	const std::uint32_t messageBinaryPathSize =
+		static_cast<uint32_t>((binaryPath.size() + 1) * sizeof(std::remove_reference<decltype(binaryPath)>::type::value_type));
 
 	buffer.resize(sizeof(messageAction) + sizeof(std::uint32_t) + messageModuleNameSize + sizeof(std::uint32_t) + messageBinaryPathSize);
 
