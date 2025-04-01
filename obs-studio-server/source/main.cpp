@@ -167,7 +167,6 @@ static void Shutdown(void *data, const int64_t id, const std::vector<ipc::value>
 
 int main(int argc, char *argv[])
 {
-	Sleep(10000);
 #ifdef __APPLE__
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");
 	std::string_view slobsStdErrPath("/tmp/slobs-stderr");
