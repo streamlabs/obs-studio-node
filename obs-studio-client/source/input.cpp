@@ -102,7 +102,8 @@ osn::Input::Input(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Input>
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
+	this->sourceId = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -190,7 +191,7 @@ Napi::Value osn::Input::Create(const Napi::CallbackInfo &info)
 
 	CacheManager<SourceDataInfo *>::getInstance().Store(response[1].value_union.ui64, name, sdi);
 
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<uint32_t>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -237,7 +238,7 @@ Napi::Value osn::Input::CreatePrivate(const Napi::CallbackInfo &info)
 
 	CacheManager<SourceDataInfo *>::getInstance().Store(response[1].value_union.ui64, name, sdi);
 
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 	return instance;
 }
 
@@ -248,7 +249,7 @@ Napi::Value osn::Input::FromName(const Napi::CallbackInfo &info)
 	SourceDataInfo *sdi = CacheManager<SourceDataInfo *>::getInstance().Retrieve(name);
 
 	if (sdi) {
-		auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), sdi->id)});
+		auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(sdi->id))});
 		return instance;
 	}
 
@@ -261,7 +262,7 @@ Napi::Value osn::Input::FromName(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 	instance.Set("sourceId", response[1].value_union.ui64);
 	return instance;
 }
@@ -279,7 +280,7 @@ Napi::Value osn::Input::GetPublicSources(const Napi::CallbackInfo &info)
 
 	Napi::Array arr = Napi::Array::New(info.Env(), int(response.size() - 1));
 	for (size_t idx = 1; idx < response.size(); idx++) {
-		auto object = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[idx - 1].value_union.ui64)});
+		auto object = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[idx - 1].value_union.ui64))});
 		arr[uint32_t(idx)] = object;
 	}
 
@@ -314,7 +315,7 @@ Napi::Value osn::Input::Duplicate(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 	return instance;
 }
 
@@ -552,7 +553,7 @@ Napi::Value osn::Input::Filters(const Napi::CallbackInfo &info)
 		std::vector<uint64_t> *filters = sdi->filters;
 		Napi::Array array = Napi::Array::New(info.Env(), int(filters->size()));
 		for (uint32_t i = 0; i < filters->size(); i++) {
-			auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), filters->at(i))});
+			auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(filters->at(i)))});
 			array.Set(i, instance);
 		}
 		return array;
@@ -575,7 +576,7 @@ Napi::Value osn::Input::Filters(const Napi::CallbackInfo &info)
 
 	Napi::Array array = Napi::Array::New(info.Env(), response.size() - 1);
 	for (size_t idx = 1; idx < response.size(); idx++) {
-		auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), response[idx].value_union.ui64)});
+		auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[idx].value_union.ui64))});
 		array.Set(uint32_t(idx) - 1, instance);
 
 		if (sdi)
@@ -654,7 +655,7 @@ Napi::Value osn::Input::FindFilter(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 
 	if (response.size() > 1) {
-		auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+		auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 		return instance;
 	}
 	return info.Env().Undefined();
@@ -668,7 +669,9 @@ Napi::Value osn::Input::CopyFilters(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Input", "CopyFiltersTo", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	bool ret = conn->call("Input", "CopyFiltersTo", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+
+	return Napi::Boolean::New(info.Env(), ret);
 }
 
 Napi::Value osn::Input::CallIsConfigurable(const Napi::CallbackInfo &info)
@@ -856,7 +859,7 @@ Napi::Value osn::Input::GetDuration(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui64);
+	return Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64));
 }
 
 Napi::Value osn::Input::GetTime(const Napi::CallbackInfo &info)
@@ -871,7 +874,7 @@ Napi::Value osn::Input::GetTime(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui64);
+	return Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64));
 }
 
 void osn::Input::SetTime(const Napi::CallbackInfo &info, const Napi::Value &value)
@@ -933,5 +936,5 @@ Napi::Value osn::Input::GetMediaState(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui64);
+	return Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64));
 }

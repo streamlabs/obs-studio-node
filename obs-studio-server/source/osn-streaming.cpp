@@ -325,7 +325,7 @@ void osn::Streaming::getDelayLegacySettings()
 {
 	delay = new Delay();
 	delay->enabled = config_get_bool(ConfigManager::getInstance().getBasic(), "Output", "DelayEnable");
-	delay->delaySec = config_get_int(ConfigManager::getInstance().getBasic(), "Output", "DelaySec");
+	delay->delaySec = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "Output", "DelaySec"));
 	delay->preserveDelay = config_get_bool(ConfigManager::getInstance().getBasic(), "Output", "DelayPreserve");
 	osn::IDelay::Manager::GetInstance().allocate(delay);
 }
@@ -334,8 +334,8 @@ void osn::Streaming::getReconnectLegacySettings()
 {
 	reconnect = new Reconnect();
 	reconnect->enabled = config_get_bool(ConfigManager::getInstance().getBasic(), "Output", "Reconnect");
-	reconnect->retryDelay = config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "RetryDelay");
-	reconnect->maxRetries = config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "MaxRetries");
+	reconnect->retryDelay = static_cast<uint32_t>(config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "RetryDelay"));
+	reconnect->maxRetries = static_cast<uint32_t>(config_get_uint(ConfigManager::getInstance().getBasic(), "Output", "MaxRetries"));
 	osn::IReconnect::Manager::GetInstance().allocate(reconnect);
 }
 

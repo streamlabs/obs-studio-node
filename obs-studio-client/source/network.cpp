@@ -47,7 +47,8 @@ osn::Network::Network(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Ne
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
+	this->uid = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -68,7 +69,7 @@ Napi::Value osn::Network::Create(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Network::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Network::constructor.New({Napi::Number::New(info.Env(), static_cast<uint32_t>(response[1].value_union.ui64))});
 
 	return instance;
 }

@@ -24,12 +24,12 @@ struct Parameter {
 	std::string description;
 	std::string type;
 	std::string subType;
-	bool enabled;
-	bool masked;
-	bool visible;
-	double minVal;
-	double maxVal;
-	double stepVal;
+	bool enabled = false;
+	bool masked = false;
+	bool visible = false;
+	double minVal = 0;
+	double maxVal = 0;
+	double stepVal = 0;
 	uint64_t sizeOfCurrentValue = 0;
 	std::vector<char> currentValue;
 	uint64_t sizeOfValues = 0;

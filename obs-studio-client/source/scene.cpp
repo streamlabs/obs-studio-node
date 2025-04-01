@@ -86,7 +86,8 @@ osn::Scene::Scene(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Scene>
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
+	this->sourceId = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -122,7 +123,7 @@ Napi::Value osn::Scene::Create(const Napi::CallbackInfo &info)
 	CacheManager<SourceDataInfo *>::getInstance().Store(sourceId, name, sdi);
 	CacheManager<SceneInfo *>::getInstance().Store(sourceId, name, si);
 
-	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -153,7 +154,7 @@ Napi::Value osn::Scene::CreatePrivate(const Napi::CallbackInfo &info)
 	CacheManager<SourceDataInfo *>::getInstance().Store(sourceId, name, sdi);
 	CacheManager<SceneInfo *>::getInstance().Store(sourceId, name, si);
 
-	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -178,7 +179,7 @@ Napi::Value osn::Scene::FromName(const Napi::CallbackInfo &info)
 		si->name = name;
 		CacheManager<SceneInfo *>::getInstance().Store(response[1].value_union.ui64, name, si);
 	}
-	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), si->id)});
+	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(si->id))});
 
 	return instance;
 }
@@ -205,7 +206,7 @@ Napi::Value osn::Scene::Remove(const Napi::CallbackInfo &info)
 
 Napi::Value osn::Scene::AsSource(const Napi::CallbackInfo &info)
 {
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), this->sourceId)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(this->sourceId))});
 
 	return instance;
 }
@@ -213,7 +214,7 @@ Napi::Value osn::Scene::AsSource(const Napi::CallbackInfo &info)
 Napi::Value osn::Scene::Duplicate(const Napi::CallbackInfo &info)
 {
 	std::string name = info[0].ToString().Utf8Value();
-	int duplicate_type = info[1].ToNumber().Int64Value();
+	int64_t duplicate_type = info[1].ToNumber().Int64Value();
 
 	auto conn = GetConnection(info);
 	if (!conn)
@@ -237,7 +238,7 @@ Napi::Value osn::Scene::Duplicate(const Napi::CallbackInfo &info)
 	si->id = sourceId;
 	CacheManager<SceneInfo *>::getInstance().Store(sourceId, name, si);
 
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), sourceId)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(sourceId))});
 
 	return instance;
 }
@@ -351,7 +352,7 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 
 	CacheManager<SceneItemData *>::getInstance().Store(id, sid);
 
-	auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), id)});
+	auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(id))});
 
 	return instance;
 }
@@ -380,7 +381,7 @@ Napi::Value osn::Scene::FindItem(const Napi::CallbackInfo &info)
 
 		auto itemIt = std::find_if(si->items.begin(), si->items.end(), find);
 		if (itemIt != si->items.end()) {
-			auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), itemIt->second)});
+			auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(itemIt->second))});
 
 			return instance;
 		}
@@ -402,15 +403,15 @@ Napi::Value osn::Scene::FindItem(const Napi::CallbackInfo &info)
 
 	uint64_t id = response[1].value_union.ui64;
 
-	auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), id)});
+	auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(id))});
 
 	return instance;
 }
 
 Napi::Value osn::Scene::MoveItem(const Napi::CallbackInfo &info)
 {
-	int from = info[0].ToNumber().Int64Value();
-	int to = info[1].ToNumber().Int64Value();
+	int64_t from = info[0].ToNumber().Int64Value();
+	int64_t to = info[1].ToNumber().Int64Value();
 
 	auto conn = GetConnection(info);
 	if (!conn)
@@ -490,7 +491,7 @@ Napi::Value osn::Scene::GetItemAtIndex(const Napi::CallbackInfo &info)
 
 	uint64_t id = response[1].value_union.ui64;
 
-	auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), id)});
+	auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(id))});
 
 	return instance;
 }
@@ -510,7 +511,7 @@ Napi::Value osn::Scene::GetItems(const Napi::CallbackInfo &info)
 				itemRemoved = true;
 				break;
 			}
-			auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), item.second)});
+			auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(item.second))});
 			array.Set(uint32_t(index++), instance);
 		}
 		if (!itemRemoved) {
@@ -530,7 +531,7 @@ Napi::Value osn::Scene::GetItems(const Napi::CallbackInfo &info)
 	Napi::Array array = Napi::Array::New(info.Env(), int((response.size()) - 1) / 2);
 	size_t index = 0;
 	for (size_t i = 1; i < response.size(); i++) {
-		auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), response[i++].value_union.ui64)});
+		auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[i++].value_union.ui64))});
 		array.Set(uint32_t(index++), instance);
 	}
 
@@ -564,7 +565,7 @@ Napi::Value osn::Scene::GetItemsInRange(const Napi::CallbackInfo &info)
 
 	Napi::Array array = Napi::Array::New(info.Env(), int(response.size() - 1));
 	for (size_t i = 1; i < response.size(); i++) {
-		auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), response[i].value_union.ui64)});
+		auto instance = osn::SceneItem::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[i].value_union.ui64))});
 		array.Set(uint32_t(i - 1), instance);
 	}
 

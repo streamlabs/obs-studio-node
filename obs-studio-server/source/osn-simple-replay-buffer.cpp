@@ -195,7 +195,7 @@ void osn::ISimpleReplayBuffer::GetLegacySettings(void *data, const int64_t id, c
 
 	replayBuffer->prefix = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecRBPrefix"));
 	replayBuffer->suffix = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecRBSuffix"));
-	replayBuffer->duration = config_get_int(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecRBTime");
+	replayBuffer->duration = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecRBTime"));
 
 	replayBuffer->usesStream = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "replayBufferUseStreamOutput");
 

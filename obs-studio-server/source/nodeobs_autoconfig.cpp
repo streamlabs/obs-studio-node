@@ -546,7 +546,7 @@ void autoConfig::TestBandwidthThread(void)
 			if (serviceName.compare("") == 0)
 				serviceName = obs_data_get_string(currentServiceSettings, "service");
 
-			key = obs_service_get_key(currentService);
+			key = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
 			if (key.empty()) {
 				sendErrorMessage("invalid_stream_settings");
 				gotError = true;
@@ -592,7 +592,7 @@ void autoConfig::TestBandwidthThread(void)
 
 	if (serviceSelected == Service::YouTube) {
 		serverName = "Stream URL";
-		server = obs_service_get_url(currentService);
+		server = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
 	}
 
 	obs_data_set_string(service_settings, "service", serviceName.c_str());

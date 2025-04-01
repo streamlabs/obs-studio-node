@@ -78,7 +78,8 @@ osn::SceneItem::SceneItem(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
+	this->itemId = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -100,7 +101,7 @@ Napi::Value osn::SceneItem::GetSource(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 	uint64_t sourceId = response[1].value_union.ui64;
 
-	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), sourceId)});
+	auto instance = osn::Input::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(sourceId))});
 
 	return instance;
 }
@@ -117,7 +118,7 @@ Napi::Value osn::SceneItem::GetScene(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 	uint64_t sourceId = response[1].value_union.ui64;
 
-	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), sourceId)});
+	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(sourceId))});
 
 	return instance;
 }
@@ -148,7 +149,9 @@ Napi::Value osn::SceneItem::IsVisible(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->visibleChanged) {
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->visibleChanged) {
 		return Napi::Boolean::New(info.Env(), sid->isVisible);
 	}
 
@@ -173,7 +176,9 @@ void osn::SceneItem::SetVisible(const Napi::CallbackInfo &info, const Napi::Valu
 	bool visible = value.ToBoolean().Value();
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && visible == sid->isVisible)
+	if (sid == nullptr)
+		return;
+	if (visible == sid->isVisible)
 		return;
 
 	auto conn = GetConnection(info);
@@ -189,7 +194,9 @@ Napi::Value osn::SceneItem::IsSelected(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && sid->cached && !sid->selectedChanged) {
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (sid->cached && !sid->selectedChanged) {
 		return Napi::Boolean::New(info.Env(), sid->isSelected);
 	}
 
@@ -214,10 +221,8 @@ void osn::SceneItem::SetSelected(const Napi::CallbackInfo &info, const Napi::Val
 	bool selected = value.ToBoolean().Value();
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid == nullptr) {
+	if (sid == nullptr)
 		return;
-	}
-
 	if (selected == sid->isSelected) {
 		sid->selectedChanged = false;
 		return;
@@ -264,10 +269,8 @@ void osn::SceneItem::SetStreamVisible(const Napi::CallbackInfo &info, const Napi
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid == nullptr) {
+	if (sid == nullptr)
 		return;
-	}
-
 	if (streamVisible == sid->isStreamVisible) {
 		sid->streamVisibleChanged = false;
 		return;
@@ -287,7 +290,9 @@ Napi::Value osn::SceneItem::IsRecordingVisible(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->recordingVisibleChanged) {
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->recordingVisibleChanged) {
 		return Napi::Boolean::New(info.Env(), sid->isRecordingVisible);
 	}
 
@@ -312,10 +317,8 @@ void osn::SceneItem::SetRecordingVisible(const Napi::CallbackInfo &info, const N
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid == nullptr) {
+	if (sid == nullptr)
 		return;
-	}
-
 	if (recordingVisible == sid->isRecordingVisible) {
 		sid->recordingVisibleChanged = false;
 		return;
@@ -337,7 +340,9 @@ Napi::Value osn::SceneItem::GetPosition(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->posChanged) {
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->posChanged) {
 		Napi::Object obj = Napi::Object::New(info.Env());
 		obj.Set("x", Napi::Number::New(info.Env(), sid->posX));
 		obj.Set("y", Napi::Number::New(info.Env(), sid->posY));
@@ -374,7 +379,9 @@ void osn::SceneItem::SetPosition(const Napi::CallbackInfo &info, const Napi::Val
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && x == sid->posX && y == sid->posY)
+	if (sid == nullptr)
+		return;
+	if (x == sid->posX && y == sid->posY)
 		return;
 
 	auto conn = GetConnection(info);
@@ -398,7 +405,7 @@ Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::Video::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Video::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -423,7 +430,9 @@ Napi::Value osn::SceneItem::GetRotation(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->rotationChanged)
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->rotationChanged)
 		return Napi::Number::New(info.Env(), sid->rotation);
 
 	auto conn = GetConnection(info);
@@ -448,7 +457,9 @@ void osn::SceneItem::SetRotation(const Napi::CallbackInfo &info, const Napi::Val
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && vector == sid->rotation)
+	if (sid == nullptr)
+		return;
+	if (vector == sid->rotation)
 		return;
 
 	auto conn = GetConnection(info);
@@ -464,7 +475,9 @@ Napi::Value osn::SceneItem::GetScale(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->scaleChanged) {
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->scaleChanged) {
 		Napi::Object obj = Napi::Object::New(info.Env());
 		obj.Set("x", Napi::Number::New(info.Env(), sid->scaleX));
 		obj.Set("y", Napi::Number::New(info.Env(), sid->scaleY));
@@ -501,7 +514,9 @@ void osn::SceneItem::SetScale(const Napi::CallbackInfo &info, const Napi::Value 
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && x == sid->scaleX && y == sid->scaleY)
+	if (sid == nullptr)
+		return;
+	if (x == sid->scaleX && y == sid->scaleY)
 		return;
 
 	auto conn = GetConnection(info);
@@ -518,7 +533,9 @@ Napi::Value osn::SceneItem::GetScaleFilter(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->scaleFilter)
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->scaleFilter)
 		return Napi::Number::New(info.Env(), sid->scaleFilter);
 
 	auto conn = GetConnection(info);
@@ -542,7 +559,10 @@ void osn::SceneItem::SetScaleFilter(const Napi::CallbackInfo &info, const Napi::
 	int32_t filter = value.ToNumber().Int32Value();
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
-	if (sid && sid->scaleFilter == filter)
+
+	if (sid == nullptr)
+		return;
+	if (sid->scaleFilter == filter)
 		return;
 
 	auto conn = GetConnection(info);
@@ -670,7 +690,9 @@ Napi::Value osn::SceneItem::GetCrop(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->cropChanged) {
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->cropChanged) {
 		Napi::Object obj = Napi::Object::New(info.Env());
 		obj.Set("left", Napi::Number::New(info.Env(), sid->cropLeft));
 		obj.Set("top", Napi::Number::New(info.Env(), sid->cropTop));
@@ -718,7 +740,9 @@ void osn::SceneItem::SetCrop(const Napi::CallbackInfo &info, const Napi::Value &
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && left == sid->cropLeft && top == sid->cropTop && right == sid->cropRight && bottom == sid->cropBottom)
+	if (sid == nullptr)
+		return;
+	if (left == sid->cropLeft && top == sid->cropTop && right == sid->cropRight && bottom == sid->cropBottom)
 		return;
 
 	auto conn = GetConnection(info);
@@ -807,10 +831,8 @@ Napi::Value osn::SceneItem::GetId(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid == nullptr) {
+	if (sid == nullptr)
 		return info.Env().Undefined();
-	}
-
 	if (sid->obs_itemId < 0) {
 		auto conn = GetConnection(info);
 		if (!conn)
@@ -824,7 +846,7 @@ Napi::Value osn::SceneItem::GetId(const Napi::CallbackInfo &info)
 		sid->obs_itemId = response[1].value_union.ui64;
 	}
 
-	return Napi::Number::New(info.Env(), sid->obs_itemId);
+	return Napi::Number::New(info.Env(), static_cast<double>(sid->obs_itemId));
 }
 
 Napi::Value osn::SceneItem::MoveUp(const Napi::CallbackInfo &info)
@@ -903,7 +925,9 @@ Napi::Value osn::SceneItem::GetBlendingMethod(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->blendingMethodChanged)
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->blendingMethodChanged)
 		return Napi::Number::New(info.Env(), sid->blendingMethod);
 
 	auto conn = GetConnection(info);
@@ -927,7 +951,9 @@ void osn::SceneItem::SetBlendingMethod(const Napi::CallbackInfo &info, const Nap
 	uint32_t method = value.ToNumber().Uint32Value();
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
-	if (sid && sid->blendingMethod == method)
+	if (sid == nullptr)
+		return;
+	if (sid->blendingMethod == method)
 		return;
 
 	auto conn = GetConnection(info);
@@ -944,7 +970,9 @@ Napi::Value osn::SceneItem::GetBlendingMode(const Napi::CallbackInfo &info)
 {
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
-	if (sid && !sid->blendingModeChanged)
+	if (sid == nullptr)
+		return info.Env().Undefined();
+	if (!sid->blendingModeChanged)
 		return Napi::Number::New(info.Env(), sid->blendingMode);
 
 	auto conn = GetConnection(info);
@@ -968,7 +996,9 @@ void osn::SceneItem::SetBlendingMode(const Napi::CallbackInfo &info, const Napi:
 	uint32_t mode = value.ToNumber().Uint32Value();
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
-	if (sid && sid->blendingMode == mode)
+	if (sid == nullptr)
+		return;
+	if (sid->blendingMode == mode)
 		return;
 
 	auto conn = GetConnection(info);

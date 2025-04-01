@@ -534,8 +534,8 @@ void osn::ISimpleRecording::GetLegacySettings(void *data, const int64_t id, cons
 	else
 		recording->splitType = SplitFileType::MANUAL;
 
-	recording->splitTime = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileTime");
-	recording->splitSize = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileSize");
+	recording->splitTime = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileTime"));
+	recording->splitSize = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileSize"));
 	recording->fileResetTimestamps = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileResetTimestamps");
 
 	uint64_t uid = osn::ISimpleRecording::Manager::GetInstance().allocate(recording);

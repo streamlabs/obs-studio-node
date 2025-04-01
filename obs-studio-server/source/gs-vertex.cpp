@@ -46,4 +46,5 @@ GS::Vertex::Vertex(vec3 *p, vec3 *n, vec3 *t, uint32_t *col, vec4 *uvs[MAXIMUM_U
 		}
 	}
 	this->hasStore = false;
+	this->store = nullptr;
 }

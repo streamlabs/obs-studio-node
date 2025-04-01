@@ -611,29 +611,29 @@ std::vector<char> registerMemoryDump(void)
 
 	//str
 	std::wstring eventName_Start = util::CrashManager::GetMemoryDumpEventName_Start();
-	uint32_t eventName_Start_Size = (eventName_Start.size() + 1) * sizeof(wchar_t);
+	size_t eventName_Start_Size = (eventName_Start.size() + 1) * sizeof(wchar_t);
 
 	//str
 	std::wstring eventName_Fail = util::CrashManager::GetMemoryDumpEventName_Fail();
-	uint32_t eventName_Fail_Size = (eventName_Fail.size() + 1) * sizeof(wchar_t);
+	size_t eventName_Fail_Size = (eventName_Fail.size() + 1) * sizeof(wchar_t);
 
 	//str
 	std::wstring eventName_Success = util::CrashManager::GetMemoryDumpEventName_Success();
-	uint32_t eventName_Success_Size = (eventName_Success.size() + 1) * sizeof(wchar_t);
+	size_t eventName_Success_Size = (eventName_Success.size() + 1) * sizeof(wchar_t);
 
 	//str
 	std::wstring dumpPath = util::CrashManager::GetMemoryDumpPath();
-	uint32_t dumpPathSize = (dumpPath.size() + 1) * sizeof(wchar_t);
+	size_t dumpPathSize = (dumpPath.size() + 1) * sizeof(wchar_t);
 
 	//str
 	std::wstring dumpName = util::CrashManager::GetMemoryDumpName();
-	uint32_t dumpNameSize = (dumpName.size() + 1) * sizeof(wchar_t);
+	size_t dumpNameSize = (dumpName.size() + 1) * sizeof(wchar_t);
 
 	// Buffer
 	std::vector<char> buffer;
 	buffer.resize(sizeof(action) + sizeof(pid) + sizeof(int) + eventName_Start_Size + sizeof(int) + eventName_Fail_Size + sizeof(int) +
 		      eventName_Success_Size + sizeof(int) + dumpPathSize + sizeof(int) + dumpNameSize);
-	uint32_t offset = 0;
+	size_t offset = 0;
 
 	//@uint32_t - pid
 	memcpy(buffer.data(), &action, sizeof(action));
@@ -712,13 +712,13 @@ std::vector<char> crashedModuleInfo(const std::string &moduleName, const std::st
 
 	// Prepare
 	const std::uint8_t messageAction = crashHandlerCommand::CRASHED_MODULE_INFO;
-	const std::uint32_t messageModuleNameSize = (moduleName.size() + 1) * sizeof(std::remove_reference<decltype(moduleName)>::type::value_type);
-	const std::uint32_t messageBinaryPathSize = (binaryPath.size() + 1) * sizeof(std::remove_reference<decltype(binaryPath)>::type::value_type);
+	size_t messageModuleNameSize = (moduleName.size() + 1) * sizeof(std::remove_reference<decltype(moduleName)>::type::value_type);
+	size_t messageBinaryPathSize = (binaryPath.size() + 1) * sizeof(std::remove_reference<decltype(binaryPath)>::type::value_type);
 
 	buffer.resize(sizeof(messageAction) + sizeof(std::uint32_t) + messageModuleNameSize + sizeof(std::uint32_t) + messageBinaryPathSize);
 
 	// Pack
-	uint32_t offset = 0;
+	uint64_t offset = 0;
 	memcpy(buffer.data(), &messageAction, sizeof(messageAction));
 	offset++;
 
@@ -755,7 +755,7 @@ void writeCrashHandler(std::vector<char> buffer)
 
 	DWORD bytesWritten;
 
-	WriteFile(hPipe, buffer.data(), buffer.size(), &bytesWritten, NULL);
+	WriteFile(hPipe, buffer.data(), (DWORD)buffer.size(), &bytesWritten, NULL);
 
 	CloseHandle(hPipe);
 }
@@ -1089,10 +1089,10 @@ void OBS_API::QueryHotkeys(void *data, const int64_t id, const std::vector<ipc::
 {
 	struct HotkeyInfo {
 		std::string objectName;
-		obs_hotkey_registerer_type objectType;
+		obs_hotkey_registerer_type objectType = OBS_HOTKEY_REGISTERER_NONE;
 		std::string hotkeyName;
 		std::string hotkeyDesc;
-		obs_hotkey_id hotkeyId;
+		obs_hotkey_id hotkeyId = 0;
 	};
 
 	// For each registered hotkey
@@ -1410,7 +1410,7 @@ bool prepareTerminationPipe()
 void acknowledgeTerminate()
 {
 	BOOL fSuccess;
-	DWORD i, dwWait, cbRet, dwErr;
+	DWORD dwWait, cbRet, dwErr;
 
 	while (!crash_handler_exit) {
 		if (crash_handler_timeout_activated) {

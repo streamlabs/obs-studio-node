@@ -27,7 +27,7 @@
 struct AutoConfigInfo {
 	std::string event;
 	std::string description;
-	double percentage;
+	double percentage = 0;
 };
 
 extern const char *ac_sem_name;

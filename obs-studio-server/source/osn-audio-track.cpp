@@ -194,7 +194,7 @@ void osn::IAudioTrack::ImportLegacySettings(void *data, const int64_t id, const 
 		auto track = new AudioTrack(160, "");
 		auto uid = osn::IAudioTrack::Manager::GetInstance().allocate(track);
 		if (uid != UINT64_MAX) {
-			track->bitrate = config_get_uint(ConfigManager::getInstance().getBasic(), "AdvOut", bitrateParam.c_str());
+			track->bitrate = static_cast<uint32_t>(config_get_uint(ConfigManager::getInstance().getBasic(), "AdvOut", bitrateParam.c_str()));
 			track->name = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", nameParam.c_str());
 			if (track->name.size())
 				SetAudioTrack(track, i);

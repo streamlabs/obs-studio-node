@@ -467,9 +467,9 @@ void osn::IAdvancedStreaming::GetLegacySettings(void *data, const int64_t id, co
 	streaming->videoEncoder = obs_video_encoder_create(encId, "video-encoder", videoEncSettings, nullptr);
 	osn::VideoEncoder::Manager::GetInstance().allocate(streaming->videoEncoder);
 
-	streaming->audioTrack = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex") - 1;
+	streaming->audioTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex") - 1);
 	streaming->enableTwitchVOD = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackEnabled");
-	streaming->twitchTrack = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex") - 1;
+	streaming->twitchTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex") - 1);
 	streaming->enforceServiceBitrate = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "ApplyServiceSettings");
 
 	streaming->rescaling = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "Rescale");

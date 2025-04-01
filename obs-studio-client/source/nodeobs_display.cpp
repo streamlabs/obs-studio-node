@@ -21,7 +21,10 @@
 #include "osn-error.hpp"
 #include "utility-v8.hpp"
 
+#pragma warning(push, 0)
 #include <node.h>
+#pragma warning(pop)
+//#include <node.h>
 #include <sstream>
 #include <string>
 #include "shared.hpp"

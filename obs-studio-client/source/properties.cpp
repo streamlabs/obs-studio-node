@@ -236,11 +236,11 @@ Napi::Value osn::PropertyObject::GetValue(const Napi::CallbackInfo &info)
 	}
 	case osn::Property::Type::INT: {
 		std::shared_ptr<osn::NumberProperty> cast_property = std::static_pointer_cast<osn::NumberProperty>(iter->second);
-		return Napi::Number::New(info.Env(), cast_property->int_value.value);
+		return Napi::Number::New(info.Env(), static_cast<double>(cast_property->int_value.value));
 	}
 	case osn::Property::Type::COLOR: {
 		std::shared_ptr<osn::NumberProperty> cast_property = std::static_pointer_cast<osn::NumberProperty>(iter->second);
-		return Napi::Number::New(info.Env(), cast_property->int_value.value);
+		return Napi::Number::New(info.Env(), static_cast<double>(cast_property->int_value.value));
 	}
 	case osn::Property::Type::FLOAT: {
 		std::shared_ptr<osn::NumberProperty> cast_property = std::static_pointer_cast<osn::NumberProperty>(iter->second);
@@ -259,9 +259,9 @@ Napi::Value osn::PropertyObject::GetValue(const Napi::CallbackInfo &info)
 		std::shared_ptr<osn::ListProperty> cast_property = std::static_pointer_cast<osn::ListProperty>(iter->second);
 		switch (cast_property->item_format) {
 		case ListProperty::Format::FLOAT:
-			return Napi::Number::New(info.Env(), cast_property->current_value_float);
+			return Napi::Number::New(info.Env(), static_cast<double>(cast_property->current_value_float));
 		case ListProperty::Format::INT:
-			return Napi::Number::New(info.Env(), cast_property->current_value_int);
+			return Napi::Number::New(info.Env(), static_cast<double>(cast_property->current_value_int));
 		case ListProperty::Format::STRING:
 			return Napi::String::New(info.Env(), cast_property->current_value_str);
 		}
@@ -288,7 +288,7 @@ Napi::Value osn::PropertyObject::GetValue(const Napi::CallbackInfo &info)
 		font.Set("face", cast_property->face);
 		font.Set("style", cast_property->style);
 		font.Set("path", cast_property->path);
-		font.Set("size", Napi::Number::New(info.Env(), cast_property->sizeF));
+		font.Set("size", Napi::Number::New(info.Env(), static_cast<double>(cast_property->sizeF)));
 		font.Set("flags", Napi::Number::New(info.Env(), cast_property->flags));
 		return font;
 	}
@@ -414,9 +414,9 @@ Napi::Value osn::PropertyObject::GetDetails(const Napi::CallbackInfo &info)
 		std::shared_ptr<osn::NumberProperty> prop = std::static_pointer_cast<osn::NumberProperty>(iter->second);
 
 		object.Set("type", Napi::Number::New(info.Env(), (uint32_t)prop->field_type));
-		object.Set("min", Napi::Number::New(info.Env(), prop->int_value.min));
-		object.Set("max", Napi::Number::New(info.Env(), prop->int_value.max));
-		object.Set("step", Napi::Number::New(info.Env(), prop->int_value.step));
+		object.Set("min", Napi::Number::New(info.Env(), static_cast<double>(prop->int_value.min)));
+		object.Set("max", Napi::Number::New(info.Env(), static_cast<double>(prop->int_value.max)));
+		object.Set("step", Napi::Number::New(info.Env(), static_cast<double>(prop->int_value.step)));
 		break;
 	}
 	case osn::Property::Type::FLOAT: {
@@ -458,7 +458,7 @@ Napi::Value osn::PropertyObject::GetDetails(const Napi::CallbackInfo &info)
 
 			switch (prop->item_format) {
 			case ListProperty::Format::INT:
-				iobj.Set("value", Napi::Number::New(info.Env(), itm.value_int));
+				iobj.Set("value", Napi::Number::New(info.Env(), static_cast<double>(itm.value_int)));
 				break;
 			case ListProperty::Format::FLOAT:
 				iobj.Set("value", Napi::Number::New(info.Env(), itm.value_float));

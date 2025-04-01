@@ -40,6 +40,7 @@ MemoryManager::MemoryManager()
 #ifdef WIN32
 	MEMORYSTATUSEX statex;
 	statex.dwLength = sizeof(statex);
+	current_cached_size = 0;
 
 	if (::GlobalMemoryStatusEx(&statex)) {
 		available_memory = statex.ullTotalPhys;
@@ -71,8 +72,8 @@ void MemoryManager::calculateRawSize(source_info &si)
 	proc_handler_call(ph, "get_file_info", &cd);
 	si.have_video = calldata_bool(&cd, "have_video");
 
-	const uint32_t pix_fmt = calldata_int(&cd, "pix_format");
-	float bpp = 0;
+	const uint64_t pix_fmt = calldata_int(&cd, "pix_format");
+	double bpp = 0;
 	switch (pix_fmt) {
 	case VIDEO_FORMAT_I420:
 	case VIDEO_FORMAT_NV12:
@@ -101,7 +102,7 @@ void MemoryManager::calculateRawSize(source_info &si)
 	const uint64_t width = calldata_int(&cd, "width");
 	const uint64_t height = calldata_int(&cd, "height");
 	const uint64_t nb_frames = calldata_int(&cd, "num_frames");
-	si.size = width * height * bpp * nb_frames;
+	si.size = static_cast<uint64_t>(width * height * bpp * nb_frames);
 }
 
 // Not thread safe. 'si.mtx' AND 'mtx' should be locked

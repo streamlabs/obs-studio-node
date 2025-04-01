@@ -71,7 +71,7 @@ osn::Filter::Filter(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Filt
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -96,7 +96,7 @@ Napi::Value osn::Filter::Types(const Napi::CallbackInfo &info)
 	Napi::Array types = Napi::Array::New(info.Env(), count);
 
 	for (size_t idx = 0; idx < count; idx++)
-		types.Set(idx, Napi::String::New(info.Env(), response[1 + idx].value_str));
+		types.Set(static_cast<uint32_t>(idx), Napi::String::New(info.Env(), response[1 + idx].value_str));
 
 	return types;
 }
@@ -137,7 +137,7 @@ Napi::Value osn::Filter::Create(const Napi::CallbackInfo &info)
 
 	CacheManager<SourceDataInfo *>::getInstance().Store(response[1].value_union.ui64, name, sdi);
 
-	auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::Filter::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }

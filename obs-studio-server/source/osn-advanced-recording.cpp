@@ -341,7 +341,7 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 		recording->outputHeight = cy;
 	}
 
-	recording->mixer = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecTracks");
+	recording->mixer = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecTracks"));
 
 	std::string encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder"));
 	recording->useStreamEncoders = encId.compare("") == 0 || encId.compare("none") == 0;
@@ -361,8 +361,8 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 	else
 		recording->splitType = SplitFileType::MANUAL;
 
-	recording->splitTime = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileTime");
-	recording->splitSize = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileSize");
+	recording->splitTime = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileTime"));
+	recording->splitSize = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileSize"));
 	recording->fileResetTimestamps = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileResetTimestamps");
 
 	uint64_t uid = osn::IAdvancedRecording::Manager::GetInstance().allocate(recording);

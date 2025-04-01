@@ -263,24 +263,24 @@ void osn::Scene::AddSource(void *data, const int64_t id, const std::vector<ipc::
 
 	if (args.size() > 2) {
 		vec2 scale;
-		scale.x = args[2].value_union.fp64;
-		scale.y = args[3].value_union.fp64;
+		scale.x = static_cast<float>(args[2].value_union.fp64);
+		scale.y = static_cast<float>(args[3].value_union.fp64);
 		obs_sceneitem_set_scale(item, &scale);
 
 		obs_sceneitem_set_visible(item, !!args[4].value_union.i32);
 
 		vec2 pos;
-		pos.x = args[5].value_union.fp64;
-		pos.y = args[6].value_union.fp64;
+		pos.x = static_cast<float>(args[5].value_union.fp64);
+		pos.y = static_cast<float>(args[6].value_union.fp64);
 		obs_sceneitem_set_pos(item, &pos);
 
-		obs_sceneitem_set_rot(item, args[7].value_union.fp64);
+		obs_sceneitem_set_rot(item, static_cast<float>(args[7].value_union.fp64));
 
 		obs_sceneitem_crop crop;
-		crop.left = args[8].value_union.i64;
-		crop.top = args[9].value_union.i64;
-		crop.right = args[10].value_union.i64;
-		crop.bottom = args[11].value_union.i64;
+		crop.left = static_cast<int>(args[8].value_union.i64);
+		crop.top = static_cast<int>(args[9].value_union.i64);
+		crop.right = static_cast<int>(args[10].value_union.i64);
+		crop.bottom = static_cast<int>(args[11].value_union.i64);
 
 		obs_sceneitem_set_crop(item, &crop);
 
@@ -384,7 +384,7 @@ void osn::Scene::OrderItems(void *data, const int64_t id, const std::vector<ipc:
 	const std::vector<char> &new_items_order = args[1].value_bin;
 	size_t items_count = new_items_order.size() / sizeof(int64_t);
 
-	obs_scene_set_items_order(scene, (int64_t *)new_items_order.data(), items_count);
+	obs_scene_set_items_order(scene, (int64_t *)new_items_order.data(), static_cast<int>(items_count));
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 

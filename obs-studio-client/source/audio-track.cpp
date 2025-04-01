@@ -46,7 +46,8 @@ osn::AudioTrack::AudioTrack(const Napi::CallbackInfo &info) : Napi::ObjectWrap<o
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
-	int length = info.Length();
+	size_t length = info.Length();
+	this->uid = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -69,7 +70,7 @@ Napi::Value osn::AudioTrack::Create(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::AudioTrack::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::AudioTrack::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -92,7 +93,7 @@ Napi::Value osn::AudioTrack::GetAudioTracks(const Napi::CallbackInfo &info)
 		if (uid == UINT64_MAX)
 			tracks.Set(i - 2, info.Env().Undefined());
 		else
-			tracks.Set(i - 2, osn::AudioTrack::constructor.New({Napi::Number::New(info.Env(), uid)}));
+			tracks.Set(i - 2, osn::AudioTrack::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(uid))}));
 	}
 
 	return tracks;
@@ -130,7 +131,7 @@ Napi::Value osn::AudioTrack::GetAtIndex(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::AudioTrack::constructor.New({Napi::Number::New(info.Env(), response[1].value_union.ui64)});
+	auto instance = osn::AudioTrack::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
