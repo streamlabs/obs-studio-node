@@ -139,5 +139,8 @@ Napi::Value OBS_settings_getInputAudioDevices(const Napi::CallbackInfo &info);
 Napi::Value OBS_settings_getOutputAudioDevices(const Napi::CallbackInfo &info);
 Napi::Value OBS_settings_getVideoDevices(const Napi::CallbackInfo &info);
 
+Napi::Value OBS_settings_isEnhancedBroadcasting(const Napi::CallbackInfo &info);
+void OBS_settings_setEnhancedBroadcasting(const Napi::CallbackInfo &info);
+
 static std::vector<std::string> getListCategories(void);
 }

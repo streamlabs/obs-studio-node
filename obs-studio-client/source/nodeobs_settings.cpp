@@ -494,6 +494,33 @@ Napi::Value settings::OBS_settings_getVideoDevices(const Napi::CallbackInfo &inf
 	return devices_to_js(info, response);
 }
 
+Napi::Value settings::OBS_settings_isEnhancedBroadcasting(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Settings", "OBS_settings_isEnhancedBroadcasting", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
+}
+
+void settings::OBS_settings_setEnhancedBroadcasting(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	const bool enable = info[0].ToBoolean().Value();
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Settings", "OBS_settings_setEnhancedBroadcasting", {ipc::value(uint32_t(enable))});
+
+	if (!ValidateResponse(info, response))
+		return;
+}
+
 void settings::Init(Napi::Env env, Napi::Object exports)
 {
 	exports.Set(Napi::String::New(env, "OBS_settings_getSettings"), Napi::Function::New(env, settings::OBS_settings_getSettings));
@@ -502,4 +529,6 @@ void settings::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_settings_getInputAudioDevices"), Napi::Function::New(env, settings::OBS_settings_getInputAudioDevices));
 	exports.Set(Napi::String::New(env, "OBS_settings_getOutputAudioDevices"), Napi::Function::New(env, settings::OBS_settings_getOutputAudioDevices));
 	exports.Set(Napi::String::New(env, "OBS_settings_getVideoDevices"), Napi::Function::New(env, settings::OBS_settings_getVideoDevices));
+	exports.Set(Napi::String::New(env, "OBS_settings_isEnhancedBroadcasting"), Napi::Function::New(env, settings::OBS_settings_isEnhancedBroadcasting));
+	exports.Set(Napi::String::New(env, "OBS_settings_setEnhancedBroadcasting"), Napi::Function::New(env, settings::OBS_settings_setEnhancedBroadcasting));
 }

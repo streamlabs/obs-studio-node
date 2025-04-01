@@ -151,6 +151,8 @@ public:
 
 private:
 	static bool startStreaming(StreamServiceId serviceId);
+	static bool startSingleTrackStreaming(StreamServiceId serviceId);
+	static bool startMultiTrackStreaming(StreamServiceId serviceId);
 	static void stopStreaming(bool forceStop, StreamServiceId serviceId);
 	static bool startRecording(void);
 	static bool startReplayBuffer(void);
@@ -177,6 +179,8 @@ private:
 	static void StopVirtualCam();
 	static void StartVirtualCam();
 	static void DeactivateSources();
+
+	static bool isTwitchStream(StreamServiceId serviceId);
 
 public:
 	// Service
@@ -274,9 +278,6 @@ public:
 	static void duplicate_encoder(obs_encoder_t **dst, obs_encoder_t *src, uint64_t trackIndex = 0);
 
 	static void stopAllOutputs(void);
-
-	static bool startTwitchSoundtrackAudio(void);
-	static void stopTwitchSoundtrackAudio(void);
 	static void setupVodTrack(bool isSimpleMode);
 	static void clearArchiveVodEncoder();
 };

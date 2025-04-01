@@ -78,6 +78,11 @@ void OBS_settings::Register(ipc::server &srv)
 		std::make_shared<ipc::function>("OBS_settings_getOutputAudioDevices", std::vector<ipc::type>{}, OBS_settings_getOutputAudioDevices));
 	cls->register_function(std::make_shared<ipc::function>("OBS_settings_getVideoDevices", std::vector<ipc::type>{}, OBS_settings_getVideoDevices));
 
+	cls->register_function(
+		std::make_shared<ipc::function>("OBS_settings_isEnhancedBroadcasting", std::vector<ipc::type>{}, OBS_settings_isEnhancedBroadcasting));
+	cls->register_function(std::make_shared<ipc::function>("OBS_settings_setEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt32},
+							       OBS_settings_setEnhancedBroadcasting));
+
 	srv.register_collection(cls);
 }
 
@@ -1209,27 +1214,6 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 		const char *serviceName = obs_data_get_string(settings, "service");
 		obs_data_release(settings);
 
-		if (serviceName && strcmp(serviceName, "Twitch") == 0) {
-			bool soundtrackSourceExists = false;
-			obs_enum_sources(
-				[](void *param, obs_source_t *source) {
-					auto id = obs_source_get_id(source);
-					if (strcmp(id, "soundtrack_source") == 0) {
-						*reinterpret_cast<bool *>(param) = true;
-						return false;
-					}
-					return true;
-				},
-				&soundtrackSourceExists);
-			std::string twitchVODDesc = "Twitch VOD Track (Uses Track 2).";
-			if (soundtrackSourceExists)
-				twitchVODDesc += " Remove Twitch Soundtrack in order to enable this.";
-
-			//Twitch VOD
-			auto twitchVOD = createSettingEntry("VodTrackEnabled", "OBS_PROPERTY_BOOL", twitchVODDesc);
-			entries.push_back(twitchVOD);
-		}
-
 		//Encoder Preset
 		const char *defaultPreset;
 		const char *encoder = config_get_string(config, "SimpleOutput", "StreamEncoder");
@@ -1357,16 +1341,17 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 	obs_properties_t *encoderProperties = obs_encoder_properties(encoder);
 	obs_property_t *property = obs_properties_first(encoderProperties);
 
+	std::string bitrate_param_name = "bitrate";
 	OBSData service_default_settings;
 	if (applyServiceSettings && obs_encoder_get_type(encoder) == OBS_ENCODER_VIDEO) {
 		service_default_settings = obs_data_create();
 		// INT_MAX value is needed to get actual upper bound of service-default bitrate
-		obs_data_set_int(service_default_settings, "bitrate", INT_MAX);
+		obs_data_set_int(service_default_settings, bitrate_param_name.c_str(), INT_MAX);
 		obs_service_apply_encoder_settings(OBS_service::getService(StreamServiceId::Main), service_default_settings, nullptr);
 	}
 
-	Parameter param;
 	while (property) {
+		Parameter param;
 		param.name = obs_property_name(property);
 		obs_property_type typeProperty = obs_property_get_type(property);
 
@@ -1396,6 +1381,9 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 			param.minVal = obs_property_int_min(property);
 			param.maxVal = obs_property_int_max(property);
 			param.stepVal = obs_property_int_step(property);
+			if (param.name == bitrate_param_name) {
+				param.maxVal = INT_MAX;
+			}
 			break;
 		}
 		case OBS_PROPERTY_FLOAT: {
@@ -1589,7 +1577,7 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 						param.sizeOfCurrentValue = val_len;
 					} else if (obsType == OBS_DATA_NUMBER) {
 						const auto obs_val = obs_data_item_get_int(data_item);
-						if (param.name == "bitrate") {
+						if (param.name == bitrate_param_name) {
 							param.visible = true;
 							int64_t cur_settings_value = obs_data_get_int(settings, param.name.c_str());
 
@@ -1623,7 +1611,7 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 			// Restoring back prev value if any
 			const auto vbitrate_abs_max = obs_data_get_int(settings, "vbitrate_abs_max");
 			obs_data_erase(settings, "vbitrate_abs_max");
-			if (param.name == "bitrate" && vbitrate_abs_max) {
+			if (param.name == bitrate_param_name && vbitrate_abs_max) {
 				param.maxVal = static_cast<double>(vbitrate_abs_max);
 			}
 		}
@@ -1711,26 +1699,11 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	obs_data_release(serviceSettings);
 
 	if (serviceName && strcmp(serviceName, "Twitch") == 0) {
-		bool soundtrackSourceExists = false;
-		obs_enum_sources(
-			[](void *param, obs_source_t *source) {
-				auto id = obs_source_get_id(source);
-				if (strcmp(id, "soundtrack_source") == 0) {
-					*reinterpret_cast<bool *>(param) = true;
-					return false;
-				}
-				return true;
-			},
-			&soundtrackSourceExists);
-		std::string twitchVODDesc = "Twitch VOD";
-		if (soundtrackSourceExists)
-			twitchVODDesc += ". Remove Twitch Soundtrack in order to enable this.";
-
 		// Twitch VOD : boolean
 		Parameter twiwchVOD;
 		twiwchVOD.name = "VodTrackEnabled";
 		twiwchVOD.type = "OBS_PROPERTY_BOOL";
-		twiwchVOD.description = twitchVODDesc;
+		twiwchVOD.description = "Twitch VOD";
 
 		bool doTwiwchVOD = config_get_bool(config, "AdvOut", "VodTrackEnabled");
 
@@ -4106,6 +4079,22 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	const char *property_name = "device";
 	getDevices(source_id, property_name, rval);
 #endif
+
+	AUTO_DEBUG;
+}
+
+void OBS_settings::OBS_settings_isEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(config_get_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo")));
+
+	AUTO_DEBUG;
+}
+
+void OBS_settings::OBS_settings_setEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	config_set_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo", args[0].value_union.ui32);
 
 	AUTO_DEBUG;
 }
