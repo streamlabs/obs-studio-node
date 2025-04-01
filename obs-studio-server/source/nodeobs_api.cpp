@@ -712,13 +712,12 @@ std::vector<char> crashedModuleInfo(const std::string &moduleName, const std::st
 
 	// Prepare
 	const std::uint8_t messageAction = crashHandlerCommand::CRASHED_MODULE_INFO;
-	const std::uint32_t messageModuleNameSize = static_cast<uint32_t>((moduleName.size() + 1) * 
-                                                sizeof(std::remove_reference<decltype(moduleName)>::type::value_type));
-	const std::uint32_t messageBinaryPathSize = static_cast<uint32_t>((binaryPath.size() + 1) * 
-                                                sizeof(std::remove_reference<decltype(binaryPath)>::type::value_type));
+	const std::uint32_t messageModuleNameSize =
+		static_cast<uint32_t>((moduleName.size() + 1) * sizeof(std::remove_reference<decltype(moduleName)>::type::value_type));
+	const std::uint32_t messageBinaryPathSize =
+		static_cast<uint32_t>((binaryPath.size() + 1) * sizeof(std::remove_reference<decltype(binaryPath)>::type::value_type));
 
-	buffer.resize(sizeof(messageAction) + sizeof(std::uint32_t) + messageModuleNameSize + 
-                 sizeof(std::uint32_t) + messageBinaryPathSize);
+	buffer.resize(sizeof(messageAction) + sizeof(std::uint32_t) + messageModuleNameSize + sizeof(std::uint32_t) + messageBinaryPathSize);
 
 	// Pack
 	uint64_t offset = 0;
