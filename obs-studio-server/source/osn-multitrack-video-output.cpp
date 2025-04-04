@@ -7,6 +7,11 @@
 
 #include <inttypes.h>
 
+#ifdef _MSC_VER
+// not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
+#define strncasecmp strnicmp
+#endif
+
 namespace osn {
 
 static bool encoder_available(const char *type)
@@ -259,7 +264,7 @@ OBSServiceAutoRelease create_service(const Config &go_live_config, const std::op
 	const auto &ingest_endpoints = go_live_config.ingest_endpoints;
 
 	for (auto &endpoint : ingest_endpoints) {
-		if (strnicmp("RTMP", endpoint.protocol.c_str(), 4))
+		if (strncasecmp("RTMP", endpoint.protocol.c_str(), 4))
 			continue;
 
 		url = endpoint.url_template.c_str();
