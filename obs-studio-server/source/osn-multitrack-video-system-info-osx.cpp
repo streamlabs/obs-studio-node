@@ -10,10 +10,6 @@
 
 namespace osn {
 
-void system_info(Capabilities &capabilities)
-{
-    
-}
+void system_info(Capabilities &capabilities) {}
 
 } // namespace osn
-
