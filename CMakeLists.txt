@@ -121,17 +121,11 @@ FetchContent_Declare(
 	URL https://curl.se/download/curl-7.88.1.tar.gz
 	DOWNLOAD_EXTRACT_TIMESTAMP true
 	OVERRIDE_FIND_PACKAGE
-    CMAKE_ARGS
-        -DCURL_LIBRARY_OUTPUT_DIRECTORY="${CMAKE_INSTALL_PREFIX}/bin"
 )
 
-message(STATUS "rno fetch libcurl")
 FetchContent_GetProperties(libcurl)
 if(NOT libcurl_POPULATED)
 FetchContent_MakeAvailable(libcurl)
-  message(STATUS "libcurl is not populated. Installing source dir: ${libcurl_SOURCE_DIR} binary dir: ${libcurl_BINARY_DIR}")
-  #Commented out the code below; on cmake 4.0 it conflicts with FetchContent_MakeAvailable and libcurl library isnt built
-  #add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 add_subdirectory(lib-streamlabs-ipc)
@@ -141,12 +135,11 @@ add_subdirectory(obs-studio-server)
 include(CPack)
 
 if(APPLE)
-# Copy libcurl.dylib files for obs64 after the install process completes
+# Copies ALL libcurl.dylib files for obs64 after the install process completes.
 install(CODE "
     file(GLOB_RECURSE DYLIB_FILES \"${libcurl_BINARY_DIR}/lib/*.dylib\")
     foreach(file \${DYLIB_FILES})
         file(COPY \${file} DESTINATION \"${CMAKE_INSTALL_PREFIX}/bin\")
     endforeach()
-    message(STATUS \"Copied dylib files to destination\")
 ")
 endif()
