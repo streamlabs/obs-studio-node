@@ -125,7 +125,8 @@ FetchContent_Declare(
 
 FetchContent_GetProperties(libcurl)
 if(NOT libcurl_POPULATED)
-FetchContent_MakeAvailable(libcurl)
+FetchContent_Populate(libcurl)
+add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
 add_subdirectory(lib-streamlabs-ipc)
