@@ -134,3 +134,13 @@ add_subdirectory(obs-studio-client)
 add_subdirectory(obs-studio-server)
 
 include(CPack)
+
+if(APPLE)
+# Copies ALL libcurl.dylib files for obs64 after the install process completes.
+install(CODE "
+    file(GLOB_RECURSE DYLIB_FILES \"${libcurl_BINARY_DIR}/lib/*.dylib\")
+    foreach(file \${DYLIB_FILES})
+        file(COPY \${file} DESTINATION \"${CMAKE_INSTALL_PREFIX}/bin\")
+    endforeach()
+")
+endif()
