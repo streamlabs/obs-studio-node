@@ -17,7 +17,6 @@ test-results.xml
 *.vcxproj
 *.opendb
 docs/ 
-.vscode 
 /*.log
 /streamlabs-build
 
