@@ -128,6 +128,7 @@ Some tests interact with Twitch and we use a user pool service to get users but 
 * To run all the tests do `yarn run test` 
 * To run only run one test do `yarn run test --grep describe_name_value` where `describe_name_value` is the name of the test passed to the describe call in each test file. Examples: `yarn run test --grep nodeobs_api` or `yarn run test -g "Start streaming"`
 
+#### Debugging tests
 If you wish to attach to unit tests from Visual Studio Code, drop this into your launch.json:
 ```
 {
