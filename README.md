@@ -142,7 +142,7 @@ If you wish to attach to unit tests from Visual Studio Code, drop this into your
             "args": [
                 "-r",
                 "ts-node/register",
-                "${workspaceFolder}/tests/osn-tests/src/*.ts" // Adjust path to match your tests location
+                "${workspaceFolder}/tests/osn-tests/src/*.ts"
             ],
             "cwd": "${workspaceFolder}",
             "env": {
