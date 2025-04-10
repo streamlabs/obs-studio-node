@@ -825,7 +825,8 @@ void addModulePaths()
 			    std::string(g_moduleDirectory + "/data/obs-plugins/%module%").c_str());
 	obs_add_module_path(std::string(slobs_plugin + "/obs-plugins/64bit").c_str(), std::string(slobs_plugin + "/data/obs-plugins/%module%").c_str());
 #elif defined(__APPLE__)
-
+    obs_add_module_path(std::string(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/").c_str(),
+                std::string(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources/").c_str());
 #else
 
 #endif
