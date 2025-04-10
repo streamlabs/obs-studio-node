@@ -155,3 +155,4 @@ If you wish to attach to unit tests from Visual Studio Code, drop this into your
     ]
 }
 ```
+Note: if you wish to run a specific test, replace the wildcard character with the file name of the test (for ex, `test_nodeobs_api`).
