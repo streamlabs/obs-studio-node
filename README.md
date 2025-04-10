@@ -128,3 +128,29 @@ Some tests interact with Twitch and we use a user pool service to get users but 
 * To run all the tests do `yarn run test` 
 * To run only run one test do `yarn run test --grep describe_name_value` where `describe_name_value` is the name of the test passed to the describe call in each test file. Examples: `yarn run test --grep nodeobs_api` or `yarn run test -g "Start streaming"`
 
+If you wish to attach to unit tests from Visual Studio Code, drop this into your launch.json:
+```
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Electron-Mocha Tests",
+            "program": "${workspaceFolder}/node_modules/electron-mocha/bin/electron-mocha",
+            "args": [
+                "-r",
+                "ts-node/register",
+                "${workspaceFolder}/tests/osn-tests/src/*.ts" // Adjust path to match your tests location
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "ELECTRON_ENABLE_LOGGING": "true"
+            },
+            "outputCapture": "std", // Enables capturing test output directly
+            "internalConsoleOptions": "openOnSessionStart",
+            "skipFiles": ["<node_internals>/**"] // Avoid stepping into Electron internals
+        }
+    ]
+}
+```
