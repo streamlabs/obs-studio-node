@@ -49,11 +49,11 @@ describe(testName, () => {
         let expectedInputTypes = ["audio_line", "image_source", "color_source", "color_source_v2", "color_source_v3", "slideshow", "mediasoupconnector", "browser_source", "ffmpeg_source", "text_ft2_source", "text_ft2_source_v2", "vlc_source", "window_capture", "screen_capture", "slideshow_v2"];
 
         if (obs.os == 'darwin') {
-            let additionalOSTypes = ["macos-avcapture", "macos-avcapture-fast", "sck_audio_capture", "av_capture_input","av_capture_input_v2","display_capture","coreaudio_input_capture","coreaudio_output_capture"];
-            expectedInputTypes.push(...additionalOSTypes);
+            let additionalDarwinTypes = ["macos-avcapture", "macos-avcapture-fast", "sck_audio_capture", "av_capture_input","av_capture_input_v2","display_capture","coreaudio_input_capture","coreaudio_output_capture"];
+            expectedInputTypes.push(...additionalDarwinTypes);
         } else if (obs.os == 'win32') {
-            let additionalOSTypes = [ "text_gdiplus", "text_gdiplus_v2", "text_gdiplus_v3", "monitor_capture", "game_capture", "dshow_input", "openvr_capture", "spout_capture", "wasapi_input_capture", "wasapi_output_capture", "wasapi_process_output_capture"];
-            expectedInputTypes.push(...additionalOSTypes);
+            let additionalWin32Types = [ "text_gdiplus", "text_gdiplus_v2", "text_gdiplus_v3", "monitor_capture", "game_capture", "dshow_input", "openvr_capture", "spout_capture", "wasapi_input_capture", "wasapi_output_capture", "wasapi_process_output_capture"];
+            expectedInputTypes.push(...additionalWin32Types);
         }
         let missingDiff = expectedInputTypes.filter(x => !obs.inputTypes.includes(x));
         missingDiff = missingDiff.filter(x => !ignoreInputTypes.includes(x));
