@@ -18,6 +18,7 @@
 
 #include <mutex>
 #include <napi.h>
+#include <string>
 #include <thread>
 #include <unordered_set>
 #include "utility-v8.hpp"
@@ -33,12 +34,27 @@ struct SourceSizeInfoData {
 	std::vector<std::unique_ptr<SourceSizeInfo>> items;
 };
 
+struct TransitionInfo {
+	enum EventType : uint32_t {
+		START = 0,
+		STOP = 1,
+	};
+
+	std::string id;
+	EventType event;
+};
+
+struct TransitionInfoData {
+	std::vector<std::unique_ptr<TransitionInfo>> items;
+};
+
 namespace globalCallback {
 extern bool isWorkerRunning;
 extern bool worker_stop;
 extern uint32_t sleepIntervalMS;
 extern std::thread *worker_thread;
 extern Napi::ThreadSafeFunction js_source_callback;
+extern Napi::ThreadSafeFunction js_transition_callback;
 extern Napi::ThreadSafeFunction js_volmeter_callback;
 extern bool m_all_workers_stop;
 
@@ -56,6 +72,9 @@ void Init(Napi::Env env, Napi::Object exports);
 
 Napi::Value RegisterSourceCallback(const Napi::CallbackInfo &info);
 Napi::Value RemoveSourceCallback(const Napi::CallbackInfo &info);
+
+Napi::Value RegisterTransitionCallback(const Napi::CallbackInfo &info);
+Napi::Value RemoveTransitionCallback(const Napi::CallbackInfo &info);
 
 Napi::Value RegisterVolmeterCallback(const Napi::CallbackInfo &info);
 Napi::Value RemoveVolmeterCallback(const Napi::CallbackInfo &info);

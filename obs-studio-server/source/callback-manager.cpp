@@ -26,8 +26,13 @@
 #include "osn-source.hpp"
 #include "osn-volmeter.hpp"
 
-std::mutex sources_sizes_mtx;
-std::map<std::string, SourceSizeInfo *> sources;
+#include <memory>
+
+std::mutex sources_mtx;
+std::map<std::string, std::unique_ptr<SourceSizeInfo>> sources;
+
+std::mutex transitions_mtx;
+std::map<std::string, std::unique_ptr<TransitionInfo>> transitions;
 
 void CallbackManager::Register(ipc::server &srv)
 {
@@ -39,13 +44,15 @@ void CallbackManager::Register(ipc::server &srv)
 void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	const std::size_t source_size_idx = rval.size();
+	rval.push_back(ipc::value((uint32_t)0));
 
 	if (!sources.empty()) {
-		sources_sizes_mtx.lock();
+		sources_mtx.lock();
 		uint32_t size = 0;
 
-		for (auto item : sources) {
-			SourceSizeInfo *si = item.second;
+		for (auto &item : sources) {
+			SourceSizeInfo *si = item.second.get();
 			// See if width or height changed here
 			uint32_t newWidth = obs_source_get_width(si->source);
 			uint32_t newHeight = obs_source_get_height(si->source);
@@ -65,10 +72,31 @@ void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vecto
 			}
 		}
 
-		rval.insert(rval.begin() + 1, ipc::value(size));
-		sources_sizes_mtx.unlock();
-	} else {
-		rval.insert(rval.begin() + 1, ipc::value((uint32_t)0));
+		rval[source_size_idx] = size;
+		sources_mtx.unlock();
+	}
+
+	const std::size_t transition_size_idx = rval.size();
+	rval.push_back(ipc::value((uint32_t)0));
+
+	if (!transitions.empty()) {
+		transitions_mtx.lock();
+		uint32_t size = 0;
+
+		for (auto &item : transitions) {
+			TransitionInfo *ti = item.second.get();
+
+			for (const auto &e : ti->events) {
+				rval.push_back(ipc::value(obs_source_get_name(ti->transition)));
+				rval.push_back(ipc::value(e));
+				size++;
+			}
+
+			ti->events.clear();
+		}
+
+		rval[transition_size_idx] = size;
+		transitions_mtx.unlock();
 	}
 
 	uint64_t size_buffer = args[0].value_union.ui64;
@@ -89,34 +117,85 @@ void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vecto
 	AUTO_DEBUG;
 }
 
+static void transition_start_handler(void *data, calldata_t *calldata)
+{
+	auto transitionInfo = reinterpret_cast<TransitionInfo *>(data);
+	blog(LOG_INFO, "transition_start_handler - name: %s", obs_source_get_name(transitionInfo->transition));
+
+	transitionInfo->events.push_back(TransitionInfo::START);
+}
+
+static void transition_stop_handler(void *data, calldata_t *calldata)
+{
+	auto transitionInfo = reinterpret_cast<TransitionInfo *>(data);
+	blog(LOG_INFO, "transition_stop_handler - name: %s", obs_source_get_name(transitionInfo->transition));
+
+	transitionInfo->events.push_back(TransitionInfo::STOP);
+}
+
 void CallbackManager::addSource(obs_source_t *source)
 {
 	uint32_t flags = obs_source_get_output_flags(source);
 	if ((flags & OBS_SOURCE_VIDEO) == 0)
 		return;
 
-	if (!source || obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER || obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION ||
-	    obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE)
+	if (!source || obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER || obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE)
 		return;
 
-	std::unique_lock<std::mutex> ulock(sources_sizes_mtx);
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
+		std::unique_lock<std::mutex> ulock(transitions_mtx);
 
-	SourceSizeInfo *si = new SourceSizeInfo;
-	si->source = source;
-	si->width = obs_source_get_width(source);
-	si->height = obs_source_get_height(source);
+		blog(LOG_INFO, "addSource - transition!: %s", obs_source_get_name(source));
 
-	sources.emplace(std::make_pair(std::string(obs_source_get_name(source)), si));
+		TransitionInfo *ti = new TransitionInfo;
+		ti->transition = source;
+
+		signal_handler_t *sh = obs_source_get_signal_handler(source);
+		if (sh) {
+			signal_handler_connect(sh, "transition_start", transition_start_handler, ti);
+			signal_handler_connect(sh, "transition_stop", transition_stop_handler, ti);
+		}
+
+		transitions.emplace(std::make_pair(std::string(obs_source_get_name(source)), ti));
+	} else {
+		// Regular source
+		std::unique_lock<std::mutex> ulock(sources_mtx);
+
+		SourceSizeInfo *si = new SourceSizeInfo;
+		si->source = source;
+		si->width = obs_source_get_width(source);
+		si->height = obs_source_get_height(source);
+
+		sources.emplace(std::make_pair(std::string(obs_source_get_name(source)), si));
+	}
 }
 void CallbackManager::removeSource(obs_source_t *source)
 {
-	std::unique_lock<std::mutex> ulock(sources_sizes_mtx);
-
 	if (!source)
 		return;
 
 	const char *name = obs_source_get_name(source);
+	if (!name)
+		return;
 
-	if (name)
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
+		std::unique_lock<std::mutex> ulock(transitions_mtx);
+
+		const auto it = transitions.find(name);
+		if (it == transitions.end()) {
+			return;
+		}
+
+		signal_handler_t *sh = obs_source_get_signal_handler(source);
+		if (sh) {
+			signal_handler_disconnect(sh, "transition_start", transition_start_handler, it->second.get());
+			signal_handler_disconnect(sh, "transition_stop", transition_stop_handler, it->second.get());
+		}
+
+		transitions.erase(it);
+	} else {
+		// Regular source
+		std::unique_lock<std::mutex> ulock(sources_mtx);
 		sources.erase(name);
+	}
 }
