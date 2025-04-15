@@ -238,79 +238,86 @@ void globalCallback::worker()
 			goto do_sleep;
 		}
 
-		uint32_t index = 1;
+		// Enclosed to avoid the "jump bypasses variable initialization" error in xcode
+		{
+			uint32_t index = 1;
 
-		const auto sourcesSize = response[index++].value_union.ui32;
-		if (sourcesSize) {
-			SourceSizeInfoData *data = new SourceSizeInfoData{{}};
-			for (uint32_t i = 0; i < sourcesSize; i++) {
-				SourceSizeInfo *item = new SourceSizeInfo;
+			const auto sourcesSize = response[index++].value_union.ui32;
+			if (sourcesSize) {
+				SourceSizeInfoData *data = new SourceSizeInfoData{{}};
+				for (uint32_t i = 0; i < sourcesSize; i++) {
+					SourceSizeInfo *item = new SourceSizeInfo;
 
-				item->name = response[index++].value_str;
-				item->width = response[index++].value_union.ui32;
-				item->height = response[index++].value_union.ui32;
-				item->flags = response[index++].value_union.ui32;
-				data->items.emplace_back(item);
-			}
+					item->name = response[index++].value_str;
+					item->width = response[index++].value_union.ui32;
+					item->height = response[index++].value_union.ui32;
+					item->flags = response[index++].value_union.ui32;
+					data->items.emplace_back(item);
+				}
 
-			napi_status status = js_source_callback.NonBlockingCall(data, sources_callback);
-			if (status != napi_ok) {
-				delete data;
-			}
-		}
-
-		const auto transitionsSize = response[index++].value_union.ui32;
-		if (transitionsSize) {
-			TransitionInfoData *data = new TransitionInfoData{{}};
-			for (uint32_t i = 0; i < transitionsSize; i++) {
-				TransitionInfo *item = new TransitionInfo;
-
-				item->id = response[index++].value_str;
-				item->event = static_cast<TransitionInfo::EventType>(response[index++].value_union.ui32);
-
-				data->items.emplace_back(item);
-			}
-
-			if (data->items.size() > 0) {
-				napi_status status = js_transition_callback.NonBlockingCall(data, transitions_callback);
+				napi_status status = js_source_callback.NonBlockingCall(data, sources_callback);
 				if (status != napi_ok) {
 					delete data;
 				}
 			}
-		}
 
-		auto volmeterDataArray = new VolmeterDataArray;
-		while (volmeters_size--) {
-			VolmeterData *item = new VolmeterData{{}, {}, {}};
+			const auto transitionsSize = response[index++].value_union.ui32;
+			if (transitionsSize) {
+				TransitionInfoData *data = new TransitionInfoData{{}};
+				for (uint32_t i = 0; i < transitionsSize; i++) {
+					TransitionInfo *item = new TransitionInfo;
 
-			item->source_name = response[index++].value_str;
+					item->id = response[index++].value_str;
+					item->event = static_cast<TransitionInfo::EventType>(response[index++].value_union.ui32);
 
-			const size_t channels = response[index++].value_union.i32;
-			const bool isMuted = response[index++].value_union.i32;
-			const bool isAudioInput = response[index++].value_union.i32;
+					data->items.emplace_back(item);
+				}
 
-			if (isMuted && !isAudioInput) {
-				continue;
+				if (data->items.size() > 0) {
+					if (js_transition_callback) {
+						napi_status status = js_transition_callback.NonBlockingCall(data, transitions_callback);
+						if (status != napi_ok) {
+							delete data;
+						}
+					} else {
+						delete data;
+					}
+				}
 			}
 
-			item->magnitude.resize(channels);
-			item->peak.resize(channels);
-			item->input_peak.resize(channels);
-			for (size_t ch = 0; ch < channels; ch++) {
-				item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
-				item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
-				item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
+			auto volmeterDataArray = new VolmeterDataArray;
+			while (volmeters_size--) {
+				VolmeterData *item = new VolmeterData{{}, {}, {}};
+
+				item->source_name = response[index++].value_str;
+
+				const size_t channels = response[index++].value_union.i32;
+				const bool isMuted = response[index++].value_union.i32;
+				const bool isAudioInput = response[index++].value_union.i32;
+
+				if (isMuted && !isAudioInput) {
+					continue;
+				}
+
+				item->magnitude.resize(channels);
+				item->peak.resize(channels);
+				item->input_peak.resize(channels);
+				for (size_t ch = 0; ch < channels; ch++) {
+					item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
+					item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
+					item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
+				}
+
+				index += static_cast<uint32_t>((3 * channels));
+
+				volmeterDataArray->items.emplace_back(item);
 			}
 
-			index += static_cast<uint32_t>((3 * channels));
-
-			volmeterDataArray->items.emplace_back(item);
-		}
-
-		if (js_volmeter_callback) {
-			napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
-			if (status != napi_ok) {
-				delete volmeterDataArray;
+			if (js_volmeter_callback) {
+				napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
+				if (status != napi_ok) {
+					delete volmeterDataArray;
+				}
 			}
 		}
 

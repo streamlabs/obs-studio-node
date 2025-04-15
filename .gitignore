@@ -17,8 +17,7 @@ test-results.xml
 *.vcxproj
 *.opendb
 docs/ 
-.vscode 
 /*.log
-/streamlabs-build
+streamlabs-build.app
 
 tests/osn-tests/*-cache-local.zip

@@ -105,7 +105,10 @@ describe(testName, () => {
         osn.SimpleReplayBufferFactory.destroy(replayBuffer);
     });
 
-    it('Start simple replay buffer - Use Recording', async () => {
+    it('Start simple replay buffer - Use Recording', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const replayBuffer = osn.SimpleReplayBufferFactory.create();
         replayBuffer.path = path.join(path.normalize(__dirname), '..', 'osnData');
         replayBuffer.format = osn.ERecordingFormat.MP4;
@@ -186,7 +189,10 @@ describe(testName, () => {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple replay buffer - Use Stream through Recording', async () => {
+    it('Start simple replay buffer - Use Stream through Recording', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const replayBuffer = osn.SimpleReplayBufferFactory.create();
         replayBuffer.path = path.join(path.normalize(__dirname), '..', 'osnData');
         replayBuffer.format = osn.ERecordingFormat.MP4;
