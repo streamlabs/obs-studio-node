@@ -3,7 +3,6 @@ brew update
 brew doctor
 brew install cmake
 brew install python
-brew install openssl@3
 brew install node@18
 export PATH="/usr/local/opt/node@18/bin:$PATH"
 node -v
