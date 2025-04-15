@@ -125,9 +125,9 @@ FetchContent_Declare(
 
 FetchContent_GetProperties(libcurl)
 if(NOT libcurl_POPULATED)
-  set (CURL_USE_OPENSSL OFF CACHE BOOL "")
-  set (SSH2CURL_USE_LIB OFF CACHE BOOL "")
-  message(STATUS "CURL_USE_OPENSSL: ${CURL_USE_OPENSSL}")
+  set(CURL_USE_OPENSSL OFF CACHE BOOL "")
+  set(SSH2CURL_USE_LIB OFF CACHE BOOL "")
+  set(CURL_USE_LIBSSH2 OFF CACHE BOOL "")
   FetchContent_Populate(libcurl)
   add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
