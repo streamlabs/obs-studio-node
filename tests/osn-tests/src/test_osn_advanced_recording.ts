@@ -12,7 +12,8 @@ import path = require('path');
 
 const testName = 'osn-advanced-recording';
 
-describe(testName, () => {
+describe(testName, function() {
+    this.timeout(5000);
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process

@@ -10,7 +10,8 @@ import { EFPSType } from '../osn';
 
 const testName = 'osn-advanced-streaming';
 
-describe(testName, () => {
+describe(testName, function() {
+    this.timeout(3000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process

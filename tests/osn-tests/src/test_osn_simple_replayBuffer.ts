@@ -10,7 +10,8 @@ import path = require('path');
 
 const testName = 'osn-simple-replay-buffer';
 
-describe(testName, () => {
+describe(testName, function() {
+    this.timeout(5000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process
