@@ -30,6 +30,7 @@
 #include <util/config-file.h>
 #include <util/dstr.h>
 #include <util/platform.h>
+#include <vector>
 #include "nodeobs_api.h"
 
 #include "nodeobs_audio_encoders.h"
@@ -39,6 +40,17 @@ struct SourceSizeInfo {
 	uint32_t width = 0;
 	uint32_t height = 0;
 	uint32_t flags = 0;
+};
+
+struct TransitionInfo {
+	enum EventType : uint32_t {
+		START = 0,
+		STOP = 1,
+	};
+
+	obs_source_t *transition;
+	// All pending events to be processed. Might be empty.
+	std::vector<EventType> events;
 };
 
 class CallbackManager {
