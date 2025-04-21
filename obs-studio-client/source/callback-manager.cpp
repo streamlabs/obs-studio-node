@@ -189,61 +189,64 @@ void globalCallback::worker()
 			if (!response.size() || (response.size() == 1)) {
 				goto do_sleep;
 			}
+            
+            // Separate scope to avoid "jump bypasses variable initialization" compiler error
+            {
+                uint32_t index = 1;
 
-			uint32_t index = 1;
+                SourceSizeInfoData *data = new SourceSizeInfoData{{}};
+                for (uint32_t i = 2; i < (response[1].value_union.ui32 * 4) + 2; i++) {
+                    SourceSizeInfo *item = new SourceSizeInfo;
 
-			SourceSizeInfoData *data = new SourceSizeInfoData{{}};
-			for (uint32_t i = 2; i < (response[1].value_union.ui32 * 4) + 2; i++) {
-				SourceSizeInfo *item = new SourceSizeInfo;
+                    item->name = response[i++].value_str;
+                    item->width = response[i++].value_union.ui32;
+                    item->height = response[i++].value_union.ui32;
+                    item->flags = response[i].value_union.ui32;
+                    data->items.emplace_back(item);
+                    index = i;
+                }
 
-				item->name = response[i++].value_str;
-				item->width = response[i++].value_union.ui32;
-				item->height = response[i++].value_union.ui32;
-				item->flags = response[i].value_union.ui32;
-				data->items.emplace_back(item);
-				index = i;
-			}
+                if (data->items.size() > 0) {
+                    napi_status status = js_source_callback.NonBlockingCall(data, sources_callback);
+                    if (status != napi_ok) {
+                        delete data;
+                    }
+                }
 
-			if (data->items.size() > 0) {
-				napi_status status = js_source_callback.NonBlockingCall(data, sources_callback);
-				if (status != napi_ok) {
-					delete data;
-				}
-			}
+                index++;
 
-			index++;
+                auto volmeterDataArray = new VolmeterDataArray;
+                while (volmeters_size--) {
+                    VolmeterData *item = new VolmeterData{{}, {}, {}};
 
-			auto volmeterDataArray = new VolmeterDataArray;
-			while (volmeters_size--) {
-				VolmeterData *item = new VolmeterData{{}, {}, {}};
+                    item->source_name = response[index++].value_str;
 
-				item->source_name = response[index++].value_str;
+                    size_t channels = response[index++].value_union.i32;
+                    bool isMuted = response[index++].value_union.i32;
 
-				size_t channels = response[index++].value_union.i32;
-				bool isMuted = response[index++].value_union.i32;
+                    if (!isMuted) {
+                        item->magnitude.resize(channels);
+                        item->peak.resize(channels);
+                        item->input_peak.resize(channels);
+                        for (size_t ch = 0; ch < channels; ch++) {
+                            item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
+                            item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
+                            item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
+                        }
 
-				if (!isMuted) {
-					item->magnitude.resize(channels);
-					item->peak.resize(channels);
-					item->input_peak.resize(channels);
-					for (size_t ch = 0; ch < channels; ch++) {
-						item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
-						item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
-						item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
-					}
+                        index += static_cast<uint32_t>((3 * channels));
 
-					index += static_cast<uint32_t>((3 * channels));
+                        volmeterDataArray->items.emplace_back(item);
+                    }
+                }
 
-					volmeterDataArray->items.emplace_back(item);
-				}
-			}
-
-			if (js_volmeter_callback) {
-				napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
-				if (status != napi_ok) {
-					delete volmeterDataArray;
-				}
-			}
+                if (js_volmeter_callback) {
+                    napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
+                    if (status != napi_ok) {
+                        delete volmeterDataArray;
+                    }
+                }
+            }
 		}
 
 	do_sleep:
