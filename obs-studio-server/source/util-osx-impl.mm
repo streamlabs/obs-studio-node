@@ -53,7 +53,7 @@ void UtilObjCInt::wait_terminate(void)
 				this->stopApplication();
 			break;
 		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 	close(file_descriptor);
 	remove(name);
