@@ -39,7 +39,7 @@ jobs:
             ReleaseName: release
             Architecture: x86_64
           - BuildReleases: Release-arm64
-            image: macos-14
+            image: macos-15
             BuildConfig: RelWithDebInfo
             ReleaseName: release
             Architecture: arm64
