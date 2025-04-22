@@ -16,6 +16,7 @@ describe(testName, function () {
     let hasTestFailed: boolean = false;
     // Initialize OBS process
     before(async() => {
+        const start = performance.now();
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
         obs = new OBSHandler(testName);
@@ -24,6 +25,8 @@ describe(testName, function () {
 
         // Reserving user from pool
         await obs.reserveUser();
+        const end = performance.now();
+        console.log(`advanced-replay-buffer Elapsed time: ${end - start} milliseconds`);
     });
 
     // Shutdown OBS process

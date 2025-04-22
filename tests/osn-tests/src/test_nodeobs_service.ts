@@ -103,6 +103,7 @@ describe(testName, function() {
     });
 
     it('Simple mode - Start recording and stop', async function() {
+        const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
@@ -146,9 +147,13 @@ describe(testName, function() {
 
         expect(signalInfo.type).to.equal(EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
         expect(signalInfo.signal).to.equal(EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        const end = performance.now();
+        console.log(`t1-sm-time Elapsed time: ${end - start} milliseconds`);
+        
     });
 
     it('Simple mode - Start replay buffer, save replay and stop', async function() {
+        const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
@@ -193,9 +198,12 @@ describe(testName, function() {
 
         expect(signalInfo.type).to.equal(EOBSOutputType.ReplayBuffer, GetErrorMessage(ETestErrorMsg.ReplayBuffer));
         expect(signalInfo.signal).to.equal(EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.ReplayBuffer));
+        const end = performance.now();
+        console.log(`t1-rb-time Elapsed time: ${end - start} milliseconds`);
     });
 
     it('Simple mode - Record while streaming', async function() {
+        const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
@@ -280,9 +288,12 @@ describe(testName, function() {
         signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
         expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
         expect(signalInfo.signal).to.equal(EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
+        const end = performance.now();
+        console.log(`t-rws-time Elapsed time: ${end - start} milliseconds`);
     });
 
     it('Simple mode - Record replay while streaming and save', async function() {
+        const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
@@ -367,9 +378,12 @@ describe(testName, function() {
         signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
         expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
         expect(signalInfo.signal).to.equal(EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
+        const end = performance.now();
+        console.log(`t-record-replay-while-stream-time Elapsed time: ${end - start} milliseconds`);
     });
 
     it('Simple mode - Record and use replay buffer while streaming', async function() {
+        const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
@@ -494,6 +508,8 @@ describe(testName, function() {
         signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
         expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
         expect(signalInfo.signal).to.equal(EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
+        const end = performance.now();
+        console.log(`ss-urb Elapsed time: ${end - start} milliseconds`);
     });
 
     it('Advanced mode - Start and stop streaming', async function() {
@@ -947,6 +963,8 @@ describe(testName, function() {
     });
 
     it('Fail test - Stream with invalid stream key', async function() {
+        const start = performance.now();
+        
         let signalInfo: IOBSOutputSignalInfo;
 
         obs.setStreamKey('invalid');
@@ -963,6 +981,8 @@ describe(testName, function() {
         expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         obs.setStreamKey(obs.userStreamKey);
+        const end = performance.now();
+        console.log(`ft-invalid-stream-key Elapsed time: ${end - start} milliseconds`);
     });
 
     it('Reset video context', function() {
