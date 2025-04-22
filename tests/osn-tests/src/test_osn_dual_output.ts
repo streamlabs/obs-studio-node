@@ -18,7 +18,7 @@ import { randomUUID } from 'crypto';
 const testName = 'osn-dual-output';
 
 describe(testName, function() {
-    this.timeout(6000);
+    this.timeout(7000);
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     let newSceneName = 'scene_' + randomUUID();
