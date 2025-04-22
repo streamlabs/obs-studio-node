@@ -41,7 +41,7 @@ public:
 
 private:
 	void *self;
-    std::atomic<bool> appRunning;
+	std::atomic<bool> appRunning;
 	std::thread *worker;
 };
 

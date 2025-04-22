@@ -43,9 +43,9 @@ void UtilObjCInt::wait_terminate(void)
 		return;
 
 	while (true) {
-        if (!appRunning) {
-            break;
-        }
+		if (!appRunning) {
+			break;
+		}
 		int ret = ::read(file_descriptor, buffer.data(), count);
 		if (ret > 0) {
 			bool appCrashed = *reinterpret_cast<bool *>(buffer.data());
@@ -110,10 +110,9 @@ void UtilObjCInt::stopApplication(void)
 						       data2:0];
 		[NSApp postEvent:event atStart:TRUE];
 
-        appRunning = false;
+		appRunning = false;
 		if (worker->joinable())
 			worker->join();
-
 	});
 }
 
