@@ -74,7 +74,7 @@ Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
 	if (info.Length() > 2) {
 		Napi::Object json = info.Env().Global().Get("JSON").As<Napi::Object>();
 		Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
-		Napi::String settingsObj = Napi::String::New(info.Env(), "");
+		Napi::Object settingsObj = info[2].ToObject();
 		settings = stringify.Call(json, {settingsObj}).As<Napi::String>().Utf8Value();
 	}
 
