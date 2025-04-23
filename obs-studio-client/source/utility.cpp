@@ -158,8 +158,13 @@ void ipc_freeze_callback(const std::string &app_state_dir, const std::string &ca
 
 	static const std::string call_log_path = app_state_dir + "\\long_calls.txt";
 	static const std::string app_state_path = app_state_dir + "\\appState";
-	static const auto pid = ::getpid();
 
+#ifdef WIN32
+    static const auto pid = _getpid();
+#else
+    static const auto pid = getpid();
+#endif
+    
 	const bool freeze_detected = obs_time < 0;
 
 	static std::mutex file_mutex;
