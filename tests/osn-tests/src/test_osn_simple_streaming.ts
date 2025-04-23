@@ -10,7 +10,7 @@ import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_en
 const testName = 'osn-simple-streaming';
 
 describe(testName, function() {
-    this.timeout(4000)
+    this.timeout(3000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
 

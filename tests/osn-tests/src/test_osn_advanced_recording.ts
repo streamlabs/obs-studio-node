@@ -13,7 +13,7 @@ import path = require('path');
 const testName = 'osn-advanced-recording';
 
 describe(testName, function() {
-    this.timeout(6000);
+    this.timeout(5000);
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process
