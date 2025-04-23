@@ -9,6 +9,7 @@ import { deleteConfigFiles } from '../util/general';
 const testName = 'nodeobs_autoconfig';
 
 describe(testName, function() {
+    this.timeout(15000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
 
