@@ -245,7 +245,7 @@ static void write_pid_file(std::string &pid_path, uint64_t pid)
 #elif __APPLE__
 // Make sure the previous obs-server process has been killed before we proceed.
 // This use case might be encountered when the obs-server is being constantly spun up and shutdown
-// by test cases or if the user where to somehow do this manually be restarting the host app.
+// by test cases or if the user where to somehow do this manually by quickly restarting the host app.
 static void killObsServer(uint32_t maxTries = 3, uint32_t sleepTime = 20)
 {
 	uint32_t tries = 0;
