@@ -294,6 +294,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 #else
 	g_util_osx->setServerWorkingDirectoryPath(workingDirectory);
 	pid_t pids[2048];
+check_obs64:
 	int bytes = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
 	int n_proc = bytes / sizeof(pids[0]);
 	for (int i = 0; i < n_proc; i++) {
@@ -301,8 +302,12 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 		int st = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &proc, PROC_PIDTBSDINFO_SIZE);
 		if (st == PROC_PIDTBSDINFO_SIZE) {
 			if (strcmp("obs64", proc.pbi_name) == 0) {
-				if (pids[i] != 0)
-					kill(pids[i], SIGKILL);
+                if (pids[i] != 0) {
+                    kill(pids[i], SIGKILL);
+                    std::cout << "killing the obs64 process" << std::endl;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                    goto check_obs64; // see if its still alive
+                }
 			}
 		}
 	}
@@ -310,6 +315,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	pid_t pid;
 	std::vector<char> uri_str(uri.c_str(), uri.c_str() + uri.size() + 1);
 	char *argv[] = {"obs64", uri_str.data(), (char *)version.c_str(), (char *)serverBinaryPath.c_str(), NULL};
+    std::cout << "obs64 " << uri_str.data() << std::endl;
 	remove(uri.c_str());
 
 	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, argv, environ);
