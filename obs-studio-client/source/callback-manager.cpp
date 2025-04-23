@@ -35,6 +35,7 @@ bool globalCallback::worker_stop = true;
 uint32_t globalCallback::sleepIntervalMS = 50;
 std::thread *globalCallback::worker_thread = nullptr;
 Napi::ThreadSafeFunction globalCallback::js_source_callback;
+Napi::ThreadSafeFunction globalCallback::js_transition_callback;
 Napi::ThreadSafeFunction globalCallback::js_volmeter_callback;
 bool globalCallback::m_all_workers_stop = false;
 std::mutex globalCallback::mtx_volmeters;
@@ -44,6 +45,9 @@ void globalCallback::Init(Napi::Env env, Napi::Object exports)
 {
 	exports.Set(Napi::String::New(env, "RegisterSourceCallback"), Napi::Function::New(env, globalCallback::RegisterSourceCallback));
 	exports.Set(Napi::String::New(env, "RemoveSourceCallback"), Napi::Function::New(env, globalCallback::RemoveSourceCallback));
+
+	exports.Set(Napi::String::New(env, "RegisterTransitionCallback"), Napi::Function::New(env, globalCallback::RegisterTransitionCallback));
+	exports.Set(Napi::String::New(env, "RemoveTransitionCallback"), Napi::Function::New(env, globalCallback::RemoveTransitionCallback));
 
 	exports.Set(Napi::String::New(env, "RegisterVolmeterCallback"), Napi::Function::New(env, globalCallback::RegisterVolmeterCallback));
 	exports.Set(Napi::String::New(env, "RemoveVolmeterCallback"), Napi::Function::New(env, globalCallback::RemoveVolmeterCallback));
@@ -66,6 +70,21 @@ Napi::Value globalCallback::RemoveSourceCallback(const Napi::CallbackInfo &info)
 {
 	if (isWorkerRunning)
 		stop_worker();
+
+	return info.Env().Undefined();
+}
+
+Napi::Value globalCallback::RegisterTransitionCallback(const Napi::CallbackInfo &info)
+{
+	Napi::Function async_callback = info[0].As<Napi::Function>();
+	js_transition_callback = Napi::ThreadSafeFunction::New(info.Env(), async_callback, "TransitionCallback", 0, 1, [](Napi::Env) {});
+
+	return Napi::Boolean::New(info.Env(), true);
+}
+
+Napi::Value globalCallback::RemoveTransitionCallback(const Napi::CallbackInfo &info)
+{
+	js_transition_callback.Release();
 
 	return info.Env().Undefined();
 }
@@ -116,6 +135,36 @@ void globalCallback::worker()
 				obj.Set("width", Napi::Number::New(env, data->items[i]->width));
 				obj.Set("height", Napi::Number::New(env, data->items[i]->height));
 				obj.Set("flags", Napi::Number::New(env, data->items[i]->flags));
+				result.Set(static_cast<uint32_t>(i), obj);
+			}
+			jsCallback.Call({result});
+		} catch (...) {
+		}
+		delete data;
+	};
+
+	auto transitions_callback = [](Napi::Env env, Napi::Function jsCallback, TransitionInfoData *data) {
+		try {
+			Napi::Array result = Napi::Array::New(env, data->items.size());
+
+			for (size_t i = 0; i < data->items.size(); i++) {
+				Napi::Object obj = Napi::Object::New(env);
+				obj.Set("id", Napi::String::New(env, data->items[i]->id));
+
+				switch (data->items[i]->event) {
+				case TransitionInfo::START:
+					obj.Set("event", Napi::String::New(env, "start"));
+					break;
+
+				case TransitionInfo::STOP:
+					obj.Set("event", Napi::String::New(env, "stop"));
+					break;
+
+				default:
+					// do nothing
+					break;
+				}
+
 				result.Set(static_cast<uint32_t>(i), obj);
 			}
 			jsCallback.Call({result});
@@ -183,69 +232,85 @@ void globalCallback::worker()
 			}
 		}
 
-		{
-			std::vector<ipc::value> response = conn->call_synchronous_helper(
-				"CallbackManager", "GlobalQuery", {ipc::value((uint64_t)volmeters_ids.size()), ipc::value(volmeters_ids)});
-			if (!response.size() || (response.size() == 1)) {
-				goto do_sleep;
-			}
+		std::vector<ipc::value> response = conn->call_synchronous_helper("CallbackManager", "GlobalQuery",
+										 {ipc::value((uint64_t)volmeters_ids.size()), ipc::value(volmeters_ids)});
+		if (!response.size() || (response.size() == 1)) {
+			goto do_sleep;
+		}
 
-			uint32_t index = 1;
+		uint32_t index = 1;
 
+		const auto sourcesSize = response[index++].value_union.ui32;
+		if (sourcesSize) {
 			SourceSizeInfoData *data = new SourceSizeInfoData{{}};
-			for (uint32_t i = 2; i < (response[1].value_union.ui32 * 4) + 2; i++) {
+			for (uint32_t i = 0; i < sourcesSize; i++) {
 				SourceSizeInfo *item = new SourceSizeInfo;
 
-				item->name = response[i++].value_str;
-				item->width = response[i++].value_union.ui32;
-				item->height = response[i++].value_union.ui32;
-				item->flags = response[i].value_union.ui32;
+				item->name = response[index++].value_str;
+				item->width = response[index++].value_union.ui32;
+				item->height = response[index++].value_union.ui32;
+				item->flags = response[index++].value_union.ui32;
 				data->items.emplace_back(item);
-				index = i;
+			}
+
+			napi_status status = js_source_callback.NonBlockingCall(data, sources_callback);
+			if (status != napi_ok) {
+				delete data;
+			}
+		}
+
+		const auto transitionsSize = response[index++].value_union.ui32;
+		if (transitionsSize) {
+			TransitionInfoData *data = new TransitionInfoData{{}};
+			for (uint32_t i = 0; i < transitionsSize; i++) {
+				TransitionInfo *item = new TransitionInfo;
+
+				item->id = response[index++].value_str;
+				item->event = static_cast<TransitionInfo::EventType>(response[index++].value_union.ui32);
+
+				data->items.emplace_back(item);
 			}
 
 			if (data->items.size() > 0) {
-				napi_status status = js_source_callback.NonBlockingCall(data, sources_callback);
+				napi_status status = js_transition_callback.NonBlockingCall(data, transitions_callback);
 				if (status != napi_ok) {
 					delete data;
 				}
 			}
+		}
 
-			index++;
+		auto volmeterDataArray = new VolmeterDataArray;
+		while (volmeters_size--) {
+			VolmeterData *item = new VolmeterData{{}, {}, {}};
 
-			auto volmeterDataArray = new VolmeterDataArray;
-			while (volmeters_size--) {
-				VolmeterData *item = new VolmeterData{{}, {}, {}};
+			item->source_name = response[index++].value_str;
 
-				item->source_name = response[index++].value_str;
+			const size_t channels = response[index++].value_union.i32;
+			const bool isMuted = response[index++].value_union.i32;
+			const bool isAudioInput = response[index++].value_union.i32;
 
-				size_t channels = response[index++].value_union.i32;
-				bool isMuted = response[index++].value_union.i32;
-				bool isAudioInput = response[index++].value_union.i32;
-
-				if (isMuted && !isAudioInput) {
-					continue;
-				}
-
-				item->magnitude.resize(channels);
-				item->peak.resize(channels);
-				item->input_peak.resize(channels);
-				for (size_t ch = 0; ch < channels; ch++) {
-					item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
-					item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
-					item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
-				}
-
-				index += static_cast<uint32_t>((3 * channels));
-
-				volmeterDataArray->items.emplace_back(item);
+			if (isMuted && !isAudioInput) {
+				continue;
 			}
 
-			if (js_volmeter_callback) {
-				napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
-				if (status != napi_ok) {
-					delete volmeterDataArray;
-				}
+			item->magnitude.resize(channels);
+			item->peak.resize(channels);
+			item->input_peak.resize(channels);
+			for (size_t ch = 0; ch < channels; ch++) {
+				item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
+				item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
+				item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
+			}
+
+			index += static_cast<uint32_t>((3 * channels));
+
+			volmeterDataArray->items.emplace_back(item);
+		}
+
+		if (js_volmeter_callback) {
+			napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
+			if (status != napi_ok) {
+				delete volmeterDataArray;
 			}
 		}
 
