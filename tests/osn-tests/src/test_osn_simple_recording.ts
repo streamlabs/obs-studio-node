@@ -11,8 +11,7 @@ import path = require('path');
 
 const testName = 'osn-simple-recording';
 
-describe(testName, function() {
-    this.timeout(4000)
+describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process

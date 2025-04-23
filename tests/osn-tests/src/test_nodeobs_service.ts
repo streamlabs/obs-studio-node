@@ -10,7 +10,6 @@ import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../uti
 const testName = 'nodeobs_service';
 
 describe(testName, function() {
-    this.timeout(5000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     const path = require('path');
