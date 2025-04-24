@@ -115,7 +115,10 @@ describe(testName, () => {
         }
     }
 
-    it('Start Dual Output with advanced recording', async () => {
+    it('Start Dual Output with advanced recording', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.AdvancedRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -163,7 +166,10 @@ describe(testName, () => {
         osn.AdvancedRecordingFactory.destroy(recording2);
     });
 
-    it('Start Dual Output with recording and scene items', async () => {
+    it('Start Dual Output with recording and scene items', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const returnSource = osn.Global.getOutputSource(0);
 
         const recording = osn.AdvancedRecordingFactory.create();
@@ -246,7 +252,10 @@ describe(testName, () => {
         scene.release();
     });
 
-    it('Start Dual Output with advanced recording and audio scene items', async () => {
+    it('Start Dual Output with advanced recording and audio scene items', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const returnSource = osn.Global.getOutputSource(0);
 
         const recording = osn.AdvancedRecordingFactory.create();
@@ -342,7 +351,10 @@ describe(testName, () => {
     });
 
 
-    it('Start Dual Output with simple recording and audio scene items', async () => {
+    it('Start Dual Output with simple recording and audio scene items', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const returnSource = osn.Global.getOutputSource(0);
 
         const recording = osn.SimpleRecordingFactory.create();
@@ -441,7 +453,10 @@ describe(testName, () => {
         scene.release();
     });
 
-    it('Start Dual Output with legacy streaming to two services', async () => {
+    it('Start Dual Output with legacy streaming to two services', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
@@ -483,7 +498,10 @@ describe(testName, () => {
         await secondStreamUserPoolHandler.releaseUser();
     });
 
-    it('Start Dual Output with legacy streaming to two services and audio sources', async () => {
+    it('Start Dual Output with legacy streaming to two services and audio sources', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');

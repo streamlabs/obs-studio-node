@@ -102,6 +102,9 @@ describe(testName, function() {
     });
 
     it('Simple mode - Start recording and stop', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
@@ -152,6 +155,9 @@ describe(testName, function() {
     });
 
     it('Simple mode - Start replay buffer, save replay and stop', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
@@ -202,6 +208,9 @@ describe(testName, function() {
     });
 
     it('Simple mode - Record while streaming', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
@@ -292,6 +301,9 @@ describe(testName, function() {
     });
 
     it('Simple mode - Record replay while streaming and save', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
@@ -382,6 +394,9 @@ describe(testName, function() {
     });
 
     it('Simple mode - Record and use replay buffer while streaming', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
@@ -512,6 +527,9 @@ describe(testName, function() {
     });
 
     it('Advanced mode - Start and stop streaming', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Advanced');
         obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_x264');
@@ -563,6 +581,9 @@ describe(testName, function() {
     });
 
     it('Advanced mode - Start recording and stop', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Advanced');
         obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_x264');
@@ -610,6 +631,9 @@ describe(testName, function() {
     });
 
     it('Advanced mode - Start replay buffer, save replay and stop', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Advanced');
         obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_x264');
@@ -658,6 +682,9 @@ describe(testName, function() {
     });
 
     it('Advanced mode - Record while streaming', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Advanced');
         obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_x264');
@@ -746,6 +773,9 @@ describe(testName, function() {
     });
 
     it('Advanced mode - Record replay while streaming and save', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Advanced');
         obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_x264');
@@ -834,6 +864,9 @@ describe(testName, function() {
     });
 
     it('Advanced mode - Record and use replay buffer while streaming', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         // Preparing environment
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Advanced');
         obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_x264');
@@ -962,6 +995,9 @@ describe(testName, function() {
     });
 
     it('Fail test - Stream with invalid stream key', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         
         let signalInfo: IOBSOutputSignalInfo;

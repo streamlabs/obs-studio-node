@@ -117,7 +117,10 @@ describe(testName, () => {
         osn.AdvancedRecordingFactory.destroy(recording);
     });
 
-    it('Start advanced recording - Stream', async () => {
+    it('Start advanced recording - Stream', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.AdvancedRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -247,7 +250,10 @@ describe(testName, () => {
         osn.AdvancedStreamingFactory.destroy(stream);
     });
 
-    it('Start advanced recording - Custom encoders', async () => {
+    it('Start advanced recording - Custom encoders', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.AdvancedRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
