@@ -99,7 +99,7 @@ describe(testName, function() {
     });
 
     it('Start simple recording - Stream', async function () {
-        if (obs.os == 'darwin') {
+        if (this.isDarwin()) {
             this.skip();
         }
         const recording = osn.SimpleRecordingFactory.create();
@@ -232,7 +232,7 @@ describe(testName, function() {
     });
 
     it('Start simple recording - HighQuality', async function () {
-        if (obs.os == 'darwin') {
+        if (this.isDarwin()) {
             this.skip();
         }
         const recording = osn.SimpleRecordingFactory.create();
@@ -304,7 +304,7 @@ describe(testName, function() {
     });
 
     it('Start simple recording - HigherQuality', async function () {
-        if (obs.os == 'darwin') {
+        if (this.isDarwin()) {
             this.skip();
         }
         const recording = osn.SimpleRecordingFactory.create();
@@ -376,7 +376,7 @@ describe(testName, function() {
     });
 
     it('Start simple recording - Lossless', async function () {
-        if (obs.os == 'darwin') {
+        if (this.isDarwin()) {
             this.skip();
         }
         const recording = osn.SimpleRecordingFactory.create();
