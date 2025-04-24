@@ -255,7 +255,7 @@ export class OBSHandler {
                     resolve(signalInfo)
                 }
             );
-            setTimeout(() => reject(new Error(output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout')), 200000);
+            setTimeout(() => reject(new Error(output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout')), 70000);
         }
         );
     }
