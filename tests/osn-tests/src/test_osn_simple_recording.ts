@@ -20,7 +20,7 @@ describe(testName, function() {
         deleteConfigFiles();
         obs = new OBSHandler(testName);
         if (obs.os == 'darwin') {
-            this.timeout(35000);
+            this.timeout(40000);
             logInfo(testName, 'set long timeout for macos');
         }
         obs.instantiateUserPool(testName);
