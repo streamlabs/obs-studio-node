@@ -242,7 +242,35 @@ static void write_pid_file(std::string &pid_path, uint64_t pid)
 
 	pid_file.write(reinterpret_cast<char *>(&pid), sizeof(pid));
 }
-
+#elif __APPLE__
+// Make sure the previous obs-server process has been killed before we proceed.
+// This use case might be encountered when the obs-server is being constantly spun up and shutdown
+// by test cases or if the user where to somehow do this manually by quickly restarting the host app.
+static void killObsServer(uint32_t maxTries = 3, uint32_t sleepTime = 20)
+{
+	uint32_t tries = 0;
+	pid_t pids[2048];
+	int bytes = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
+	int n_proc = bytes / sizeof(pids[0]);
+	while (tries < maxTries) {
+		for (int i = 0; i < n_proc; i++) {
+			struct proc_bsdinfo proc;
+			int st = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &proc, PROC_PIDTBSDINFO_SIZE);
+			if (st == PROC_PIDTBSDINFO_SIZE) {
+				if (strcmp("obs64", proc.pbi_name) == 0) {
+					if (pids[i] != 0) {
+						kill(pids[i], SIGKILL);
+						std::this_thread::sleep_for(
+							std::chrono::milliseconds(sleepTime)); // wait for the obs-server to handle the signal
+					} else {
+						break;
+					}
+				}
+			}
+		}
+		tries++;
+	}
+}
 #endif
 
 Controller::Controller() {}
@@ -293,19 +321,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	}
 #else
 	g_util_osx->setServerWorkingDirectoryPath(workingDirectory);
-	pid_t pids[2048];
-	int bytes = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
-	int n_proc = bytes / sizeof(pids[0]);
-	for (int i = 0; i < n_proc; i++) {
-		struct proc_bsdinfo proc;
-		int st = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &proc, PROC_PIDTBSDINFO_SIZE);
-		if (st == PROC_PIDTBSDINFO_SIZE) {
-			if (strcmp("obs64", proc.pbi_name) == 0) {
-				if (pids[i] != 0)
-					kill(pids[i], SIGKILL);
-			}
-		}
-	}
+	killObsServer();
 
 	pid_t pid;
 	std::vector<char> uri_str(uri.c_str(), uri.c_str() + uri.size() + 1);
