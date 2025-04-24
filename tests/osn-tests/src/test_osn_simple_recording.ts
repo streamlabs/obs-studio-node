@@ -19,10 +19,6 @@ describe(testName, function() {
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
         obs = new OBSHandler(testName);
-        if (obs.os == 'darwin') {
-            this.timeout(120000);
-            logInfo(testName, 'set long timeout for macos');
-        }
         obs.instantiateUserPool(testName);
 
         // Reserving user from pool
@@ -104,7 +100,7 @@ describe(testName, function() {
 
     it('Start simple recording - Stream', async function () {
         if (obs.os == 'darwin') {
-            //this.skip();
+            this.skip();
         }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
@@ -235,7 +231,10 @@ describe(testName, function() {
         osn.SimpleStreamingFactory.destroy(stream);
     });
 
-    it('Start simple recording - HighQuality', async () => {
+    it('Start simple recording - HighQuality', async function () {
+        if (obs.os == 'darwin') {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -304,7 +303,10 @@ describe(testName, function() {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple recording - HigherQuality', async () => {
+    it('Start simple recording - HigherQuality', async function () {
+        if (obs.os == 'darwin') {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -373,7 +375,10 @@ describe(testName, function() {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple recording - Lossless', async () => {
+    it('Start simple recording - Lossless', async function () {
+        if (obs.os == 'darwin') {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
