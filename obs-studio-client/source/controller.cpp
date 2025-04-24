@@ -262,6 +262,8 @@ static void killObsServer(uint32_t maxTries = 3, uint32_t sleepTime = 20)
 						kill(pids[i], SIGKILL);
 						std::this_thread::sleep_for(
 							std::chrono::milliseconds(sleepTime)); // wait for the obs-server to handle the signal
+					} else {
+						break;
 					}
 				}
 			}
