@@ -15,12 +15,12 @@ describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process
-    before(async() => {
+    before(async function() {
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
         obs = new OBSHandler(testName);
         if (obs.os == 'darwin') {
-            this.timeout(50000);
+            this.timeout(120000);
             logInfo(testName, 'set long timeout for macos');
         }
         obs.instantiateUserPool(testName);
@@ -53,7 +53,7 @@ describe(testName, function() {
         }
     });
 
-    it('Create simple recording', async () => {
+    it('Create simple recording', async function() {
         const recording = osn.SimpleRecordingFactory.create();
         expect(recording).to.not.equal(
             undefined, "Error while creating the simple recording output");
@@ -102,7 +102,10 @@ describe(testName, function() {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple recording - Stream', async () => {
+    it('Start simple recording - Stream', async function () {
+        if (obs.os == 'darwin') {
+            //this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
