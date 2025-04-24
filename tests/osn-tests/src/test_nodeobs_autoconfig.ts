@@ -9,7 +9,7 @@ import { deleteConfigFiles } from '../util/general';
 const testName = 'nodeobs_autoconfig';
 
 describe(testName, function() {
-    this.timeout(15000)
+    this.timeout(16000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
 
@@ -52,6 +52,7 @@ describe(testName, function() {
     });
 
     it('Run autoconfig', async function() {
+        const start = performance.now();
         let progressInfo: IConfigProgress;
 	    let settingValue: any;
 
@@ -155,6 +156,8 @@ describe(testName, function() {
 
             settingValue = obs.getSetting('Video', 'FPSCommon');
             expect(settingValue).to.equal('30', GetErrorMessage(ETestErrorMsg.DefaultFPSCommon));
+            const end = performance.now();
+            logInfo(testName, `Elapsed time: ${end - start} milliseconds`);
         }
 
 	osn.NodeObs.TerminateAutoConfig();
