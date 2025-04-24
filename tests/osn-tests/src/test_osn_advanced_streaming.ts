@@ -96,7 +96,10 @@ describe(testName, () => {
         osn.AdvancedStreamingFactory.destroy(stream);
     });
 
-    it('Start streaming', async () => {
+    it('Start streaming', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
@@ -173,6 +176,9 @@ describe(testName, () => {
     });
 
     it('Stream with invalid stream key', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');

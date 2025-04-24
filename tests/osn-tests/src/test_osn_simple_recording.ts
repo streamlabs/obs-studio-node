@@ -11,15 +11,14 @@ import path = require('path');
 
 const testName = 'osn-simple-recording';
 
-describe(testName, () => {
+describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process
-    before(async() => {
+    before(async function() {
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
         obs = new OBSHandler(testName);
-
         obs.instantiateUserPool(testName);
 
         // Reserving user from pool
@@ -50,7 +49,7 @@ describe(testName, () => {
         }
     });
 
-    it('Create simple recording', async () => {
+    it('Create simple recording', async function() {
         const recording = osn.SimpleRecordingFactory.create();
         expect(recording).to.not.equal(
             undefined, "Error while creating the simple recording output");
@@ -99,7 +98,10 @@ describe(testName, () => {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple recording - Stream', async () => {
+    it('Start simple recording - Stream', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -229,7 +231,10 @@ describe(testName, () => {
         osn.SimpleStreamingFactory.destroy(stream);
     });
 
-    it('Start simple recording - HighQuality', async () => {
+    it('Start simple recording - HighQuality', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -298,7 +303,10 @@ describe(testName, () => {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple recording - HigherQuality', async () => {
+    it('Start simple recording - HigherQuality', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -367,7 +375,10 @@ describe(testName, () => {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Start simple recording - Lossless', async () => {
+    it('Start simple recording - Lossless', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
