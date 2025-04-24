@@ -542,6 +542,12 @@ else ()
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/MacOS/"
 		DESTINATION "./bin" USE_SOURCE_PERMISSIONS PATTERN "OBS" EXCLUDE
 	)
+    # Install library files for unit tests & xcode
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
+		DESTINATION "${libobs_SOURCE_DIR}" USE_SOURCE_PERMISSIONS
+        FILES_MATCHING PATTERN "*.dylib"
+	)
 endif ()
 
 if (WIN32)
