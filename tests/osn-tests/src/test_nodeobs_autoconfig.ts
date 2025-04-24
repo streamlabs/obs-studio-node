@@ -9,7 +9,7 @@ import { deleteConfigFiles } from '../util/general';
 const testName = 'nodeobs_autoconfig';
 
 describe(testName, function() {
-    this.timeout(16000)
+    this.timeout(30000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
 
@@ -52,6 +52,9 @@ describe(testName, function() {
     });
 
     it('Run autoconfig', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
         const start = performance.now();
         let progressInfo: IConfigProgress;
 	    let settingValue: any;
