@@ -11,7 +11,7 @@ import path = require('path');
 
 const testName = 'osn-simple-recording';
 
-describe(testName, () => {
+describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process
@@ -19,7 +19,10 @@ describe(testName, () => {
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
         obs = new OBSHandler(testName);
-
+        if (obs.os == 'darwin') {
+            this.timeout(35000);
+            logInfo(testName, 'set long timeout for macos');
+        }
         obs.instantiateUserPool(testName);
 
         // Reserving user from pool
