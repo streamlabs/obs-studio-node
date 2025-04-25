@@ -43,6 +43,9 @@ void UtilObjCInt::wait_terminate(void)
 		return;
 
 	while (true) {
+		if (!appRunning) {
+			break;
+		}
 		int ret = ::read(file_descriptor, buffer.data(), count);
 		if (ret > 0) {
 			bool appCrashed = *reinterpret_cast<bool *>(buffer.data());
@@ -50,7 +53,7 @@ void UtilObjCInt::wait_terminate(void)
 				this->stopApplication();
 			break;
 		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 	close(file_descriptor);
 	remove(name);
@@ -107,10 +110,9 @@ void UtilObjCInt::stopApplication(void)
 						       data2:0];
 		[NSApp postEvent:event atStart:TRUE];
 
+		appRunning = false;
 		if (worker->joinable())
 			worker->join();
-
-		appRunning = false;
 	});
 }
 
