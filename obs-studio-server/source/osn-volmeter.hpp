@@ -58,6 +58,7 @@ private:
 		std::array<float, MAX_AUDIO_CHANNELS> input_peak{};
 		std::chrono::milliseconds lastUpdateTime = std::chrono::milliseconds(0);
 		int32_t ch = 0;
+		bool is_audio_input_device = false;
 
 		void resetData()
 		{
