@@ -31,8 +31,8 @@
 std::mutex sources_mtx;
 std::map<std::string, std::unique_ptr<SourceSizeInfo>> sources;
 
-std::mutex transitions_mtx;
-std::map<std::string, std::unique_ptr<TransitionInfo>> transitions;
+//std::mutex transitions_mtx;
+//std::map<std::string, std::unique_ptr<TransitionInfo>> transitions;
 
 void CallbackManager::Register(ipc::server &srv)
 {
@@ -79,6 +79,7 @@ void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vecto
 	const std::size_t transition_size_idx = rval.size();
 	rval.push_back(ipc::value((uint32_t)0));
 
+	/*
 	if (!transitions.empty()) {
 		transitions_mtx.lock();
 		uint32_t size = 0;
@@ -98,6 +99,7 @@ void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vecto
 		rval[transition_size_idx] = size;
 		transitions_mtx.unlock();
 	}
+	*/
 
 	uint64_t size_buffer = args[0].value_union.ui64;
 
@@ -143,6 +145,7 @@ void CallbackManager::addSource(obs_source_t *source)
 		return;
 
 	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
+		/*
 		std::unique_lock<std::mutex> ulock(transitions_mtx);
 
 		blog(LOG_INFO, "addSource - transition!: %s", obs_source_get_name(source));
@@ -157,6 +160,7 @@ void CallbackManager::addSource(obs_source_t *source)
 		}
 
 		transitions.emplace(std::make_pair(std::string(obs_source_get_name(source)), ti));
+		*/
 	} else {
 		// Regular source
 		std::unique_lock<std::mutex> ulock(sources_mtx);
@@ -179,6 +183,7 @@ void CallbackManager::removeSource(obs_source_t *source)
 		return;
 
 	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
+		/*
 		std::unique_lock<std::mutex> ulock(transitions_mtx);
 
 		const auto it = transitions.find(name);
@@ -193,6 +198,7 @@ void CallbackManager::removeSource(obs_source_t *source)
 		}
 
 		transitions.erase(it);
+		*/
 	} else {
 		// Regular source
 		std::unique_lock<std::mutex> ulock(sources_mtx);
