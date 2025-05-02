@@ -22,98 +22,98 @@ env:
   SLGenerator: Visual Studio 17 2022
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 30.2.4sl17
+  LibOBSVersion: 30.2.4sl18
   PACKAGE_NAME: osn
 
 jobs:
-  # macos64:
-  #   name: 'macOS'
-  #   runs-on: ${{ matrix.image }}
-  #   strategy:
-  #     matrix:
-  #       BuildReleases: [Release-x86_64, Release-arm64]
-  #       include:
-  #         - BuildReleases: Release-x86_64
-  #           image: macos-13
-  #           BuildConfig: RelWithDebInfo
-  #           ReleaseName: release
-  #           Architecture: x86_64
-  #         - BuildReleases: Release-arm64
-  #           image: macos-14
-  #           BuildConfig: RelWithDebInfo
-  #           ReleaseName: release
-  #           Architecture: arm64
-  #   env:
-  #     OS_TAG: "osx"
-  #   steps:
-  #     - name: 'Checkout'
-  #       uses: actions/checkout@v3
-  #       with:
-  #         submodules: 'recursive'
-  #     - name: Get the version
-  #       id: get_version
-  #       run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
-  #       shell: bash
-  #     - name: Install Node.js
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: '18.x'
-  #     - name: Install dependencies
-  #       shell: bash
-  #       run: './ci/install-dependencies-osx.sh'
-  #     - name: 'Configure obs-studio-node'
-  #       shell: bash
-  #       run: './ci/configure-osn-osx.sh'
-  #       env:
-  #         BUILD_CONFIG: ${{matrix.BuildConfig}}
-  #         RELEASE_NAME: ${{matrix.ReleaseName}}
-  #         ARCHITECTURE: ${{matrix.Architecture}}
-  #         tagartifact: ${{ steps.get_version.outputs.VERSION }}
-  #     - name: 'Build obs-studio-node'
-  #       run: ./ci/build-osn-osx.sh
-  #       shell: bash
-  #       env:
-  #         BUILD_CONFIG: ${{matrix.BuildConfig}}
-  #         SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-  #     - name: Put version into package.json
-  #       if: startsWith(github.ref, 'refs/tags/')
-  #       run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
-  #       env:
-  #         PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-  #     - name: 'Run tests'
-  #       continue-on-error: true
-  #       run: 'yarn run test'
-  #       env:
-  #         SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
-  #         SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
+  macos64:
+    name: 'macOS'
+    runs-on: ${{ matrix.image }}
+    strategy:
+      matrix:
+        BuildReleases: [Release-x86_64, Release-arm64]
+        include:
+          - BuildReleases: Release-x86_64
+            image: macos-13
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
+          - BuildReleases: Release-arm64
+            image: macos-14
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: arm64
+    env:
+      OS_TAG: "osx"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
+        shell: bash
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+      - name: Install dependencies
+        shell: bash
+        run: './ci/install-dependencies-osx.sh'
+      - name: 'Configure obs-studio-node'
+        shell: bash
+        run: './ci/configure-osn-osx.sh'
+        env:
+          BUILD_CONFIG: ${{matrix.BuildConfig}}
+          RELEASE_NAME: ${{matrix.ReleaseName}}
+          ARCHITECTURE: ${{matrix.Architecture}}
+          tagartifact: ${{ steps.get_version.outputs.VERSION }}
+      - name: 'Build obs-studio-node'
+        run: ./ci/build-osn-osx.sh
+        shell: bash
+        env:
+          BUILD_CONFIG: ${{matrix.BuildConfig}}
+          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
+      - name: Put version into package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
+        env:
+          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: 'Run tests'
+        continue-on-error: true
+        run: 'yarn run test'
+        env:
+          SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
+          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
 
-  #         OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-  #         OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
-  #         RELEASE_NAME: ${{matrix.ReleaseName}}
+          OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
+          OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
+          RELEASE_NAME: ${{matrix.ReleaseName}}
 
-  #     - name: Tar artifact for deployment
-  #       if: startsWith(github.ref, 'refs/tags/')
-  #       run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} ${{env.InstallPath}}
-  #       env:
-  #         TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}-${{matrix.Architecture}}
-  #     - name: Configure AWS credentials
-  #       if: startsWith(github.ref, 'refs/tags/')
-  #       uses: aws-actions/configure-aws-credentials@v1
-  #       with:
-  #         aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-  #         aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
-  #         aws-region: us-west-2
-  #     - name: Deploy
-  #       if: startsWith(github.ref, 'refs/tags/')
-  #       run: aws s3 cp ${{env.TARGET_ARTIFACT}}.tar.gz s3://${{env.RELEASE_BUCKET}} --acl public-read
-  #       env:
-  #         TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}-${{matrix.Architecture}}
-  #     - name: 'Upload debug files to Sentry'
-  #       if: startsWith(github.ref, 'refs/tags/')
-  #       run: 'python ./ci/sentry-osx.py'
-  #       env:
-  #          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-  #          BUILDCONFIG: ${{matrix.BuildConfig}}
+      - name: Tar artifact for deployment
+        if: startsWith(github.ref, 'refs/tags/')
+        run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} ${{env.InstallPath}}
+        env:
+          TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}-${{matrix.Architecture}}
+      - name: Configure AWS credentials
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
+          aws-secret-access-key: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
+          aws-region: us-west-2
+      - name: Deploy
+        if: startsWith(github.ref, 'refs/tags/')
+        run: aws s3 cp ${{env.TARGET_ARTIFACT}}.tar.gz s3://${{env.RELEASE_BUCKET}} --acl public-read
+        env:
+          TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}-${{matrix.Architecture}}
+      - name: 'Upload debug files to Sentry'
+        if: startsWith(github.ref, 'refs/tags/')
+        run: 'python ./ci/sentry-osx.py'
+        env:
+           SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
+           BUILDCONFIG: ${{matrix.BuildConfig}}
 
   win64:
     name: 'Windows 64-bit'

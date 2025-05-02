@@ -294,7 +294,6 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-output.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-audio-bitrate.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-audio-bitrate.hpp"
-    "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-output.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-output.hpp"
@@ -396,6 +395,8 @@ SET(osn-server_SOURCES
 
 if (APPLE)
     SET(osn-server-osx_SOURCES
+        "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info-osx.mm"
+
         ###### osx-util ######
         "${PROJECT_SOURCE_DIR}/source/util-osx.hpp"
         "${PROJECT_SOURCE_DIR}/source/util-osx.cpp"
@@ -407,6 +408,12 @@ if (APPLE)
         APPEND
         osn-server_SOURCES
         ${osn-server-osx_SOURCES}
+    )
+elseif(WIN32)
+    LIST(
+        APPEND
+        osn-server_SOURCES
+        "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
     )
 endif ()
 
@@ -534,6 +541,12 @@ else ()
 	install(
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/MacOS/"
 		DESTINATION "./bin" USE_SOURCE_PERMISSIONS PATTERN "OBS" EXCLUDE
+	)
+    # Install library files for unit tests & xcode
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
+		DESTINATION "${libobs_SOURCE_DIR}" USE_SOURCE_PERMISSIONS
+        FILES_MATCHING PATTERN "*.dylib"
 	)
 endif ()
 
