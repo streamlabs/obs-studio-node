@@ -19,5 +19,6 @@ test-results.xml
 docs/ 
 /*.log
 streamlabs-build.app
+.vscode
 
 tests/osn-tests/*-cache-local.zip
