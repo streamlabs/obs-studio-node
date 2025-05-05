@@ -291,27 +291,27 @@ void globalCallback::worker()
 
 				item->source_name = response[index++].value_str;
 
-			const size_t channels = response[index++].value_union.i32;
-			const bool isMuted = response[index++].value_union.i32;
-			const bool isAudioInput = response[index++].value_union.i32;
+				const size_t channels = response[index++].value_union.i32;
+				const bool isMuted = response[index++].value_union.i32;
+				const bool isAudioInput = response[index++].value_union.i32;
 
-			if (isMuted && !isAudioInput) {
-				continue;
+				if (isMuted && !isAudioInput) {
+					continue;
+				}
+
+				item->magnitude.resize(channels);
+				item->peak.resize(channels);
+				item->input_peak.resize(channels);
+				for (size_t ch = 0; ch < channels; ch++) {
+					item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
+					item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
+					item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
+				}
+
+				index += static_cast<uint32_t>((3 * channels));
+
+				volmeterDataArray->items.emplace_back(item);
 			}
-
-			item->magnitude.resize(channels);
-			item->peak.resize(channels);
-			item->input_peak.resize(channels);
-			for (size_t ch = 0; ch < channels; ch++) {
-				item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
-				item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
-				item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
-			}
-
-			index += static_cast<uint32_t>((3 * channels));
-
-			volmeterDataArray->items.emplace_back(item);
-		}
 
 			if (js_volmeter_callback) {
 				napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);

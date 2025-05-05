@@ -215,6 +215,7 @@ void osn::Volmeter::getAudioData(uint64_t id, std::vector<ipc::value> &rval)
 		rval.push_back(ipc::value(""));
 		rval.push_back(ipc::value(2));
 		rval.push_back(ipc::value(true));
+		rval.push_back(ipc::value(false));
 	};
 
 	auto meter = Manager::GetInstance().find(id);
