@@ -166,7 +166,8 @@ void osn::Volmeter::OBSCallback(void *param, const float magnitude[MAX_AUDIO_CHA
 	std::unique_lock<std::mutex> ulock(meter->current_data_mtx);
 	meter->current_data.ch = obs_volmeter_get_nr_channels(meter->self);
 
-	const bool isAudioInputDevice = std::strcmp("wasapi_input_capture", obs_source_get_id(source)) == 0;
+	// TODO: fixme
+	const bool isAudioInputDevice = false; // std::strcmp("wasapi_input_capture", obs_source_get_id(source)) == 0;
 	const bool isMuted = obs_source_muted(source);
 
 	meter->current_data.is_audio_input_device = isAudioInputDevice;
@@ -250,9 +251,9 @@ void osn::Volmeter::getAudioData(uint64_t id, std::vector<ipc::value> &rval)
 	rval.push_back(ipc::value(obs_source_get_name(source)));
 	rval.push_back(ipc::value(meter->current_data.ch));
 	rval.push_back(ipc::value(isMuted));
-	rval.push_back(ipc::value(meter->current_data.is_audio_input_device));
+	//rval.push_back(ipc::value(meter->current_data.is_audio_input_device));
 
-	if (isMuted && !meter->current_data.is_audio_input_device)
+	if (isMuted /* && !meter->current_data.is_audio_input_device */)
 		return;
 
 	for (size_t ch = 0; ch < meter->current_data.ch; ch++) {
