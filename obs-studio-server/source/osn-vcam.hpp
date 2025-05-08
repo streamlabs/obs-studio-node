@@ -20,11 +20,7 @@
 
 #include <string>
 
-#ifdef WIN32
 const char *VIRTUAL_CAM_ID = "virtualcam_output";
-#elif __APPLE__
-const char *VIRTUAL_CAM_ID = "virtual_output";
-#endif
 
 enum VCamOutputType {
 	Invalid,
