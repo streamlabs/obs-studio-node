@@ -31,11 +31,16 @@ public:
 	static Napi::Value addSceneToBackstage(const Napi::CallbackInfo &info);
 	static Napi::Value removeSceneFromBackstage(const Napi::CallbackInfo &info);
 	static Napi::Value getOutputFlagsFromId(const Napi::CallbackInfo &info);
-	static Napi::Value laggedFrames(const Napi::CallbackInfo &info);
-	static Napi::Value totalFrames(const Napi::CallbackInfo &info);
+	static Napi::Value GetLaggedFrames(const Napi::CallbackInfo &info);
+	static Napi::Value GetTotalFrames(const Napi::CallbackInfo &info);
 	static Napi::Value getLocale(const Napi::CallbackInfo &info);
 	static void setLocale(const Napi::CallbackInfo &info, const Napi::Value &value);
 	static Napi::Value getMultipleRendering(const Napi::CallbackInfo &info);
 	static void setMultipleRendering(const Napi::CallbackInfo &info, const Napi::Value &value);
+	static Napi::Value GetCPUPercentage(const Napi::CallbackInfo &info);
+	static Napi::Value GetCurrentFrameRate(const Napi::CallbackInfo &info);
+	static Napi::Value GetAverageTimeToRenderFrame(const Napi::CallbackInfo &info);
+	static Napi::Value GetDiskSpaceAvailable(const Napi::CallbackInfo &info);
+	static Napi::Value GetMemoryUsage(const Napi::CallbackInfo &info);
 };
 }

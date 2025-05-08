@@ -21,6 +21,14 @@
 #include <obs.h>
 #include "osn-source.hpp"
 #include "shared.hpp"
+#include "nodeobs_configManager.hpp"
+
+
+#define MBYTE (1024ULL * 1024ULL)
+#define GBYTE (1024ULL * 1024ULL * 1024ULL)
+#define TBYTE (1024ULL * 1024ULL * 1024ULL * 1024ULL)
+
+os_cpu_usage_info_t *osn::Global::cpuUsage = nullptr;
 
 void osn::Global::Register(ipc::server &srv)
 {
@@ -32,12 +40,17 @@ void osn::Global::Register(ipc::server &srv)
 	cls->register_function(
 		std::make_shared<ipc::function>("RemoveSceneFromBackstage", std::vector<ipc::type>{ipc::type::UInt64}, RemoveSceneFromBackstage));
 	cls->register_function(std::make_shared<ipc::function>("GetOutputFlagsFromId", std::vector<ipc::type>{ipc::type::String}, GetOutputFlagsFromId));
-	cls->register_function(std::make_shared<ipc::function>("LaggedFrames", std::vector<ipc::type>{}, LaggedFrames));
-	cls->register_function(std::make_shared<ipc::function>("TotalFrames", std::vector<ipc::type>{}, TotalFrames));
+	cls->register_function(std::make_shared<ipc::function>("GetLaggedFrames", std::vector<ipc::type>{}, GetLaggedFrames));
+	cls->register_function(std::make_shared<ipc::function>("GetTotalFrames", std::vector<ipc::type>{}, GetTotalFrames));
 	cls->register_function(std::make_shared<ipc::function>("GetLocale", std::vector<ipc::type>{}, GetLocale));
 	cls->register_function(std::make_shared<ipc::function>("SetLocale", std::vector<ipc::type>{ipc::type::String}, SetLocale));
 	cls->register_function(std::make_shared<ipc::function>("GetMultipleRendering", std::vector<ipc::type>{}, GetMultipleRendering));
 	cls->register_function(std::make_shared<ipc::function>("SetMultipleRendering", std::vector<ipc::type>{ipc::type::Int32}, SetMultipleRendering));
+	cls->register_function(std::make_shared<ipc::function>("GetCPUPercentage", std::vector<ipc::type>{}, GetCPUPercentage));
+	cls->register_function(std::make_shared<ipc::function>("GetCurrentFrameRate", std::vector<ipc::type>{}, GetCurrentFrameRate));
+	cls->register_function(std::make_shared<ipc::function>("GetAverageTimeToRenderFrame", std::vector<ipc::type>{}, GetAverageTimeToRenderFrame));
+	cls->register_function(std::make_shared<ipc::function>("GetDiskSpaceAvailable", std::vector<ipc::type>{}, GetDiskSpaceAvailable));
+	cls->register_function(std::make_shared<ipc::function>("GetMemoryUsage", std::vector<ipc::type>{}, GetMemoryUsage));
 	srv.register_collection(cls);
 }
 
@@ -133,14 +146,14 @@ void osn::Global::GetOutputFlagsFromId(void *data, const int64_t id, const std::
 	AUTO_DEBUG;
 }
 
-void osn::Global::LaggedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void osn::Global::GetLaggedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(obs_get_lagged_frames()));
 	AUTO_DEBUG;
 }
 
-void osn::Global::TotalFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void osn::Global::GetTotalFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(obs_get_total_frames()));
@@ -172,5 +185,82 @@ void osn::Global::SetMultipleRendering(void *data, const int64_t id, const std::
 {
 	obs_set_multiple_rendering(args[0].value_union.i32);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::Global::GetCPUPercentage(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	if (cpuUsage == nullptr) {
+		cpuUsage = os_cpu_usage_info_start();
+	}
+
+	double cpuPercentage = os_cpu_usage_info_query(cpuUsage);
+
+	cpuPercentage *= 10;
+	cpuPercentage = trunc(cpuPercentage);
+	cpuPercentage /= 10;
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(cpuPercentage));
+}
+
+void osn::Global::GetCurrentFrameRate(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(obs_get_active_fps()));
+	AUTO_DEBUG;
+}
+
+void osn::Global::GetAverageTimeToRenderFrame(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value((double)obs_get_average_frame_time_ns() / 1000000.0));
+	AUTO_DEBUG;
+}
+
+void osn::Global::GetDiskSpaceAvailable(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	const char *path = nullptr;
+	const char *mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+
+	if (strcmp(mode, "Advanced") == 0) {
+		const char *advanced_mode = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecType");
+
+		if (strcmp(advanced_mode, "FFmpeg") == 0) {
+			path = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "FFFilePath");
+		} else {
+			path = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFilePath");
+		}
+	} else {
+		path = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "FilePath");
+	}
+
+	uint64_t bytes = os_get_free_disk_space(path);
+
+	double free_bytes = 0;
+	std::string type;
+
+	if (bytes > TBYTE) {
+		free_bytes = (double)bytes / TBYTE;
+		type = " TB";
+	} else if (bytes > GBYTE) {
+		free_bytes = (double)bytes / GBYTE;
+		type = " GB";
+	} else {
+		free_bytes = (double)bytes / MBYTE;
+		type = " MB";
+	}
+
+	std::stringstream remainingHDSpace;
+	remainingHDSpace << free_bytes << type;
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(remainingHDSpace.str()));
+	AUTO_DEBUG;
+}
+
+void osn::Global::GetMemoryUsage(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value((double)os_get_proc_resident_size() / (1024.0 * 1024.0)));
 	AUTO_DEBUG;
 }

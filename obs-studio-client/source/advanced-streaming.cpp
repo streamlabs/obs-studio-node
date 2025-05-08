@@ -41,6 +41,10 @@ Napi::Object osn::AdvancedStreaming::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("reconnect", &osn::AdvancedStreaming::GetReconnect, &osn::AdvancedStreaming::SetReconnect),
 		 InstanceAccessor("network", &osn::AdvancedStreaming::GetNetwork, &osn::AdvancedStreaming::SetNetwork),
 		 InstanceAccessor("video", &osn::AdvancedStreaming::GetCanvas, &osn::AdvancedStreaming::SetCanvas),
+		 InstanceAccessor("droppedFrames", &osn::AdvancedStreaming::GetDroppedFrames, nullptr),
+		 InstanceAccessor("totalFrames", &osn::AdvancedStreaming::GetTotalFrames, nullptr),
+		 InstanceAccessor("kbitsPerSec", &osn::AdvancedStreaming::GetKBitsPerSec, nullptr),
+		 InstanceAccessor("dataOutput", &osn::AdvancedStreaming::GetDataOutput, nullptr),
 
 		 InstanceAccessor("audioTrack", &osn::AdvancedStreaming::GetAudioTrack, &osn::AdvancedStreaming::SetAudioTrack),
 		 InstanceAccessor("twitchTrack", &osn::AdvancedStreaming::GetTwitchTrack, &osn::AdvancedStreaming::SetTwitchTrack),
