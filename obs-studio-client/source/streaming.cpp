@@ -305,3 +305,59 @@ void osn::Streaming::Stop(const Napi::CallbackInfo &info)
 
 	conn->call(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
 }
+
+Napi::Value osn::Streaming::GetDroppedFrames(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetDroppedFrames", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+Napi::Value osn::Streaming::GetTotalFrames(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetTotalFrames", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+Napi::Value osn::Streaming::GetKBitsPerSec(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetKBitsPerSec", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetDataOutput", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}

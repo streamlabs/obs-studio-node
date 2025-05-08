@@ -68,7 +68,6 @@ describe(testName, () => {
         expect(stream.outputHeight).to.equal(
             720, "Invalid outputHeight default value");
 
-
         stream.enforceServiceBitrate = false;
         stream.enableTwitchVOD = true;
         stream.audioTrack = 2;
@@ -141,6 +140,15 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         await sleep(500);
+
+        expect(stream.droppedFrames).to.not.equal(
+            undefined, "Undefined droppedFrames");
+        expect(stream.totalFrames).to.not.equal(
+            undefined, "Undefined totalFrames");
+        expect(stream.kbitsPerSec).to.not.equal(
+            undefined, "Undefined kbitsPerSec");
+        expect(stream.dataOutput).to.not.equal(
+            undefined, "Undefined dataOutput");
 
         stream.stop();
 

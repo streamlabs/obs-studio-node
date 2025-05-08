@@ -72,6 +72,12 @@ export const enum ETestErrorMsg {
     LaggedFrames = 'Failed to get lagged frames value',
     TotalFrames = 'Failed to get total frames value',
     Locale = 'Failed to update locale',
+    CPUPercent = 'Failed to get CPU percentage',
+    FrameRate = 'Failed to get current frame rate',
+    FrameRenderTime = 'Failed to get average frame render time',
+    DiskSpace = 'Failed to get available disk space',
+    MemUsage = 'Failed to get current memory usage',
+    //osn-advanced-streaming
     // osn-input
     InputsChanged = 'List of inputs has unexpected changes',
     CreateInput = 'Failed to create input %VALUE1%',

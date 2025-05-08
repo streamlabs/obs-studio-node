@@ -73,7 +73,7 @@ Napi::Value osn::Video::GetEncodedFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "GetTotalFrames", {ipc::value((uint64_t)(this->canvasId))});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "GetEncodedFrames", {ipc::value((uint64_t)(this->canvasId))});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

@@ -30,7 +30,7 @@ void osn::Video::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("Video");
 	cls->register_function(std::make_shared<ipc::function>("GetSkippedFrames", std::vector<ipc::type>{}, GetSkippedFrames));
-	cls->register_function(std::make_shared<ipc::function>("GetTotalFrames", std::vector<ipc::type>{}, GetTotalFrames));
+	cls->register_function(std::make_shared<ipc::function>("GetEncodedFrames", std::vector<ipc::type>{}, GetEncodedFrames));
 
 	cls->register_function(std::make_shared<ipc::function>("AddVideoContext", std::vector<ipc::type>{}, AddVideoContext));
 	cls->register_function(std::make_shared<ipc::function>("RemoveVideoContext", std::vector<ipc::type>{ipc::type::UInt32}, RemoveVideoContext));
@@ -52,15 +52,49 @@ void osn::Video::Register(ipc::server &srv)
 
 void osn::Video::GetSkippedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!canvas) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::NotFound));
+		return;
+	}
+	obs_core_video_mix_t *mix = obs_video_mix_get(canvas, obs_get_video_rendering_mode());
+	if (!mix) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::NotFound));
+		return;
+	}
+	video_t *video = obs_video_mix_get_video(mix);
+	if (!video) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::NotFound));
+		return;
+	}
+	uint32_t skippedFrames = video_output_get_skipped_frames(video);
+
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(video_output_get_skipped_frames(obs_get_video())));
+	rval.push_back(ipc::value(skippedFrames));
 	AUTO_DEBUG;
 }
 
-void osn::Video::GetTotalFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void osn::Video::GetEncodedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!canvas) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::NotFound));
+		return;
+	}
+	obs_core_video_mix_t *mix = obs_video_mix_get(canvas, obs_get_video_rendering_mode());
+	if (!mix) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::NotFound));
+		return;
+	}
+	video_t *video = obs_video_mix_get_video(mix);
+	if (!video) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::NotFound));
+		return;
+	}
+	uint32_t totalFrames = video_output_get_total_frames(video);
+
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(video_output_get_total_frames(obs_get_video())));
+	rval.push_back(ipc::value(totalFrames));
 	AUTO_DEBUG;
 }
 

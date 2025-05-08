@@ -125,6 +125,15 @@ describe(testName, () => {
 
         await sleep(500);
 
+        expect(stream.droppedFrames).to.not.equal(
+            undefined, "Undefined droppedFrames");
+        expect(stream.totalFrames).to.not.equal(
+            undefined, "Undefined totalFrames");
+        expect(stream.kbitsPerSec).to.not.equal(
+            undefined, "Undefined kbitsPerSec");
+        expect(stream.dataOutput).to.not.equal(
+            undefined, "Undefined dataOutput");
+
         stream.stop();
 
         signalInfo = await obs.getNextSignalInfo(
