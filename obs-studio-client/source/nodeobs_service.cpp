@@ -435,7 +435,7 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	g_util_osx->installPlugin();
+    return OBS_service_createVirtualCam();
 #endif
 	return info.Env().Undefined();
 }
@@ -467,7 +467,7 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	g_util_osx->uninstallPlugin();
+    // User must manually uninstall the Apple SystemExtension
 #endif
 	return info.Env().Undefined();
 }
