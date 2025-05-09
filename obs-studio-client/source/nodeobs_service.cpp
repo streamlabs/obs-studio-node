@@ -362,6 +362,16 @@ Napi::Value service::OBS_service_removeCallback(const Napi::CallbackInfo &info)
 	return info.Env().Undefined();
 }
 
+Napi::Value service::OBS_service_createVirtualCam(const Napi::CallbackInfo &info)
+{
+    auto conn = GetConnection(info);
+    if (!conn)
+        return info.Env().Undefined();
+
+    conn->call("NodeOBS_Service", "OBS_service_createVirtualCam", {});
+    return info.Env().Undefined();
+}
+
 Napi::Value service::OBS_service_startVirtualCam(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -518,6 +528,7 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_getLastReplay"), Napi::Function::New(env, service::OBS_service_getLastReplay));
 	exports.Set(Napi::String::New(env, "OBS_service_getLastRecording"), Napi::Function::New(env, service::OBS_service_getLastRecording));
 	exports.Set(Napi::String::New(env, "OBS_service_splitFile"), Napi::Function::New(env, service::OBS_service_splitFile));
+    exports.Set(Napi::String::New(env, "OBS_service_createVirtualCam"), Napi::Function::New(env, service::OBS_service_createVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_startVirtualCam"), Napi::Function::New(env, service::OBS_service_startVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_stopVirtualCam"), Napi::Function::New(env, service::OBS_service_stopVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_updateVirtualCam"), Napi::Function::New(env, service::OBS_service_updateVirtualCam));

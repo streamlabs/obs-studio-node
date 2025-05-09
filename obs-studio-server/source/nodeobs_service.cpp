@@ -150,6 +150,7 @@ void OBS_service::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastReplay", std::vector<ipc::type>{}, OBS_service_getLastReplay));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastRecording", std::vector<ipc::type>{}, OBS_service_getLastRecording));
 
+    cls->register_function(std::make_shared<ipc::function>("OBS_service_createVirtualCam", std::vector<ipc::type>{}, OBS_service_createVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualCam", std::vector<ipc::type>{}, OBS_service_startVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualCam", std::vector<ipc::type>{}, OBS_service_stopVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String},
@@ -3104,10 +3105,13 @@ void OBS_service::StartVirtualCam()
 		return;
 	}
 
+#if !defined(__APPLE__)
+    // This flag will not be true for macOS until obs_output_start() is invoked.
 	if (!vcamEnabled) {
 		return;
 	}
-
+#endif
+    
 	const bool typeIsProgram = vcamConfig.type == VCamOutputType::ProgramView;
 
 	if (!virtualCamView && !typeIsProgram) {
@@ -3140,6 +3144,26 @@ void OBS_service::StartVirtualCam()
 
 	virtualCamActive = true;
 	logVCamChanged(vcamConfig, true);
+}
+
+void OBS_service::OBS_service_createVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+#if defined(__APPLE__)
+    virtualCam = obs_output_create(VIRTUAL_CAM_ID, "mac-virtualcam", nullptr, nullptr);
+    if (virtualCam) {
+        std::cout << "rno virtualCam created" << std::endl;
+    }
+    auto virtualCamStarted = [](void *data, calldata_t *) {
+        std::cout << "rno virtualCam callback triggered" << std::endl;
+        if (virtualCam) {
+            //vcamEnabled = true;
+        }
+    };
+    
+    signal_handler_t *signal =
+        obs_output_get_signal_handler(virtualCam);
+    signal_handler_connect(signal, "start", virtualCamStarted, nullptr);
+#endif
 }
 
 void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
