@@ -368,6 +368,7 @@ Napi::Value service::OBS_service_createVirtualCam(const Napi::CallbackInfo &info
     if (!conn)
         return info.Env().Undefined();
 
+    start_worker(info.Env(), cb.Value());
     conn->call("NodeOBS_Service", "OBS_service_createVirtualCam", {});
     return info.Env().Undefined();
 }
@@ -378,8 +379,19 @@ Napi::Value service::OBS_service_startVirtualCam(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("NodeOBS_Service", "OBS_service_startVirtualCam", {});
-	return info.Env().Undefined();
+#if defined(__APPLE__)
+    // On macOS, we will wait for a response. Our situation is more complicated due to the vcam SystemExtension
+    // which will return errors that we need to display to the user.
+    std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_startVirtualCam", {});
+
+    if (response.size() == 2) {
+        // We encountered an error setting up the vcam
+        return Napi::String::New(info.Env(), response.at(1).value_str);
+    }
+#else
+    conn->call("NodeOBS_Service", "OBS_service_startVirtualCam", {});
+#endif
+    return info.Env().Undefined();
 }
 
 Napi::Value service::OBS_service_stopVirtualCam(const Napi::CallbackInfo &info)
@@ -435,7 +447,7 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-    return OBS_service_createVirtualCam();
+    return OBS_service_createVirtualCam(info);
 #endif
 	return info.Env().Undefined();
 }

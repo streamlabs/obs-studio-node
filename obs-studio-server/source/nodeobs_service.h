@@ -178,7 +178,7 @@ private:
 	static void DestroyVirtualCameraScene();
 	static void DestroyVirtualCamView();
 	static void StopVirtualCam();
-	static void StartVirtualCam();
+	static void StartVirtualCam(std::vector<ipc::value> &rval);
 	static void DeactivateSources();
 
 	static bool isTwitchStream(StreamServiceId serviceId);
