@@ -38,6 +38,7 @@ export const enum ETestErrorMsg {
     RecordOutputStoppedWithError = 'Record ouput stopped with error | Error code: %VALUE1% / Error message: %VALUE2%',
     ReplayBufferDidNotStart = 'Replay buffer failed to start | Error code: %VALUE1% / Error message: %VALUE2%',
     ReplayBufferStoppedWithError = 'Replay buffer stopped with error | Error code: %VALUE1% / Error message: %VALUE2%',
+    VirtualCamStoppedWithError = 'Virtual Camera stopped with error | Error code: %VALUE1%',
     // nodeobs_settings
     GeneralSettings = 'One or more general settings failed to be updated',
     SingleGeneralSetting = 'Failed to update general setting %VALUE1%',
