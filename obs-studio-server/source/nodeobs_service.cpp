@@ -2762,7 +2762,7 @@ void OBS_service::OBS_service_connectOutputSignals(void *data, const int64_t id,
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "wrote"));
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "writing_error"));
     
-    virtualCamSignals.push_back(SignalInfo("virtual-camera", "start"));
+    virtualCamSignals.push_back(SignalInfo("virtual-camera", "reconnect_success"));
     virtualCamSignals.push_back(SignalInfo("virtual-camera", "deactivate"));
 
 	connectOutputSignals(StreamServiceId::Main);
