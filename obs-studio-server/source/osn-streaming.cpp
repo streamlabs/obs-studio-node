@@ -395,8 +395,8 @@ void osn::IStreaming::GetDroppedFrames(void *data, const int64_t id, const std::
 		totalDropped = obs_output_get_frames_dropped(streaming->output);
 	}
 
-	rval.push_back(ipc::value(totalDropped));
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(totalDropped));
 	AUTO_DEBUG;
 }
 
@@ -413,8 +413,8 @@ void osn::IStreaming::GetTotalFrames(void *data, const int64_t id, const std::ve
 		totalFrames = obs_output_get_total_frames(streaming->output);
 	}
 
-	rval.push_back(ipc::value(totalFrames));
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(totalFrames));
 	AUTO_DEBUG;
 }
 
@@ -450,8 +450,8 @@ void osn::IStreaming::GetKBitsPerSec(void *data, const int64_t id, const std::ve
 		streaming->lastBytesSentTime = bytesSentTime;
 	}
 
-	rval.push_back(ipc::value(kbitsPerSec));
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(kbitsPerSec));
 	AUTO_DEBUG;
 }
 
@@ -481,7 +481,7 @@ void osn::IStreaming::GetDataOutput(void *data, const int64_t id, const std::vec
 		dataOutput = bytesSent / (1024.0 * 1024.0);
 	}
 
-	rval.push_back(ipc::value(dataOutput));
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(dataOutput));
 	AUTO_DEBUG;
 }
