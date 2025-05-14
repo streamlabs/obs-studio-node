@@ -362,6 +362,11 @@ export interface IGlobal {
     locale: string;
     multipleRendering: boolean;
     readonly version: number;
+    readonly cpuPercentage: number;
+    readonly currentFrameRate: number;
+    readonly averageFrameRenderTime: number;
+    readonly diskSpaceAvailable: number;
+    readonly memoryUsage: number;
 }
 export interface IBooleanProperty extends IProperty {
 }
@@ -799,6 +804,10 @@ export interface IStreaming {
     signalHandler: (signal: EOutputSignal) => void;
     start(): void;
     stop(force?: boolean): void;
+    droppedFrames: number;
+    totalFrames: number;
+    kbitsPerSec: number;
+    dataOutput: number;
 }
 export interface EOutputSignal {
     type: string;
@@ -943,10 +952,10 @@ export interface IAudioTrackFactory {
     saveLegacySettings(): void;
 }
 export declare const enum VCamOutputType {
-	Invalid,
-	SceneOutput,
-	SourceOutput,
-	ProgramView,
-	PreviewOutput,
-};
+    Invalid = 0,
+    SceneOutput = 1,
+    SourceOutput = 2,
+    ProgramView = 3,
+    PreviewOutput = 4
+}
 export declare const NodeObs: any;

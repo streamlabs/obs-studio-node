@@ -42,11 +42,16 @@ Napi::Object osn::Global::Init(Napi::Env env, Napi::Object exports)
 
 						  StaticMethod("getOutputFlagsFromId", &osn::Global::getOutputFlagsFromId),
 
-						  StaticAccessor("laggedFrames", &osn::Global::laggedFrames, nullptr),
-						  StaticAccessor("totalFrames", &osn::Global::totalFrames, nullptr),
-
+						  StaticAccessor("laggedFrames", &osn::Global::GetLaggedFrames, nullptr),
+						  StaticAccessor("totalFrames", &osn::Global::GetTotalFrames, nullptr),
 						  StaticAccessor("locale", &osn::Global::getLocale, &osn::Global::setLocale),
 						  StaticAccessor("multipleRendering", &osn::Global::getMultipleRendering, &osn::Global::setMultipleRendering),
+
+						  StaticAccessor("cpuPercentage", &osn::Global::GetCPUPercentage, nullptr),
+						  StaticAccessor("currentFrameRate", &osn::Global::GetCurrentFrameRate, nullptr),
+						  StaticAccessor("averageFrameRenderTime", &osn::Global::GetAverageTimeToRenderFrame, nullptr),
+						  StaticAccessor("diskSpaceAvailable", &osn::Global::GetDiskSpaceAvailable, nullptr),
+						  StaticAccessor("memoryUsage", &osn::Global::GetMemoryUsage, nullptr),
 					  });
 	exports.Set("Global", func);
 	osn::Global::constructor = Napi::Persistent(func);
@@ -154,13 +159,13 @@ Napi::Value osn::Global::getOutputFlagsFromId(const Napi::CallbackInfo &info)
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }
 
-Napi::Value osn::Global::laggedFrames(const Napi::CallbackInfo &info)
+Napi::Value osn::Global::GetLaggedFrames(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "LaggedFrames", {});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetLaggedFrames", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -168,13 +173,13 @@ Napi::Value osn::Global::laggedFrames(const Napi::CallbackInfo &info)
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }
 
-Napi::Value osn::Global::totalFrames(const Napi::CallbackInfo &info)
+Napi::Value osn::Global::GetTotalFrames(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "TotalFrames", {});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetTotalFrames", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -226,4 +231,74 @@ void osn::Global::setMultipleRendering(const Napi::CallbackInfo &info, const Nap
 		return;
 
 	conn->call("Global", "SetMultipleRendering", {ipc::value(value.ToBoolean().Value())});
+}
+
+Napi::Value osn::Global::GetCPUPercentage(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetCPUPercentage", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+Napi::Value osn::Global::GetCurrentFrameRate(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetCurrentFrameRate", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+Napi::Value osn::Global::GetAverageTimeToRenderFrame(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetAverageTimeToRenderFrame", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+Napi::Value osn::Global::GetDiskSpaceAvailable(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetDiskSpaceAvailable", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::String::New(info.Env(), response[1].value_str);
+}
+
+Napi::Value osn::Global::GetMemoryUsage(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetMemoryUsage", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }

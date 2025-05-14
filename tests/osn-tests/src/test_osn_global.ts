@@ -110,6 +110,56 @@ describe(testName, () => {
         expect(locale).to.equal('pt-BR', GetErrorMessage(ETestErrorMsg.Locale));
     });
 
+    it('Get CPU percentage', () => {
+        let cpuPercent: number = undefined;
+
+        // Getting CPU %
+        cpuPercent = osn.Global.cpuPercentage;
+
+        // Checking if CPU % was returned correctly
+        expect(cpuPercent).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.CPUPercent));
+    });
+
+    it('Get current frame rate', () => {
+        let frameRate: number = undefined;
+
+        // Getting CPU %
+        frameRate = osn.Global.currentFrameRate;
+
+        // Checking if CPU % was returned correctly
+        expect(frameRate).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.FrameRate));
+    });
+
+    it('Get average time to render', () => {
+        let renderTime: number = undefined;
+
+        // Getting CPU %
+        renderTime = osn.Global.averageFrameRenderTime;
+
+        // Checking if CPU % was returned correctly
+        expect(renderTime).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.FrameRenderTime));
+    });
+
+    it('Get available disk space', () => {
+        let diskSpace: number = undefined;
+
+        // Getting CPU %
+        diskSpace = osn.Global.diskSpaceAvailable;
+
+        // Checking if CPU % was returned correctly
+        expect(diskSpace).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.DiskSpace));
+    });
+
+    it('Get memory usage', () => {
+        let mem: number = undefined;
+
+        // Getting CPU %
+        mem = osn.Global.diskSpaceAvailable;
+
+        // Checking if CPU % was returned correctly
+        expect(mem).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.MemUsage));
+    });
+
     it('Fail test - Get source from empty output channel', () => {
         let input: ISource;
         let channel: number = 5;

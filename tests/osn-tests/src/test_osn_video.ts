@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler } from '../util/obs_handler';
-import { deleteConfigFiles } from '../util/general';
+import { deleteConfigFiles, sleep } from '../util/general';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { EFPSType } from '../osn';
 
@@ -43,6 +43,21 @@ describe(testName, () => {
 
     it('Get skipped frames value', () => {
         const context = osn.VideoFactory.create();
+        const videoInfo: osn.IVideoInfo = {
+            fpsNum: 60,
+            fpsDen: 1,
+            baseWidth: 1280,
+            baseHeight: 720,
+            outputWidth: 1280,
+            outputHeight: 720,
+            outputFormat: osn.EVideoFormat.NV12,
+            colorspace: osn.EColorSpace.CS709,
+            range: osn.ERangeType.Partial,
+            scaleType: osn.EScaleType.Bilinear,
+            fpsType: osn.EFPSType.Fractional
+        };
+        context.video = videoInfo;
+
         // Getting skipped frames
         const skippedFrames = context.skippedFrames;
 
@@ -54,6 +69,21 @@ describe(testName, () => {
 
     it('Get total frames value', () => {
         const context = osn.VideoFactory.create();
+        const videoInfo: osn.IVideoInfo = {
+            fpsNum: 60,
+            fpsDen: 1,
+            baseWidth: 1280,
+            baseHeight: 720,
+            outputWidth: 1280,
+            outputHeight: 720,
+            outputFormat: osn.EVideoFormat.NV12,
+            colorspace: osn.EColorSpace.CS709,
+            range: osn.ERangeType.Partial,
+            scaleType: osn.EScaleType.Bilinear,
+            fpsType: osn.EFPSType.Fractional
+        };
+        context.video = videoInfo;
+
         // Getting total frames value
         const totalFrames = context.encodedFrames;
 
