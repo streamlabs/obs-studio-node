@@ -364,13 +364,13 @@ Napi::Value service::OBS_service_removeCallback(const Napi::CallbackInfo &info)
 
 Napi::Value service::OBS_service_createVirtualCam(const Napi::CallbackInfo &info)
 {
-    auto conn = GetConnection(info);
-    if (!conn)
-        return info.Env().Undefined();
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
 
-    start_worker(info.Env(), cb.Value());
-    conn->call("NodeOBS_Service", "OBS_service_createVirtualCam", {});
-    return info.Env().Undefined();
+	start_worker(info.Env(), cb.Value());
+	conn->call("NodeOBS_Service", "OBS_service_createVirtualCam", {});
+	return info.Env().Undefined();
 }
 
 Napi::Value service::OBS_service_startVirtualCam(const Napi::CallbackInfo &info)
@@ -380,18 +380,18 @@ Napi::Value service::OBS_service_startVirtualCam(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 
 #if defined(__APPLE__)
-    // On macOS, we will wait for a response. Our situation is more complicated due to the vcam SystemExtension
-    // which will return errors that we need to display to the user.
-    std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_startVirtualCam", {});
+	// On macOS, we will wait for a response. Our situation is more complicated due to the vcam SystemExtension
+	// which will return errors that we need to display to the user.
+	std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_startVirtualCam", {});
 
-    if (response.size() == 2) {
-        // We encountered an error setting up the vcam
-        return Napi::String::New(info.Env(), response.at(1).value_str);
-    }
+	if (response.size() == 2) {
+		// We encountered an error setting up the vcam
+		return Napi::String::New(info.Env(), response.at(1).value_str);
+	}
 #else
-    conn->call("NodeOBS_Service", "OBS_service_startVirtualCam", {});
+	conn->call("NodeOBS_Service", "OBS_service_startVirtualCam", {});
 #endif
-    return info.Env().Undefined();
+	return info.Env().Undefined();
 }
 
 Napi::Value service::OBS_service_stopVirtualCam(const Napi::CallbackInfo &info)
@@ -447,7 +447,7 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-    return OBS_service_createVirtualCam(info);
+	return OBS_service_createVirtualCam(info);
 #endif
 	return info.Env().Undefined();
 }
@@ -479,7 +479,7 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-    // User must manually uninstall the Apple SystemExtension
+	// User must manually uninstall the Apple SystemExtension
 #endif
 	return info.Env().Undefined();
 }
@@ -540,7 +540,7 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_getLastReplay"), Napi::Function::New(env, service::OBS_service_getLastReplay));
 	exports.Set(Napi::String::New(env, "OBS_service_getLastRecording"), Napi::Function::New(env, service::OBS_service_getLastRecording));
 	exports.Set(Napi::String::New(env, "OBS_service_splitFile"), Napi::Function::New(env, service::OBS_service_splitFile));
-    exports.Set(Napi::String::New(env, "OBS_service_createVirtualCam"), Napi::Function::New(env, service::OBS_service_createVirtualCam));
+	exports.Set(Napi::String::New(env, "OBS_service_createVirtualCam"), Napi::Function::New(env, service::OBS_service_createVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_startVirtualCam"), Napi::Function::New(env, service::OBS_service_startVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_stopVirtualCam"), Napi::Function::New(env, service::OBS_service_stopVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_updateVirtualCam"), Napi::Function::New(env, service::OBS_service_updateVirtualCam));
