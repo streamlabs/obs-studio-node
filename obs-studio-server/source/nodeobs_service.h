@@ -95,7 +95,7 @@ private:
 	StreamServiceId m_index = StreamServiceId::Main;
 
 public:
-	SignalInfo() {};
+	SignalInfo(){};
 	SignalInfo(std::string outputType, std::string signal, StreamServiceId serviceId)
 	{
 		m_outputType = outputType;
