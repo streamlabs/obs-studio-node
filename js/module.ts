@@ -1682,7 +1682,8 @@ export interface IVideoEncoder extends IConfigurable, IReleasable {
     readonly type: EVideoEncoderType,
     readonly active: boolean,
     readonly id: string,
-    readonly lastError: string
+    readonly lastError: string,
+    release(): void
 }
 
 export interface IAudioEncoder extends IReleasable {

@@ -85,7 +85,7 @@ Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Create", {ipc::value(id), ipc::value(name), ipc::value(settings)});
-
+	
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 

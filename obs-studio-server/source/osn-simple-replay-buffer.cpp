@@ -281,9 +281,6 @@ void osn::ISimpleReplayBuffer::SetRecording(void *data, const int64_t id, const 
 
 	if (args[1].value_union.ui64 == UINT64_MAX) {
 		replayBuffer->recording = nullptr;
-		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-		AUTO_DEBUG;
-		return;
 	}
 
 	SimpleRecording *recording = static_cast<SimpleRecording *>(osn::ISimpleRecording::Manager::GetInstance().find(args[1].value_union.ui64));
