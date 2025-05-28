@@ -575,19 +575,19 @@ if (APPLE)
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
-        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper (GPU).app"
+        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/OBS Helper (GPU).app"
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
-        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper (Plugin).app"
+        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/OBS Helper (Plugin).app"
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
-        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper (Renderer).app"
+        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/OBS Helper (Renderer).app"
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
-        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper.app"
+        DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/OBS Helper.app"
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
 endif()
