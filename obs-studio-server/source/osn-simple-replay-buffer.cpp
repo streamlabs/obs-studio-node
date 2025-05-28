@@ -247,7 +247,7 @@ void osn::ISimpleReplayBuffer::SetStreaming(void *data, const int64_t id, const 
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple replay buffer reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		replayBuffer->streaming = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
@@ -279,7 +279,7 @@ void osn::ISimpleReplayBuffer::SetRecording(void *data, const int64_t id, const 
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple replay buffer reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		replayBuffer->recording = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
