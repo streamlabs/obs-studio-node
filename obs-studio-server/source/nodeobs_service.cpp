@@ -1773,8 +1773,11 @@ void OBS_service::stopRecording(void)
 
 void OBS_service::stopRecordingForce(void)
 {
-	blog(LOG_WARNING, "stopRecordingForce with %s", obs_output_active(recordingOutput) ? "recordingOutput active" : "recordingOutput not active");
-	obs_output_force_stop(recordingOutput);
+	blog(LOG_WARNING, "stopRecordingForce called");
+
+  if (recordingOutput && obs_output_active(recordingOutput))
+		obs_output_force_stop(recordingOutput);
+
 	isRecording = false;
 }
 
