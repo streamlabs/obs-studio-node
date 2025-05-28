@@ -71,6 +71,20 @@ Napi::Value osn::Delay::Create(const Napi::CallbackInfo &info)
 	return instance;
 }
 
+void osn::Delay::Finalize(Napi::Env env)
+{
+	auto conn = GetConnection(env);
+	if (!conn)
+		return;
+
+	if (this->uid == UINT64_MAX)
+		return;
+
+	conn->call_synchronous_helper("Delay", "Destroy", {ipc::value(this->uid)});
+
+	this->uid = UINT64_MAX;
+}
+
 Napi::Value osn::Delay::GetEnabled(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

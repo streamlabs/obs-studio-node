@@ -47,7 +47,7 @@ describe(testName, () => {
     });
 
     it('Create a video encoder', () => {
-        const encoder = osn.VideoEncoderFactory.create('obs_x264', "My x264", {});
+        const encoder = osn.VideoEncoderFactory.create('obs_x264', "video-encoder-test-1", {});
         expect(encoder).to.not.equal(undefined, 'Invalid x264 video encoder creation');
         expect(encoder.active).to.equal(false, "Invalid active value");
         expect(encoder.lastError).to.equal('', "Error while creating the video encoder");
@@ -96,10 +96,12 @@ describe(testName, () => {
 
         expect(propsArray[10].name).to.equal('repeat_headers', "Invalid repeat_headers name property");
         expect(propsArray[10].value).to.equal(false, "Invalid repeat_headers value property");
+
+        encoder.release();
     });
 
     it('Update video encoder properties', () => {
-        const encoder = osn.VideoEncoderFactory.create('obs_x264', "My x264", {});
+        const encoder = osn.VideoEncoderFactory.create('obs_x264', "video-encoder-test-2", {});
         encoder.update({
             rate_control: 'VBR',
             bitrate: 5000,
@@ -157,5 +159,7 @@ describe(testName, () => {
 
         expect(propsArray[10].name).to.equal('repeat_headers', "Invalid repeat_headers name property");
         expect(propsArray[10].value).to.equal(true, "Invalid repeat_headers value property");
+
+        encoder.release();
     });
 });

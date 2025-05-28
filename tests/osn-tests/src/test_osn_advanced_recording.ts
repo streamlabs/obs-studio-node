@@ -82,7 +82,7 @@ describe(testName, () => {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MOV;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-1');
         recording.overwrite = true;
         recording.noSpace = false;
         recording.video = obs.defaultVideoContext;
@@ -111,7 +111,9 @@ describe(testName, () => {
         expect(recording.useStreamEncoders).to.equal(
             false, "Invalid useStreamEncoders default value");
 
+        const videoEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
+        videoEncoder.release();
     });
 
     it('Start advanced recording - Stream', async function () {
@@ -128,7 +130,7 @@ describe(testName, () => {
         recording.useStreamEncoders = true;
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.video = obs.defaultVideoContext;
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
@@ -243,8 +245,10 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const videoEncoder = stream.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
         osn.AdvancedStreamingFactory.destroy(stream);
+        videoEncoder.release();
     });
 
     it('Start advanced recording - Custom encoders', async function () {
@@ -256,7 +260,7 @@ describe(testName, () => {
         recording.format = ERecordingFormat.MP4;
         recording.useStreamEncoders = false;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-2');
         recording.overwrite = false;
         recording.noSpace = false;
         recording.video = obs.defaultVideoContext;
@@ -316,6 +320,8 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
+        const videoEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
+        videoEncoder.release();
     });
 });

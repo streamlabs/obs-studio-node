@@ -1681,7 +1681,8 @@ export interface IVideoEncoder extends IConfigurable {
     readonly type: EVideoEncoderType,
     readonly active: boolean,
     readonly id: string,
-    readonly lastError: string
+    readonly lastError: string,
+    release(): void
 }
 
 export interface IAudioEncoder {
@@ -1833,7 +1834,7 @@ export interface ISimpleReplayBufferFactory {
 export interface IAdvancedReplayBufferFactory {
     create(): IAdvancedReplayBuffer;
     destroy(stream: IAdvancedReplayBuffer): void;
-    legacySettings: IAdvancedReplayBufferFactory;
+    legacySettings: IAdvancedReplayBuffer;
 }
 
 export interface IDelay {

@@ -76,15 +76,15 @@
 #define dstr(s) #s
 #define vstr(s) dstr(s)
 
-static bool ValidateResponse(const Napi::CallbackInfo &info, std::vector<ipc::value> &response)
+static bool ValidateResponse(const Napi::Env &env, std::vector<ipc::value> &response)
 {
 	if (response.size() == 0) {
-		Napi::Error::New(info.Env(), "Failed to make IPC call, verify IPC status.").ThrowAsJavaScriptException();
+		Napi::Error::New(env, "Failed to make IPC call, verify IPC status.").ThrowAsJavaScriptException();
 		return false;
 	}
 
 	if ((response.size() == 1) && (response[0].type == ipc::type::Null)) {
-		Napi::Error::New(info.Env(), response[0].value_str).ThrowAsJavaScriptException();
+		Napi::Error::New(env, response[0].value_str).ThrowAsJavaScriptException();
 		return false;
 	}
 
@@ -94,38 +94,48 @@ static bool ValidateResponse(const Napi::CallbackInfo &info, std::vector<ipc::va
 
 		// Check if there is an error message to show
 		if (response.size() == 1) {
-			Napi::Error::New(info.Env(), "IPC received error code " + std::to_string(uint64_t(error)) + ", no additional description provided.")
+			Napi::Error::New(env, "IPC received error code " + std::to_string(uint64_t(error)) + ", no additional description provided.")
 				.ThrowAsJavaScriptException();
 			return false;
 		}
 
 		if (error == ErrorCode::InvalidReference) {
-			Napi::Error::New(info.Env(), response[1].value_str).ThrowAsJavaScriptException();
+			Napi::Error::New(env, response[1].value_str).ThrowAsJavaScriptException();
 			return false;
 		}
 
 		if (error != ErrorCode::Ok) {
-			Napi::Error::New(info.Env(), response[1].value_str).ThrowAsJavaScriptException();
+			Napi::Error::New(env, response[1].value_str).ThrowAsJavaScriptException();
 			return false;
 		}
 	}
 
 	if (!response.size()) {
-		Napi::Error::New(info.Env(), "Failed to make IPC call, verify IPC status.").ThrowAsJavaScriptException();
+		Napi::Error::New(env, "Failed to make IPC call, verify IPC status.").ThrowAsJavaScriptException();
 		return false;
 	}
 
 	return true;
 }
 
-static FORCE_INLINE std::shared_ptr<ipc::client> GetConnection(const Napi::CallbackInfo &info)
+static bool ValidateResponse(const Napi::CallbackInfo &info, std::vector<ipc::value> &response)
+{
+	return ValidateResponse(info.Env(), response);
+}
+
+static FORCE_INLINE std::shared_ptr<ipc::client> GetConnection(const Napi::Env &env)
 {
 	auto conn = Controller::GetInstance().GetConnection();
 	if (!conn) {
-		Napi::Error::New(info.Env(), "Failed to obtain IPC connection.").ThrowAsJavaScriptException();
+		Napi::Error::New(env, "Failed to obtain IPC connection.").ThrowAsJavaScriptException();
 		exit(1);
 	}
 	return conn;
+}
+
+static FORCE_INLINE std::shared_ptr<ipc::client> GetConnection(const Napi::CallbackInfo &info)
+{
+	return GetConnection(info.Env());
 }
 
 namespace utility {

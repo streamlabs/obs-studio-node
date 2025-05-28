@@ -24,6 +24,7 @@ void osn::INetwork::Register(ipc::server &srv)
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("Network");
 
 	cls->register_function(std::make_shared<ipc::function>("Create", std::vector<ipc::type>{}, Create));
+	cls->register_function(std::make_shared<ipc::function>("Destroy", std::vector<ipc::type>{}, Destroy));
 
 	cls->register_function(std::make_shared<ipc::function>("GetBindIP", std::vector<ipc::type>{ipc::type::UInt64}, GetBindIP));
 	cls->register_function(std::make_shared<ipc::function>("SetBindIP", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetBindIP));
@@ -50,6 +51,20 @@ void osn::INetwork::Create(void *data, const int64_t id, const std::vector<ipc::
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
+	AUTO_DEBUG;
+}
+
+void osn::INetwork::Destroy(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	uint64_t uid = args[0].value_union.ui64;
+	Network *network = osn::INetwork::Manager::GetInstance().find(uid);
+	if (!network) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Network reference is not valid.");
+	}
+
+	osn::INetwork::Manager::GetInstance().free(uid);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

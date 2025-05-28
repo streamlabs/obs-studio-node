@@ -33,6 +33,7 @@ void osn::VideoEncoder::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetId", std::vector<ipc::type>{ipc::type::UInt64}, GetId));
 	cls->register_function(std::make_shared<ipc::function>("GetLastError", std::vector<ipc::type>{ipc::type::UInt64}, GetLastError));
 	cls->register_function(std::make_shared<ipc::function>("Release", std::vector<ipc::type>{ipc::type::UInt64}, Release));
+	cls->register_function(std::make_shared<ipc::function>("Finalize", std::vector<ipc::type>{ipc::type::UInt64}, Finalize));
 	cls->register_function(std::make_shared<ipc::function>("Update", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, Update));
 	cls->register_function(std::make_shared<ipc::function>("GetProperties", std::vector<ipc::type>{ipc::type::UInt64}, GetProperties));
 	cls->register_function(std::make_shared<ipc::function>("GetSettings", std::vector<ipc::type>{ipc::type::UInt64}, GetSettings));
@@ -81,7 +82,7 @@ void osn::VideoEncoder::GetName(void *data, const int64_t id, const std::vector<
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetName. Video encoder reference is not valid.");
 	}
 
 	const char *name = obs_encoder_get_name(encoder);
@@ -94,7 +95,7 @@ void osn::VideoEncoder::SetName(void *data, const int64_t id, const std::vector<
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "SetName. Video encoder reference is not valid.");
 	}
 
 	std::string name = args[1].value_str;
@@ -107,7 +108,7 @@ void osn::VideoEncoder::GetType(void *data, const int64_t id, const std::vector<
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetType. Video encoder reference is not valid.");
 	}
 
 	uint32_t type = (uint32_t)obs_encoder_get_type(encoder);
@@ -120,7 +121,7 @@ void osn::VideoEncoder::GetActive(void *data, const int64_t id, const std::vecto
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetActive. Video encoder reference is not valid.");
 	}
 
 	bool active = obs_encoder_active(encoder);
@@ -133,7 +134,7 @@ void osn::VideoEncoder::GetId(void *data, const int64_t id, const std::vector<ip
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetId. Video encoder reference is not valid.");
 	}
 
 	const char *encoderId = obs_encoder_get_id(encoder);
@@ -146,7 +147,7 @@ void osn::VideoEncoder::GetLastError(void *data, const int64_t id, const std::ve
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetLastError. Video encoder reference is not valid.");
 	}
 
 	const char *lastError = obs_encoder_get_last_error(encoder);
@@ -158,12 +159,29 @@ void osn::VideoEncoder::GetLastError(void *data, const int64_t id, const std::ve
 void osn::VideoEncoder::Release(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
+	blog(LOG_INFO, "Release encoder %p, %d", encoder, args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Release. Video encoder reference is not valid.");
 	}
 
 	obs_encoder_release(encoder);
-	encoder = nullptr;
+	osn::VideoEncoder::Manager::GetInstance().free(encoder);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::VideoEncoder::Finalize(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
+	blog(LOG_INFO, "Finalize encoder %p, %d", encoder, args[0].value_union.ui64);
+	if (!encoder) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Finalize. Video encoder reference is not valid.");
+	}
+
+	obs_encoder_release(encoder);
+	osn::VideoEncoder::Manager::GetInstance().free(encoder);
+
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
@@ -172,7 +190,7 @@ void osn::VideoEncoder::Update(void *data, const int64_t id, const std::vector<i
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Update. Video encoder reference is not valid.");
 	}
 
 	obs_data_t *settings = obs_data_create_from_json(args[1].value_str.c_str());
@@ -185,7 +203,7 @@ void osn::VideoEncoder::GetProperties(void *data, const int64_t id, const std::v
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetProperties. Video encoder reference is not valid.");
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -205,7 +223,7 @@ void osn::VideoEncoder::GetSettings(void *data, const int64_t id, const std::vec
 {
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!encoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video encoder reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "GetSettings. Video encoder reference is not valid.");
 	}
 
 	obs_data_t *settings = obs_encoder_get_settings(encoder);

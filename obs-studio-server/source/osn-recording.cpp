@@ -31,15 +31,8 @@ osn::Recording::~Recording()
 
 void osn::IRecording::GetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
-	}
-
-	uint64_t uid = osn::VideoEncoder::Manager::GetInstance().find(recording->videoEncoder);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -48,6 +41,13 @@ void osn::IRecording::SetVideoEncoder(void *data, const int64_t id, const std::v
 	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
+	}
+
+	if(args[1].value_union.ui64 == UINT64_MAX) {
+		recording->videoEncoder = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[1].value_union.ui64);
