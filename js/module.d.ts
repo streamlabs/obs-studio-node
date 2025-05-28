@@ -779,6 +779,7 @@ export interface IVideoEncoder extends IConfigurable {
     readonly active: boolean;
     readonly id: string;
     readonly lastError: string;
+    release(): void;
 }
 export interface IAudioEncoder {
     name: string;
@@ -910,7 +911,7 @@ export interface ISimpleReplayBufferFactory {
 export interface IAdvancedReplayBufferFactory {
     create(): IAdvancedReplayBuffer;
     destroy(stream: IAdvancedReplayBuffer): void;
-    legacySettings: IAdvancedReplayBufferFactory;
+    legacySettings: IAdvancedReplayBuffer;
 }
 export interface IDelay {
     enabled: boolean;

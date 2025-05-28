@@ -77,6 +77,17 @@ osn::SimpleReplayBuffer::SimpleReplayBuffer(const Napi::CallbackInfo &info) : Na
 	this->className = std::string("SimpleReplayBuffer");
 }
 
+void osn::SimpleReplayBuffer::Finalize(Napi::Env)
+{
+	ReleaseObjects();
+}
+
+void osn::SimpleReplayBuffer::ReleaseObjects()
+{
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
+}
+
 Napi::Value osn::SimpleReplayBuffer::Create(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -102,6 +113,7 @@ void osn::SimpleReplayBuffer::Destroy(const Napi::CallbackInfo &info)
 
 	replayBuffer->stopWorker();
 	replayBuffer->cb.Reset();
+	replayBuffer->ReleaseObjects();
 
 	auto conn = GetConnection(info);
 	if (!conn)
@@ -150,62 +162,82 @@ void osn::SimpleReplayBuffer::SetLegacySettings(const Napi::CallbackInfo &info, 
 
 Napi::Value osn::SimpleReplayBuffer::GetStreaming(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
+	if (usesStream) {
+		return parentOutputRef.IsEmpty() ? info.Env().Undefined() : parentOutputRef.Value();
+	} else {
 		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetStreaming", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::SimpleStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
+	}
 }
 
 void osn::SimpleReplayBuffer::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	osn::SimpleStreaming *encoder = Napi::ObjectWrap<osn::SimpleStreaming>::Unwrap(value.ToObject());
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
 
-	if (!encoder) {
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!parentOutputRef.IsEmpty())
+			parentOutputRef.Reset();
+		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		usesStream = false;
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::SimpleStreaming::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a SimpleStreaming").ThrowAsJavaScriptException();
+
+	osn::SimpleStreaming *streaming = Napi::ObjectWrap<osn::SimpleStreaming>::Unwrap(value.ToObject());
+
+	if (!streaming) {
 		Napi::TypeError::New(info.Env(), "Invalid streaming argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
+	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+	usesStream = true;
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
 
-	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(encoder->uid)});
+	parentOutputRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::SimpleReplayBuffer::GetRecording(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
+	if (usesStream) {
 		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetRecording", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::SimpleRecording::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
+	} else {
+		return parentOutputRef.IsEmpty() ? info.Env().Undefined() : parentOutputRef.Value();
+	}
 }
 
 void osn::SimpleReplayBuffer::SetRecording(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	osn::SimpleRecording *recording = Napi::ObjectWrap<osn::SimpleRecording>::Unwrap(value.ToObject());
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
 
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!parentOutputRef.IsEmpty())
+			parentOutputRef.Reset();
+		conn->call(className, "SetRecording", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		usesStream = false;
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::SimpleRecording::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a Valid Recording").ThrowAsJavaScriptException();
+
+	osn::SimpleRecording *recording = Napi::ObjectWrap<osn::SimpleRecording>::Unwrap(obj);
 	if (!recording) {
 		Napi::TypeError::New(info.Env(), "Invalid recording argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetRecording", {ipc::value(this->uid), ipc::value(recording->uid)});
+	usesStream = false;
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
+	parentOutputRef = Napi::Persistent(obj);
 }

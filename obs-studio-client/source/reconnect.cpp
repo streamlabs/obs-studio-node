@@ -71,6 +71,18 @@ Napi::Value osn::Reconnect::Create(const Napi::CallbackInfo &info)
 	return instance;
 }
 
+void osn::Reconnect::Finalize(Napi::Env env)
+{
+	auto conn = GetConnection(env);
+	if (!conn)
+		return;
+
+	if (this->uid != UINT64_MAX) {
+		conn->call_synchronous_helper("Reconnect", "Destroy", {ipc::value(this->uid)});
+		this->uid = UINT64_MAX;
+	}
+}
+
 Napi::Value osn::Reconnect::GetEnabled(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

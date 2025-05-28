@@ -131,7 +131,7 @@ describe(testName, () => {
         recording.useStreamEncoders = false;
         recording.video = obs.defaultVideoContext;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-1');
         const track1 = osn.AudioTrackFactory.create(160, 'track1');
         osn.AudioTrackFactory.setAtIndex(track1, 1);
         recording.overwrite = false;
@@ -239,8 +239,10 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
+        const streamEncoder = recording.videoEncoder;
         osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
         osn.AdvancedRecordingFactory.destroy(recording);
+        streamEncoder.release();
     });
 
     it('Start advanced replay buffer - Use Stream through Recording', async function() {
@@ -264,14 +266,14 @@ describe(testName, () => {
         recording.useStreamEncoders = true;
         recording.overwrite = false;
         recording.noSpace = false;
-        recording .video = obs.defaultVideoContext;
+        recording.video = obs.defaultVideoContext;
         recording.useStreamEncoders = true;
         recording.signalHandler = (signal) => {obs.signals.push(signal)};
 
         const stream = osn.AdvancedStreamingFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-stream-1');
         stream.service = osn.ServiceFactory.legacySettings;
         const track1 = osn.AudioTrackFactory.create(160, 'track1');
         osn.AudioTrackFactory.setAtIndex(track1, 1);
@@ -433,8 +435,10 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const videoEncoder = stream.videoEncoder;
         osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
         osn.AdvancedRecordingFactory.destroy(recording);
         osn.AdvancedStreamingFactory.destroy(stream);
+        videoEncoder.release();
     });
 });

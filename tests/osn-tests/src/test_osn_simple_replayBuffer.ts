@@ -126,7 +126,7 @@ describe(testName, () => {
         recording.quality = osn.ERecordingQuality.HighQuality;
         recording.video = obs.defaultVideoContext;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-recording-1');
         recording.audioEncoder = osn.AudioEncoderFactory.create();
         recording.lowCPU = false;
         recording.overwrite = false;
@@ -185,8 +185,10 @@ describe(testName, () => {
         expect(expectedPrefix).to.equal(true, 'Wrong prefix when saving the simple replay buffer');
         expect(expectedSuffix).to.equal(true, 'Wrong suffix when saving the simple replay buffer');
 
+        const videoEncoder = recording.videoEncoder;
         osn.SimpleReplayBufferFactory.destroy(replayBuffer);
         osn.SimpleRecordingFactory.destroy(recording);
+        videoEncoder.release();
     });
 
     it('Start simple replay buffer - Use Stream through Recording', async function() {
@@ -217,7 +219,7 @@ describe(testName, () => {
         const stream = osn.SimpleStreamingFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.audioEncoder = osn.AudioEncoderFactory.create();
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
@@ -377,8 +379,10 @@ describe(testName, () => {
         expect(expectedPrefix).to.equal(true, 'Wrong prefix when saving the simple replay buffer');
         expect(expectedSuffix).to.equal(true, 'Wrong suffix when saving the simple replay buffer');
 
+        const videoEncoder = stream.videoEncoder;
         osn.SimpleReplayBufferFactory.destroy(replayBuffer);
         osn.SimpleRecordingFactory.destroy(recording);
         osn.SimpleStreamingFactory.destroy(stream);
+        videoEncoder.release();
     });
 });
