@@ -591,3 +591,19 @@ if (APPLE)
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
 endif()
+
+# Install dependencies for the obs-browser plugin (distribution folder is the destination)
+if (APPLE)
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/QtCore.framework"
+		DESTINATION "./Frameworks" USE_SOURCE_PERMISSIONS
+	)
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/QtGui.framework"
+		DESTINATION "./Frameworks" USE_SOURCE_PERMISSIONS
+	)
+	install(
+		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/QtWidgets.framework"
+		DESTINATION "./Frameworks" USE_SOURCE_PERMISSIONS
+	)
+endif()
