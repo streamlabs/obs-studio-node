@@ -47,7 +47,7 @@ void osn::IStreaming::SetService(void *data, const int64_t id, const std::vector
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		streaming->service = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
@@ -111,7 +111,7 @@ void osn::IStreaming::SetVideoEncoder(void *data, const int64_t id, const std::v
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		streaming->videoEncoder = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
@@ -193,7 +193,7 @@ void osn::IStreaming::SetDelay(void *data, const int64_t id, const std::vector<i
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		streaming->delay = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
@@ -225,7 +225,7 @@ void osn::IStreaming::SetReconnect(void *data, const int64_t id, const std::vect
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		streaming->reconnect = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
@@ -257,7 +257,7 @@ void osn::IStreaming::SetNetwork(void *data, const int64_t id, const std::vector
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	if( args[1].value_union.ui64 == UINT64_MAX ) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		streaming->network = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
