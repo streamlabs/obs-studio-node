@@ -56,8 +56,8 @@ void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Valu
 
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!serviceRef.IsEmpty())
-			serviceRef.Reset();   
-		conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+			serviceRef.Reset();
+			conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		return;
 	}
 
@@ -142,7 +142,7 @@ void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 
 	conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
 
-	if (!videoEncoderRef.IsEmpty()) 
+	if (!videoEncoderRef.IsEmpty())
 		videoEncoderRef.Reset();
 
 	videoEncoderRef = Napi::Persistent(obj);

@@ -452,7 +452,7 @@ void osn::IAdvancedRecording::SetStreaming(void *data, const int64_t id, const s
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
 
-	if(args[1].value_union.ui64 == UINT64_MAX) {
+	if (args[1].value_union.ui64 == UINT64_MAX) {
 		recording->streaming = nullptr;
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
