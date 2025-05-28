@@ -30,7 +30,7 @@ public:
 	Network(const Napi::CallbackInfo &info);
 
 	static Napi::Value Create(const Napi::CallbackInfo &info);
-
+	void Finalize(Napi::Env env);
 	Napi::Value GetBindIP(const Napi::CallbackInfo &info);
 	void SetBindIP(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetNetworkInterfaces(const Napi::CallbackInfo &info);

@@ -30,6 +30,7 @@ public:
 	Reconnect(const Napi::CallbackInfo &info);
 
 	static Napi::Value Create(const Napi::CallbackInfo &info);
+	void Finalize(Napi::Env env);
 
 	Napi::Value GetEnabled(const Napi::CallbackInfo &info);
 	void SetEnabled(const Napi::CallbackInfo &info, const Napi::Value &value);

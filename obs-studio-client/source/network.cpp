@@ -48,7 +48,7 @@ osn::Network::Network(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Ne
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
 	size_t length = info.Length();
-	this->uid = 0;
+	this->uid = UINT64_MAX;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -72,6 +72,20 @@ Napi::Value osn::Network::Create(const Napi::CallbackInfo &info)
 	auto instance = osn::Network::constructor.New({Napi::Number::New(info.Env(), static_cast<uint32_t>(response[1].value_union.ui64))});
 
 	return instance;
+}
+
+void osn::Network::Finalize(Napi::Env env)
+{
+	auto conn = GetConnection(env);
+	if (!conn)
+		return;
+
+	if (this->uid == UINT64_MAX)
+		return;
+
+	conn->call_synchronous_helper("Network", "Destroy", {ipc::value(this->uid)});
+
+	this->uid = UINT64_MAX;
 }
 
 Napi::Value osn::Network::GetBindIP(const Napi::CallbackInfo &info)

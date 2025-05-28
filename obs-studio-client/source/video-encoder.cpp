@@ -53,7 +53,8 @@ osn::VideoEncoder::VideoEncoder(const Napi::CallbackInfo &info) : Napi::ObjectWr
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
 	size_t length = info.Length();
-	this->uid = 0;
+	this->uid = UINT64_MAX;
+	this->encoderInitialized = false;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -61,6 +62,7 @@ osn::VideoEncoder::VideoEncoder(const Napi::CallbackInfo &info) : Napi::ObjectWr
 	}
 
 	this->uid = (uint64_t)info[0].ToNumber().Int64Value();
+	this->encoderInitialized = true;
 }
 
 Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
@@ -90,6 +92,22 @@ Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
 	auto instance = osn::VideoEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
+}
+
+void osn::VideoEncoder::Finalize(Napi::Env env)
+{
+	if (!this->encoderInitialized)
+		return;
+
+	auto conn = GetConnection(env);
+	if (!conn)
+		return;
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
+	this->encoderInitialized = false;
+	this->uid = UINT64_MAX;
+	if (!ValidateResponse(env, response))
+		return;
 }
 
 Napi::Value osn::VideoEncoder::GetTypes(const Napi::CallbackInfo &info)
@@ -193,11 +211,18 @@ Napi::Value osn::VideoEncoder::GetLastError(const Napi::CallbackInfo &info)
 
 void osn::VideoEncoder::Release(const Napi::CallbackInfo &info)
 {
+	if (!this->encoderInitialized)
+		return;
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
-	conn->call("VideoEncoder", "Release", {});
+	this->encoderInitialized = false;
+	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Release", {ipc::value(this->uid)});
+	this->uid = UINT64_MAX;
+	if (!ValidateResponse(info, response))
+		return;
 }
 
 void osn::VideoEncoder::Update(const Napi::CallbackInfo &info)
