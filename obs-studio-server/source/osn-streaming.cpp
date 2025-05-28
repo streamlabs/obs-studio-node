@@ -35,15 +35,8 @@ osn::Streaming::~Streaming()
 
 void osn::IStreaming::GetService(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Service reference is not valid.");
-	}
-
-	uint64_t uid = osn::Service::Manager::GetInstance().find(streaming->service);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -52,6 +45,13 @@ void osn::IStreaming::SetService(void *data, const int64_t id, const std::vector
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->service = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_service_t *service = osn::Service::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -101,15 +101,8 @@ void osn::IStreaming::SetVideoCanvas(void *data, const int64_t id, const std::ve
 
 void osn::IStreaming::GetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	uint64_t uid = osn::VideoEncoder::Manager::GetInstance().find(streaming->videoEncoder);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -118,6 +111,13 @@ void osn::IStreaming::SetVideoEncoder(void *data, const int64_t id, const std::v
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->videoEncoder = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -183,15 +183,8 @@ void osn::IStreaming::SetEnableTwitchVOD(void *data, const int64_t id, const std
 
 void osn::IStreaming::GetDelay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	uint64_t uid = osn::IDelay::Manager::GetInstance().find(streaming->delay);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -200,6 +193,13 @@ void osn::IStreaming::SetDelay(void *data, const int64_t id, const std::vector<i
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->delay = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	Delay *delay = osn::IDelay::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -215,15 +215,8 @@ void osn::IStreaming::SetDelay(void *data, const int64_t id, const std::vector<i
 
 void osn::IStreaming::GetReconnect(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	uint64_t uid = osn::IReconnect::Manager::GetInstance().find(streaming->reconnect);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -232,6 +225,13 @@ void osn::IStreaming::SetReconnect(void *data, const int64_t id, const std::vect
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->reconnect = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	Reconnect *reconnect = osn::IReconnect::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -247,15 +247,8 @@ void osn::IStreaming::SetReconnect(void *data, const int64_t id, const std::vect
 
 void osn::IStreaming::GetNetwork(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	uint64_t uid = osn::INetwork::Manager::GetInstance().find(streaming->network);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -264,6 +257,13 @@ void osn::IStreaming::SetNetwork(void *data, const int64_t id, const std::vector
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->network = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	Network *network = osn::INetwork::Manager::GetInstance().find(args[1].value_union.ui64);
