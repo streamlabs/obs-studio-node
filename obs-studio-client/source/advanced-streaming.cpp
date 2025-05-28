@@ -80,6 +80,16 @@ osn::AdvancedStreaming::AdvancedStreaming(const Napi::CallbackInfo &info) : Napi
 	this->className = std::string("AdvancedStreaming");
 }
 
+void osn::AdvancedStreaming::Finalize(Napi::Env)
+{
+	ReleaseObjects();
+}
+
+void osn::AdvancedStreaming::ReleaseObjects()
+{
+	osn::Streaming::ReleaseObjects();
+}
+
 Napi::Value osn::AdvancedStreaming::Create(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -105,6 +115,8 @@ void osn::AdvancedStreaming::Destroy(const Napi::CallbackInfo &info)
 
 	stream->stopWorker();
 	stream->cb.Reset();
+
+	stream->ReleaseObjects();
 
 	auto conn = GetConnection(info);
 	if (!conn)

@@ -126,8 +126,8 @@ describe(testName, () => {
         recording.quality = osn.ERecordingQuality.HighQuality;
         recording.video = obs.defaultVideoContext;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-recording-1');
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
         recording.lowCPU = false;
         recording.overwrite = false;
         recording.noSpace = false;
@@ -185,8 +185,12 @@ describe(testName, () => {
         expect(expectedPrefix).to.equal(true, 'Wrong prefix when saving the simple replay buffer');
         expect(expectedSuffix).to.equal(true, 'Wrong suffix when saving the simple replay buffer');
 
+        const videoEncoder = recording.videoEncoder;
+        const audioEncoder = recording.audioEncoder;
         osn.SimpleReplayBufferFactory.destroy(replayBuffer);
         osn.SimpleRecordingFactory.destroy(recording);
+        videoEncoder.release();
+        audioEncoder.release();
     });
 
     it('Start simple replay buffer - Use Stream through Recording', async function() {
@@ -217,9 +221,9 @@ describe(testName, () => {
         const stream = osn.SimpleStreamingFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
         recording.streaming = stream;
 
@@ -377,8 +381,12 @@ describe(testName, () => {
         expect(expectedPrefix).to.equal(true, 'Wrong prefix when saving the simple replay buffer');
         expect(expectedSuffix).to.equal(true, 'Wrong suffix when saving the simple replay buffer');
 
+        const videoEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleReplayBufferFactory.destroy(replayBuffer);
         osn.SimpleRecordingFactory.destroy(recording);
         osn.SimpleStreamingFactory.destroy(stream);
+        videoEncoder.release();
+        audioEncoder.release();
     });
 });

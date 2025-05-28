@@ -22,22 +22,26 @@
 
 Napi::Value osn::Recording::GetVideoEncoder(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetVideoEncoder", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::VideoEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-
-	return instance;
+	return videoEncoderRef.IsEmpty() ? info.Env().Undefined() : videoEncoderRef.Value();
 }
 
 void osn::Recording::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!videoEncoderRef.IsEmpty())
+			videoEncoderRef.Reset();
+		conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::VideoEncoder::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a VideoEncoder").ThrowAsJavaScriptException();
+
 	osn::VideoEncoder *encoder = Napi::ObjectWrap<osn::VideoEncoder>::Unwrap(value.ToObject());
 
 	if (!encoder) {
@@ -45,11 +49,12 @@ void osn::Recording::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
+
+	videoEncoderRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::Recording::GetSignalHandler(const Napi::CallbackInfo &info)

@@ -81,6 +81,19 @@ osn::AdvancedRecording::AdvancedRecording(const Napi::CallbackInfo &info) : Napi
 	this->className = std::string("AdvancedRecording");
 }
 
+void osn::AdvancedRecording::Finalize(Napi::Env)
+{
+	ReleaseObjects();
+}
+
+void osn::AdvancedRecording::ReleaseObjects()
+{
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
+}
+
 Napi::Value osn::AdvancedRecording::Create(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -106,6 +119,8 @@ void osn::AdvancedRecording::Destroy(const Napi::CallbackInfo &info)
 
 	recording->stopWorker();
 	recording->cb.Reset();
+
+	recording->ReleaseObjects();
 
 	auto conn = GetConnection(info);
 	if (!conn)
@@ -269,21 +284,26 @@ void osn::AdvancedRecording::SetLegacySettings(const Napi::CallbackInfo &info, c
 
 Napi::Value osn::AdvancedRecording::GetStreaming(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetStreaming", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::AdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
+	return streamingRef.IsEmpty() ? info.Env().Undefined() : streamingRef.Value();
 }
 
 void osn::AdvancedRecording::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!streamingRef.IsEmpty())
+			streamingRef.Reset();
+		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::AdvancedStreaming::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a AdvancedStreaming").ThrowAsJavaScriptException();
+
 	osn::AdvancedStreaming *streaming = Napi::ObjectWrap<osn::AdvancedStreaming>::Unwrap(value.ToObject());
 
 	if (!streaming) {
@@ -291,9 +311,10 @@ void osn::AdvancedRecording::SetStreaming(const Napi::CallbackInfo &info, const 
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
+
+	streamingRef = Napi::Persistent(obj);
 }

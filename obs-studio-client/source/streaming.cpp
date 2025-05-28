@@ -25,36 +25,61 @@
 #include "network.hpp"
 #include "video.hpp"
 
+void osn::Streaming::ReleaseObjects()
+{
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
+
+	if (!serviceRef.IsEmpty())
+		serviceRef.Reset();
+
+	if (!delayRef.IsEmpty())
+		delayRef.Reset();
+
+	if (!reconnectRef.IsEmpty())
+		reconnectRef.Reset();
+
+	if (!networkRef.IsEmpty())
+		networkRef.Reset();
+
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
+}
+
 Napi::Value osn::Streaming::GetService(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetService", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::Service::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-
-	return instance;
+	return serviceRef.IsEmpty() ? info.Env().Undefined() : serviceRef.Value();
 }
 
 void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	osn::Service *service = Napi::ObjectWrap<osn::Service>::Unwrap(value.ToObject());
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
 
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!serviceRef.IsEmpty())
+			serviceRef.Reset();
+		conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::Service::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a Service").ThrowAsJavaScriptException();
+
+	osn::Service *service = Napi::ObjectWrap<osn::Service>::Unwrap(obj);
 	if (!service) {
 		Napi::TypeError::New(info.Env(), "Invalid service argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(service->uid)});
+
+	if (!serviceRef.IsEmpty())
+		serviceRef.Reset();
+
+	serviceRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::Streaming::GetCanvas(const Napi::CallbackInfo &info)
@@ -88,24 +113,29 @@ void osn::Streaming::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value
 
 	conn->call(className, "SetVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
 }
+
 Napi::Value osn::Streaming::GetVideoEncoder(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetVideoEncoder", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::VideoEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-
-	return instance;
+	return videoEncoderRef.IsEmpty() ? info.Env().Undefined() : videoEncoderRef.Value();
 }
 
 void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!videoEncoderRef.IsEmpty())
+			videoEncoderRef.Reset();
+		conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::VideoEncoder::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a VideoEncoder").ThrowAsJavaScriptException();
+
 	osn::VideoEncoder *encoder = Napi::ObjectWrap<osn::VideoEncoder>::Unwrap(value.ToObject());
 
 	if (!encoder) {
@@ -113,11 +143,12 @@ void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
+
+	videoEncoderRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::Streaming::GetEnforceServiceBirate(const Napi::CallbackInfo &info)
@@ -168,98 +199,110 @@ void osn::Streaming::SetEnableTwitchVOD(const Napi::CallbackInfo &info, const Na
 
 Napi::Value osn::Streaming::GetDelay(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetDelay", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::Delay::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-
-	return instance;
+	return delayRef.IsEmpty() ? info.Env().Undefined() : delayRef.Value();
 }
 
 void osn::Streaming::SetDelay(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	osn::Delay *delay = Napi::ObjectWrap<osn::Delay>::Unwrap(value.ToObject());
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
 
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!delayRef.IsEmpty())
+			delayRef.Reset();
+		conn->call(className, "SetDelay", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::Delay::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a Delay").ThrowAsJavaScriptException();
+
+	osn::Delay *delay = Napi::ObjectWrap<osn::Delay>::Unwrap(obj);
 	if (!delay) {
 		Napi::TypeError::New(info.Env(), "Invalid delay argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetDelay", {ipc::value(this->uid), ipc::value(delay->uid)});
+
+	if (!delayRef.IsEmpty())
+		delayRef.Reset();
+
+	delayRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::Streaming::GetReconnect(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetReconnect", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::Reconnect::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-
-	return instance;
+	return reconnectRef.IsEmpty() ? info.Env().Undefined() : reconnectRef.Value();
 }
 
 void osn::Streaming::SetReconnect(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	osn::Reconnect *reconnect = Napi::ObjectWrap<osn::Reconnect>::Unwrap(value.ToObject());
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
 
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!reconnectRef.IsEmpty())
+			reconnectRef.Reset();
+		conn->call(className, "SetReconnect", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::Reconnect::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a Reconnect").ThrowAsJavaScriptException();
+
+	osn::Reconnect *reconnect = Napi::ObjectWrap<osn::Reconnect>::Unwrap(obj);
 	if (!reconnect) {
 		Napi::TypeError::New(info.Env(), "Invalid reconnect argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetReconnect", {ipc::value(this->uid), ipc::value(reconnect->uid)});
+
+	if (!reconnectRef.IsEmpty())
+		reconnectRef.Reset();
+
+	reconnectRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::Streaming::GetNetwork(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetNetwork", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::Network::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-
-	return instance;
+	return networkRef.IsEmpty() ? info.Env().Undefined() : networkRef.Value();
 }
 
 void osn::Streaming::SetNetwork(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	osn::Network *network = Napi::ObjectWrap<osn::Network>::Unwrap(value.ToObject());
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
 
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!networkRef.IsEmpty())
+			networkRef.Reset();
+		conn->call(className, "SetNetwork", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::Network::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a Network").ThrowAsJavaScriptException();
+
+	osn::Network *network = Napi::ObjectWrap<osn::Network>::Unwrap(obj);
 	if (!network) {
 		Napi::TypeError::New(info.Env(), "Invalid network argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetNetwork", {ipc::value(this->uid), ipc::value(network->uid)});
+
+	if (!networkRef.IsEmpty())
+		networkRef.Reset();
+
+	networkRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::Streaming::GetSignalHandler(const Napi::CallbackInfo &info)

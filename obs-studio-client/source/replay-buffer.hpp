@@ -29,6 +29,8 @@ public:
 protected:
 	Napi::Function signalHandler;
 	std::string className;
+	Napi::Reference<Napi::Object> parentOutputRef;
+	bool usesStream = false;
 
 	Napi::Value GetDuration(const Napi::CallbackInfo &info);
 	void SetDuration(const Napi::CallbackInfo &info, const Napi::Value &value);
