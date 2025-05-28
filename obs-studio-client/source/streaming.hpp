@@ -30,6 +30,13 @@ protected:
 	Napi::Function signalHandler;
 	std::string className;
 
+	Napi::Reference<Napi::Object> videoEncoderRef;
+	Napi::Reference<Napi::Object> serviceRef;
+	Napi::Reference<Napi::Object> delayRef;
+	Napi::Reference<Napi::Object> reconnectRef;
+	Napi::Reference<Napi::Object> networkRef;
+	void ReleaseObjects();
+
 	Napi::Value GetService(const Napi::CallbackInfo &info);
 	void SetService(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetCanvas(const Napi::CallbackInfo &info);

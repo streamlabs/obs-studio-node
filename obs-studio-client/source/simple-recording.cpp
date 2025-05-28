@@ -85,6 +85,20 @@ osn::SimpleRecording::SimpleRecording(const Napi::CallbackInfo &info) : Napi::Ob
 	this->className = std::string("SimpleRecording");
 }
 
+void osn::SimpleRecording::Finalize(Napi::Env)
+{
+	ReleaseObjects();
+}
+
+void osn::SimpleRecording::ReleaseObjects()
+{
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
+
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
+}
+
 Napi::Value osn::SimpleRecording::Create(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -110,6 +124,8 @@ void osn::SimpleRecording::Destroy(const Napi::CallbackInfo &info)
 
 	recording->stopWorker();
 	recording->cb.Reset();
+
+	recording->ReleaseObjects();
 
 	auto conn = GetConnection(info);
 	if (!conn)
@@ -235,21 +251,26 @@ void osn::SimpleRecording::SetLegacySettings(const Napi::CallbackInfo &info, con
 
 Napi::Value osn::SimpleRecording::GetStreaming(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetStreaming", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::SimpleStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
+	return streamingRef.IsEmpty() ? info.Env().Undefined() : streamingRef.Value();
 }
 
 void osn::SimpleRecording::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!streamingRef.IsEmpty())
+			streamingRef.Reset();
+		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::SimpleStreaming::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a SimpleStreaming").ThrowAsJavaScriptException();
+
 	osn::SimpleStreaming *streaming = Napi::ObjectWrap<osn::SimpleStreaming>::Unwrap(value.ToObject());
 
 	if (!streaming) {
@@ -257,9 +278,10 @@ void osn::SimpleRecording::SetStreaming(const Napi::CallbackInfo &info, const Na
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
+
+	streamingRef = Napi::Persistent(obj);
 }

@@ -79,7 +79,7 @@ describe(testName, () => {
         recording.quality = ERecordingQuality.HighQuality;
         recording.video = obs.defaultVideoContext;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-1');
         recording.lowCPU = true;
         recording.audioEncoder = osn.AudioEncoderFactory.create();
         recording.overwrite = true;
@@ -98,7 +98,9 @@ describe(testName, () => {
         expect(recording.noSpace).to.equal(
             false, "Invalid noSpace value");
 
+        const videoEncoder = recording.videoEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
+        videoEncoder.release();
     });
 
     it('Start simple recording - Stream', async function () {
@@ -118,7 +120,7 @@ describe(testName, () => {
         const stream = osn.SimpleStreamingFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-stream-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.audioEncoder = osn.AudioEncoderFactory.create();
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
@@ -230,8 +232,10 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const streamEncoder = stream.videoEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
         osn.SimpleStreamingFactory.destroy(stream);
+        streamEncoder.release();
     });
 
     it('Start simple recording - HighQuality', async function () {
@@ -244,7 +248,7 @@ describe(testName, () => {
         recording.quality = ERecordingQuality.HighQuality;
         recording.video = obs.defaultVideoContext;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-2');
         recording.lowCPU = false;
         recording.audioEncoder = osn.AudioEncoderFactory.create();
         recording.overwrite = false;
@@ -303,7 +307,9 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
+        const videoEncoder = recording.videoEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
+        videoEncoder.release();
     });
 
     it('Start simple recording - HigherQuality', async function () {
@@ -316,7 +322,7 @@ describe(testName, () => {
         recording.quality = ERecordingQuality.HigherQuality;
         recording.video = obs.defaultVideoContext;
         recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-3');
         recording.lowCPU = false;
         recording.audioEncoder = osn.AudioEncoderFactory.create();
         recording.overwrite = false;
@@ -375,7 +381,9 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
+        const videoEncoder = recording.videoEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
+        videoEncoder.release();
     });
 
     it('Start simple recording - Lossless', async function () {

@@ -91,24 +91,17 @@ void osn::ReplayBuffer::SetSuffix(const Napi::CallbackInfo &info, const Napi::Va
 
 Napi::Value osn::ReplayBuffer::GetUsesStream(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetUsesStream", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Boolean::New(info.Env(), usesStream);
 }
 
 void osn::ReplayBuffer::SetUsesStream(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	//todo should be depricated
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
+	usesStream = value.ToBoolean().Value();
 	conn->call_synchronous_helper(className, "SetUsesStream", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
 }
 

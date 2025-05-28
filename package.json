@@ -21,7 +21,7 @@
     "local:config": "yarn install && git submodule update --init --recursive --force && cmake -Bbuild -H. -G\"Visual Studio 16 2019\" -A\"x64\" -DCMAKE_INSTALL_PREFIX=\"./obs-studio-node\" -DLIBOBS_BUILD_TYPE=\"debug\" -DCMAKE_PREFIX_PATH=%CD%/build/libobs-src/cmake/",
     "local:build": "cmake --build build --target install --config Debug",
     "local:clean": "rm -rf build/*",
-    "test": "electron-mocha -t 80000 -c true -r ts-node/register tests/osn-tests/src/**/*.ts --reporter tests/osn-tests/util/list-reporter.js"
+    "test": "electron-mocha -t 80000 --js-flags=\"--expose-gc\" -c true -r ts-node/register tests/osn-tests/src/**/*.ts --reporter tests/osn-tests/util/list-reporter.js"
   },
   "devDependencies": {
     "@types/chai": "^4.1.7",
@@ -35,6 +35,7 @@
     "colors": "^1.4.0",
     "electron": "29.4.3",
     "electron-mocha": "^12.1.0",
+    "get-func-name": "^3.0.0",
     "mocha": "^7.1.0",
     "mocha-junit-reporter": "^1.22.0",
     "node-addon-api": "^7.1.1",
@@ -45,7 +46,6 @@
     "typedoc-plugin-markdown": "^2.2.17",
     "typescript": "^4.0.7",
     "uuid": "^3.0.1",
-    "get-func-name": "^3.0.0",
     "wait-queue": "^1.1.4"
   },
   "keywords": [
@@ -69,5 +69,5 @@
     "mixer",
     "beam"
   ],
-  "dependencies": {}
+  "packageManager": "yarn@4.9.1+sha512.f95ce356460e05be48d66401c1ae64ef84d163dd689964962c6888a9810865e39097a5e9de748876c2e0bf89b232d583c33982773e9903ae7a76257270986538"
 }
