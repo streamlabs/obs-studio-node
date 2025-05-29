@@ -96,15 +96,8 @@ void osn::ISimpleStreaming::Destroy(void *data, const int64_t id, const std::vec
 
 void osn::ISimpleStreaming::GetAudioEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::ISimpleStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	uint64_t uid = osn::AudioEncoder::Manager::GetInstance().find(streaming->audioEncoder);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -113,6 +106,13 @@ void osn::ISimpleStreaming::SetAudioEncoder(void *data, const int64_t id, const 
 	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::ISimpleStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->audioEncoder = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_encoder_t *encoder = osn::AudioEncoder::Manager::GetInstance().find(args[1].value_union.ui64);

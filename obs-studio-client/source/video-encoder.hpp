@@ -24,7 +24,7 @@ namespace osn {
 class VideoEncoder : public Napi::ObjectWrap<osn::VideoEncoder> {
 public:
 	uint64_t uid;
-	bool has_encoder;
+	bool encoderInitialized;
 
 public:
 	static Napi::FunctionReference constructor;

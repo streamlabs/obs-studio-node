@@ -96,7 +96,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -165,8 +165,10 @@ describe(testName, () => {
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         const streamEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);
         streamEncoder.release();
+        audioEncoder.release();
     });
 
     it('Stream with invalid stream key', async function() {
@@ -185,7 +187,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-2");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -208,7 +210,9 @@ describe(testName, () => {
         stream.service.update({ key: obs.userStreamKey });
         
         const videoEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);
         videoEncoder.release();
+        audioEncoder.release();
     });
 });

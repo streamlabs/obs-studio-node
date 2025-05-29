@@ -81,7 +81,7 @@ describe(testName, () => {
         recording.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-1');
         recording.lowCPU = true;
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
         recording.overwrite = true;
         recording.noSpace = false;
 
@@ -99,8 +99,10 @@ describe(testName, () => {
             false, "Invalid noSpace value");
 
         const videoEncoder = recording.videoEncoder;
+        const audioEncoder = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
         videoEncoder.release();
+        audioEncoder.release();
     });
 
     it('Start simple recording - Stream', async function () {
@@ -122,7 +124,7 @@ describe(testName, () => {
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-stream-1');
         stream.service = osn.ServiceFactory.legacySettings;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
         recording.streaming = stream;
 
@@ -233,9 +235,11 @@ describe(testName, () => {
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         const streamEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
         osn.SimpleStreamingFactory.destroy(stream);
         streamEncoder.release();
+        audioEncoder.release();
     });
 
     it('Start simple recording - HighQuality', async function () {
@@ -250,7 +254,7 @@ describe(testName, () => {
         recording.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-2');
         recording.lowCPU = false;
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-2");
         recording.overwrite = false;
         recording.noSpace = false;
         recording.signalHandler = (signal) => {obs.signals.push(signal)};
@@ -308,8 +312,10 @@ describe(testName, () => {
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
         const videoEncoder = recording.videoEncoder;
+        const audioEncoder = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
         videoEncoder.release();
+        audioEncoder.release();
     });
 
     it('Start simple recording - HigherQuality', async function () {
@@ -324,7 +330,7 @@ describe(testName, () => {
         recording.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-3');
         recording.lowCPU = false;
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
         recording.overwrite = false;
         recording.noSpace = false;
         recording.signalHandler = (signal) => {obs.signals.push(signal)};
@@ -382,8 +388,10 @@ describe(testName, () => {
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
         const videoEncoder = recording.videoEncoder;
+        const audioEncoder = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
         videoEncoder.release();
+        audioEncoder.release();
     });
 
     it('Start simple recording - Lossless', async function () {
