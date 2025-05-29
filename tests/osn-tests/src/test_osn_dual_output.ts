@@ -374,7 +374,7 @@ describe(testName, () => {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-7');
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-1");
         recording.audioEncoder.name = 'audio-encoder-test-recording-1';
         recording.audioEncoder.bitrate = 160;
         recording.overwrite = false;
@@ -389,7 +389,7 @@ describe(testName, () => {
         recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording2.format = ERecordingFormat.MP4;
         recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-8');
-        recording2.audioEncoder = osn.AudioEncoderFactory.create();
+        recording2.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-2");
         recording2.audioEncoder.name = 'audio-encoder-test-recording-2';
         recording2.audioEncoder.bitrate = 160;
         recording2.overwrite = false;
@@ -452,9 +452,11 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
         const recordingEncoder = recording.videoEncoder;
+        const recordingAudioEncoder = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
 
         const recording2Encoder = recording2.videoEncoder;
+        const recording2AudioEncoder = recording2.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording2);
 
         osn.Global.setOutputSource(0, returnSource);
@@ -469,6 +471,8 @@ describe(testName, () => {
 
         recordingEncoder.release();
         recording2Encoder.release();
+        recordingAudioEncoder.release();
+        recording2AudioEncoder.release();
     });
 
     it('Start Dual Output with legacy streaming to two services', async function() {

@@ -31,6 +31,7 @@ protected:
 	std::string className;
 
 	Napi::Reference<Napi::Object> videoEncoderRef;
+	Napi::Reference<Napi::Object> audioEncoderRef;
 	Napi::Reference<Napi::Object> serviceRef;
 	Napi::Reference<Napi::Object> delayRef;
 	Napi::Reference<Napi::Object> reconnectRef;

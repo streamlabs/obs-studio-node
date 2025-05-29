@@ -43,9 +43,9 @@ describe(testName, () => {
     });
 
     it('Create an audio encoder', () => {
-        const encoder = osn.AudioEncoderFactory.create();
+        const encoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-1");
         expect(encoder).to.not.equal(undefined, 'Invalid audio encoder creation');
-        expect(encoder.name).to.equal('audio', "Invalid default name value");
+        expect(encoder.name).to.equal('audio-encoder-test-1', "Invalid default name value");
         expect(encoder.bitrate).to.equal(128, "Invalid default bitrate value");
 
         encoder.name = 'audio track';
@@ -53,5 +53,7 @@ describe(testName, () => {
 
         expect(encoder.name).to.equal('audio track', "Invalid name value");
         expect(encoder.bitrate).to.equal(256, "Invalid bitrate value");
+
+        encoder.release();
     });
 });

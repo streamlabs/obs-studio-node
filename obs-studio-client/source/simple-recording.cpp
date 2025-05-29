@@ -97,6 +97,9 @@ void osn::SimpleRecording::ReleaseObjects()
 
 	if (!streamingRef.IsEmpty())
 		streamingRef.Reset();
+
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
 }
 
 Napi::Value osn::SimpleRecording::Create(const Napi::CallbackInfo &info)
@@ -162,21 +165,26 @@ void osn::SimpleRecording::SetQuality(const Napi::CallbackInfo &info, const Napi
 
 Napi::Value osn::SimpleRecording::GetAudioEncoder(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "GetAudioEncoder", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::AudioEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
+	return audioEncoderRef.IsEmpty() ? info.Env().Undefined() : audioEncoderRef.Value();
 }
 
 void osn::SimpleRecording::SetAudioEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!audioEncoderRef.IsEmpty())
+			audioEncoderRef.Reset();
+		conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::AudioEncoder::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a AudioEncoder").ThrowAsJavaScriptException();
+
 	osn::AudioEncoder *encoder = Napi::ObjectWrap<osn::AudioEncoder>::Unwrap(value.ToObject());
 
 	if (!encoder) {
@@ -184,11 +192,12 @@ void osn::SimpleRecording::SetAudioEncoder(const Napi::CallbackInfo &info, const
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
+
+	audioEncoderRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::SimpleRecording::GetLowCPU(const Napi::CallbackInfo &info)
