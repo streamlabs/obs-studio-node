@@ -96,17 +96,18 @@ Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
 
 void osn::VideoEncoder::Finalize(Napi::Env env)
 {
+	if (!this->has_encoder)
+		return;
+
 	auto conn = GetConnection(env);
 	if (!conn)
 		return;
 
-	if (this->has_encoder) {
-		std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
-		this->has_encoder = false;
-		this->uid = UINT64_MAX;
-		if (!ValidateResponse(env, response))
-			return;
-	}
+	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
+	this->has_encoder = false;
+	this->uid = UINT64_MAX;
+	if (!ValidateResponse(env, response))
+		return;
 }
 
 Napi::Value osn::VideoEncoder::GetTypes(const Napi::CallbackInfo &info)
@@ -210,17 +211,19 @@ Napi::Value osn::VideoEncoder::GetLastError(const Napi::CallbackInfo &info)
 
 void osn::VideoEncoder::Release(const Napi::CallbackInfo &info)
 {
+	if (!this->has_encoder)
+		return;
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
-	if (this->has_encoder) {
-		this->has_encoder = false;
-		std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Release", {ipc::value(this->uid)});
-		this->uid = UINT64_MAX;
-		if (!ValidateResponse(info, response))
-			return;
-	}
+	
+	this->has_encoder = false;
+	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Release", {ipc::value(this->uid)});
+	this->uid = UINT64_MAX;
+	if (!ValidateResponse(info, response))
+		return;
 }
 
 void osn::VideoEncoder::Update(const Napi::CallbackInfo &info)
