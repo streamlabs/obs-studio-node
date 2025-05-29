@@ -218,7 +218,6 @@ void osn::VideoEncoder::Release(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	
 	this->has_encoder = false;
 	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Release", {ipc::value(this->uid)});
 	this->uid = UINT64_MAX;
