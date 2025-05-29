@@ -57,7 +57,7 @@ void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Valu
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!serviceRef.IsEmpty())
 			serviceRef.Reset();
-			conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		return;
 	}
 
