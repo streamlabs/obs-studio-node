@@ -31,6 +31,7 @@ protected:
 	std::string className;
 	Napi::Reference<Napi::Object> videoEncoderRef;
 	Napi::Reference<Napi::Object> streamingRef;
+	Napi::Reference<Napi::Object> audioEncoderRef;
 
 	Napi::Value GetVideoEncoder(const Napi::CallbackInfo &info);
 	void SetVideoEncoder(const Napi::CallbackInfo &info, const Napi::Value &value);

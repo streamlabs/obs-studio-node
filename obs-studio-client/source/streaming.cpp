@@ -41,6 +41,9 @@ void osn::Streaming::ReleaseObjects()
 
 	if (!networkRef.IsEmpty())
 		networkRef.Reset();
+
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
 }
 
 Napi::Value osn::Streaming::GetService(const Napi::CallbackInfo &info)

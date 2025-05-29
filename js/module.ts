@@ -1676,22 +1676,21 @@ export const enum EProcessPriority {
     Idle = 'Idle'
 }
 
-export interface IVideoEncoder extends IConfigurable {
+export interface IVideoEncoder extends IConfigurable, IReleasable {
     name: string,
     readonly type: EVideoEncoderType,
     readonly active: boolean,
     readonly id: string,
-    readonly lastError: string,
-    release(): void
+    readonly lastError: string
 }
 
-export interface IAudioEncoder {
+export interface IAudioEncoder extends IReleasable {
     name: string,
     bitrate: number
 }
 
 export interface IAudioEncoderFactory {
-    create(): IAudioEncoder
+    create(id: string, name: string): IAudioEncoder
 }
 
 export interface IVideoEncoderFactory {

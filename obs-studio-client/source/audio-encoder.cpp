@@ -32,6 +32,8 @@ Napi::Object osn::AudioEncoder::Init(Napi::Env env, Napi::Object exports)
 
 						  InstanceAccessor("name", &osn::AudioEncoder::GetName, &osn::AudioEncoder::SetName),
 						  InstanceAccessor("bitrate", &osn::AudioEncoder::GetBitrate, &osn::AudioEncoder::SetBitrate),
+
+						  InstanceMethod("release", &osn::AudioEncoder::Release),
 					  });
 	exports.Set("AudioEncoder", func);
 	osn::AudioEncoder::constructor = Napi::Persistent(func);
@@ -45,6 +47,7 @@ osn::AudioEncoder::AudioEncoder(const Napi::CallbackInfo &info) : Napi::ObjectWr
 	Napi::HandleScope scope(env);
 	size_t length = info.Length();
 	this->uid = 0;
+	this->encoderInitialized = false;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -52,15 +55,24 @@ osn::AudioEncoder::AudioEncoder(const Napi::CallbackInfo &info) : Napi::ObjectWr
 	}
 
 	this->uid = (uint64_t)info[0].ToNumber().Int64Value();
+	this->encoderInitialized = true;
 }
 
 Napi::Value osn::AudioEncoder::Create(const Napi::CallbackInfo &info)
 {
+	std::string id = "ffmpeg_aac";
+	std::string name = "audio-encoder";
+
+	if (info.Length() >= 2) {
+		id = info[0].ToString().Utf8Value();
+		name = info[1].ToString().Utf8Value();
+	}
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioEncoder", "Create", {});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioEncoder", "Create", {ipc::value(id), ipc::value(name)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -68,6 +80,38 @@ Napi::Value osn::AudioEncoder::Create(const Napi::CallbackInfo &info)
 	auto instance = osn::AudioEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
+}
+
+void osn::AudioEncoder::Finalize(Napi::Env env)
+{
+	if (!this->encoderInitialized)
+		return;
+
+	auto conn = GetConnection(env);
+	if (!conn)
+		return;
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioEncoder", "Finalize", {ipc::value(this->uid)});
+	this->encoderInitialized = false;
+	this->uid = UINT64_MAX;
+	if (!ValidateResponse(env, response))
+		return;
+}
+
+void osn::AudioEncoder::Release(const Napi::CallbackInfo &info)
+{
+	if (!this->encoderInitialized)
+		return;
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	this->encoderInitialized = false;
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioEncoder", "Release", {ipc::value(this->uid)});
+	this->uid = UINT64_MAX;
+	if (!ValidateResponse(info, response))
+		return;
 }
 
 Napi::Value osn::AudioEncoder::GetName(const Napi::CallbackInfo &info)

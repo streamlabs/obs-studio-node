@@ -35,7 +35,6 @@ Napi::Object osn::SimpleStreaming::Init(Napi::Env env, Napi::Object exports)
 		 StaticMethod("destroy", &osn::SimpleStreaming::Destroy),
 
 		 InstanceAccessor("videoEncoder", &osn::SimpleStreaming::GetVideoEncoder, &osn::SimpleStreaming::SetVideoEncoder),
-		 InstanceAccessor("audioEncoder", &osn::SimpleStreaming::GetAudioEncoder, &osn::SimpleStreaming::SetAudioEncoder),
 		 InstanceAccessor("service", &osn::SimpleStreaming::GetService, &osn::SimpleStreaming::SetService),
 		 InstanceAccessor("enforceServiceBitrate", &osn::SimpleStreaming::GetEnforceServiceBirate, &osn::SimpleStreaming::SetEnforceServiceBirate),
 		 InstanceAccessor("enableTwitchVOD", &osn::SimpleStreaming::GetEnableTwitchVOD, &osn::SimpleStreaming::SetEnableTwitchVOD),
@@ -129,17 +128,7 @@ void osn::SimpleStreaming::Destroy(const Napi::CallbackInfo &info)
 
 Napi::Value osn::SimpleStreaming::GetAudioEncoder(const Napi::CallbackInfo &info)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "GetAudioEncoder", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::AudioEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
+	return audioEncoderRef.IsEmpty() ? info.Env().Undefined() : audioEncoderRef.Value();
 }
 
 Napi::Value osn::SimpleStreaming::GetUseAdvanced(const Napi::CallbackInfo &info)
@@ -190,6 +179,21 @@ void osn::SimpleStreaming::SetCustomEncSettings(const Napi::CallbackInfo &info, 
 
 void osn::SimpleStreaming::SetAudioEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	if (value.IsNull() || value.IsUndefined()) {
+		if (!audioEncoderRef.IsEmpty())
+			audioEncoderRef.Reset();
+		conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		return;
+	}
+
+	Napi::Object obj = value.As<Napi::Object>();
+	if (!obj.InstanceOf(osn::AudioEncoder::constructor.Value()))
+		Napi::TypeError::New(info.Env(), "Object is not a AudioEncoder").ThrowAsJavaScriptException();
+
 	osn::AudioEncoder *encoder = Napi::ObjectWrap<osn::AudioEncoder>::Unwrap(value.ToObject());
 
 	if (!encoder) {
@@ -197,11 +201,12 @@ void osn::SimpleStreaming::SetAudioEncoder(const Napi::CallbackInfo &info, const
 		return;
 	}
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
 	conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
+
+	audioEncoderRef = Napi::Persistent(obj);
 }
 
 Napi::Value osn::SimpleStreaming::GetLegacySettings(const Napi::CallbackInfo &info)
