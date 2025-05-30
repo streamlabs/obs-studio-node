@@ -328,8 +328,8 @@ describe(testName, () => {
         ERecordingFormat.MOV,
         ERecordingFormat.MKV,
         ERecordingFormat.FLV,
-        ERecordingFormat.TS,
-        ERecordingFormat.M3U8,
+        ERecordingFormat.MPEGTS,
+        ERecordingFormat.HLS,
       ];
       for (const format of formats) {
         const recording = osn.SimpleRecordingFactory.create();
