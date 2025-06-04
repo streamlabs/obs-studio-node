@@ -79,7 +79,7 @@ Napi::Object osn::Input::Init(Napi::Env env, Napi::Object exports)
 			     InstanceMethod("release", &osn::Input::CallRelease),
 			     InstanceMethod("remove", &osn::Input::CallRemove),
 			     InstanceMethod("update", &osn::Input::CallUpdate),
-			     InstanceMethod("sendMessage", &osn::Input::CallSendMessage),
+				 InstanceMethod("sendMessage", &osn::Input::CallSendMessage),
 			     InstanceMethod("load", &osn::Input::CallLoad),
 			     InstanceMethod("save", &osn::Input::CallSave),
 			     InstanceMethod("sendMouseClick", &osn::Input::CallSendMouseClick),
