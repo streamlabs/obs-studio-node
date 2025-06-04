@@ -475,7 +475,7 @@ describe(testName, () => {
         recording.quality = ERecordingQuality.HighQuality;
         recording.video  = obs.defaultVideoContext;
         recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-browser-rec', );
-        recording.audioEncoder = osn.AudioEncoderFactory.create('ffmpeg_aac','audio-encoder-browser-rec',);
+        recording.audioEncoder = osn.AudioEncoderFactory.create();
         recording.overwrite = true;
         recording.noSpace   = false;
         recording.signalHandler = (sig) => obs.signals.push(sig);
@@ -514,11 +514,7 @@ describe(testName, () => {
         expect(sig.signal).to.equal(EOBSOutputSignal.Wrote,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
 
         /* ---------- cleanup ---------- */
-        const vEnc = recording.videoEncoder;
-        const aEnc = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
-        vEnc.release();
-        aEnc.release();
         browserInput.release();
         sceneItem1.source.release();
         sceneItem1.remove();
