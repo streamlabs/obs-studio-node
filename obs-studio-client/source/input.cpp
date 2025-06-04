@@ -39,6 +39,7 @@ Napi::Object osn::Input::Init(Napi::Env env, Napi::Object exports)
 			    {StaticMethod("types", &osn::Input::Types),
 			     StaticMethod("create", &osn::Input::Create),
 			     StaticMethod("createPrivate", &osn::Input::CreatePrivate),
+
 			     StaticMethod("fromName", &osn::Input::FromName),
 			     StaticMethod("getPublicSources", &osn::Input::GetPublicSources),
 
@@ -78,6 +79,7 @@ Napi::Object osn::Input::Init(Napi::Env env, Napi::Object exports)
 			     InstanceMethod("release", &osn::Input::CallRelease),
 			     InstanceMethod("remove", &osn::Input::CallRemove),
 			     InstanceMethod("update", &osn::Input::CallUpdate),
+				 InstanceMethod("sendMessage", &osn::Input::CallSendMessage),
 			     InstanceMethod("load", &osn::Input::CallLoad),
 			     InstanceMethod("save", &osn::Input::CallSave),
 			     InstanceMethod("sendMouseClick", &osn::Input::CallSendMouseClick),
@@ -794,6 +796,13 @@ Napi::Value osn::Input::CallUpdate(const Napi::CallbackInfo &info)
 	if (sdi && sdi->obs_sourceId.compare("screen_capture") == 0) {
 		sdi->settingsChanged = true;
 	}
+
+	return info.Env().Undefined();
+}
+
+Napi::Value osn::Input::CallSendMessage(const Napi::CallbackInfo &info)
+{
+	osn::ISource::SendMessage(info, this->sourceId);
 
 	return info.Env().Undefined();
 }
