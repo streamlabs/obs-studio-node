@@ -73,6 +73,7 @@ public:
 	Napi::Value CallLoad(const Napi::CallbackInfo &info);
 	Napi::Value CallSave(const Napi::CallbackInfo &info);
 
+	Napi::Value CallSendMessage(const Napi::CallbackInfo &info);
 	Napi::Value CallSendMouseClick(const Napi::CallbackInfo &info);
 	Napi::Value CallSendMouseMove(const Napi::CallbackInfo &info);
 	Napi::Value CallSendMouseWheel(const Napi::CallbackInfo &info);

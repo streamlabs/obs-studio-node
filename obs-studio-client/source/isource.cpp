@@ -208,6 +208,26 @@ void osn::ISource::Update(const Napi::CallbackInfo &info, uint64_t id)
 	}
 }
 
+void osn::ISource::SendMessage(const Napi::CallbackInfo &info, uint64_t id)
+{
+	Napi::Object jsonObj = info[0].ToObject();
+
+	Napi::Object json = info.Env().Global().Get("JSON").As<Napi::Object>();
+	Napi::Function stringify = json.Get("stringify").As<Napi::Function>();
+
+	std::string jsondata = stringify.Call(json, {jsonObj}).As<Napi::String>();
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "SendMessage", {ipc::value(id), ipc::value(jsondata)});
+
+	if (!ValidateResponse(info, response))
+		return;
+
+}
+
 void osn::ISource::Load(const Napi::CallbackInfo &info, uint64_t id)
 {
 	auto conn = GetConnection(info);

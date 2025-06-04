@@ -135,6 +135,7 @@ void osn::Source::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetType", std::vector<ipc::type>{ipc::type::UInt64}, GetType));
 	cls->register_function(std::make_shared<ipc::function>("GetName", std::vector<ipc::type>{ipc::type::UInt64}, GetName));
 	cls->register_function(std::make_shared<ipc::function>("SetName", std::vector<ipc::type>{ipc::type::UInt64}, SetName));
+	cls->register_function(std::make_shared<ipc::function>("SendMessage", std::vector<ipc::type>{ipc::type::UInt64}, SendMessage));
 	cls->register_function(std::make_shared<ipc::function>("GetOutputFlags", std::vector<ipc::type>{ipc::type::UInt64}, GetOutputFlags));
 	cls->register_function(std::make_shared<ipc::function>("GetFlags", std::vector<ipc::type>{ipc::type::UInt64}, GetFlags));
 	cls->register_function(std::make_shared<ipc::function>("SetFlags", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetFlags));
@@ -327,6 +328,7 @@ void osn::Source::GetSettings(void *data, const int64_t id, const std::vector<ip
 
 void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	blog(LOG_INFO, "BrowserSource::Update called with source id: %llu, %s", args[0].value_union.ui64, args[1].value_str.c_str());
 	// Attempt to find the source asked to load.
 	obs_source_t *src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (src == nullptr) {
@@ -492,6 +494,24 @@ void osn::Source::GetId(void *data, const int64_t id, const std::vector<ipc::val
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	const char *sid = obs_source_get_unversioned_id(src);
 	rval.push_back(ipc::value(sid ? sid : ""));
+	AUTO_DEBUG;
+}
+
+void osn::Source::SendMessage(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	blog(LOG_INFO, "BrowserSource::SendMessage called with source id: %llu, %s", args[0].value_union.ui64, args[1].value_str.c_str());
+	// Attempt to find the source asked to load.
+	obs_source_t *src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (src == nullptr) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Source reference is not valid.");
+	}
+
+	obs_data_t *sets = obs_data_create_from_json(args[1].value_str.c_str());
+
+	obs_source_send_message(src, sets);
+	obs_data_release(sets);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

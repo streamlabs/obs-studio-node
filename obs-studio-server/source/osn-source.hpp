@@ -80,6 +80,7 @@ public:
 	static void SetFlags(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetStatus(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetId(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SendMessage(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 	// Flags
 	static void GetMuted(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

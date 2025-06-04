@@ -596,6 +596,7 @@ export interface IConfigurable {
 export interface ISource extends IConfigurable, IReleasable {
     remove(): void;
     save(): void;
+    sendMessage(message: ISettings): void;
     readonly status: number;
     readonly type: ESourceType;
     readonly id: string;
