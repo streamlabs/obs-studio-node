@@ -83,6 +83,7 @@ public:
 	Napi::Value CallRelease(const Napi::CallbackInfo &info);
 	Napi::Value CallRemove(const Napi::CallbackInfo &info);
 	Napi::Value CallUpdate(const Napi::CallbackInfo &info);
+	Napi::Value CallSendMessage(const Napi::CallbackInfo &info);
 	Napi::Value CallLoad(const Napi::CallbackInfo &info);
 	Napi::Value CallSave(const Napi::CallbackInfo &info);
 

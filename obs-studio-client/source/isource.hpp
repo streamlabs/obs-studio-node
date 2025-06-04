@@ -39,6 +39,7 @@ public:
 	static void Release(const Napi::CallbackInfo &info, uint64_t id);
 	static void Remove(const Napi::CallbackInfo &info, uint64_t id);
 	static void Update(const Napi::CallbackInfo &info, uint64_t id);
+	static void SendMessage(const Napi::CallbackInfo &info, uint64_t id);
 	static void Load(const Napi::CallbackInfo &info, uint64_t id);
 	static void Save(const Napi::CallbackInfo &info, uint64_t id);
 

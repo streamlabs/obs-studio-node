@@ -74,6 +74,7 @@ Napi::Object osn::Scene::Init(Napi::Env env, Napi::Object exports)
 						  InstanceMethod("sendMouseWheel", &osn::Scene::CallSendMouseWheel),
 						  InstanceMethod("sendFocus", &osn::Scene::CallSendFocus),
 						  InstanceMethod("sendKeyClick", &osn::Scene::CallSendKeyClick),
+						  InstanceMethod("sendMessage", &osn::Scene::CallSendMessage),
 						  InstanceMethod("callHandler", &osn::Scene::CallCallHandler),
 					  });
 	exports.Set("Scene", func);
@@ -118,12 +119,12 @@ Napi::Value osn::Scene::Create(const Napi::CallbackInfo &info)
 	SourceDataInfo *sdi = new SourceDataInfo;
 	sdi->name = name;
 	sdi->obs_sourceId = "scene";
-	sdi->id = response[1].value_union.ui64;
+	sdi->id = sourceId;
 
 	CacheManager<SourceDataInfo *>::getInstance().Store(sourceId, name, sdi);
 	CacheManager<SceneInfo *>::getInstance().Store(sourceId, name, si);
 
-	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
+	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(sourceId))});
 
 	return instance;
 }
@@ -675,6 +676,13 @@ Napi::Value osn::Scene::CallRemove(const Napi::CallbackInfo &info)
 Napi::Value osn::Scene::CallUpdate(const Napi::CallbackInfo &info)
 {
 	osn::ISource::Update(info, this->sourceId);
+
+	return info.Env().Undefined();
+}
+
+Napi::Value osn::Scene::CallSendMessage(const Napi::CallbackInfo &info)
+{
+	osn::ISource::SendMessage(info, this->sourceId);
 
 	return info.Env().Undefined();
 }
