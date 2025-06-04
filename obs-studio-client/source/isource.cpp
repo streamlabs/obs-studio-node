@@ -225,7 +225,6 @@ void osn::ISource::SendMessage(const Napi::CallbackInfo &info, uint64_t id)
 
 	if (!ValidateResponse(info, response))
 		return;
-
 }
 
 void osn::ISource::Load(const Napi::CallbackInfo &info, uint64_t id)
