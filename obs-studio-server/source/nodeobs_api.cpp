@@ -41,6 +41,9 @@
 #include "osn-audio-track.hpp"
 #include "memory-manager.h"
 
+//to destroy cpu usage object
+#include "osn-global.hpp"
+
 #include <sys/types.h>
 
 #ifdef __APPLE
@@ -1600,6 +1603,9 @@ void OBS_API::destroyOBS_API(void)
 	blog(LOG_DEBUG, "OBS_API::destroyOBS_API started, objects allocated %d", bnum_allocs());
 	debug_enum_sources(" on destroyOBS_API");
 	os_cpu_usage_info_destroy(cpuUsageInfo);
+
+	//temp until new API migration is complete
+	osn::Global::StopCPUMonitoring();
 
 #ifdef _WIN32
 	config_t *basicConfig = ConfigManager::getInstance().getBasic();

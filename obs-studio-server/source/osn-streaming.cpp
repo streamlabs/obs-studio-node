@@ -21,6 +21,8 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include <osn-video.hpp>
+//os_gettime_ns
+#include <util/platform.h>
 
 osn::Streaming::~Streaming()
 {
@@ -378,4 +380,108 @@ void osn::Streaming::setNetworkLegacySettings()
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "DynamicBitrate", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "NewSocketLoopEnable", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "LowLatencyEnable", network->enableDynamicBitrate);
+}
+
+void osn::IStreaming::GetDroppedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	int totalDropped = 0;
+
+	if (streaming->output && obs_output_active(streaming->output)) {
+		totalDropped = obs_output_get_frames_dropped(streaming->output);
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(totalDropped));
+	AUTO_DEBUG;
+}
+
+void osn::IStreaming::GetTotalFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	int totalFrames = 0;
+
+	if (streaming->output && obs_output_active(streaming->output)) {
+		totalFrames = obs_output_get_total_frames(streaming->output);
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(totalFrames));
+	AUTO_DEBUG;
+}
+
+void osn::IStreaming::GetKBitsPerSec(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	double kbitsPerSec = 0;
+
+	if (streaming->output && obs_output_active(streaming->output)) {
+
+		uint64_t bytesSent = obs_output_get_total_bytes(streaming->output);
+		uint64_t bytesSentTime = os_gettime_ns();
+
+		if (bytesSent < streaming->lastBytesSent)
+			bytesSent = 0;
+		if (bytesSent == 0)
+			streaming->lastBytesSent = 0;
+
+		uint64_t bitsBetween = (bytesSent - streaming->lastBytesSent) * 8;
+
+		double timePassed = double(bytesSentTime - streaming->lastBytesSentTime) / 1000000000.0;
+		if (timePassed < std::numeric_limits<double>::epsilon() && timePassed > -std::numeric_limits<double>::epsilon()) {
+			kbitsPerSec = 0.0;
+		} else {
+			kbitsPerSec = double(bitsBetween) / timePassed / 1000.0;
+		}
+
+		streaming->lastBytesSent = bytesSent;
+		streaming->lastBytesSentTime = bytesSentTime;
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(kbitsPerSec));
+	AUTO_DEBUG;
+}
+
+void osn::IStreaming::GetDataOutput(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	double dataOutput = 0;
+
+	if (streaming->output && obs_output_active(streaming->output)) {
+
+		uint64_t bytesSent = obs_output_get_total_bytes(streaming->output);
+		uint64_t bytesSentTime = os_gettime_ns();
+
+		if (bytesSent < streaming->lastBytesSent)
+			bytesSent = 0;
+		if (bytesSent == 0)
+			streaming->lastBytesSent = 0;
+
+		uint64_t bitsBetween = (bytesSent - streaming->lastBytesSent) * 8;
+
+		streaming->lastBytesSent = bytesSent;
+		streaming->lastBytesSentTime = bytesSentTime;
+		dataOutput = bytesSent / (1024.0 * 1024.0);
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(dataOutput));
+	AUTO_DEBUG;
 }

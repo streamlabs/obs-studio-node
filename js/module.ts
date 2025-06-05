@@ -575,6 +575,31 @@ export interface IGlobal {
      * Last 4 bytes are patch.
      */
     readonly version: number;
+
+    /**
+     * Percentage of CPU being used 
+     */
+    readonly cpuPercentage: number;
+
+    /**
+     * Current FPS 
+     */
+    readonly currentFrameRate: number;
+
+    /**
+     * Average time to render a frame
+     */
+    readonly averageFrameRenderTime: number;
+
+    /**
+     * Disk space currentlky available
+     */
+    readonly diskSpaceAvailable: number;
+
+    /**
+     * Current memory usage 
+     */
+    readonly memoryUsage: number;
 }
 
 export interface IBooleanProperty extends IProperty {
@@ -1686,6 +1711,10 @@ export interface IStreaming {
     signalHandler: (signal: EOutputSignal) => void,
     start(): void,
     stop(force?: boolean): void,
+    droppedFrames: number;
+    totalFrames: number;
+    kbitsPerSec: number;
+    dataOutput: number;
 }
 
 export interface EOutputSignal {

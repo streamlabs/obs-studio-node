@@ -30,7 +30,8 @@ Napi::Object osn::AdvancedStreaming::Init(Napi::Env env, Napi::Object exports)
 	Napi::HandleScope scope(env);
 	Napi::Function func = DefineClass(
 		env, "AdvancedStreaming",
-		{StaticMethod("create", &osn::AdvancedStreaming::Create), StaticMethod("destroy", &osn::AdvancedStreaming::Destroy),
+		{StaticMethod("create", &osn::AdvancedStreaming::Create),
+		 StaticMethod("destroy", &osn::AdvancedStreaming::Destroy),
 
 		 InstanceAccessor("videoEncoder", &osn::AdvancedStreaming::GetVideoEncoder, &osn::AdvancedStreaming::SetVideoEncoder),
 		 InstanceAccessor("service", &osn::AdvancedStreaming::GetService, &osn::AdvancedStreaming::SetService),
@@ -41,6 +42,10 @@ Napi::Object osn::AdvancedStreaming::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("reconnect", &osn::AdvancedStreaming::GetReconnect, &osn::AdvancedStreaming::SetReconnect),
 		 InstanceAccessor("network", &osn::AdvancedStreaming::GetNetwork, &osn::AdvancedStreaming::SetNetwork),
 		 InstanceAccessor("video", &osn::AdvancedStreaming::GetCanvas, &osn::AdvancedStreaming::SetCanvas),
+		 InstanceAccessor("droppedFrames", &osn::AdvancedStreaming::GetDroppedFrames, nullptr),
+		 InstanceAccessor("totalFrames", &osn::AdvancedStreaming::GetTotalFrames, nullptr),
+		 InstanceAccessor("kbitsPerSec", &osn::AdvancedStreaming::GetKBitsPerSec, nullptr),
+		 InstanceAccessor("dataOutput", &osn::AdvancedStreaming::GetDataOutput, nullptr),
 
 		 InstanceAccessor("audioTrack", &osn::AdvancedStreaming::GetAudioTrack, &osn::AdvancedStreaming::SetAudioTrack),
 		 InstanceAccessor("twitchTrack", &osn::AdvancedStreaming::GetTwitchTrack, &osn::AdvancedStreaming::SetTwitchTrack),
@@ -48,7 +53,8 @@ Napi::Object osn::AdvancedStreaming::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("outputWidth", &osn::AdvancedStreaming::GetOutputWidth, &osn::AdvancedStreaming::SetOutputWidth),
 		 InstanceAccessor("outputHeight", &osn::AdvancedStreaming::GetOutputHeight, &osn::AdvancedStreaming::SetOutputHeight),
 
-		 InstanceMethod("start", &osn::AdvancedStreaming::Start), InstanceMethod("stop", &osn::AdvancedStreaming::Stop),
+		 InstanceMethod("start", &osn::AdvancedStreaming::Start),
+		 InstanceMethod("stop", &osn::AdvancedStreaming::Stop),
 
 		 StaticAccessor("legacySettings", &osn::AdvancedStreaming::GetLegacySettings, &osn::AdvancedStreaming::SetLegacySettings)});
 

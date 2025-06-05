@@ -44,6 +44,8 @@ public:
 		delay = new Delay();
 		reconnect = new Reconnect();
 		network = new Network();
+		lastBytesSent = 0;
+		lastBytesSentTime = 0;
 	}
 	virtual ~Streaming();
 
@@ -59,6 +61,8 @@ public:
 	Delay *delay;
 	Reconnect *reconnect;
 	Network *network;
+	uint64_t lastBytesSent;
+	uint64_t lastBytesSentTime;
 
 	bool isTwitchVODSupported();
 	void getDelayLegacySettings();
@@ -104,5 +108,9 @@ public:
 	static void GetNetwork(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetNetwork(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetDroppedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetTotalFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetKBitsPerSec(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetDataOutput(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 };
 }

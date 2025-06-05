@@ -48,6 +48,10 @@ protected:
 	void SetNetwork(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetSignalHandler(const Napi::CallbackInfo &info);
 	void SetSignalHandler(const Napi::CallbackInfo &info, const Napi::Value &value);
+	Napi::Value GetDroppedFrames(const Napi::CallbackInfo &info);
+	Napi::Value GetTotalFrames(const Napi::CallbackInfo &info);
+	Napi::Value GetKBitsPerSec(const Napi::CallbackInfo &info);
+	Napi::Value GetDataOutput(const Napi::CallbackInfo &info);
 
 	void Start(const Napi::CallbackInfo &info);
 	void Stop(const Napi::CallbackInfo &info);
