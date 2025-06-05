@@ -21,11 +21,13 @@
 #import <Cocoa/Cocoa.h>
 #import <Security/Security.h>
 #import <Foundation/Foundation.h>
+#import <SystemExtensions/SystemExtensions.h>
 
 #include "util-osx-int.h"
 #include "util-osx.hpp"
 
 typedef std::function<void(void *data, bool webcam, bool mic)> perms_cb;
+typedef std::function<void(void *data, bool isInstalled)> virtualcam_cb;
 extern std::string g_server_working_dir;
 
 @interface UtilImplObj : NSObject

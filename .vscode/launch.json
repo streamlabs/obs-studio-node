@@ -9,7 +9,7 @@
             "args": [
                 "-r",
                 "ts-node/register",
-                "${workspaceFolder}/tests/osn-tests/src/*.ts"
+                "${workspaceFolder}/tests/osn-tests/src/test_virtualcam.ts"
             ],
             "cwd": "${workspaceFolder}",
             "outputCapture": "std", // Enables capturing test output directly

@@ -58,3 +58,8 @@ void UtilInt::setServerWorkingDirectoryPath(std::string path)
 {
 	_impl->setServerWorkingDirectoryPath(path);
 }
+
+void UtilInt::requestCamExtCheck(void *async_cb, virtualcam_cb cb)
+{
+	_impl->requestCamExtCheck(async_cb, cb);
+}

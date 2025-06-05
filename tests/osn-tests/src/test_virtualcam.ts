@@ -47,6 +47,10 @@ describe(testName, function() {
             logInfo(testName, "Skipping this test it must be ran locally on a macOS Apple developer machine.")
             this.skip(); // This should only be ran locally because this test installs a SystemExtension which will not work on a VM
         }
+        osn.NodeObs.requestVirtualCamInstallation((isInstalled) => {
+            console.log(`isInstalled: ${isInstalled}`);
+        });
+
         // Registers the global callback.
         // This step must be invoked before OBS_service_createVirtualCam
         obs.connectOutputSignals();

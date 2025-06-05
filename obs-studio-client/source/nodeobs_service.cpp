@@ -48,6 +48,10 @@ std::thread *service::worker_thread = nullptr;
 Napi::ThreadSafeFunction service::js_thread;
 Napi::FunctionReference service::cb;
 
+#if defined(__APPLE__)
+static Napi::ThreadSafeFunction js_virtualcam_thread;
+#endif
+
 void service::start_worker(napi_env env, Napi::Function async_callback)
 {
 	if (isWorkerRunning)
@@ -518,9 +522,37 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 
 	return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 #elif __APPLE__
-	// Not implemented
-	return info.Env().Undefined();
+    // Not implemented
+    return info.Env().Undefined();
 #endif
+}
+
+Napi::Value service::OBS_service_requestCamExtCheck(const Napi::CallbackInfo &info)
+{
+#ifdef __APPLE__
+    Napi::Function async_callback = info[0].As<Napi::Function>();
+    js_virtualcam_thread = Napi::ThreadSafeFunction::New(info.Env(), async_callback, "RequestVirtualCamThread", 0, 1, [](Napi::Env) {});
+    std::cout << "js_thread RequestVirtualCamThread intiated " << std::endl;
+
+    auto cb = [](void *data, bool isInstalled) {
+        Napi::ThreadSafeFunction *worker = reinterpret_cast<Napi::ThreadSafeFunction *>(data);
+
+        auto callback = [](Napi::Env env, Napi::Function jsCallback, bool isInstalled) {
+            Napi::Object result = Napi::Object::New(env);
+
+            result.Set(Napi::String::New(env, "isVirtualCamInstalled"), Napi::Boolean::New(env, isInstalled));
+
+            jsCallback.Call({result});
+            
+            // TODO: when do I release the virtual thread?
+            if (js_virtualcam_thread)
+                js_virtualcam_thread.Release();
+        };
+    };
+
+    g_util_osx->requestCamExtCheck(js_thread, cb);
+#endif
+    return info.Env().Undefined();
 }
 
 void service::Init(Napi::Env env, Napi::Object exports)

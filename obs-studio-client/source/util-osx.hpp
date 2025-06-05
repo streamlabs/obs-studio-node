@@ -24,6 +24,7 @@
 
 class UtilObjCInt;
 typedef std::function<void(void *data, bool webcam, bool mic)> perms_cb;
+typedef std::function<void(void *data, bool isInstalled)> virtualcam_cb;
 
 class UtilInt {
 public:
@@ -36,6 +37,7 @@ public:
 	void installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
+    void requestCamExtCheck(void *async_cb, virtualcam_cb cb);
 
 private:
 	UtilObjCInt *_impl;

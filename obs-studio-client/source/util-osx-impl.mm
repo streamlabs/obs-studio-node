@@ -18,12 +18,15 @@
 
 #include "util-osx-impl.h"
 #include <iostream>
+#import "util-osx-systemextensionrequest.h"
 
 std::string g_server_working_dir;
 
 @implementation UtilImplObj
 
-UtilObjCInt::UtilObjCInt(void) : self(NULL) {}
+UtilObjCInt::UtilObjCInt(void)
+    : m_async_systemextension_cb(nullptr)
+    , self(NULL) {}
 
 UtilObjCInt::~UtilObjCInt(void)
 {
@@ -116,6 +119,12 @@ void UtilObjCInt::uninstallPlugin()
 	NSAppleScript *run = [[NSAppleScript alloc] initWithSource:script];
 	[run executeAndReturnError:&error];
 	NSLog(@"errors: %@", error);
+}
+
+void UtilObjCInt::requestCamExtCheck(void *async_cb, virtualcam_cb cb)
+{
+    m_async_systemextension_cb = async_cb;
+    UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(async_cb, cb);
 }
 
 @end

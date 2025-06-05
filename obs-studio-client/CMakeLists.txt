@@ -128,26 +128,22 @@ SET(osn-client_SOURCES
     "source/advanced-replay-buffer.hpp"
     "source/advanced-replay-buffer.cpp"
 
-    ###### callback-manager ######
+    # callback-manager ######
     "source/callback-manager.cpp"
-    "source/callback-manager.hpp"
-)
+    "source/callback-manager.hpp")
 
-if (APPLE)
-    SET(osn-client-osx_SOURCES
-        ###### osx-util ######
-        "${PROJECT_SOURCE_DIR}/source/util-osx.hpp"
-        "${PROJECT_SOURCE_DIR}/source/util-osx.cpp"
-        "${PROJECT_SOURCE_DIR}/source/util-osx-int.h"
-        "${PROJECT_SOURCE_DIR}/source/util-osx-impl.h"
-        "${PROJECT_SOURCE_DIR}/source/util-osx-impl.mm"
-    )
-    LIST(
-        APPEND
-        osn-client_SOURCES
-        ${osn-client-osx_SOURCES}
-    )
-endif ()
+if(APPLE)
+  set(osn-client-osx_SOURCES
+      # osx-util ######
+      "${PROJECT_SOURCE_DIR}/source/util-osx.hpp"
+      "${PROJECT_SOURCE_DIR}/source/util-osx.cpp"
+      "${PROJECT_SOURCE_DIR}/source/util-osx-int.h"
+      "${PROJECT_SOURCE_DIR}/source/util-osx-impl.h"
+      "${PROJECT_SOURCE_DIR}/source/util-osx-impl.mm"
+      "${PROJECT_SOURCE_DIR}/source/util-osx-systemextensionrequest.mm"
+      "${PROJECT_SOURCE_DIR}/source/util-osx-systemextensionrequest.h")
+  list(APPEND osn-client_SOURCES ${osn-client-osx_SOURCES})
+endif()
 
 add_nodejs_module(
     obs_studio_client
@@ -161,8 +157,8 @@ set(PROJECT_INCLUDE_PATHS
 if(WIN32)
     target_sources(obs_studio_client PUBLIC ${PROJECT_BINARY_DIR}/version.rc)
     target_link_libraries(obs_studio_client lib-streamlabs-ipc)
-else ()
-    target_link_libraries(obs_studio_client lib-streamlabs-ipc ${COREFOUNDATION} ${COCOA} ${AVFOUNDATION} ${Security} ${Foundation})
+elseif(APPLE)
+    target_link_libraries(obs_studio_client lib-streamlabs-ipc ${COREFOUNDATION} ${COCOA} ${AVFOUNDATION} ${Security} ${Foundation} "-framework SystemExtensions")
 endif()
 
 target_include_directories(

@@ -1,5 +1,5 @@
 /******************************************************************************
-    Copyright (C) 2016-2020 by Streamlabs (General Workings Inc)
+    Copyright (C) 2016-2019 by Streamlabs (General Workings Inc)
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -16,36 +16,13 @@
 
 ******************************************************************************/
 
-#ifndef __UTIL_OBJC_INTERFACE_H__
-#define __UTIL_OBJC_INTERFACE_H__
+#pragma once
 
-#include <string>
 #include <functional>
 
-typedef std::function<void(void *data, bool webcam, bool mic)> perms_cb;
 typedef std::function<void(void *data, bool isInstalled)> virtualcam_cb;
 
-class UtilObjCInt {
-private:
-	bool m_webcam_perm;
-	bool m_mic_perm;
-	void *m_async_cb;
-    void *m_async_systemextension_cb;
-
+class UtilOsxSystemExtensionRequest {
 public:
-	UtilObjCInt(void);
-	~UtilObjCInt(void);
-
-	void init(void);
-	void getPermissionsStatus(bool &webcam, bool &mic);
-	void requestPermissions(void *async_cb, perms_cb cb);
-	void installPlugin(void);
-	void uninstallPlugin(void);
-	void setServerWorkingDirectoryPath(std::string path);
-    void requestCamExtCheck(void *async_cb, virtualcam_cb cb);
-
-private:
-	void *self;
+    static void requestVirtualCamInstallation(void *async_cb, virtualcam_cb cb);
 };
-
-#endif
