@@ -18,7 +18,6 @@
 
 #include "util-osx-impl.h"
 #include <iostream>
-#import "util-osx-systemextensionrequest.h"
 
 std::string g_server_working_dir;
 

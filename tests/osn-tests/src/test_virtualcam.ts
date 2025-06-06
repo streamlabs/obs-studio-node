@@ -52,8 +52,6 @@ describe(testName, function() {
             this.skip(); // This should only be ran locally because this test installs a SystemExtension which will not work on a VM
         }
 
-        logInfo(testName,`invoke OBS_service_requestCamExtCheck`);
-
         // Registers the global callback.
         // This step must be invoked before OBS_service_createVirtualCam
         obs.connectOutputSignals();
