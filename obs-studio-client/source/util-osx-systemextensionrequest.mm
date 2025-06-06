@@ -1,29 +1,30 @@
 #import <SystemExtensions/SystemExtensions.h>
 #import "util-osx-systemextensionrequest.h"
 
-@interface MySystemExtensionDelegate : NSObject <OSSystemExtensionRequestDelegate> {
+@interface UtilOsxSystemExtensionDelegate : NSObject <OSSystemExtensionRequestDelegate> {
 @private
     void *js_vcam_thread;
     virtualcam_cb vcam_callback;
 }
 @end
 
-@implementation MySystemExtensionDelegate
+@implementation UtilOsxSystemExtensionDelegate
 
-- (id)init:(void *)js_vcam_thread  withAsyncCallback:(virtualcam_cb)virtualcam_callback
+- (id)init:(void *)js_thread  withAsyncCallback:(virtualcam_cb)virtualcam_callback
 {
     self = [super init];
 
     if (self) {
-        self->js_vcam_thread = js_vcam_thread;
-        self->vcam_callback = virtualcam_callback;
+        js_vcam_thread = js_thread;
+        vcam_callback = virtualcam_callback;
     }
 
     return self;
 }
 
 - (OSSystemExtensionReplacementAction)request:(OSSystemExtensionRequest *)request actionForReplacingExtension:(OSSystemExtensionProperties *)existing withExtension:(OSSystemExtensionProperties *)ext {
-    
+
+    return OSSystemExtensionReplacementActionReplace;
 }
 
 // Called when the extension activation request completes successfully
@@ -47,6 +48,10 @@
     NSLog(@"Error: %@", error);
 }
 
+- (void)requestNeedsUserApproval:(nonnull OSSystemExtensionRequest *)request {
+}
+
+
 // Called when the activation request needs user authorization
 - (void)requestNeedsUserAuthorization:(OSSystemExtensionRequest *)request {
     NSLog(@"User authorization is required to activate the system extension: %@", request.identifier);
@@ -54,7 +59,7 @@
 }
 
 - (void)request:(OSSystemExtensionRequest *)request foundProperties:(NSArray<OSSystemExtensionProperties *> *)properties {
-    NSLog(@"rno foundProperties");
+    NSLog(@"[UtilOsx] properties count: %ld\n", (unsigned long)properties.count);
     bool isInstalled = false;
     //TODO: iterate thru the array passed in
     for (OSSystemExtensionProperties *property in properties) {
@@ -65,14 +70,15 @@
         }
     }
     
-    vcam_callback(js_vcam_thread, isInstalled);
+    if (vcam_callback && js_vcam_thread)
+        vcam_callback(js_vcam_thread, isInstalled);
 }
 @end
 
-void UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(void *async_cb, virtualcam_cb cb)
+void UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(void *js_thread, virtualcam_cb callback)
 {
     if (@available(macOS 12.0, *)) {
-        id delegate = [[MySystemExtensionDelegate alloc] init:async_cb withAsyncCallback:cb];
+        id delegate = [[UtilOsxSystemExtensionDelegate alloc] init:js_thread withAsyncCallback:callback];
         // We need to use streamlabs teamID/Bundle identifier here.
         OSSystemExtensionRequest *request = [OSSystemExtensionRequest
                                              propertiesRequestForExtension:@"com.streamlabs.slobs.mac-camera-extension"
@@ -80,5 +86,7 @@ void UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(void *async_cb
         request.delegate = delegate;
         
         [[OSSystemExtensionManager sharedManager] submitRequest:request];
+    } else if (callback && js_thread) {
+        callback(js_thread, false); // cannot determine if plugin installed.
     }
 }

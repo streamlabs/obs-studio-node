@@ -21,6 +21,10 @@
 #include <thread>
 #include "utility-v8.hpp"
 
+struct VirtualCamPermissions {
+    bool isInstalled;
+};
+
 struct ServiceSignalInfo {
 	std::string outputType;
 	std::string signal;

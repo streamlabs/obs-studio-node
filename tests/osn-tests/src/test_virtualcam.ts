@@ -9,6 +9,31 @@ import { EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 
 const testName = 'osn-virtualcam';
 
+export interface IVirtualCamPermission {
+  isVirtualCamInstalled: boolean;
+}
+
+async function waitVCam() {
+    let count = 0;
+    const sleepTime = 100;
+    const maxSleep = 2000;
+    let callbackInvoked = false;
+
+    osn.NodeObs.OBS_service_requestCamExtCheck((permissions: IVirtualCamPermission) => {
+        console.log(`isInstalled: ${permissions.isVirtualCamInstalled}`);
+        callbackInvoked = true;
+    });
+    while(count < maxSleep) {
+        if (callbackInvoked) {
+            console.log(`js_callback: ${count}`);
+            break;
+        }
+        await sleep(sleepTime);
+        count += sleepTime
+    }
+    expect(callbackInvoked);
+}
+
 describe(testName, function() {
     this.timeout(100000);
     let obs: OBSHandler;
@@ -47,9 +72,9 @@ describe(testName, function() {
             logInfo(testName, "Skipping this test it must be ran locally on a macOS Apple developer machine.")
             this.skip(); // This should only be ran locally because this test installs a SystemExtension which will not work on a VM
         }
-        osn.NodeObs.requestVirtualCamInstallation((isInstalled) => {
-            console.log(`isInstalled: ${isInstalled}`);
-        });
+
+        logInfo(testName,`invoke OBS_service_requestCamExtCheck`);
+        await waitVCam();
 
         // Registers the global callback.
         // This step must be invoked before OBS_service_createVirtualCam

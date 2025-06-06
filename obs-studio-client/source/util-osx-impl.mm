@@ -124,7 +124,7 @@ void UtilObjCInt::uninstallPlugin()
 void UtilObjCInt::requestCamExtCheck(void *async_cb, virtualcam_cb cb)
 {
     m_async_systemextension_cb = async_cb;
-    UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(async_cb, cb);
+    UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(m_async_systemextension_cb, cb);
 }
 
 @end
