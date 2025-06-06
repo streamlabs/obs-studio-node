@@ -59,7 +59,7 @@ void UtilInt::setServerWorkingDirectoryPath(std::string path)
 	_impl->setServerWorkingDirectoryPath(path);
 }
 
-void UtilInt::requestCamExtCheck(void *async_cb, virtualcam_cb cb)
+bool UtilInt::isPluginInstalled()
 {
-	_impl->requestCamExtCheck(async_cb, cb);
+	return _impl->isPluginInstalled();
 }

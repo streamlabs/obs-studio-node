@@ -30,7 +30,6 @@ private:
 	bool m_webcam_perm;
 	bool m_mic_perm;
 	void *m_async_cb;
-    void *m_async_systemextension_cb;
 
 public:
 	UtilObjCInt(void);
@@ -42,7 +41,7 @@ public:
 	void installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
-    void requestCamExtCheck(void *async_cb, virtualcam_cb cb);
+    bool isPluginInstalled();
 
 private:
 	void *self;

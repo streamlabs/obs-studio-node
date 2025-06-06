@@ -25,8 +25,7 @@ std::string g_server_working_dir;
 @implementation UtilImplObj
 
 UtilObjCInt::UtilObjCInt(void)
-    : m_async_systemextension_cb(nullptr)
-    , self(NULL) {}
+    : self(NULL) {}
 
 UtilObjCInt::~UtilObjCInt(void)
 {
@@ -121,10 +120,33 @@ void UtilObjCInt::uninstallPlugin()
 	NSLog(@"errors: %@", error);
 }
 
-void UtilObjCInt::requestCamExtCheck(void *async_cb, virtualcam_cb cb)
+bool UtilObjCInt::isPluginInstalled()
 {
-    m_async_systemextension_cb = async_cb;
-    UtilOsxSystemExtensionRequest::requestVirtualCamInstallation(m_async_systemextension_cb, cb);
+    const std::string command("systemextensionsctl list");
+    std::array<char, 256> buffer;
+    std::string result;
+    bool isInstalled = false;
+
+    // Open a pipe to execute the command
+    FILE* pipe = popen(command.c_str(), "r");
+    if (pipe) {
+        try {
+            // Read the output from the command execution
+            while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+                std::string text(buffer.data());
+                if (text.find_first_of("com.streamlabs.slobs.mac-camera-extension")) {
+                    isInstalled = true;
+                }
+            }
+        } catch (...) {
+            std::cerr << "Exception occurred during reading the buffer" << std::endl;
+        }
+    } else {
+        std::cerr << "Could not run the system command:" << command << std::endl;
+    }
+
+    pclose(pipe);
+    return isInstalled;
 }
 
 @end

@@ -37,7 +37,7 @@ public:
 	void installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
-    void requestCamExtCheck(void *async_cb, virtualcam_cb cb);
+    bool isPluginInstalled();
 
 private:
 	UtilObjCInt *_impl;

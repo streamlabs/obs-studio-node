@@ -36,10 +36,8 @@
 #include <shellapi.h>
 
 #define TOTALBYTES 8192
-
-enum VcamInstalledStatus : uint8_t { NotInstalled = 0, LegacyInstalled = 1, Installed = 2 };
-
 #endif
+enum VcamInstalledStatus : uint8_t { NotInstalled = 0, LegacyInstalled = 1, Installed = 2 };
 
 bool service::isWorkerRunning = false;
 bool service::worker_stop = true;
@@ -522,44 +520,9 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 
 	return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 #elif __APPLE__
-    // Not implemented
-    return info.Env().Undefined();
+    bool isInstalled = g_util_osx->isPluginInstalled();
+    return Napi::Number::New(info.Env(), isInstalled ? VcamInstalledStatus::Installed : VcamInstalledStatus::NotInstalled);
 #endif
-}
-
-Napi::Value service::OBS_service_requestCamExtCheck(const Napi::CallbackInfo &info)
-{
-#ifdef __APPLE__
-    Napi::Function async_callback = info[0].As<Napi::Function>();
-    js_virtualcam_thread = Napi::ThreadSafeFunction::New(info.Env(), async_callback, "RequestVirtualCamThread", 0, 1, [](Napi::Env) {});
-    std::cout << "js_virtualcam_thread RequestVirtualCamThread intiated " << std::endl;
-
-    auto cb = [](void *napiData, bool isInstalled) {
-        Napi::ThreadSafeFunction *worker = reinterpret_cast<Napi::ThreadSafeFunction *>(napiData);
-
-        auto callback = [](Napi::Env env, Napi::Function jsCallback, VirtualCamPermissions *data) {
-            std::cout << "js_virtualcam_thread callback invoked " << std::endl;
-            Napi::Object result = Napi::Object::New(env);
-
-            result.Set(Napi::String::New(env, "isVirtualCamInstalled"), Napi::Boolean::New(env, data->isInstalled));
-
-            jsCallback.Call({result}); // Napi::Boolean::New(info.Env(), isInstalled)
-            delete data;
-            // TODO: when do I release the virtual thread?
-            //if (js_virtualcam_thread)
-            //    js_virtualcam_thread.Release();
-        };
-        VirtualCamPermissions *perms_status = new VirtualCamPermissions();
-        perms_status->isInstalled = isInstalled;
-        napi_status status = js_virtualcam_thread.BlockingCall(perms_status, callback);
-        if (status != napi_ok) {
-            delete perms_status;
-        }
-    };
-
-    g_util_osx->requestCamExtCheck(js_virtualcam_thread, cb);
-#endif
-    return info.Env().Undefined();
 }
 
 void service::Init(Napi::Env env, Napi::Object exports)
@@ -587,6 +550,4 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_uninstallVirtualCamPlugin"), Napi::Function::New(env, service::OBS_service_uninstallVirtualCamPlugin));
 	exports.Set(Napi::String::New(env, "OBS_service_isVirtualCamPluginInstalled"),
 		    Napi::Function::New(env, service::OBS_service_isVirtualCamPluginInstalled));
-    exports.Set(Napi::String::New(env, "OBS_service_requestCamExtCheck"),
-            Napi::Function::New(env, service::OBS_service_requestCamExtCheck));
 }

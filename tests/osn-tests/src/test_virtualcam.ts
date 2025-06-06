@@ -13,27 +13,6 @@ export interface IVirtualCamPermission {
   isVirtualCamInstalled: boolean;
 }
 
-async function waitVCam() {
-    let count = 0;
-    const sleepTime = 100;
-    const maxSleep = 2000;
-    let callbackInvoked = false;
-
-    osn.NodeObs.OBS_service_requestCamExtCheck((permissions: IVirtualCamPermission) => {
-        console.log(`isInstalled: ${permissions.isVirtualCamInstalled}`);
-        callbackInvoked = true;
-    });
-    while(count < maxSleep) {
-        if (callbackInvoked) {
-            console.log(`js_callback: ${count}`);
-            break;
-        }
-        await sleep(sleepTime);
-        count += sleepTime
-    }
-    expect(callbackInvoked);
-}
-
 describe(testName, function() {
     this.timeout(100000);
     let obs: OBSHandler;
@@ -74,7 +53,6 @@ describe(testName, function() {
         }
 
         logInfo(testName,`invoke OBS_service_requestCamExtCheck`);
-        await waitVCam();
 
         // Registers the global callback.
         // This step must be invoked before OBS_service_createVirtualCam
@@ -93,5 +71,8 @@ describe(testName, function() {
         let errorMsg = osn.NodeObs.OBS_service_startVirtualCam();
         expect(errorMsg === undefined);
         osn.NodeObs.OBS_service_stopVirtualCam();
+
+        const installationStatus = osn.NodeObs.OBS_service_isVirtualCamPluginInstalled();
+        expect(installationStatus === 2); // plugin is installed
     });
 });
