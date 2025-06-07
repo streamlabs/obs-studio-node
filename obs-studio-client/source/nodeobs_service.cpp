@@ -46,10 +46,6 @@ std::thread *service::worker_thread = nullptr;
 Napi::ThreadSafeFunction service::js_thread;
 Napi::FunctionReference service::cb;
 
-#if defined(__APPLE__)
-static Napi::ThreadSafeFunction js_virtualcam_thread;
-#endif
-
 void service::start_worker(napi_env env, Napi::Function async_callback)
 {
 	if (isWorkerRunning)
