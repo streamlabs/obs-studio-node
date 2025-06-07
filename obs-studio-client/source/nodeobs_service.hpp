@@ -22,7 +22,7 @@
 #include "utility-v8.hpp"
 
 struct VirtualCamPermissions {
-    bool isInstalled;
+	bool isInstalled;
 };
 
 struct ServiceSignalInfo {

@@ -520,10 +520,10 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 
 	return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 #elif __APPLE__
-    bool isInstalled = g_util_osx->isPluginInstalled();
-    return Napi::Number::New(info.Env(), isInstalled ? VcamInstalledStatus::Installed : VcamInstalledStatus::NotInstalled);
+	bool isInstalled = g_util_osx->isPluginInstalled();
+	return Napi::Number::New(info.Env(), isInstalled ? VcamInstalledStatus::Installed : VcamInstalledStatus::NotInstalled);
 #else
-    return info.Env().Undefined();
+	return info.Env().Undefined();
 #endif
 }
 

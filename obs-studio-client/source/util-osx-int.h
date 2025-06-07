@@ -41,7 +41,7 @@ public:
 	void installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
-    bool isPluginInstalled();
+	bool isPluginInstalled();
 
 private:
 	void *self;
