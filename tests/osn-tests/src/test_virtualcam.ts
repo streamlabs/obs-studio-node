@@ -71,6 +71,6 @@ describe(testName, function() {
         osn.NodeObs.OBS_service_stopVirtualCam();
 
         const installationStatus = osn.NodeObs.OBS_service_isVirtualCamPluginInstalled();
-        expect(installationStatus === 2); // plugin is installed
+        expect(installationStatus).to.equal(2); // expect plugin is installed
     });
 });

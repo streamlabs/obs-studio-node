@@ -133,7 +133,7 @@ bool UtilObjCInt::isPluginInstalled()
             // Read the output from the command execution
             while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
                 std::string text(buffer.data());
-                if (text.find_first_of("com.streamlabs.slobs.mac-camera-extension")) {
+                if (text.find("com.streamlabs.slobs.mac-camera-extension") != std::string::npos) {
                     isInstalled = true;
                 }
             }
@@ -145,6 +145,7 @@ bool UtilObjCInt::isPluginInstalled()
     }
 
     pclose(pipe);
+    std::cout << "isVirtualCamInstalled: " << isInstalled << std::endl;
     return isInstalled;
 }
 
