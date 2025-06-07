@@ -206,7 +206,7 @@ int main(int argc, char *argv[])
 	std::string myVersion = GET_OSN_VERSION;
 
 #ifdef __APPLE__
-	std::cerr << "rno1 Version recv: " << receivedVersion << std::endl;
+	std::cerr << "Version recv: " << receivedVersion << std::endl;
 	std::cerr << "Version compiled " << myVersion << std::endl;
 #endif
 
