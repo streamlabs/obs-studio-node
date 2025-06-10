@@ -306,8 +306,7 @@ export class OBSHandler {
         this.defaultVideoContext = null;
     }
 
-    skipSource(inputType: string) 
-    {
+    skipSource(inputType: string) {
         if (process.platform === 'darwin') {
             if (inputType === 'browser_source' || 
                 inputType === 'window_capture' ||
@@ -320,6 +319,16 @@ export class OBSHandler {
             }
         }
         return false
+    }
+
+    setSourceMessageListener() {
+        osn.NodeObs.RegisterSourceCallback((message: any) => {
+            console.log('Source callback received' + JSON.stringify(message));
+        });
+
+        osn.NodeObs.RegisterSourceMessageCallback((message: any) => {
+            console.log('Source message callback received' + JSON.stringify(message));
+        });
     }
 
     isDarwin()

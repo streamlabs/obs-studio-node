@@ -86,13 +86,14 @@
             const detail = event.detail || {};
             console.log('Message changed:', detail);
             addLogEntry(`Message changed to: ${JSON.stringify(detail)}`);
+            window.obsstudio.messageToApp("message1", "msg2");
         });
 
         window.obsstudio.getStatus(function (status) {
             addLogEntry(`OBS Browser plugin status: ${status}`);
         });
         window.obsstudio.getCurrentScene(function(scene) {
-            addLogEntry(`Current scene: ${scene.name}`);
+            addLogEntry(`Current scene: ${scene}`);
         })
         window.obsstudio.getControlLevel(function (level) {
             addLogEntry(`Control level: ${level}`);
@@ -102,8 +103,10 @@
         
         setTimeout(() => {
             addLogEntry(`Current scene at timeout `);
+            window.obsstudio.messageToApp("message2", "msg3");
+
             window.obsstudio.getCurrentScene(function(scene) {
-                addLogEntry(`Current scene: ${scene.name}`);
+                addLogEntry(`Current scene: ${scene}`);
             });
         }, 1000);
 

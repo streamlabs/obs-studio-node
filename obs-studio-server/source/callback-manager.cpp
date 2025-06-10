@@ -99,6 +99,33 @@ void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vecto
 		transitions_mtx.unlock();
 	}
 
+	const std::size_t messages_size_idx = rval.size();
+	rval.push_back(ipc::value((uint32_t)0));
+
+	if (!sources.empty()) {
+		sources_mtx.lock();
+		uint32_t size = 0;
+
+		for (auto &item : sources) {
+			SourceSizeInfo *si = item.second.get();
+			obs_data_array_t *messages = obs_source_get_messages(si->source);
+			if (messages != nullptr) {
+				size_t count = obs_data_array_count(messages);
+				for (size_t idx = 0; idx < count; ++idx) {
+					obs_data_t *msg = obs_data_array_item(messages, idx);
+					rval.push_back(ipc::value(obs_source_get_name(si->source)));
+					rval.push_back(ipc::value(obs_data_get_string(msg, "message")));
+					blog(LOG_INFO, "[BrowserMessage] %s message: %s", obs_source_get_name(si->source), obs_data_get_string(msg, "message"));
+					size++;
+				}
+				obs_data_array_release(messages);
+			}
+		}
+
+		rval[messages_size_idx] = size;
+		sources_mtx.unlock();
+	}
+
 	uint64_t size_buffer = args[0].value_union.ui64;
 
 	std::vector<char> buffer;
@@ -169,6 +196,7 @@ void CallbackManager::addSource(obs_source_t *source)
 		sources.emplace(std::make_pair(std::string(obs_source_get_name(source)), si));
 	}
 }
+
 void CallbackManager::removeSource(obs_source_t *source)
 {
 	if (!source)
