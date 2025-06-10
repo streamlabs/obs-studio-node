@@ -458,7 +458,7 @@ describe(testName, () => {
             restart_when_active:  false,
         };
 
-        const browserInput = osn.InputFactory.create(EOBSInputTypes.BrowserSource,'browser-input',browserSettings,);
+        const browserInput = osn.InputFactory.create(EOBSInputTypes.BrowserSource, 'browser-input-' + randomUUID(), browserSettings);
 
         let settings: ISettings = {};
         settings['message'] = "test message";
@@ -480,6 +480,7 @@ describe(testName, () => {
         recording.noSpace   = false;
         recording.signalHandler = (sig) => obs.signals.push(sig);
 
+        obs.setSourceMessageListener();
         recording.start();
         let sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Start,);
 
