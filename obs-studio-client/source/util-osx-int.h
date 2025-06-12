@@ -40,6 +40,7 @@ public:
 	void installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
+	bool isPluginInstalled();
 
 private:
 	void *self;
