@@ -144,7 +144,6 @@ bool UtilObjCInt::isPluginInstalled()
 	}
 
 	pclose(pipe);
-	std::cout << "isVirtualCamInstalled: " << isInstalled << std::endl;
 	return isInstalled;
 }
 
