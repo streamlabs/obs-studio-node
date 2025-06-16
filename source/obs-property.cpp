@@ -547,6 +547,9 @@ size_t obs::ListProperty::size()
 		case Format::Float:
 			total += sizeof(double_t);
 			break;
+		case Format::Bool:
+			total += sizeof(int64_t);
+			break;
 		case Format::String:
 			total += sizeof(size_t);
 			total += entry.value_string.size();
@@ -560,6 +563,9 @@ size_t obs::ListProperty::size()
 		break;
 	case Format::Float:
 		total += sizeof(double_t);
+		break;
+	case Format::Bool:
+		total += sizeof(int64_t);
 		break;
 	case Format::String:
 		total += sizeof(size_t) + current_value_str.size();
@@ -605,6 +611,10 @@ bool obs::ListProperty::serialize(std::vector<char> &buf)
 			reinterpret_cast<double_t &>(buf[offset]) = entry.value_float;
 			offset += sizeof(double_t);
 			break;
+		case Format::Bool:
+			reinterpret_cast<int64_t &>(buf[offset]) = entry.value_int;
+			offset += sizeof(int64_t);
+			break;
 		case Format::String:
 			reinterpret_cast<size_t &>(buf[offset]) = entry.value_string.size();
 			offset += sizeof(size_t);
@@ -624,6 +634,10 @@ bool obs::ListProperty::serialize(std::vector<char> &buf)
 	case Format::Float:
 		reinterpret_cast<double_t &>(buf[offset]) = current_value_float;
 		offset += sizeof(double_t);
+		break;
+	case Format::Bool:
+		reinterpret_cast<int64_t &>(buf[offset]) = current_value_int;
+		offset += sizeof(int64_t);
 		break;
 	case Format::String:
 		reinterpret_cast<size_t &>(buf[offset]) = current_value_str.size();
@@ -677,6 +691,10 @@ bool obs::ListProperty::read(std::vector<char> const &buf)
 			entry.value_float = reinterpret_cast<const double_t &>(buf[offset]);
 			offset += sizeof(double_t);
 			break;
+		case Format::Bool:
+			entry.value_int = reinterpret_cast<const int64_t &>(buf[offset]);
+			offset += sizeof(int64_t);
+			break;
 		case Format::String:
 			length = reinterpret_cast<const size_t &>(buf[offset]);
 			offset += sizeof(size_t);
@@ -698,6 +716,10 @@ bool obs::ListProperty::read(std::vector<char> const &buf)
 	case Format::Float:
 		current_value_float = reinterpret_cast<const double_t &>(buf[offset]);
 		offset += sizeof(double_t);
+		break;
+	case Format::Bool:
+		current_value_int = reinterpret_cast<const int64_t &>(buf[offset]);
+		offset += sizeof(int64_t);
 		break;
 	case Format::String:
 		length = reinterpret_cast<const size_t &>(buf[offset]);
