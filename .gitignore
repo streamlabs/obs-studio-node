@@ -21,3 +21,5 @@ docs/
 streamlabs-build.app
 
 tests/osn-tests/*-cache-local.zip
+
+.vscode/

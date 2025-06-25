@@ -622,7 +622,6 @@ export interface IVolmeterFactory {
     create(type: EFaderType): IVolmeter;
 }
 export interface IVolmeter {
-    updateInterval: number;
     destroy(): void;
     attach(source: IInput): void;
     detach(): void;
