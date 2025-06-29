@@ -262,6 +262,8 @@ Napi::Value osn::PropertyObject::GetValue(const Napi::CallbackInfo &info)
 			return Napi::Number::New(info.Env(), static_cast<double>(cast_property->current_value_float));
 		case ListProperty::Format::INT:
 			return Napi::Number::New(info.Env(), static_cast<double>(cast_property->current_value_int));
+		case ListProperty::Format::BOOL:
+			return Napi::Boolean::New(info.Env(), static_cast<bool>(cast_property->current_value_int));
 		case ListProperty::Format::STRING:
 			return Napi::String::New(info.Env(), cast_property->current_value_str);
 		}
@@ -462,6 +464,9 @@ Napi::Value osn::PropertyObject::GetDetails(const Napi::CallbackInfo &info)
 				break;
 			case ListProperty::Format::FLOAT:
 				iobj.Set("value", Napi::Number::New(info.Env(), itm.value_float));
+				break;
+			case ListProperty::Format::BOOL:
+				iobj.Set("value", Napi::Boolean::New(info.Env(), itm.value_int));
 				break;
 			case ListProperty::Format::STRING:
 				iobj.Set("value", Napi::String::New(info.Env(), itm.value_str));
@@ -680,6 +685,9 @@ osn::property_map_t osn::ProcessProperties(const std::vector<ipc::value> &data, 
 			case obs::ListProperty::Format::Float:
 				pr2->current_value_float = cast_property->current_value_float;
 				break;
+			case obs::ListProperty::Format::Bool:
+				pr2->current_value_int = cast_property->current_value_int;
+				break;
 			case obs::ListProperty::Format::String:
 				pr2->current_value_str = cast_property->current_value_str;
 				break;
@@ -695,6 +703,9 @@ osn::property_map_t osn::ProcessProperties(const std::vector<ipc::value> &data, 
 					break;
 				case obs::ListProperty::Format::Float:
 					item2.value_float = item.value_float;
+					break;
+				case obs::ListProperty::Format::Bool:
+					item2.value_int = item.value_int;
 					break;
 				case obs::ListProperty::Format::String:
 					item2.value_str = item.value_string;

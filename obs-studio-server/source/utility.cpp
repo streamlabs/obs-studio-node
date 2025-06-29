@@ -255,6 +255,9 @@ void utility::ProcessProperties(obs_properties_t *prp, obs_data *settings, std::
 				case obs::ListProperty::Format::Float:
 					entry.value_float = obs_property_list_item_float(p, idx);
 					break;
+				case obs::ListProperty::Format::Bool:
+					entry.value_int = obs_property_list_item_bool(p, idx);
+					break;
 				case obs::ListProperty::Format::String:
 					entry.value_string = (buf = obs_property_list_item_string(p, idx)) != nullptr ? buf : "";
 					break;
@@ -268,6 +271,10 @@ void utility::ProcessProperties(obs_properties_t *prp, obs_data *settings, std::
 			}
 			case obs::ListProperty::Format::Float: {
 				prop2->current_value_float = obs_data_get_double(settings, name);
+				break;
+			}
+			case obs::ListProperty::Format::Bool: {
+				prop2->current_value_int = (int)obs_data_get_bool(settings, name);
 				break;
 			}
 			case obs::ListProperty::Format::String: {
