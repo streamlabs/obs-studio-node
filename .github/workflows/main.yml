@@ -129,22 +129,22 @@ jobs:
     steps:
       - name: 'Add msbuild to PATH'
         uses: microsoft/setup-msbuild@v1
-      - name: Install older build components
-        run: |
-          # For versions update see here: https://learn.microsoft.com/en-us/visualstudio/install/workload-component-id-vs-build-tools?view=vs-2022
-          Set-Location "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
-          $InstallPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
-          $componentsToInstall= @(
-          "Microsoft.VisualStudio.Component.VC.v141.x86.x64"
-          "Microsoft.VisualStudio.Component.VC.14.39.17.9.x86.x64"
-          "Microsoft.VisualStudio.Component.VC.14.39.17.9.ATL"
-          )
-          [string]$workloadArgs = $componentsToInstall | ForEach-Object {" --add " +  $_}
-          $Arguments = ('/c', "vs_installer.exe", 'modify', '--installPath', "`"$InstallPath`"",$workloadArgs, '--quiet', '--norestart', '--nocache')
-          # should be run twice
-          $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
-          $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
-        shell: powershell
+      # - name: Install older build components
+      #   run: |
+      #     # For versions update see here: https://learn.microsoft.com/en-us/visualstudio/install/workload-component-id-vs-build-tools?view=vs-2022
+      #     Set-Location "C:\Program Files (x86)\Microsoft Visual Studio\Installer\"
+      #     $InstallPath = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise"
+      #     $componentsToInstall= @(
+      #     "Microsoft.VisualStudio.Component.VC.v141.x86.x64"
+      #     "Microsoft.VisualStudio.Component.VC.14.39.17.9.x86.x64"
+      #     "Microsoft.VisualStudio.Component.VC.14.39.17.9.ATL"
+      #     )
+      #     [string]$workloadArgs = $componentsToInstall | ForEach-Object {" --add " +  $_}
+      #     $Arguments = ('/c', "vs_installer.exe", 'modify', '--installPath', "`"$InstallPath`"",$workloadArgs, '--quiet', '--norestart', '--nocache')
+      #     # should be run twice
+      #     $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
+      #     $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
+      #   shell: powershell
       - name: 'Checkout'
         uses: actions/checkout@v3
         with:
