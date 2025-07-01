@@ -94,12 +94,7 @@ struct ListProperty : Property {
 		EDITABLE,
 		LIST,
 	};
-	enum class Format {
-		INVALID,
-		INT,
-		FLOAT,
-		STRING,
-	};
+	enum class Format { INVALID, INT, FLOAT, STRING, BOOL };
 
 	struct Item {
 		std::string name;
