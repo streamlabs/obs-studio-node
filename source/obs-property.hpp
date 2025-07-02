@@ -171,19 +171,10 @@ protected:
 };
 
 struct ListProperty : Property {
-	enum class ListType : uint8_t {
-		Invalid,
-		Editable,
-		List,
-	};
+	enum class ListType : uint8_t { Invalid, Editable, List, Radio };
 	ListType field_type;
 
-	enum class Format : uint8_t {
-		Invalid,
-		Integer,
-		Float,
-		String,
-	};
+	enum class Format : uint8_t { Invalid, Integer, Float, String, Bool };
 	Format format;
 
 	struct Item {
