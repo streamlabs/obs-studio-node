@@ -817,7 +817,7 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 		encoderId = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
 	}
 
-    if (encoderId == NULL || !EncoderAvailable(encoderId) || isInvalidEncoder(encoderId)) {
+	if (encoderId == NULL || !EncoderAvailable(encoderId) || isInvalidEncoder(encoderId)) {
 		encoderId = "obs_x264";
 	}
 
@@ -3304,13 +3304,13 @@ void OBS_service::setupVodTrack(bool isSimpleMode)
 	}
 }
 
-bool OBS_service::isInvalidEncoder(const char* encoderID)
+bool OBS_service::isInvalidEncoder(const char *encoderID)
 {
 #if defined(__APPLE__)
-    // disable this encoder; not functioning properly
-    return strcmp(encoderID, "com.apple.videotoolbox.videoencoder.h264") == 0;
+	// disable this encoder; not functioning properly
+	return strcmp(encoderID, "com.apple.videotoolbox.videoencoder.h264") == 0;
 #else
-    return false;
+	return false;
 #endif
 }
 
