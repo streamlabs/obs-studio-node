@@ -1157,8 +1157,10 @@ void OBS_settings::getAdvancedAvailableEncoders(std::vector<std::pair<std::strin
 std::string newValue;
 static const char *translate_macvth264_encoder(std::string encoder)
 {
-	if (strcmp(encoder.c_str(), "vt_h264_hw") == 0 || strcmp(encoder.c_str(), "vt_h264_sw") == 0) {
+	if (strcmp(encoder.c_str(), "vt_h264_hw") == 0) {
 		newValue = "com.apple.videotoolbox.videoencoder.h264.gva";
+	} else if (strcmp(encoder.c_str(), "vt_h264_sw") == 0) {
+		newValue = "obs_x264"; // fallback to x264 encoder because com.apple.videotoolbox.videoencoder.h264 is not functioning properly
 	} else {
 		newValue = std::string(encoder);
 	}
