@@ -281,4 +281,5 @@ public:
 	static void stopAllOutputs(void);
 	static void setupVodTrack(bool isSimpleMode);
 	static void clearArchiveVodEncoder();
+	static bool isInvalidEncoder(const char *encoderID);
 };
