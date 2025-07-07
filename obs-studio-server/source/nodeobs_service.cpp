@@ -818,7 +818,7 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 		encoderId = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
 	}
 
-	if (encoderId == NULL || !EncoderAvailable(encoderId)) {
+	if (encoderId == NULL || !EncoderAvailable(encoderId) || isInvalidEncoder(encoderId)) {
 		encoderId = "obs_x264";
 	}
 
@@ -2032,8 +2032,6 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 			} else if (strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
 				presetType = "NVENCPreset";
 				encoderID = "jim_nvenc";
-			} else if (strcmp(encoder, APPLE_SOFTWARE_VIDEO_ENCODER) == 0) {
-				encoderID = APPLE_SOFTWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
 				encoderID = APPLE_HARDWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
@@ -3333,6 +3331,16 @@ void OBS_service::setupVodTrack(bool isSimpleMode)
 			obs_encoder_set_video_mix(streamArchiveEncVod, obs_video_mix_get(videoInfo[0], OBS_STREAMING_VIDEO_RENDERING));
 		}
 	}
+}
+
+bool OBS_service::isInvalidEncoder(const char *encoderID)
+{
+#if defined(__APPLE__)
+	// disable this encoder; not functioning properly
+	return strcmp(encoderID, "com.apple.videotoolbox.videoencoder.h264") == 0;
+#else
+	return false;
+#endif
 }
 
 std::string GetFormatExt(const std::string container)
