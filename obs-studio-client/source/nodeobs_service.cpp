@@ -445,7 +445,7 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	return OBS_service_createVirtualCam(info);
+    g_util_osx->installPlugin();
 #endif
 	return info.Env().Undefined();
 }
