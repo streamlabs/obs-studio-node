@@ -135,7 +135,7 @@ bool replace(std::string &str, const std::string &from, const std::string &to)
 	return true;
 }
 
-void UtilObjCInt::installPlugin()
+bool UtilObjCInt::installPlugin()
 {
     NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
     std::string app_framework_path = bundlePath.UTF8String;
@@ -147,7 +147,7 @@ void UtilObjCInt::installPlugin()
         app_framework_path.erase(last_occurrence_pos + 1); // Erase from after the delimiter
     }
     app_framework_path += "slobs-virtual-cam-installer.app/Contents/MacOS/slobs-virtual-cam-installer";
-    executeTaskAndCaptureOutput(app_framework_path); // Run the installer
+    return executeTaskAndCaptureOutput(app_framework_path); // Run the installer
 }
 
 void UtilObjCInt::uninstallPlugin()

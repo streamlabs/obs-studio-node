@@ -33,7 +33,7 @@ public:
 	void init(void);
 	void getPermissionsStatus(bool &webcam, bool &mic);
 	void requestPermissions(void *async_cb, perms_cb cb);
-	void installPlugin(void);
+	bool installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
 	bool isPluginInstalled();
