@@ -478,9 +478,7 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	// User must manually uninstall the Apple SystemExtension (new obs-virtualcam)
-	// but we can uninstall the legacy DAL plugin if its there.
-	g_util_osx->uninstallPlugin(); // uninstall legacy plugin
+	g_util_osx->uninstallPlugin();
 #endif
 	return info.Env().Undefined();
 }

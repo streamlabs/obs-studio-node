@@ -21,7 +21,26 @@
 
 std::string g_server_working_dir;
 
-bool executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString*>* exeArguments = nullptr) {
+void uninstallLegacyDALPlugin()
+{
+    @try {
+        NSDictionary *error = [NSDictionary dictionary];
+        std::string cmd = "do shell script \"rm -rf /Library/CoreMediaIO/Plug-Ins/DAL/vcam-plugin.plugin \" with administrator privileges";
+        
+        NSString *script = [NSString stringWithCString:cmd.c_str() encoding:[NSString defaultCStringEncoding]];
+        NSAppleScript *run = [[NSAppleScript alloc] initWithSource:script];
+        [run executeAndReturnError:&error];
+        NSLog(@"errors: %@", error);
+    }
+    @catch (NSException *exception) {
+        std::cout << "Caught an NSException!" << std::endl;
+        std::cout << "Name: " << [[exception name] UTF8String] << std::endl;
+        std::cout << "Reason: " << [[exception reason] UTF8String] << std::endl;
+    }
+}
+
+bool executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString*>* exeArguments = nullptr)
+{
     bool success = true;
     @autoreleasepool {
         @try {
@@ -64,6 +83,23 @@ bool executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString*>* ex
         }
     }
     return success;
+}
+
+// In our app bundle, we will search for the slobs-virtual-cam-installer.app which
+// exclusively handles installing/uninstalling the mac camera system extension.
+std::string getInstallerAppPath()
+{
+    NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+    std::string app_framework_path = bundlePath.UTF8String;
+    char delimiter = '/';
+
+    size_t last_occurrence_pos = app_framework_path.rfind(delimiter);
+
+    if (last_occurrence_pos != std::string::npos) {
+        app_framework_path.erase(last_occurrence_pos + 1); // Erase from after the delimiter
+    }
+    app_framework_path += "slobs-virtual-cam-installer.app/Contents/MacOS/slobs-virtual-cam-installer";
+    return app_framework_path;
 }
 
 @implementation UtilImplObj
@@ -137,28 +173,17 @@ bool replace(std::string &str, const std::string &from, const std::string &to)
 
 bool UtilObjCInt::installPlugin()
 {
-    NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
-    std::string app_framework_path = bundlePath.UTF8String;
-    char delimiter = '/';
-
-    size_t last_occurrence_pos = app_framework_path.rfind(delimiter);
-
-    if (last_occurrence_pos != std::string::npos) {
-        app_framework_path.erase(last_occurrence_pos + 1); // Erase from after the delimiter
-    }
-    app_framework_path += "slobs-virtual-cam-installer.app/Contents/MacOS/slobs-virtual-cam-installer";
-    return executeTaskAndCaptureOutput(app_framework_path); // Run the installer
+    const std::string path = getInstallerAppPath();
+    return executeTaskAndCaptureOutput(path); // Run the installer
 }
 
 void UtilObjCInt::uninstallPlugin()
 {
-	NSDictionary *error = [NSDictionary dictionary];
-	std::string cmd = "do shell script \"rm -rf /Library/CoreMediaIO/Plug-Ins/DAL/vcam-plugin.plugin \" with administrator privileges";
-
-	NSString *script = [NSString stringWithCString:cmd.c_str() encoding:[NSString defaultCStringEncoding]];
-	NSAppleScript *run = [[NSAppleScript alloc] initWithSource:script];
-	[run executeAndReturnError:&error];
-	NSLog(@"errors: %@", error);
+    // Uninstall the camera system extension
+    const std::string path = getInstallerAppPath();
+    return executeTaskAndCaptureOutput(path, @[ @"--deactivate" ]); // Run the uninstaller
+    
+    uninstallLegacyDALPlugin();
 }
 
 bool UtilObjCInt::isPluginInstalled()
@@ -175,7 +200,9 @@ bool UtilObjCInt::isPluginInstalled()
 			// Read the output from the command execution
 			while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
 				std::string text(buffer.data());
-				if (text.find("com.streamlabs.slobs.mac-camera-extension") != std::string::npos) {
+                // Edge case- if it shows "terminated waiting to uninstall on reboot" then technically the plugin was uninstalled.
+				if ((text.find("com.streamlabs.slobs.mac-camera-extension") != std::string::npos) &&
+                    (text.find("terminated waiting to uninstall on reboot") == std::string::npos)) {
 					isInstalled = true;
 				}
 			}
