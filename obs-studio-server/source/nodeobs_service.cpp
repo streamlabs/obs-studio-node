@@ -2051,7 +2051,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		}
 
 		if (videoBitrate == 0) {
-			videoBitrate = 2500;
+			videoBitrate = 4500;
 			config_set_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", videoBitrate);
 			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 		}
