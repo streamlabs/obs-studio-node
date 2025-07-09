@@ -36,6 +36,7 @@ public:
 	void installPlugin(void);
 	void uninstallPlugin(void);
 	void setServerWorkingDirectoryPath(std::string path);
+	bool isPluginInstalled();
 
 private:
 	UtilObjCInt *_impl;

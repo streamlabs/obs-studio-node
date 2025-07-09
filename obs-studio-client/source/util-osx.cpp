@@ -58,3 +58,8 @@ void UtilInt::setServerWorkingDirectoryPath(std::string path)
 {
 	_impl->setServerWorkingDirectoryPath(path);
 }
+
+bool UtilInt::isPluginInstalled()
+{
+	return _impl->isPluginInstalled();
+}
