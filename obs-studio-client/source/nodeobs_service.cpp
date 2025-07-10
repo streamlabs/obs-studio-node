@@ -27,6 +27,7 @@
 //#include <node.h>
 #include <sstream>
 #include <string>
+#include <fstream>
 #include "shared.hpp"
 #include "utility.hpp"
 #include "video.hpp"
@@ -490,12 +491,38 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	HKEY OpenResult;
 	LONG error;
 
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}", 0, KEY_READ | KEY_WOW64_64KEY, &OpenResult);
+	const char *prefix = "CLSID\\{";
+	std::string line = "";
+	std::string guid = "";
+	size_t pos = 0;
+	size_t endPos = 0;
+
+	//open install file and search for the correct GUID
+	std::wstring batPath = utfWorkingDir + L"\\data\\obs-plugins\\win-dshow\\virtualcam-install.bat";
+	std::ifstream batFile(batPath.c_str());
+	if (batFile.is_open()) {
+		while (std::getline(batFile, line)) {
+			pos = line.find(prefix);
+			if (pos != std::string::npos)
+			{
+				pos += +strlen(prefix);
+				endPos = line.find("}");
+				guid = line.substr(pos, endPos - pos);
+				guid.insert(0, prefix);
+				guid.append("}");
+				break;
+			}
+		}
+		batFile.close();
+	}
+
+	std::wstring wideGUID(from_utf8_to_utf16_wide(guid.c_str()));
+	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_WOW64_64KEY, &OpenResult);
 	if (error != ERROR_SUCCESS) {
 		return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 	}
 
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}", 0, KEY_READ | KEY_WOW64_32KEY, &OpenResult);
+	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_WOW64_32KEY, &OpenResult);
 	if (error != ERROR_SUCCESS) {
 		return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 	}
@@ -503,7 +530,7 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	DWORD dwRet = 0;
 	TCHAR buf[TOTALBYTES] = {0};
 	DWORD dwBufSize = sizeof(buf);
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}\\InprocServer32", 0, KEY_READ | KEY_QUERY_VALUE, &OpenResult);
+	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_QUERY_VALUE, &OpenResult);
 	if (error == ERROR_SUCCESS && OpenResult) {
 		dwRet = RegQueryValueExW(OpenResult, TEXT(""), NULL, NULL, (LPBYTE)buf, &dwBufSize);
 		if (dwRet == ERROR_SUCCESS) {
