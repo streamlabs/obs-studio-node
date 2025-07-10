@@ -420,6 +420,7 @@ Napi::Value service::OBS_service_updateVirtualCam(const Napi::CallbackInfo &info
 
 Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
+	bool isInstalled = true;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -445,9 +446,9 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	return OBS_service_createVirtualCam(info);
+	isInstalled = g_util_osx->installPlugin();
 #endif
-	return info.Env().Undefined();
+	return Napi::Boolean::New(info.Env(), isInstalled);
 }
 
 Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackInfo &info)
@@ -477,9 +478,7 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	// User must manually uninstall the Apple SystemExtension (new obs-virtualcam)
-	// but we can uninstall the legacy DAL plugin if its there.
-	g_util_osx->uninstallPlugin(); // uninstall legacy plugin
+	g_util_osx->uninstallPlugin();
 #endif
 	return info.Env().Undefined();
 }
