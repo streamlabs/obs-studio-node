@@ -68,13 +68,13 @@ describe(testName, () => {
         expect(propsArray[0].value).to.equal('CBR', "Invalid rate_control value property");
 
         expect(propsArray[1].name).to.equal('bitrate', "Invalid bitrate name property");
-        expect(propsArray[1].value).to.equal(2500, "Invalid bitrate value property");
+        expect(propsArray[1].value).to.equal(4500, "Invalid bitrate value property");
 
         expect(propsArray[2].name).to.equal('use_bufsize', "Invalid use_bufsize name property");
         expect(propsArray[2].value).to.equal(false, "Invalid use_bufsize value property");
 
         expect(propsArray[3].name).to.equal('buffer_size', "Invalid buffer_size name property");
-        expect(propsArray[3].value).to.equal(2500, "Invalid buffer_size value property");
+        expect(propsArray[3].value).to.equal(4500, "Invalid buffer_size value property");
 
         expect(propsArray[4].name).to.equal('crf', "Invalid crf name property");
         expect(propsArray[4].value).to.equal(23, "Invalid crf value property");
