@@ -18,6 +18,7 @@ test-results.xml
 *.opendb
 docs/ 
 /*.log
+.vscode/
 streamlabs-build.app
 
 tests/osn-tests/*-cache-local.zip
