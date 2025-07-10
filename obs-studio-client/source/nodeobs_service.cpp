@@ -503,8 +503,7 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	if (batFile.is_open()) {
 		while (std::getline(batFile, line)) {
 			pos = line.find(prefix);
-			if (pos != std::string::npos)
-			{
+			if (pos != std::string::npos) {
 				pos += +strlen(prefix);
 				endPos = line.find("}");
 				guid = line.substr(pos, endPos - pos);
