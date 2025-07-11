@@ -30,7 +30,7 @@ describe(testName, function() {
 
         // Releasing user got from pool
         await obs.releaseUser();
-        
+
         // Closing OBS process
         obs.shutdown();
 
@@ -140,7 +140,7 @@ describe(testName, function() {
             expect(settingValue).to.equal('Simple',  GetErrorMessage(ETestErrorMsg.DefaultOutputMode));
 
             settingValue = obs.getSetting('Output', 'VBitrate');
-            expect(settingValue).to.equal(2500, GetErrorMessage(ETestErrorMsg.DefaultVBitrate));
+            expect(settingValue).to.equal(4500, GetErrorMessage(ETestErrorMsg.DefaultVBitrate));
 
             settingValue = obs.getSetting('Output', 'StreamEncoder');
             expect(settingValue).to.equal('x264', GetErrorMessage(ETestErrorMsg.DefaultStreamEncoder));

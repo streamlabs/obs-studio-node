@@ -59,7 +59,7 @@ Encoder recordingEncoder = Encoder::Stream;
 Encoder streamingEncoder = Encoder::x264;
 Type type = Type::Streaming;
 FPSType fpsType = FPSType::PreferHighFPS;
-uint64_t idealBitrate = 2500;
+uint64_t idealBitrate = 4500;
 uint64_t baseResolutionCX = 1920;
 uint64_t baseResolutionCY = 1080;
 uint64_t idealResolutionCX = 1280;
@@ -78,7 +78,7 @@ bool qsvAvailable = false;
 bool vceAvailable = false;
 bool appleHWAvailable = false;
 
-int startingBitrate = 2500;
+int startingBitrate = 4500;
 bool customServer = false;
 bool bandwidthTest = true;
 bool testRegions = true;
@@ -1457,7 +1457,7 @@ void autoConfig::SetDefaultSettings(void)
 	idealResolutionCY = 720;
 	idealFPSNum = 30;
 	recordingQuality = Quality::High;
-	idealBitrate = 2500;
+	idealBitrate = 4500;
 	streamingEncoder = Encoder::x264;
 	recordingEncoder = Encoder::Stream;
 
