@@ -434,8 +434,7 @@ describe(testName, () => {
         osn.SimpleRecordingFactory.destroy(recording);
     });
 
-    it('Create a browser source and record', async function () {
-        /* ---------- skip if browser source unavailable ---------- */
+    it('Create a browser source and test messages', async function () {
         if (obs.skipSource(EOBSInputTypes.BrowserSource)) {
             this.skip();
         }
@@ -444,7 +443,6 @@ describe(testName, () => {
         const scene = osn.SceneFactory.create(secondSceneName);
         osn.Global.setOutputSource(0, scene);
 
-        /* ---------- create browser input ---------- */
         const media_path = path.join(path.normalize(__dirname), '..', 'media');
         const browserSettings = {
             url:    path.join( media_path, "obs_scene_log_browser.html" ),
@@ -468,7 +466,6 @@ describe(testName, () => {
         sceneItem1.video = obs.defaultVideoContext;
         sceneItem1.visible = true;
 
-        /* ---------- simple recording setup ---------- */
         const recording = osn.SimpleRecordingFactory.create();
         recording.path   = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -487,15 +484,24 @@ describe(testName, () => {
         if (sig.signal === EOBSOutputSignal.Stop) {
             throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputDidNotStart,sig.code.toString(),sig.error,),);
         }
+
+        settings['message'] = "First message";
         browserInput.sendMessage(settings);
 
-        await sleep(1500); // capture ~1.5 s
+        await sleep(1500);
+        settings['message'] = "Second message after timeout";
         browserInput.sendMessage(settings);
-        await sleep(1500); // capture ~1.5 s
+        
+        await sleep(1500);
+        settings['message'] = "Third message after timeout";
+        browserInput.sendMessage(settings);
+                
+        await sleep(1500);
         sceneItem1.visible = false;
-        await sleep(1500); // capture ~1.5 s
+        await sleep(1500);
         sceneItem1.visible = false;
-        await sleep(1500); // capture ~1.5 s
+
+        await sleep(1500);
         recording.stop();
         sig = await obs.getNextSignalInfo(EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
         expect(sig.signal).to.equal(EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
@@ -507,14 +513,12 @@ describe(testName, () => {
         }
         expect(sig.signal).to.equal(EOBSOutputSignal.Stop,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
 
-        /* ---------- wrote ---------- */
         sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Wrote,);
         if (sig.code !== 0) {
             throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
         }
         expect(sig.signal).to.equal(EOBSOutputSignal.Wrote,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
 
-        /* ---------- cleanup ---------- */
         osn.SimpleRecordingFactory.destroy(recording);
         browserInput.release();
         sceneItem1.source.release();
