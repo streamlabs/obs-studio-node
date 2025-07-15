@@ -82,11 +82,10 @@
 
         addLogEntry('Scene change log initialized');
 
-        window.addEventListener('obsSourceMessage', function(event) {
+        window.addEventListener('messageFromApp', function(event) {
             const detail = event.detail || {};
-            console.log('Message changed:', detail);
-            addLogEntry(`Message changed to: ${JSON.stringify(detail)}`);
-            window.obsstudio.messageToApp("message1", "msg2");
+            console.log('Message from app:', detail);
+            window.obsstudio.messageToApp("Sending message back to app: " + JSON.stringify(detail), "msg2");
         });
 
         window.obsstudio.getStatus(function (status) {
@@ -103,10 +102,10 @@
         
         setTimeout(() => {
             addLogEntry(`Current scene at timeout `);
-            window.obsstudio.messageToApp("message2", "msg3");
 
             window.obsstudio.getCurrentScene(function(scene) {
                 addLogEntry(`Current scene: ${scene}`);
+                window.obsstudio.messageToApp("Browser source send message to app: Timer on " + JSON.stringify(scene), "msg3");
             });
         }, 1000);
 
