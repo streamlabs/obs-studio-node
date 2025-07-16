@@ -27,6 +27,7 @@
 //#include <node.h>
 #include <sstream>
 #include <string>
+#include <filesystem>
 #include <fstream>
 #include "shared.hpp"
 #include "utility.hpp"
@@ -440,12 +441,6 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 
-	std::wstring pathToRegFile32 = L"/s /n /i:\"1\" \"" + utfWorkingDir;
-	pathToRegFile32 += L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll\"";
-	ShExecInfo.lpParameters = pathToRegFile32.c_str();
-	ShellExecuteEx(&ShExecInfo);
-	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
 	isInstalled = g_util_osx->installPlugin();
 #endif
@@ -472,12 +467,18 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 
-	std::wstring pathToRegFile32 = L"/u \"" + utfWorkingDir;
-	pathToRegFile32 += L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll\"";
-	ShExecInfo.lpParameters = pathToRegFile32.c_str();
-	ShellExecuteEx(&ShExecInfo);
-	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-	CloseHandle(ShExecInfo.hProcess);
+	// Check if the 32-bit module exists and uninstall it if it does. This way user does not see an error message from regsvr32
+	std::wstring pathToDLL(L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll");
+	std::wstring module32path(utfWorkingDir);
+	module32path += pathToDLL;
+	if (std::filesystem::exists(module32path)) {
+		std::wstring pathToRegFile32 = L"/u \"" + utfWorkingDir;
+		pathToRegFile32 += pathToDLL + L"\"";
+		ShExecInfo.lpParameters = pathToRegFile32.c_str();
+		ShellExecuteEx(&ShExecInfo);
+		WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+		CloseHandle(ShExecInfo.hProcess);
+	}
 #elif __APPLE__
 	g_util_osx->uninstallPlugin();
 #endif
@@ -516,11 +517,6 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 
 	std::wstring wideGUID(from_utf8_to_utf16_wide(guid.c_str()));
 	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_WOW64_64KEY, &OpenResult);
-	if (error != ERROR_SUCCESS) {
-		return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
-	}
-
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_WOW64_32KEY, &OpenResult);
 	if (error != ERROR_SUCCESS) {
 		return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 	}
