@@ -422,7 +422,7 @@ Napi::Value service::OBS_service_updateVirtualCam(const Napi::CallbackInfo &info
 
 Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
-	bool isInstalled = true;
+	std::string message;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -442,13 +442,14 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	CloseHandle(ShExecInfo.hProcess);
 
 #elif __APPLE__
-	isInstalled = g_util_osx->installPlugin();
+	message = g_util_osx->installPlugin();
 #endif
-	return Napi::Boolean::New(info.Env(), isInstalled);
+	return Napi::String::New(info.Env(), message);
 }
 
 Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
+	std::string message;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -480,9 +481,9 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 		CloseHandle(ShExecInfo.hProcess);
 	}
 #elif __APPLE__
-	g_util_osx->uninstallPlugin();
+	message = g_util_osx->uninstallPlugin();
 #endif
-	return info.Env().Undefined();
+	return Napi::String::New(info.Env(), message);
 }
 
 Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::CallbackInfo &info)
