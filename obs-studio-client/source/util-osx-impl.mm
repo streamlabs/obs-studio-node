@@ -38,9 +38,9 @@ void uninstallLegacyDALPlugin()
 	}
 }
 
-bool executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString *> *exeArguments = nullptr)
+std::string executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString *> *exeArguments = nullptr)
 {
-	bool success = true;
+	std::string errorMessage;
 	@autoreleasepool {
 		@try {
 			// Create an NSTask instance
@@ -71,16 +71,19 @@ bool executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString *> *e
 			NSString *outputString = [[NSString alloc] initWithData:outputData encoding:NSUTF8StringEncoding];
 
 			// Print the captured output
-			std::cout << "Child process output:\n" << [outputString UTF8String] << std::endl;
+			if (exitCode != 0) {
+				errorMessage = outputString.UTF8String;
+			}
+			std::cout << "Child process output:\n" << outputString.UTF8String << std::endl;
 			std::cout << "Child process exited with code: " << exitCode << std::endl;
 		} @catch (NSException *exception) {
 			std::cout << "Caught an NSException!" << std::endl;
 			std::cout << "Name: " << [[exception name] UTF8String] << std::endl;
 			std::cout << "Reason: " << [[exception reason] UTF8String] << std::endl;
-			success = false;
+			errorMessage = [[exception reason] UTF8String];
 		}
 	}
-	return success;
+	return errorMessage;
 }
 
 // In our app bundle, we will search for the slobs-virtual-cam-installer.app which
@@ -169,19 +172,18 @@ bool replace(std::string &str, const std::string &from, const std::string &to)
 	return true;
 }
 
-bool UtilObjCInt::installPlugin()
+std::string UtilObjCInt::installPlugin()
 {
 	const std::string path = getInstallerAppPath();
 	return executeTaskAndCaptureOutput(path); // Run the installer
 }
 
-void UtilObjCInt::uninstallPlugin()
+std::string UtilObjCInt::uninstallPlugin()
 {
+	uninstallLegacyDALPlugin();
 	// Uninstall the camera system extension
 	const std::string path = getInstallerAppPath();
 	return executeTaskAndCaptureOutput(path, @[@"--deactivate"]); // Run the uninstaller
-
-	uninstallLegacyDALPlugin();
 }
 
 bool UtilObjCInt::isPluginInstalled()
