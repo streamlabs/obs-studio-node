@@ -44,12 +44,12 @@ void UtilInt::requestPermissions(void *async_cb, perms_cb cb)
 	_impl->requestPermissions(async_cb, cb);
 }
 
-std::string UtilInt::installPlugin(void)
+int UtilInt::installPlugin(void)
 {
 	return _impl->installPlugin();
 }
 
-std::string UtilInt::uninstallPlugin(void)
+int UtilInt::uninstallPlugin(void)
 {
 	return _impl->uninstallPlugin();
 }

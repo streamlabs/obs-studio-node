@@ -3137,10 +3137,7 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 		virtualCamVideo = typeIsProgram ? obs_get_video() : obs_view_add(virtualCamView);
 
 		if (!virtualCamVideo) {
-			blog(LOG_ERROR, "Failed to create virtual camera video");
-			rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
-			rval.push_back(ipc::value("Failed to create virtual camera video"));
-			return;
+			PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to create virtual camera video");
 		}
 	}
 
@@ -3149,10 +3146,8 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 	bool success = obs_output_start(virtualCam);
 	if (!success) {
 		const char *error = obs_output_get_last_error(virtualCam);
-		blog(LOG_ERROR, "Virtual Camera output start failed. Error: '%s'", error);
-		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
-		rval.push_back(ipc::value(error));
 		DestroyVirtualCamView();
+		PRETTY_ERROR_RETURN(ErrorCode::Error, error);
 	}
 
 	virtualCamActive = true;

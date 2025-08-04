@@ -38,9 +38,9 @@ void uninstallLegacyDALPlugin()
 	}
 }
 
-std::string executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString *> *exeArguments = nullptr)
+int executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString *> *exeArguments = nullptr)
 {
-	std::string errorMessage;
+	int exitCode = 0;
 	@autoreleasepool {
 		@try {
 			// Create an NSTask instance
@@ -61,7 +61,7 @@ std::string executeTaskAndCaptureOutput(const std::string &path, NSArray<NSStrin
 			[task launch];
 			[task waitUntilExit];
 
-			int exitCode = [task terminationStatus];
+			exitCode = [task terminationStatus];
 
 			// Read the data from the pipe
 			NSFileHandle *readHandle = [outputPipe fileHandleForReading];
@@ -71,19 +71,16 @@ std::string executeTaskAndCaptureOutput(const std::string &path, NSArray<NSStrin
 			NSString *outputString = [[NSString alloc] initWithData:outputData encoding:NSUTF8StringEncoding];
 
 			// Print the captured output
-			if (exitCode != 0) {
-				errorMessage = outputString.UTF8String;
-			}
 			std::cout << "Child process output:\n" << outputString.UTF8String << std::endl;
 			std::cout << "Child process exited with code: " << exitCode << std::endl;
 		} @catch (NSException *exception) {
 			std::cout << "Caught an NSException!" << std::endl;
 			std::cout << "Name: " << [[exception name] UTF8String] << std::endl;
 			std::cout << "Reason: " << [[exception reason] UTF8String] << std::endl;
-			errorMessage = [[exception reason] UTF8String];
+			exitCode = 1;
 		}
 	}
-	return errorMessage;
+	return exitCode;
 }
 
 // In our app bundle, we will search for the slobs-virtual-cam-installer.app which
@@ -172,13 +169,13 @@ bool replace(std::string &str, const std::string &from, const std::string &to)
 	return true;
 }
 
-std::string UtilObjCInt::installPlugin()
+int UtilObjCInt::installPlugin()
 {
 	const std::string path = getInstallerAppPath();
 	return executeTaskAndCaptureOutput(path); // Run the installer
 }
 
-std::string UtilObjCInt::uninstallPlugin()
+int UtilObjCInt::uninstallPlugin()
 {
 	uninstallLegacyDALPlugin();
 	// Uninstall the camera system extension
