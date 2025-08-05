@@ -383,10 +383,9 @@ Napi::Value service::OBS_service_startVirtualCam(const Napi::CallbackInfo &info)
 	// On macOS, we will wait for a response. Our situation is more complicated due to the vcam SystemExtension
 	// which will return errors that we need to display to the user.
 	std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_startVirtualCam", {});
-
-	if (response.size() == 2) {
+	if (response.size() > 1) {
 		// We encountered an error setting up the vcam
-		return Napi::String::New(info.Env(), response.at(1).value_str);
+		Napi::Error::New(info.Env(), response[1].value_str).ThrowAsJavaScriptException();
 	}
 #else
 	conn->call("NodeOBS_Service", "OBS_service_startVirtualCam", {});
@@ -422,7 +421,7 @@ Napi::Value service::OBS_service_updateVirtualCam(const Napi::CallbackInfo &info
 
 Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
-	std::string message;
+	int errorCode = 0;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -442,14 +441,14 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	CloseHandle(ShExecInfo.hProcess);
 
 #elif __APPLE__
-	message = g_util_osx->installPlugin();
+	errorCode = g_util_osx->installPlugin();
 #endif
-	return Napi::String::New(info.Env(), message);
+	return Napi::Number::New(info.Env(), errorCode);
 }
 
 Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
-	std::string message;
+	int errorCode = 0;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -481,9 +480,9 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 		CloseHandle(ShExecInfo.hProcess);
 	}
 #elif __APPLE__
-	message = g_util_osx->uninstallPlugin();
+	errorCode = g_util_osx->uninstallPlugin();
 #endif
-	return Napi::String::New(info.Env(), message);
+	return Napi::Number::New(info.Env(), errorCode);
 }
 
 Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::CallbackInfo &info)
