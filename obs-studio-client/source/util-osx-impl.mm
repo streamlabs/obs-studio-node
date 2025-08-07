@@ -198,7 +198,7 @@ bool UtilObjCInt::isPluginInstalled()
 			while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
 				std::string text(buffer.data());
 				// Edge case- if it shows "terminated waiting to uninstall on reboot" then technically the plugin was uninstalled.
-				if ((text.find("com.streamlabs.slobs.mac-camera-extension") != std::string::npos) &&
+				if ((text.find("com.streamlabs.slobs") != std::string::npos) &&
 				    (text.find("terminated waiting to uninstall on reboot") == std::string::npos)) {
 					isInstalled = true;
 				}
