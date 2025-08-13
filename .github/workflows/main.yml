@@ -1,16 +1,16 @@
-name: 'CI Multiplatform Build'
+name: "CI Multiplatform Build"
 
 on:
   push:
     paths-ignore:
-      - '**.md'
-    branches: [ "staging" ]
+      - "**.md"
+    branches: ["staging"]
     tags:
-      - '*'
+      - "*"
   pull_request:
     paths-ignore:
-      - '**.md'
-    branches: [ "staging" ]
+      - "**.md"
+    branches: ["staging"]
 
 env:
   InstallPath: "obs-studio-node"
@@ -22,12 +22,12 @@ env:
   SLGenerator: Visual Studio 17 2022
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 30.2.4sl35
+  LibOBSVersion: 30.2.4sl36-m12-test1
   PACKAGE_NAME: osn
 
 jobs:
   macos64:
-    name: 'macOS'
+    name: "macOS"
     runs-on: ${{ matrix.image }}
     strategy:
       matrix:
@@ -46,10 +46,10 @@ jobs:
     env:
       OS_TAG: "osx"
     steps:
-      - name: 'Checkout'
+      - name: "Checkout"
         uses: actions/checkout@v3
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -57,19 +57,19 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18.x'
+          node-version: "18.x"
       - name: Install dependencies
         shell: bash
-        run: './ci/install-dependencies-osx.sh'
-      - name: 'Configure obs-studio-node'
+        run: "./ci/install-dependencies-osx.sh"
+      - name: "Configure obs-studio-node"
         shell: bash
-        run: './ci/configure-osn-osx.sh'
+        run: "./ci/configure-osn-osx.sh"
         env:
           BUILD_CONFIG: ${{matrix.BuildConfig}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
           ARCHITECTURE: ${{matrix.Architecture}}
           tagartifact: ${{ steps.get_version.outputs.VERSION }}
-      - name: 'Build obs-studio-node'
+      - name: "Build obs-studio-node"
         run: ./ci/build-osn-osx.sh
         shell: bash
         env:
@@ -80,12 +80,12 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-      - name: 'Run tests'
+      - name: "Run tests"
         continue-on-error: true
-        run: 'yarn run test'
+        run: "yarn run test"
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
-          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
+          SLOBS_TEST_USER_POOL_TOKEN: ${{secrets.testsUserPoolToken}}
 
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
@@ -108,26 +108,26 @@ jobs:
         run: aws s3 cp ${{env.TARGET_ARTIFACT}}.tar.gz s3://${{env.RELEASE_BUCKET}} --acl public-read
         env:
           TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}-${{matrix.Architecture}}
-      - name: 'Upload debug files to Sentry'
+      - name: "Upload debug files to Sentry"
         if: startsWith(github.ref, 'refs/tags/')
-        run: 'python ./ci/sentry-osx.py'
+        run: "python ./ci/sentry-osx.py"
         env:
-           SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-           BUILDCONFIG: ${{matrix.BuildConfig}}
+          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
+          BUILDCONFIG: ${{matrix.BuildConfig}}
 
   win64:
-    name: 'Windows 64-bit'
+    name: "Windows 64-bit"
     runs-on: windows-latest
     strategy:
       matrix:
         ReleaseName: [release]
         include:
-        - ReleaseName: release
-          ReleaseConfig: RelWithDebInfo
+          - ReleaseName: release
+            ReleaseConfig: RelWithDebInfo
     env:
       OS_TAG: "win64"
     steps:
-      - name: 'Add msbuild to PATH'
+      - name: "Add msbuild to PATH"
         uses: microsoft/setup-msbuild@v1
       - name: Install older build components
         run: |
@@ -145,10 +145,10 @@ jobs:
           $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
           $process = Start-Process -FilePath cmd.exe -ArgumentList $Arguments -Wait -PassThru -WindowStyle Hidden
         shell: powershell
-      - name: 'Checkout'
+      - name: "Checkout"
         uses: actions/checkout@v3
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Get the version
         id: get_version
         run: |
@@ -172,12 +172,12 @@ jobs:
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
 
-      - name: 'Run tests'
+      - name: "Run tests"
         continue-on-error: false
-        run: 'yarn run test'
+        run: "yarn run test"
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
-          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
+          SLOBS_TEST_USER_POOL_TOKEN: ${{secrets.testsUserPoolToken}}
 
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
@@ -211,9 +211,9 @@ jobs:
           AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
         shell: powershell
 
-      - name: 'Copy necessary dll files'
+      - name: "Copy necessary dll files"
         run: ./ci/copy-files.cmd
-      - name: 'Prepare tag artifact'
+      - name: "Prepare tag artifact"
         if: startsWith(github.ref, 'refs/tags/')
         run: ./ci/prepare-artifact.cmd
 
