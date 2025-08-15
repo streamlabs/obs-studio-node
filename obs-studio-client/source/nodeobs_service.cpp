@@ -27,6 +27,8 @@
 //#include <node.h>
 #include <sstream>
 #include <string>
+#include <filesystem>
+#include <fstream>
 #include "shared.hpp"
 #include "utility.hpp"
 #include "video.hpp"
@@ -36,10 +38,8 @@
 #include <shellapi.h>
 
 #define TOTALBYTES 8192
-
-enum VcamInstalledStatus : uint8_t { NotInstalled = 0, LegacyInstalled = 1, Installed = 2 };
-
 #endif
+enum VcamInstalledStatus : uint8_t { NotInstalled = 0, LegacyInstalled = 1, Installed = 2 };
 
 bool service::isWorkerRunning = false;
 bool service::worker_stop = true;
@@ -372,13 +372,34 @@ Napi::Value service::OBS_service_removeCallback(const Napi::CallbackInfo &info)
 	return info.Env().Undefined();
 }
 
+Napi::Value service::OBS_service_createVirtualCam(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	start_worker(info.Env(), cb.Value());
+	conn->call("NodeOBS_Service", "OBS_service_createVirtualCam", {});
+	return info.Env().Undefined();
+}
+
 Napi::Value service::OBS_service_startVirtualCam(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
+#if defined(__APPLE__)
+	// On macOS, we will wait for a response. Our situation is more complicated due to the vcam SystemExtension
+	// which will return errors that we need to display to the user.
+	std::vector<ipc::value> response = conn->call_synchronous_helper("NodeOBS_Service", "OBS_service_startVirtualCam", {});
+	if (response.size() > 1) {
+		// We encountered an error setting up the vcam
+		Napi::Error::New(info.Env(), response[1].value_str).ThrowAsJavaScriptException();
+	}
+#else
 	conn->call("NodeOBS_Service", "OBS_service_startVirtualCam", {});
+#endif
 	return info.Env().Undefined();
 }
 
@@ -410,6 +431,7 @@ Napi::Value service::OBS_service_updateVirtualCam(const Napi::CallbackInfo &info
 
 Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
+	int errorCode = 0;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -428,20 +450,15 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 
-	std::wstring pathToRegFile32 = L"/s /n /i:\"1\" \"" + utfWorkingDir;
-	pathToRegFile32 += L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll\"";
-	ShExecInfo.lpParameters = pathToRegFile32.c_str();
-	ShellExecuteEx(&ShExecInfo);
-	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-	CloseHandle(ShExecInfo.hProcess);
 #elif __APPLE__
-	g_util_osx->installPlugin();
+	errorCode = g_util_osx->installPlugin();
 #endif
-	return info.Env().Undefined();
+	return Napi::Number::New(info.Env(), errorCode);
 }
 
 Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackInfo &info)
 {
+	int errorCode = 0;
 #ifdef WIN32
 	SHELLEXECUTEINFO ShExecInfo = {0};
 	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFO);
@@ -460,16 +477,22 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 
-	std::wstring pathToRegFile32 = L"/u \"" + utfWorkingDir;
-	pathToRegFile32 += L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll\"";
-	ShExecInfo.lpParameters = pathToRegFile32.c_str();
-	ShellExecuteEx(&ShExecInfo);
-	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-	CloseHandle(ShExecInfo.hProcess);
+	// Check if the 32-bit module exists and uninstall it if it does. This way user does not see an error message from regsvr32
+	std::wstring pathToDLL(L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll");
+	std::wstring module32path(utfWorkingDir);
+	module32path += pathToDLL;
+	if (std::filesystem::exists(module32path)) {
+		std::wstring pathToRegFile32 = L"/u \"" + utfWorkingDir;
+		pathToRegFile32 += pathToDLL + L"\"";
+		ShExecInfo.lpParameters = pathToRegFile32.c_str();
+		ShellExecuteEx(&ShExecInfo);
+		WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
+		CloseHandle(ShExecInfo.hProcess);
+	}
 #elif __APPLE__
-	g_util_osx->uninstallPlugin();
+	errorCode = g_util_osx->uninstallPlugin();
 #endif
-	return info.Env().Undefined();
+	return Napi::Number::New(info.Env(), errorCode);
 }
 
 Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::CallbackInfo &info)
@@ -478,12 +501,32 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	HKEY OpenResult;
 	LONG error;
 
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}", 0, KEY_READ | KEY_WOW64_64KEY, &OpenResult);
-	if (error != ERROR_SUCCESS) {
-		return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
+	const char *prefix = "CLSID\\{";
+	std::string line = "";
+	std::string guid = "";
+	size_t pos = 0;
+	size_t endPos = 0;
+
+	//open install file and search for the correct GUID
+	std::wstring batPath = utfWorkingDir + L"\\data\\obs-plugins\\win-dshow\\virtualcam-install.bat";
+	std::ifstream batFile(batPath.c_str());
+	if (batFile.is_open()) {
+		while (std::getline(batFile, line)) {
+			pos = line.find(prefix);
+			if (pos != std::string::npos) {
+				pos += strlen(prefix);
+				endPos = line.find("}");
+				guid = line.substr(pos, endPos - pos);
+				guid.insert(0, prefix);
+				guid.append("}");
+				break;
+			}
+		}
+		batFile.close();
 	}
 
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}", 0, KEY_READ | KEY_WOW64_32KEY, &OpenResult);
+	std::wstring wideGUID(from_utf8_to_utf16_wide(guid.c_str()));
+	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_WOW64_64KEY, &OpenResult);
 	if (error != ERROR_SUCCESS) {
 		return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 	}
@@ -491,7 +534,7 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	DWORD dwRet = 0;
 	TCHAR buf[TOTALBYTES] = {0};
 	DWORD dwBufSize = sizeof(buf);
-	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, L"CLSID\\{27B05C2D-93DC-474A-A5DA-9BBA34CB2A9C}\\InprocServer32", 0, KEY_READ | KEY_QUERY_VALUE, &OpenResult);
+	error = RegOpenKeyEx(HKEY_CLASSES_ROOT, wideGUID.c_str(), 0, KEY_READ | KEY_QUERY_VALUE, &OpenResult);
 	if (error == ERROR_SUCCESS && OpenResult) {
 		dwRet = RegQueryValueExW(OpenResult, TEXT(""), NULL, NULL, (LPBYTE)buf, &dwBufSize);
 		if (dwRet == ERROR_SUCCESS) {
@@ -506,7 +549,9 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 
 	return Napi::Number::New(info.Env(), VcamInstalledStatus::NotInstalled);
 #elif __APPLE__
-	// Not implemented
+	bool isInstalled = g_util_osx->isPluginInstalled();
+	return Napi::Number::New(info.Env(), isInstalled ? VcamInstalledStatus::Installed : VcamInstalledStatus::NotInstalled);
+#else
 	return info.Env().Undefined();
 #endif
 }
@@ -529,6 +574,7 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_getLastReplay"), Napi::Function::New(env, service::OBS_service_getLastReplay));
 	exports.Set(Napi::String::New(env, "OBS_service_getLastRecording"), Napi::Function::New(env, service::OBS_service_getLastRecording));
 	exports.Set(Napi::String::New(env, "OBS_service_splitFile"), Napi::Function::New(env, service::OBS_service_splitFile));
+	exports.Set(Napi::String::New(env, "OBS_service_createVirtualCam"), Napi::Function::New(env, service::OBS_service_createVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_startVirtualCam"), Napi::Function::New(env, service::OBS_service_startVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_stopVirtualCam"), Napi::Function::New(env, service::OBS_service_stopVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_updateVirtualCam"), Napi::Function::New(env, service::OBS_service_updateVirtualCam));

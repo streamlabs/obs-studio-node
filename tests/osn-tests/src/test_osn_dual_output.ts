@@ -149,7 +149,7 @@ describe(testName, () => {
         recording2.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1000);
+        await sleep(1500);
 
         recording.stop();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
@@ -228,7 +228,7 @@ describe(testName, () => {
         recording2.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1000);
+        await sleep(1500);
 
         recording.stop();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
@@ -315,7 +315,7 @@ describe(testName, () => {
         let position2: IVec2 = { x: 500, y: 1200 };
         sceneItem2.position = position2;
 
-        await sleep(500);
+        await sleep(1500);
 
         recording.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
@@ -323,7 +323,7 @@ describe(testName, () => {
         recording2.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1000);
+        await sleep(1500);
 
         recording.stop();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
@@ -418,7 +418,7 @@ describe(testName, () => {
         let position2: IVec2 = { x: 500, y: 1200 };
         sceneItem2.position = position2;
 
-        await sleep(500);
+        await sleep(1500);
 
         recording.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
@@ -426,7 +426,7 @@ describe(testName, () => {
         recording2.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1000);
+        await sleep(1500);
 
         recording.stop();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
@@ -483,7 +483,7 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Activate, ETestErrorMsg.StreamOutput);
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Start, ETestErrorMsg.StreamOutput);
 
-        await sleep(500);
+        await sleep(1500);
 
         osn.NodeObs.OBS_service_stopStreaming(false, "horizontal");
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Stopping, ETestErrorMsg.StreamOutput);
@@ -561,8 +561,8 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Activate, ETestErrorMsg.StreamOutput);
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Start, ETestErrorMsg.StreamOutput);
 
-        // Stream for 0.5s
-        await sleep(500);
+        // Stream for 1.5s
+        await sleep(1500);
 
         // Stop first stream
         osn.NodeObs.OBS_service_stopStreaming(false, "horizontal");

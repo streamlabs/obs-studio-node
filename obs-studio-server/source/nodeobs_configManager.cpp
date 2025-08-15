@@ -125,7 +125,7 @@ void initBasicDefault(config_t *config)
 	std::string filePath = GetDefaultVideoSavePath();
 	config_set_default_string(config, "SimpleOutput", "FilePath", filePath.c_str());
 	config_set_default_string(config, "SimpleOutput", "RecFormat", "mp4");
-	config_set_default_uint(config, "SimpleOutput", "VBitrate", 2500);
+	config_set_default_uint(config, "SimpleOutput", "VBitrate", 4500);
 	config_set_default_string(config, "SimpleOutput", "StreamEncoder", SIMPLE_ENCODER_X264);
 
 	config_set_default_uint(config, "SimpleOutput", "ABitrate", 160);
@@ -160,7 +160,7 @@ void initBasicDefault(config_t *config)
 	config_set_default_bool(config, "AdvOut", "FFOutputToFile", true);
 	config_set_default_string(config, "AdvOut", "FFFilePath", GetDefaultVideoSavePath().c_str());
 	config_set_default_string(config, "AdvOut", "FFExtension", "mp4");
-	config_set_default_uint(config, "AdvOut", "FFVBitrate", 2500);
+	config_set_default_uint(config, "AdvOut", "FFVBitrate", 4500);
 	config_set_default_uint(config, "AdvOut", "FFVGOPSize", 250);
 	config_set_default_bool(config, "AdvOut", "FFUseRescale", false);
 	config_set_default_bool(config, "AdvOut", "FFIgnoreCompat", false);

@@ -21,6 +21,85 @@
 
 std::string g_server_working_dir;
 
+void uninstallLegacyDALPlugin()
+{
+	@try {
+		NSDictionary *error = [NSDictionary dictionary];
+		std::string cmd = "do shell script \"rm -rf /Library/CoreMediaIO/Plug-Ins/DAL/vcam-plugin.plugin \" with administrator privileges";
+
+		NSString *script = [NSString stringWithCString:cmd.c_str() encoding:[NSString defaultCStringEncoding]];
+		NSAppleScript *run = [[NSAppleScript alloc] initWithSource:script];
+		[run executeAndReturnError:&error];
+		NSLog(@"errors: %@", error);
+	} @catch (NSException *exception) {
+		std::cout << "Caught an NSException!" << std::endl;
+		std::cout << "Name: " << [[exception name] UTF8String] << std::endl;
+		std::cout << "Reason: " << [[exception reason] UTF8String] << std::endl;
+	}
+}
+
+int executeTaskAndCaptureOutput(const std::string &path, NSArray<NSString *> *exeArguments = nullptr)
+{
+	int exitCode = 0;
+	@autoreleasepool {
+		@try {
+			// Create an NSTask instance
+			NSTask *task = [[NSTask alloc] init];
+
+			// Set the launch path (program to execute)
+			NSString *exePath = [NSString stringWithCString:path.c_str() encoding:[NSString defaultCStringEncoding]];
+			task.launchPath = exePath; // Command (e.g., "ls")
+			if (exeArguments && exeArguments.count > 0) {
+				task.arguments = exeArguments;
+			}
+
+			// Set up a pipe to capture the output
+			NSPipe *outputPipe = [NSPipe pipe];
+			task.standardOutput = outputPipe; // Redirect standard output to the pipe
+			task.standardError = outputPipe;  // Optional: Redirect errors as well
+
+			[task launch];
+			[task waitUntilExit];
+
+			exitCode = [task terminationStatus];
+
+			// Read the data from the pipe
+			NSFileHandle *readHandle = [outputPipe fileHandleForReading];
+			NSData *outputData = [readHandle readDataToEndOfFile];
+
+			// Convert the data to a string
+			NSString *outputString = [[NSString alloc] initWithData:outputData encoding:NSUTF8StringEncoding];
+
+			// Print the captured output
+			std::cout << "Child process output:\n" << outputString.UTF8String << std::endl;
+			std::cout << "Child process exited with code: " << exitCode << std::endl;
+		} @catch (NSException *exception) {
+			std::cout << "Caught an NSException!" << std::endl;
+			std::cout << "Name: " << [[exception name] UTF8String] << std::endl;
+			std::cout << "Reason: " << [[exception reason] UTF8String] << std::endl;
+			exitCode = 1;
+		}
+	}
+	return exitCode;
+}
+
+// In our app bundle, we will search for the slobs-virtual-cam-installer.app which
+// exclusively handles installing/uninstalling the mac camera system extension.
+std::string getInstallerAppPath()
+{
+	NSString *bundlePath = [[NSBundle mainBundle] bundlePath];
+	std::string app_framework_path = bundlePath.UTF8String;
+	char delimiter = '/';
+
+	size_t last_occurrence_pos = app_framework_path.rfind(delimiter);
+
+	if (last_occurrence_pos != std::string::npos) {
+		app_framework_path.erase(last_occurrence_pos + 1); // Erase from after the delimiter
+	}
+	app_framework_path += "slobs-virtual-cam-installer.app/Contents/MacOS/slobs-virtual-cam-installer";
+	return app_framework_path;
+}
+
 @implementation UtilImplObj
 
 UtilObjCInt::UtilObjCInt(void) : self(NULL) {}
@@ -90,32 +169,49 @@ bool replace(std::string &str, const std::string &from, const std::string &to)
 	return true;
 }
 
-void UtilObjCInt::installPlugin()
+int UtilObjCInt::installPlugin()
 {
-	NSDictionary *error = [NSDictionary dictionary];
-	std::string pathToScript = g_server_working_dir + "/data/obs-plugins/slobs-virtual-cam/install-plugin.sh";
-	std::cout << "launching: " << pathToScript.c_str() << std::endl;
-
-	replace(pathToScript, " ", "\\\\ ");
-	std::string arg = g_server_working_dir + "/data/obs-plugins/slobs-virtual-cam";
-	replace(arg, " ", "\\\\ ");
-	std::string cmd = "do shell script \"/bin/sh " + pathToScript + " " + arg + "\" with administrator privileges";
-
-	NSString *script = [NSString stringWithCString:cmd.c_str() encoding:[NSString defaultCStringEncoding]];
-	NSAppleScript *run = [[NSAppleScript alloc] initWithSource:script];
-	[run executeAndReturnError:&error];
-	NSLog(@"errors: %@", error);
+	const std::string path = getInstallerAppPath();
+	return executeTaskAndCaptureOutput(path); // Run the installer
 }
 
-void UtilObjCInt::uninstallPlugin()
+int UtilObjCInt::uninstallPlugin()
 {
-	NSDictionary *error = [NSDictionary dictionary];
-	std::string cmd = "do shell script \"rm -rf /Library/CoreMediaIO/Plug-Ins/DAL/vcam-plugin.plugin \" with administrator privileges";
+	uninstallLegacyDALPlugin();
+	// Uninstall the camera system extension
+	const std::string path = getInstallerAppPath();
+	return executeTaskAndCaptureOutput(path, @[@"--deactivate"]); // Run the uninstaller
+}
 
-	NSString *script = [NSString stringWithCString:cmd.c_str() encoding:[NSString defaultCStringEncoding]];
-	NSAppleScript *run = [[NSAppleScript alloc] initWithSource:script];
-	[run executeAndReturnError:&error];
-	NSLog(@"errors: %@", error);
+bool UtilObjCInt::isPluginInstalled()
+{
+	const std::string command("systemextensionsctl list");
+	std::array<char, 256> buffer;
+	std::string result;
+	bool isInstalled = false;
+
+	// Open a pipe to execute the command
+	FILE *pipe = popen(command.c_str(), "r");
+	if (pipe) {
+		try {
+			// Read the output from the command execution
+			while (fgets(buffer.data(), buffer.size(), pipe) != nullptr) {
+				std::string text(buffer.data());
+				// Edge case- if it shows "terminated waiting to uninstall on reboot" then technically the plugin was uninstalled.
+				if ((text.find("com.streamlabs.slobs.mac-camera-extension") != std::string::npos) &&
+				    (text.find("terminated waiting to uninstall on reboot") == std::string::npos)) {
+					isInstalled = true;
+				}
+			}
+		} catch (...) {
+			std::cerr << "Exception occurred during reading the buffer" << std::endl;
+		}
+	} else {
+		std::cerr << "Could not run the system command:" << command << std::endl;
+	}
+
+	pclose(pipe);
+	return isInstalled;
 }
 
 @end

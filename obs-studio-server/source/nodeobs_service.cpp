@@ -148,6 +148,7 @@ void OBS_service::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastReplay", std::vector<ipc::type>{}, OBS_service_getLastReplay));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastRecording", std::vector<ipc::type>{}, OBS_service_getLastRecording));
 
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_createVirtualCam", std::vector<ipc::type>{}, OBS_service_createVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualCam", std::vector<ipc::type>{}, OBS_service_startVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualCam", std::vector<ipc::type>{}, OBS_service_stopVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String}, OBS_service_updateVirtualCam));
@@ -826,7 +827,7 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 		encoderId = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
 	}
 
-	if (encoderId == NULL || !EncoderAvailable(encoderId)) {
+	if (encoderId == NULL || !EncoderAvailable(encoderId) || isInvalidEncoder(encoderId)) {
 		encoderId = "obs_x264";
 	}
 
@@ -2050,8 +2051,6 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 			} else if (strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
 				presetType = "NVENCPreset";
 				encoderID = "jim_nvenc";
-			} else if (strcmp(encoder, APPLE_SOFTWARE_VIDEO_ENCODER) == 0) {
-				encoderID = APPLE_SOFTWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
 				encoderID = APPLE_HARDWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
@@ -2071,7 +2070,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		}
 
 		if (videoBitrate == 0) {
-			videoBitrate = 2500;
+			videoBitrate = 4500;
 			config_set_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", videoBitrate);
 			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 		}
@@ -2745,6 +2744,7 @@ void OBS_service::updateStreamingOutput(StreamServiceId serviceId)
 std::vector<SignalInfo> streamingSignals;
 std::vector<SignalInfo> recordingSignals;
 std::vector<SignalInfo> replayBufferSignals;
+std::vector<SignalInfo> virtualCamSignals;
 
 void OBS_service::OBS_service_connectOutputSignals(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
@@ -2778,6 +2778,9 @@ void OBS_service::OBS_service_connectOutputSignals(void *data, const int64_t id,
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "writing"));
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "wrote"));
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "writing_error"));
+
+	virtualCamSignals.push_back(SignalInfo("virtual-camera", "reconnect_success"));
+	virtualCamSignals.push_back(SignalInfo("virtual-camera", "deactivate"));
 
 	connectOutputSignals(StreamServiceId::Main);
 	connectOutputSignals(StreamServiceId::Second);
@@ -2875,6 +2878,16 @@ void OBS_service::connectOutputSignals(StreamServiceId serviceId)
 		for (int i = 0; i < replayBufferSignals.size(); i++) {
 			signal_handler_connect(replayBufferOutputSignalHandler, replayBufferSignals.at(i).getSignal().c_str(), JSCallbackOutputSignal,
 					       &(replayBufferSignals.at(i)));
+		}
+	}
+
+	if (virtualCam) {
+		signal_handler *virtualCamOutputSignalHandler = obs_output_get_signal_handler(virtualCam);
+
+		// Connect virtualCam output
+		for (int i = 0; i < virtualCamSignals.size(); i++) {
+			signal_handler_connect(virtualCamOutputSignalHandler, virtualCamSignals.at(i).getSignal().c_str(), JSCallbackOutputSignal,
+					       &(virtualCamSignals.at(i)));
 		}
 	}
 }
@@ -3110,7 +3123,7 @@ void OBS_service::UpdateVirtualCamOutputSource()
 	}
 }
 
-void OBS_service::StartVirtualCam()
+void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 {
 	blog(LOG_INFO, "StartVirtualCam");
 
@@ -3143,8 +3156,7 @@ void OBS_service::StartVirtualCam()
 		virtualCamVideo = typeIsProgram ? obs_get_video() : obs_view_add(virtualCamView);
 
 		if (!virtualCamVideo) {
-			blog(LOG_ERROR, "Failed to create virtual camera video");
-			return;
+			PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to create virtual camera video");
 		}
 	}
 
@@ -3153,12 +3165,22 @@ void OBS_service::StartVirtualCam()
 	bool success = obs_output_start(virtualCam);
 	if (!success) {
 		const char *error = obs_output_get_last_error(virtualCam);
-		blog(LOG_ERROR, "Virtual Camera output start failed. Error: '%s'", error);
 		DestroyVirtualCamView();
+		PRETTY_ERROR_RETURN(ErrorCode::Error, error);
 	}
 
 	virtualCamActive = true;
 	logVCamChanged(vcamConfig, true);
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+}
+
+void OBS_service::OBS_service_createVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+#if defined(__APPLE__)
+	virtualCam = obs_output_create(VIRTUAL_CAM_ID, "mac-virtualcam", nullptr, nullptr);
+	vcamEnabled = (obs_get_output_flags(VIRTUAL_CAM_ID) & OBS_OUTPUT_VIDEO) != 0;
+	connectOutputSignals(StreamServiceId::Main);
+#endif
 }
 
 void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -3167,7 +3189,7 @@ void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, cons
 		return;
 	}
 
-	StartVirtualCam();
+	StartVirtualCam(rval);
 }
 
 void OBS_service::StopVirtualCam()
@@ -3239,7 +3261,7 @@ void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, con
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		DestroyVirtualCamView();
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-		StartVirtualCam();
+		StartVirtualCam(rval);
 	} else {
 		UpdateVirtualCamOutputSource();
 	}
@@ -3323,6 +3345,16 @@ void OBS_service::setupVodTrack(bool isSimpleMode)
 			obs_encoder_set_video_mix(streamArchiveEncVod, obs_video_mix_get(videoInfo[0], OBS_STREAMING_VIDEO_RENDERING));
 		}
 	}
+}
+
+bool OBS_service::isInvalidEncoder(const char *encoderID)
+{
+#if defined(__APPLE__)
+	// disable this encoder; not functioning properly
+	return strcmp(encoderID, "com.apple.videotoolbox.videoencoder.h264") == 0;
+#else
+	return false;
+#endif
 }
 
 std::string GetFormatExt(const std::string container)

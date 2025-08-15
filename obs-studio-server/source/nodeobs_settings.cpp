@@ -1067,9 +1067,6 @@ std::vector<EncoderSettings> encoders_set = {
 	{"NVIDIA NVENC HEVC", "jim_hevc_nvenc", "Hardware (NVENC, HEVC)", "nvenc_hevc", "jim_hevc_nvenc", true, true, true, true, true, false},
 	// NVIDIA NVENC AV1
 	{"NVIDIA NVENC AV1", "jim_av1_nvenc", "Hardware (NVENC, AV1)", "jim_av1_nvenc", "", true, true, true, true, true, false},
-	// Apple VT H264 Software Encoder
-	{"Apple VT H264 Software Encoder", "com.apple.videotoolbox.videoencoder.h264", "Software (Apple, H.264)", "com.apple.videotoolbox.videoencoder.h264",
-	 "", true, true, true, false, true, false},
 	// Apple VT H264 Hardware Encoder
 	{"Apple VT H264 Hardware Encoder", "com.apple.videotoolbox.videoencoder.h264.gva", "Hardware (Apple, H.264)",
 	 "com.apple.videotoolbox.videoencoder.h264.gva", "", true, true, true, false, true, false},
@@ -1163,7 +1160,7 @@ static const char *translate_macvth264_encoder(std::string encoder)
 	if (strcmp(encoder.c_str(), "vt_h264_hw") == 0) {
 		newValue = "com.apple.videotoolbox.videoencoder.h264.gva";
 	} else if (strcmp(encoder.c_str(), "vt_h264_sw") == 0) {
-		newValue = "com.apple.videotoolbox.videoencoder.h264";
+		newValue = "obs_x264"; // fallback to x264 encoder because com.apple.videotoolbox.videoencoder.h264 is not functioning properly
 	} else {
 		newValue = std::string(encoder);
 	}
@@ -1919,7 +1916,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 	// Encoder settings
 	const char *encoderID = config_get_string(config, "AdvOut", "Encoder");
-	if (encoderID == NULL) {
+	if (encoderID == NULL || OBS_service::isInvalidEncoder(encoderID)) {
 		encoderID = "obs_x264";
 		config_set_string(config, "AdvOut", "Encoder", encoderID);
 		config_save_safe(config, "tmp", nullptr);

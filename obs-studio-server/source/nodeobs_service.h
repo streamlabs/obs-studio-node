@@ -146,6 +146,7 @@ public:
 	static void OBS_service_splitFile(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
+	static void OBS_service_createVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_service_startVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_service_stopVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
@@ -179,7 +180,7 @@ private:
 	static void DestroyVirtualCameraScene();
 	static void DestroyVirtualCamView();
 	static void StopVirtualCam();
-	static void StartVirtualCam();
+	static void StartVirtualCam(std::vector<ipc::value> &rval);
 	static void DeactivateSources();
 
 	static bool isTwitchStream(StreamServiceId serviceId);
@@ -282,4 +283,5 @@ public:
 	static void stopAllOutputs(void);
 	static void setupVodTrack(bool isSimpleMode);
 	static void clearArchiveVodEncoder();
+	static bool isInvalidEncoder(const char *encoderID);
 };

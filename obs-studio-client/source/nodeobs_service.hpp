@@ -21,6 +21,10 @@
 #include <thread>
 #include "utility-v8.hpp"
 
+struct VirtualCamPermissions {
+	bool isInstalled;
+};
+
 struct ServiceSignalInfo {
 	std::string outputType;
 	std::string signal;
@@ -68,6 +72,7 @@ void OBS_service_splitFile(const Napi::CallbackInfo &info);
 int getServiceIdByName(std::string serviceName);
 std::string getServiceNameById(int serviceId);
 
+Napi::Value OBS_service_createVirtualCam(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_startVirtualCam(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_stopVirtualCam(const Napi::CallbackInfo &info);
 Napi::Value OBS_service_updateVirtualCam(const Napi::CallbackInfo &info);

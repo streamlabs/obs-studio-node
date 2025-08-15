@@ -44,17 +44,22 @@ void UtilInt::requestPermissions(void *async_cb, perms_cb cb)
 	_impl->requestPermissions(async_cb, cb);
 }
 
-void UtilInt::installPlugin(void)
+int UtilInt::installPlugin(void)
 {
-	_impl->installPlugin();
+	return _impl->installPlugin();
 }
 
-void UtilInt::uninstallPlugin(void)
+int UtilInt::uninstallPlugin(void)
 {
-	_impl->uninstallPlugin();
+	return _impl->uninstallPlugin();
 }
 
 void UtilInt::setServerWorkingDirectoryPath(std::string path)
 {
 	_impl->setServerWorkingDirectoryPath(path);
+}
+
+bool UtilInt::isPluginInstalled()
+{
+	return _impl->isPluginInstalled();
 }

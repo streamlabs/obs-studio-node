@@ -3,6 +3,7 @@ export const enum EOBSOutputType {
     Streaming = 'streaming',
     Recording = 'recording',
     ReplayBuffer = 'replay-buffer',
+    VirtualCam = 'virtual-camera',
 }
   
 export const enum EOBSOutputSignal {
