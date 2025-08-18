@@ -73,3 +73,8 @@ std::string UtilInt::getWorkingDirectory(void)
 {
 	return _impl->getWorkingDirectory();
 }
+
+void UtilInt::runOnMainThreadSync(std::function<void()> func)
+{
+	_impl->runOnMainThreadSync(func);
+}

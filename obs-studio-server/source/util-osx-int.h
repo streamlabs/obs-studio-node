@@ -39,6 +39,9 @@ public:
 	std::string getWorkingDirectory(void);
 	void wait_terminate(void);
 
+	// Runs a function on the main thread and waits for the function to finish before proceeding.
+	void runOnMainThreadSync(std::function<void()> func);
+
 private:
 	void *self;
 	std::atomic<bool> appRunning;

@@ -170,4 +170,11 @@ std::string UtilObjCInt::getWorkingDirectory(void)
 	NSString *workindDirPath = [[NSProcessInfo processInfo] environment][@"PWD"];
 	return std::string([workindDirPath UTF8String]);
 }
+
+void UtilObjCInt::runOnMainThreadSync(std::function<void()> func)
+{
+	dispatch_sync(dispatch_get_main_queue(), ^{
+		func();
+	});
+}
 @end
