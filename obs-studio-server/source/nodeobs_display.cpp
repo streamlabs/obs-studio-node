@@ -114,8 +114,7 @@ public:
 		HWND m_windowHandle = NULL;
 	};
 
-	struct DestroyWindowMessageAnswer : MessageAnswer {
-	};
+	struct DestroyWindowMessageAnswer : MessageAnswer {};
 
 	SystemWorkerThread() : m_thread(&OBS::Display::SystemWorkerThread::Thread, this) {}
 	~SystemWorkerThread()
@@ -263,8 +262,10 @@ void OBS::Display::SetDayTheme(bool dayTheme)
 }
 
 OBS::Display::Display()
+	: m_gsInitData({})
 #if defined(_WIN32)
-	: m_systemWorkerThread(std::make_unique<SystemWorkerThread>())
+	  ,
+	  m_systemWorkerThread(std::make_unique<SystemWorkerThread>())
 #endif
 {
 #if defined(_WIN32)
@@ -273,9 +274,6 @@ OBS::Display::Display()
 #elif defined(__linux__) || defined(__FreeBSD__)
 #endif
 
-	m_gsInitData.adapter = 0;
-	m_gsInitData.cx = 0;
-	m_gsInitData.cy = 0;
 	m_gsInitData.format = GS_BGRA;
 	m_gsInitData.zsformat = GS_ZS_NONE;
 	m_gsInitData.num_backbuffers = 1;
