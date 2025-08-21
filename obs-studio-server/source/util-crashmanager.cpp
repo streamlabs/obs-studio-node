@@ -70,9 +70,9 @@
 // STATIC VARIABLES //
 //////////////////////
 std::vector<nlohmann::json> breadcrumbs;
-std::mutex messageMutex;
-std::vector<std::string> warnings;
 std::queue<std::pair<int, std::string>> lastActions;
+std::vector<std::string> warnings;
+std::mutex messageMutex;
 #ifdef WIN32
 // Global/static variables
 std::vector<std::string> handledOBSCrashes;
