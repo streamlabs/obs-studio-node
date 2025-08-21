@@ -885,9 +885,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	before attempting to make a file there. */
 	if (os_mkdirs(log_path.c_str()) == MKDIR_ERROR) {
 		std::cerr << "Failed to open log file" << std::endl;
-#ifdef WIN32
 		util::CrashManager::AddWarning("Error on log file, failed to create path: " + log_path);
-#endif
 	}
 
 	/* Delete oldest file in the folder to imitate rotating */
@@ -925,7 +923,6 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		}
 	}
 
-#ifdef WIN32
 	// Register the pre and post server callbacks to log the data into the crashmanager
 	g_server->set_pre_callback(
 		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
@@ -940,7 +937,6 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		},
 		&crashManager);
 
-#endif
 #endif
 
 #ifdef WIN32

@@ -69,15 +69,15 @@
 //////////////////////
 // STATIC VARIABLES //
 //////////////////////
+std::vector<nlohmann::json> breadcrumbs;
+std::mutex messageMutex;
+std::vector<std::string> warnings;
+std::queue<std::pair<int, std::string>> lastActions;
 #ifdef WIN32
 // Global/static variables
 std::vector<std::string> handledOBSCrashes;
 PDH_HQUERY cpuQuery;
 PDH_HCOUNTER cpuTotal;
-std::vector<nlohmann::json> breadcrumbs;
-std::queue<std::pair<int, std::string>> lastActions;
-std::vector<std::string> warnings;
-std::mutex messageMutex;
 util::MetricsProvider metricsClient;
 LPTOP_LEVEL_EXCEPTION_FILTER crashpadInternalExceptionFilterMethod = nullptr;
 HANDLE memoryDumpEvent = INVALID_HANDLE_VALUE;
@@ -998,16 +998,12 @@ nlohmann::json util::CrashManager::RequestOBSLog(OBSLogType type)
 
 nlohmann::json util::CrashManager::ComputeBreadcrumbs()
 {
-#ifdef WIN32
 	nlohmann::json result = nlohmann::json::array();
 
 	for (auto &msg : breadcrumbs)
 		result.push_back(msg);
 
 	return result;
-#else
-	return NULL;
-#endif
 }
 
 nlohmann::json util::CrashManager::ComputeActions()
@@ -1036,16 +1032,12 @@ nlohmann::json util::CrashManager::ComputeActions()
 
 nlohmann::json util::CrashManager::ComputeWarnings()
 {
-#ifdef WIN32
 	nlohmann::json result;
 
 	for (auto &msg : warnings)
 		result.push_back(msg);
 
 	return result;
-#else
-	return NULL;
-#endif
 }
 
 void BindCrtHandlesToStdHandles(bool bindStdIn, bool bindStdOut, bool bindStdErr)
@@ -1203,15 +1195,12 @@ void util::CrashManager::IPCValuesToData(const std::vector<ipc::value> &values, 
 
 void util::CrashManager::AddWarning(const std::string &warning)
 {
-#ifdef WIN32
 	std::lock_guard<std::mutex> lock(messageMutex);
 	warnings.push_back(warning);
-#endif
 }
 
 void RegisterAction(const std::string &message)
 {
-#ifdef WIN32
 	static const int MaximumActionsRegistered = 50;
 	std::lock_guard<std::mutex> lock(messageMutex);
 
@@ -1224,34 +1213,27 @@ void RegisterAction(const std::string &message)
 			lastActions.pop();
 		}
 	}
-#endif
 }
 
 void util::CrashManager::AddBreadcrumb(const nlohmann::json &message)
 {
-#ifdef WIN32
 	std::lock_guard<std::mutex> lock(messageMutex);
 	breadcrumbs.push_back(message);
-#endif
 }
 
 void util::CrashManager::AddBreadcrumb(const std::string &message)
 {
-#ifdef WIN32
 	nlohmann::json j = nlohmann::json::array();
 	j.push_back({{message}});
 
 	std::lock_guard<std::mutex> lock(messageMutex);
 	breadcrumbs.push_back(j);
-#endif
 }
 
 void util::CrashManager::ClearBreadcrumbs()
 {
-#ifdef WIN32
 	std::lock_guard<std::mutex> lock(messageMutex);
 	breadcrumbs.clear();
-#endif
 }
 
 void util::CrashManager::setAppState(const std::string &newState)
