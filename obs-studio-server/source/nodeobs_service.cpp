@@ -35,9 +35,9 @@
 #ifdef __APPLE__
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "util-crashmanager.h"
 #endif
 
+#include "util-crashmanager.h"
 #include <optional>
 
 std::string GetFormatExt(const std::string container);
