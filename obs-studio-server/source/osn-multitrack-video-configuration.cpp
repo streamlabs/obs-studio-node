@@ -221,7 +221,7 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 {
 	PostData post_data{};
 	post_data.service = "IVS";
-	post_data.schema_version = "2024-06-04";
+	post_data.schema_version = "2025-01-25";
 	post_data.authentication = streamKey;
 
 	system_info(post_data.capabilities);
@@ -260,22 +260,36 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 	preferences.vod_track_audio = vod_track_enabled;
 
 	obs_video_info ovi;
-	if (obs_get_video_info(&ovi)) {
-		preferences.width = ovi.output_width;
-		preferences.height = ovi.output_height;
-		preferences.framerate.numerator = ovi.fps_num;
-		preferences.framerate.denominator = ovi.fps_den;
-
-		preferences.canvas_width = ovi.base_width;
-		preferences.canvas_height = ovi.base_height;
-
+	if (obs_get_video_info(&ovi))
 		preferences.composition_gpu_index = ovi.adapter;
+
+	const size_t contexts = obs_get_video_info_count();
+	for (size_t i = 0; i < contexts; i++) {
+		if (obs_get_video_info_by_index(i, &ovi)) {
+			preferences.canvases.emplace_back(Canvas{ovi.output_width,
+									    ovi.output_height,
+									    ovi.base_width,
+									    ovi.base_height,
+									    {ovi.fps_num, ovi.fps_den}});
+		}
+	}
+
+	obs_audio_info2 oai2;
+	if (obs_get_audio_info2(&oai2)) {
+		preferences.audio_samples_per_sec = oai2.samples_per_sec;
+		preferences.audio_channels = get_audio_channels(oai2.speakers);
+		preferences.audio_fixed_buffering = oai2.fixed_buffering;
+		preferences.audio_max_buffering_ms = oai2.max_buffering_ms;
 	}
 
 	if (maximum_aggregate_bitrate.has_value())
 		preferences.maximum_aggregate_bitrate = maximum_aggregate_bitrate.value();
-	if (maximum_video_tracks.has_value())
-		preferences.maximum_video_tracks = maximum_video_tracks.value();
+
+	if (maximum_video_tracks.has_value()) {
+		/* Cap to maximum supported number of output encoders. */
+		preferences.maximum_video_tracks =
+			std::min(maximum_video_tracks.value(), static_cast<uint32_t>(MAX_OUTPUT_VIDEO_ENCODERS));
+	}
 
 	return post_data;
 }

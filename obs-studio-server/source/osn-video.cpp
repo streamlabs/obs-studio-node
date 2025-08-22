@@ -343,9 +343,9 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 		blog(LOG_ERROR, error);
 	}
 
-	auto canvases = obs_get_video_info_count();
-
-	blog(LOG_INFO, "[VIDEO_CANVAS] Set video context: %p ret %d now total %d", canvas, ret, canvases);
+	blog(LOG_INFO, "SetVideoContext - base_width: %d, base_width: %d, output_width: %d, output_height: %d, result: %d",
+		video.base_width, video.base_height, video.output_width, video.output_height, ret
+	);
 
 	if (ret != OBS_VIDEO_SUCCESS) {
 		blog(LOG_ERROR, "Failed to set video context");
@@ -375,6 +375,8 @@ void osn::Video::AddVideoContext(void *data, const int64_t id, const std::vector
 	SetDefaultResolution(canvas);
 
 	utility::unique_id::id_t uid = osn::Video::Manager::GetInstance().allocate(canvas);
+
+	blog(LOG_INFO, "[VIDEO_CANVAS] Created canvas 0x%" PRIXPTR ", uid: %d", (uintptr_t)canvas, (int)uid);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint64_t)uid));

@@ -7,6 +7,31 @@
 
 #include <inttypes.h>
 
+// Codec profile strings
+static const char *h264_main = "Main";
+static const char *h264_high = "High";
+static const char *h264_cb = "Constrained Baseline";
+static const char *hevc_main = "Main";
+static const char *hevc_main10 = "Main 10";
+static const char *av1_main = "Main";
+
+///////////////////////////////////////////////////////////////////////////////////
+// Note: this code block represents essential constants from the libav library;
+//       it was added to not add the libav as a dependency of OBS studio node.
+#define AV_PROFILE_UNKNOWN        -99
+
+#define AV_PROFILE_H264_CONSTRAINED  (1<<9)  // 8+1; constraint_set1_flag
+#define AV_PROFILE_H264_INTRA        (1<<11) // 8+3; constraint_set3_flag
+#define AV_PROFILE_H264_MAIN                 77
+#define AV_PROFILE_H264_HIGH                 100
+#define AV_PROFILE_H264_CONSTRAINED_BASELINE (66|AV_PROFILE_H264_CONSTRAINED)
+
+#define AV_PROFILE_HEVC_MAIN                        1
+#define AV_PROFILE_HEVC_MAIN_10                     2
+
+#define AV_PROFILE_AV1_MAIN                         0
+///////////////////////////////////////////////////////////////////////////////////
+
 #ifdef _MSC_VER
 // not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
 #define strncasecmp strnicmp
@@ -73,37 +98,82 @@ static void adjust_encoder_frame_rate_divisor(const obs_video_info &ovi, obs_enc
 	obs_encoder_set_frame_rate_divisor(video_encoder, divisor);
 }
 
-static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t encoder_index, const VideoEncoderConfiguration &encoder_config)
+static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t encoder_index, const VideoEncoderConfiguration &encoder_config,
+	obs_video_info* canvas_ovi)
 {
 	auto encoder_type = encoder_config.type.c_str();
 	if (!encoder_available(encoder_type)) {
 		blog(LOG_ERROR, "Encoder type '%s' not available", encoder_type);
-
 		throw std::runtime_error("Failed to start stream. Encoder '" + std::string(encoder_type) + "' not available");
 	}
 
 	dstr_printf(name_buffer, "multitrack video video encoder %zu", encoder_index);
 
 	OBSDataAutoRelease encoder_settings = obs_data_create_from_json(encoder_config.settings.dump().c_str());
+
+	/* VAAPI-based encoders unfortunately use an integer for "profile". Until a string-based "profile" can be used with
+	 * VAAPI, find the corresponding integer value and update the settings with an integer-based "profile".
+	 */
+	if (strstr(encoder_type, "vaapi")) {
+		// Move the "profile" string to "profile_str".
+		const char *profile_str = obs_data_get_string(encoder_settings, "profile");
+		obs_data_set_string(encoder_settings, "profile_str", profile_str);
+		obs_data_item_t *profile_item = obs_data_item_byname(encoder_settings, "profile");
+		obs_data_item_remove(&profile_item);
+		obs_data_item_release(&profile_item);
+
+		// Find the vaapi_profile integer based on codec type and "profile" string.
+		int vaapi_profile;
+		const char *codec = obs_get_encoder_codec(encoder_type);
+		if (strcmp(codec, "h264") == 0) {
+			if (astrcmpi(profile_str, h264_main) == 0) {
+				vaapi_profile = AV_PROFILE_H264_MAIN;
+			} else if (astrcmpi(profile_str, h264_high) == 0) {
+				vaapi_profile = AV_PROFILE_H264_HIGH;
+			} else if (astrcmpi(profile_str, h264_cb) == 0) {
+				vaapi_profile = AV_PROFILE_H264_CONSTRAINED_BASELINE;
+			} else {
+				blog(LOG_WARNING, "Unsupported H264 profile '%s', setting to Main profile",
+				     profile_str);
+				vaapi_profile = AV_PROFILE_H264_MAIN;
+			}
+		} else if (strcmp(codec, "hevc") == 0) {
+			if (astrcmpi(profile_str, hevc_main) == 0) {
+				vaapi_profile = AV_PROFILE_HEVC_MAIN;
+			} else if (astrcmpi(profile_str, hevc_main10) == 0) {
+				vaapi_profile = AV_PROFILE_HEVC_MAIN_10;
+			} else {
+				blog(LOG_WARNING, "Unsupported HEVC profile '%s', setting to Main profile",
+				     profile_str);
+				vaapi_profile = AV_PROFILE_HEVC_MAIN;
+			}
+		} else if (strcmp(codec, "av1") == 0) {
+			if (astrcmpi(profile_str, av1_main) == 0) {
+				vaapi_profile = AV_PROFILE_AV1_MAIN;
+			} else {
+				blog(LOG_WARNING, "Unsupported AV1 profile '%s', setting to Main profile", profile_str);
+				vaapi_profile = AV_PROFILE_AV1_MAIN;
+			}
+		} else {
+			vaapi_profile = AV_PROFILE_UNKNOWN;
+			blog(LOG_WARNING, "Unsupported codec '%s', setting profile to unknown", codec);
+		}
+		obs_data_set_int(encoder_settings, "profile", vaapi_profile);
+	}
 	obs_data_set_bool(encoder_settings, "disable_scenecut", true);
 
-	OBSEncoderAutoRelease video_encoder = obs_video_encoder_create(encoder_type, name_buffer, encoder_settings, nullptr);
+	OBSEncoderAutoRelease video_encoder =
+		obs_video_encoder_create(encoder_type, name_buffer, encoder_settings, nullptr);
 	if (!video_encoder) {
 		blog(LOG_ERROR, "Failed to create video encoder '%s'", name_buffer->array);
-
 		throw std::runtime_error("Failed to start stream. Failed to create video encoder");
 	}
-	obs_encoder_set_video(video_encoder, obs_get_video());
 
-	obs_video_info ovi;
-	if (!obs_get_video_info(&ovi)) {
-		blog(LOG_WARNING, "Failed to get obs_video_info while creating encoder %zu", encoder_index);
+	// TODO: selective recording
+	obs_encoder_set_video_mix(video_encoder, obs_video_mix_get(canvas_ovi, OBS_MAIN_VIDEO_RENDERING));
 
-		throw std::runtime_error("Failed to start stream. Failed to get OBS video info");
-	}
-
-	adjust_video_encoder_scaling(ovi, video_encoder, encoder_config, encoder_index);
-	adjust_encoder_frame_rate_divisor(ovi, video_encoder, encoder_config, encoder_index);
+	adjust_video_encoder_scaling(*canvas_ovi, video_encoder, encoder_config, encoder_index);
+	adjust_encoder_frame_rate_divisor(*canvas_ovi, video_encoder, encoder_config, encoder_index);
 
 	return video_encoder;
 }
@@ -112,27 +182,48 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 {
 	DStr video_encoder_name_buffer;
 	if (go_live_config.encoder_configurations.empty()) {
-		blog(LOG_WARNING, "MultitrackVideoOutput: Missing video encoder configurations");
-		throw std::runtime_error("Failed to start stream. Missing video encoder configurations");
+		blog(LOG_ERROR, "create_video_encoders - Missing video encoder configurations");
+		return false;
 	}
 
 	std::shared_ptr<obs_encoder_group_t> encoder_group(obs_encoder_group_create(), obs_encoder_group_destroy);
-	if (!encoder_group)
+	if (!encoder_group) {
+		blog(LOG_ERROR, "create_video_encoders - failed to create encoder group");
 		return false;
+	}
 
-	for (size_t i = 0; i < go_live_config.encoder_configurations.size(); ++i) {
-		auto encoder = create_video_encoder(video_encoder_name_buffer, i, go_live_config.encoder_configurations[i]);
+	const auto max_canvas_idx = obs_get_video_info_count() - 1;
+
+	for (size_t i = 0; i < go_live_config.encoder_configurations.size(); i++) {
+		auto &config = go_live_config.encoder_configurations[i];
+		if (config.canvas_index > max_canvas_idx) {
+			blog(LOG_ERROR, "create_video_encoders - got unexpected large canvas index - i: %d", config.canvas_index);
+			return false;
+		}
+
+		obs_video_info *ovi = obs_get_video_info_by_index2(config.canvas_index);
+		if (!ovi) {
+			blog(LOG_ERROR, "create_video_encoders - failed to get canvas video info by index - i: %d", config.canvas_index);
+			return false;
+		}
+
+		auto encoder = create_video_encoder(video_encoder_name_buffer, i, config, ovi);
 		if (!encoder) {
-			blog(LOG_ERROR, "FAILED to create ENCODER: %s", go_live_config.encoder_configurations[i].type.c_str());
+			blog(LOG_ERROR, "create_video_encoders - failed to create video encoder - i: %d", config.canvas_index);
 			return false;
 		}
 
 		if (!obs_encoder_set_group(encoder, encoder_group.get())) {
-			blog(LOG_ERROR, "Failed to set encoder to group");
+			blog(LOG_ERROR, "create_video_encoders - failed to set video encoder group - i: %d", config.canvas_index);
 			return false;
 		}
 
 		obs_output_set_video_encoder2(output, encoder, i);
+
+		// TODO: remove this or fix the recording output, if needed
+		// for reference, see OBS front-end
+		//if (recording_output)
+		//	obs_output_set_video_encoder2(recording_output, encoder, i);
 	}
 
 	video_encoder_group = encoder_group;
