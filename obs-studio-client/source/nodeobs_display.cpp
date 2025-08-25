@@ -336,7 +336,10 @@ Napi::Value display::OBS_content_createIOSurface(const Napi::CallbackInfo &info)
 	std::vector<ipc::value> response = conn->call_synchronous_helper("Display", "OBS_content_createIOSurface", {ipc::value(key)});
 
 	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
+    {
+        Napi::Error::New(info.Env(), response[1].value_str).ThrowAsJavaScriptException();
+        return;
+    }
 
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }
