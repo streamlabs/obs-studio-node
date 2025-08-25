@@ -337,7 +337,7 @@ Napi::Value display::OBS_content_createIOSurface(const Napi::CallbackInfo &info)
 
 	if (!ValidateResponse(info, response)) {
 		Napi::Error::New(info.Env(), response[1].value_str).ThrowAsJavaScriptException();
-		return;
+		return info.Env().Undefined();
 	}
 
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
