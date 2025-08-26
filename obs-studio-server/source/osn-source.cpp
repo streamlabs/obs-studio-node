@@ -477,7 +477,7 @@ void osn::Source::GetStatus(void *data, const int64_t id, const std::vector<ipc:
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value((uint32_t)true));
+	rval.push_back(ipc::value((uint32_t) true));
 	AUTO_DEBUG;
 }
 
