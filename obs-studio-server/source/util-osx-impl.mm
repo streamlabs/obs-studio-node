@@ -170,4 +170,23 @@ std::string UtilObjCInt::getWorkingDirectory(void)
 	NSString *workindDirPath = [[NSProcessInfo processInfo] environment][@"PWD"];
 	return std::string([workindDirPath UTF8String]);
 }
+
+std::string UtilObjCInt::getComputerName(void) {
+    @autoreleasepool {
+        NSString *computerName = [[NSHost currentHost] localizedName];
+        if (computerName) {
+            return [computerName UTF8String];
+        }
+    }
+    return {};
+}
+
+int UtilObjCInt::getPhysicalCores(void) {
+    int physical_cores = 0;
+    size_t size = sizeof(physical_cores);
+    int ret = sysctlbyname("machdep.cpu.core_count", &physical_cores, &size, NULL, 0);
+    if (ret != 0)
+        return 0;
+    return physical_cores;
+}
 @end

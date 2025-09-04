@@ -174,12 +174,12 @@ void RequestComputerUsageParams(long long &totalPhysMem, long long &physMemUsed,
 		commitMemLimit = perfInfo.CommitLimit * perfInfo.PageSize;
 	}
 #else
-	totalPhysMem = -1;
-	physMemUsed = -1;
-	physMemUsedByMe = size_t(-1);
-	totalCPUUsed = double(-1.0);
-	commitMemTotal = LongLong(-1);
-	commitMemLimit = LongLong(-1);
+	totalPhysMem = g_util_osx->getTotalPhysicalMemory();
+	physMemUsed = g_util_osx->getTotalPhysicalMemory() - g_util_osx->getAvailableMemory();
+	physMemUsedByMe = g_util_osx->getTotalPhysicalMemory() - g_util_osx->getAvailableMemory();
+	totalCPUUsed = g_util_osx->getPhysicalCores();
+	commitMemTotal = LongLong(0);
+	commitMemLimit = LongLong(0);
 
 #endif
 }
@@ -198,7 +198,7 @@ void GetUserInfo(std::string &computerName)
 
 	computerName = converterX.to_bytes(std::wstring(infoBuf));
 #else
-	computerName = "";
+	computerName = g_util_osx->getComputerName();
 #endif
 }
 
@@ -268,7 +268,8 @@ nlohmann::json RequestProcessList()
 
 	return result;
 #else
-	return NULL;
+    nlohmann::json result = nlohmann::json::object();
+	return result;
 #endif
 }
 
@@ -1008,7 +1009,6 @@ nlohmann::json util::CrashManager::ComputeBreadcrumbs()
 
 nlohmann::json util::CrashManager::ComputeActions()
 {
-#ifdef WIN32
 	nlohmann::json result = nlohmann::json::array();
 
 	while (!lastActions.empty()) {
@@ -1025,9 +1025,6 @@ nlohmann::json util::CrashManager::ComputeActions()
 	}
 
 	return result;
-#else
-	return NULL;
-#endif
 }
 
 nlohmann::json util::CrashManager::ComputeWarnings()

@@ -73,3 +73,13 @@ std::string UtilInt::getWorkingDirectory(void)
 {
 	return _impl->getWorkingDirectory();
 }
+
+std::string UtilInt::getComputerName(void)
+{
+    return _impl->getComputerName();
+}
+
+int UtilInt::getPhysicalCores(void)
+{
+    return _impl->getPhysicalCores();
+}
