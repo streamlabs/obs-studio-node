@@ -424,7 +424,10 @@ bool util::CrashManager::InitializeMemoryDump()
 {
 	return IsMemoryDumpEnabled();
 }
-bool util::CrashManager::SignalMemoryDump() {}
+bool util::CrashManager::SignalMemoryDump()
+{
+    return false;
+}
 std::wstring util::CrashManager::GetMemoryDumpPath()
 {
 	return L"";
