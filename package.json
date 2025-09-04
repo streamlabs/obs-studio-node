@@ -33,7 +33,7 @@
     "chai": "^4.2.0",
     "chai-subset": "^1.6.0",
     "colors": "^1.4.0",
-    "electron": "29.4.3",
+    "electron": "35.7.5",
     "electron-mocha": "^12.1.0",
     "mocha": "^7.1.0",
     "mocha-junit-reporter": "^1.22.0",
