@@ -148,6 +148,14 @@ std::string PrettyBytes(uint64_t bytes)
 	return std::string(temp);
 }
 
+std::wstring utf8_to_wstring(const std::string& utf8) {
+    return std::wstring(utf8.begin(), utf8.end());
+}
+
+std::string wstring_to_utf8(const std::wstring& wide) {
+    return std::string(wide.begin(), wide.end());
+}
+
 void RequestComputerUsageParams(long long &totalPhysMem, long long &physMemUsed, size_t &physMemUsedByMe, double &totalCPUUsed, long long &commitMemTotal,
 				long long &commitMemLimit)
 {
@@ -430,11 +438,8 @@ std::wstring util::CrashManager::GetMemoryDumpName()
 bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 {
 #ifdef ENABLE_CRASHREPORT
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
-
-	globalAppData_path = converterX.from_bytes(appdata);
-	appStateFile = appdata + "\\appState";
+	globalAppData_path = utf8_to_wstring(appdata);
+    appStateFile = appdata + std::filesystem::path::preferred_separator + "appState";
 
 	annotations.insert({{"crashpad_status", "internal crash handler missed"}});
 	annotations.insert({{"sentry[user][ip_address]", "{{auto}}"}});
@@ -721,14 +726,7 @@ void util::CrashManager::SaveBriefCrashInfoToFile()
 	briefCrashInfoFilename += briefCrashInfoBasename;
 
 	std::ofstream briefCrashInfoFile;
-#if defined(_WIN32)
 	briefCrashInfoFile.open(briefCrashInfoFilename);
-#else
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
-	briefCrashInfoFile.open(converterX.to_bytes(briefCrashInfoFilename));
-#endif
-
 	briefCrashInfoFile << serialized;
 	briefCrashInfoFile.flush();
 	briefCrashInfoFile.close();
@@ -783,9 +781,7 @@ void util::CrashManager::DeleteBriefCrashInfoFile()
 	}
 	briefCrashInfoFilename += briefCrashInfoBasename;
 
-	using convert_typeX = std::codecvt_utf8<wchar_t>;
-	std::wstring_convert<convert_typeX, wchar_t> converterX;
-	std::filesystem::path briefCrashInfoPath = std::filesystem::u8path(converterX.to_bytes(briefCrashInfoFilename));
+	std::filesystem::path briefCrashInfoPath = std::filesystem::u8path(wstring_to_utf8(briefCrashInfoFilename));
 
 	if (std::filesystem::exists(briefCrashInfoPath) && std::filesystem::is_regular_file(briefCrashInfoPath)) {
 		std::filesystem::remove(briefCrashInfoPath);
