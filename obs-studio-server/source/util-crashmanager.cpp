@@ -140,10 +140,11 @@ std::string PrettyBytes(uint64_t bytes)
 		s++;
 		count /= 1024;
 	}
-	if (count - floor(count) == 0.0)
-		sprintf(temp, "%d%s", (int)count, suffixes[s]);
-	else
-		sprintf(temp, "%.1f%s", count, suffixes[s]);
+	if (count - floor(count) == 0.0) {
+		snprintf(temp, sizeof(temp), "%d%s", static_cast<int>(count), suffixes[s]);
+	} else {
+		snprintf(temp, sizeof(temp), "%.1f%s", count, suffixes[s]);
+	}
 
 	return std::string(temp);
 }
