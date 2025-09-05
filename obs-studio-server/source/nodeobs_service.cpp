@@ -1411,6 +1411,9 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId)
 	streamingOutput[serviceId] = obs_output_get_ref(output);
 	connectOutputSignals(serviceId);
 
+	// Register the BPM (Broadcast Performance Metrics) callback
+	obs_output_add_packet_callback(output, bpm_inject, NULL);
+
 	isStreaming[serviceId] = obs_output_start(output);
 
 	enhancedBroadcastContext.emplace(EnhancedBroadcastOutputObjects{
@@ -1748,6 +1751,12 @@ void OBS_service::stopStreaming(bool forceStop, StreamServiceId serviceId)
 		obs_output_force_stop(streamingOutput[serviceId]);
 	else
 		obs_output_stop(streamingOutput[serviceId]);
+
+	/* Unregister the BPM (Broadcast Performance Metrics) callback and destroy the allocated metrics data. */
+	if (isTwitchStream(serviceId) && IsMultitrackVideoEnabled()) {
+		obs_output_remove_packet_callback(streamingOutput[serviceId], bpm_inject, NULL);
+		bpm_destroy(streamingOutput[serviceId]);
+	}
 
 	waitReleaseWorker();
 
