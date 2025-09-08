@@ -228,7 +228,7 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 
 	auto &client = post_data.client;
 
-	client.name = "obs-studio";
+	client.name = "streamlabs";
 	client.version = obs_get_version_string();
 
 	auto add_codec = [&](const char *codec) {
