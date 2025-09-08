@@ -18,6 +18,7 @@
 
 #include <string>
 #include <optional>
+#include <unordered_set>
 
 #include <obs.h>
 
@@ -107,7 +108,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(StatusResult, {
 struct Client {
 	std::string name = "obs-studio";
 	std::string version;
-	std::vector<std::string> supported_codecs;
+	std::unordered_set<std::string> supported_codecs;
 
 	NLOHMANN_DEFINE_TYPE_INTRUSIVE(Client, name, version, supported_codecs)
 };

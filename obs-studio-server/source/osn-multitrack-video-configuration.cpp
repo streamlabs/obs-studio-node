@@ -212,7 +212,6 @@ std::string MultitrackVideoAutoConfigURL(obs_service_t *service)
 {
 	OBSDataAutoRelease settings = obs_service_get_settings(service);
 	auto url = obs_data_get_string(settings, "multitrack_video_configuration_url");
-	blog(LOG_INFO, "Go live URL: %s", url);
 	return url;
 }
 
@@ -231,14 +230,6 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 	client.name = "streamlabs";
 	client.version = obs_get_version_string();
 
-	auto add_codec = [&](const char *codec) {
-		auto it = std::find(std::begin(client.supported_codecs), std::end(client.supported_codecs), codec);
-		if (it != std::end(client.supported_codecs))
-			return;
-
-		client.supported_codecs.push_back(codec);
-	};
-
 	const char *encoder_id = nullptr;
 	for (size_t i = 0; obs_enum_encoder_types(i, &encoder_id); i++) {
 		auto codec = obs_get_encoder_codec(encoder_id);
@@ -246,11 +237,11 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 			continue;
 
 		if (strcmp(codec, "h264") == 0) {
-			add_codec("h264");
-		} else if (strcmp(codec, "hevc")) {
-			add_codec("h265");
-		} else if (strcmp(codec, "av1")) {
-			add_codec("av1");
+			client.supported_codecs.emplace("h264");
+		} else if (strcmp(codec, "hevc") == 0) {
+			client.supported_codecs.emplace("h265");
+		} else if (strcmp(codec, "av1") == 0) {
+			client.supported_codecs.emplace("av1");
 		}
 	}
 
