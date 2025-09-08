@@ -247,10 +247,8 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 
 		if (strcmp(codec, "h264") == 0) {
 			add_codec("h264");
-#ifdef ENABLE_HEVC
-		} else if (qstricmp(codec, "hevc")) {
+		} else if (strcmp(codec, "hevc")) {
 			add_codec("h265");
-#endif
 		} else if (strcmp(codec, "av1")) {
 			add_codec("av1");
 		}
