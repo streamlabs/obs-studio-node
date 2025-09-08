@@ -1,6 +1,8 @@
 #include "osn-multitrack-video-configuration.hpp"
 #include "osn-multitrack-video-system-info.hpp"
 
+#include "util-censor.h"
+
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 
@@ -152,7 +154,7 @@ static bool GetRemoteFile(const char *url, std::string &str, std::string &error,
 Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 {
 	nlohmann::json post_data_json = post_data;
-	blog(LOG_INFO, "Go live POST data: %s", post_data_json.dump().c_str());
+	blog(LOG_INFO, "Go live POST data: %s", util::censoredJson(post_data_json).c_str());
 
 	if (url.empty()) {
 		throw std::runtime_error("Failed to start stream. Missing config URL");
@@ -175,11 +177,9 @@ Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 		throw std::runtime_error("Failed to start stream. Config request failed");
 	}
 
-	blog(LOG_INFO, "encodeConfigText: %s", encodeConfigText.c_str());
-
 	try {
 		auto data = nlohmann::json::parse(encodeConfigText);
-		blog(LOG_INFO, "Go live response data: %s", data.dump().c_str());
+		blog(LOG_INFO, "Go live response data: %s", util::censoredJson(data, true).c_str());
 		Config config = data;
 
 		if (config.status) {
