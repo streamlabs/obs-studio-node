@@ -76,10 +76,10 @@ std::string UtilInt::getWorkingDirectory(void)
 
 std::string UtilInt::getComputerName(void)
 {
-    return _impl->getComputerName();
+	return _impl->getComputerName();
 }
 
 int UtilInt::getPhysicalCores(void)
 {
-    return _impl->getPhysicalCores();
+	return _impl->getPhysicalCores();
 }
