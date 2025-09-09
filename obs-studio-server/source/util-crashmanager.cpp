@@ -51,6 +51,8 @@
 #include "TCHAR.h"
 #include "pdh.h"
 #include "psapi.h"
+#elif defined(__APPLE__)
+#include <libproc.h>
 #endif
 
 #include "nodeobs_api.h"
@@ -148,12 +150,14 @@ std::string PrettyBytes(uint64_t bytes)
 	return std::string(temp);
 }
 
-std::wstring utf8_to_wstring(const std::string& utf8) {
-    return std::wstring(utf8.begin(), utf8.end());
+std::wstring utf8_to_wstring(const std::string &utf8)
+{
+	return std::wstring(utf8.begin(), utf8.end());
 }
 
-std::string wstring_to_utf8(const std::wstring& wide) {
-    return std::string(wide.begin(), wide.end());
+std::string wstring_to_utf8(const std::wstring &wide)
+{
+	return std::string(wide.begin(), wide.end());
 }
 
 void RequestComputerUsageParams(long long &totalPhysMem, long long &physMemUsed, size_t &physMemUsedByMe, double &totalCPUUsed, long long &commitMemTotal,
@@ -276,8 +280,37 @@ nlohmann::json RequestProcessList()
 
 	return result;
 #else
-    nlohmann::json result = nlohmann::json::object();
+	nlohmann::json result = nlohmann::json::array();
+
+	int max_pids = 1024;
+	std::vector<pid_t> pids(max_pids);
+
+	int num_pids = proc_listpids(PROC_ALL_PIDS, 0, pids.data(), max_pids * sizeof(pid_t));
+	if (num_pids < 0) {
+		blog(LOG_WARNING, "Failed to get process list.");
+		return result;
+	}
+
+	int count = num_pids / sizeof(pid_t);
+	for (int i = 0; i < count; ++i) {
+		if (pids[i] == 0)
+			continue;
+
+		struct proc_bsdinfo procInfo;
+		int ret = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &procInfo, sizeof(proc_bsdinfo));
+		if (ret <= 0)
+			continue; // Skip if information can't be retrieved
+
+		nlohmann::json procInfoJson;
+		procInfoJson["PID"] = pids[i];
+		procInfoJson["Name"] = std::string(procInfo.pbi_name);
+		procInfoJson["UID"] = procInfo.pbi_uid;
+		procInfoJson["GID"] = procInfo.pbi_gid;
+		result.push_back(procInfoJson);
+	}
+
 	return result;
+
 #endif
 }
 
@@ -426,7 +459,7 @@ bool util::CrashManager::InitializeMemoryDump()
 }
 bool util::CrashManager::SignalMemoryDump()
 {
-    return false;
+	return false;
 }
 std::wstring util::CrashManager::GetMemoryDumpPath()
 {
@@ -442,7 +475,7 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 {
 #ifdef ENABLE_CRASHREPORT
 	globalAppData_path = utf8_to_wstring(appdata);
-    appStateFile = appdata + std::filesystem::path::preferred_separator + "appState";
+	appStateFile = appdata + std::filesystem::path::preferred_separator + "appState";
 
 	annotations.insert({{"crashpad_status", "internal crash handler missed"}});
 	annotations.insert({{"sentry[user][ip_address]", "{{auto}}"}});
@@ -556,8 +589,8 @@ bool util::CrashManager::SetupCrashpad()
 #endif
 
 #ifdef __APPLE__
-    // Creates crashpad folder
-    std::string appdata_path = wstring_to_utf8(globalAppData_path) + "/Crashpad";
+	// Creates crashpad folder
+	std::string appdata_path = wstring_to_utf8(globalAppData_path) + "/Crashpad";
 #endif
 	db = base::FilePath(appdata_path);
 	handler = base::FilePath(handler_path);
@@ -567,20 +600,19 @@ bool util::CrashManager::SetupCrashpad()
 		return false;
 
 	database->GetSettings()->SetUploadsEnabled(true);
-    bool asynchronous_start = true;
+	bool asynchronous_start = true;
 #if defined(__APPLE__)
-    asynchronous_start = false;
+	asynchronous_start = false;
 #endif
 
 	bool rc = client.StartHandler(handler, db, db, reportServerUrl, annotations, arguments, /* restartable */ true, asynchronous_start);
-	if (!rc)
-    {
-        blog(LOG_WARNING, "Unable to start crash handler");
-        return false;
-    }
+	if (!rc) {
+		blog(LOG_WARNING, "Unable to start crash handler");
+		return false;
+	}
 
 #ifdef WIN32
-    // Windows will wait since asynchronous_start is set to true.
+	// Windows will wait since asynchronous_start is set to true.
 	rc = client.WaitForHandlerStart(INFINITE);
 	if (!rc)
 		return false;
