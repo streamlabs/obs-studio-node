@@ -556,7 +556,8 @@ bool util::CrashManager::SetupCrashpad()
 #endif
 
 #ifdef __APPLE__
-	std::string appdata_path = g_util_osx->getUserDataPath();
+    // Creates crashpad folder
+    std::string appdata_path = wstring_to_utf8(globalAppData_path) + "/Crashpad";
 #endif
 	db = base::FilePath(appdata_path);
 	handler = base::FilePath(handler_path);
@@ -566,12 +567,20 @@ bool util::CrashManager::SetupCrashpad()
 		return false;
 
 	database->GetSettings()->SetUploadsEnabled(true);
+    bool asynchronous_start = true;
+#if defined(__APPLE__)
+    asynchronous_start = false;
+#endif
 
-	bool rc = client.StartHandler(handler, db, db, reportServerUrl, annotations, arguments, true, true);
+	bool rc = client.StartHandler(handler, db, db, reportServerUrl, annotations, arguments, /* restartable */ true, asynchronous_start);
 	if (!rc)
-		return false;
+    {
+        blog(LOG_WARNING, "Unable to start crash handler");
+        return false;
+    }
 
 #ifdef WIN32
+    // Windows will wait since asynchronous_start is set to true.
 	rc = client.WaitForHandlerStart(INFINITE);
 	if (!rc)
 		return false;
