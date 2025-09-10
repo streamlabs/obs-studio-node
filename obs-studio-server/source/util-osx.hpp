@@ -19,7 +19,6 @@
 #ifndef __UTIL_CLASS_H__
 #define __UTIL_CLASS_H__
 
-#include <functional>
 #include <string>
 #include <vector>
 
@@ -39,8 +38,6 @@ public:
 	std::vector<std::pair<uint32_t, uint32_t>> getAvailableScreenResolutions(void);
 	std::string getUserDataPath(void);
 	std::string getWorkingDirectory(void);
-	// Runs a function on the main thread and waits for the function to finish before proceeding.
-	void runOnMainThreadSync(std::function<void()> func);
 
 private:
 	UtilObjCInt *_impl;

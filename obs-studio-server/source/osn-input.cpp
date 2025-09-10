@@ -111,22 +111,13 @@ void osn::Input::Create(void *data, const int64_t id, const std::vector<ipc::val
 		break;
 	}
 
-#if defined(__APPLE__)
-	static bool hasInitializedBrowserSources = false;
-	obs_source_t *source = nullptr;
-
-	if (!hasInitializedBrowserSources && sourceId == "browser_source") {
-		// CEFInitialize must be invoked on main thread (first time a browser source is created)
-		hasInitializedBrowserSources = true;
-
-		g_util_osx->runOnMainThreadSync(
-			[&source, &sourceId, &name, &settings, &hotkeys]() { source = obs_source_create(sourceId.c_str(), name.c_str(), settings, hotkeys); });
-	} else {
-		source = obs_source_create(sourceId.c_str(), name.c_str(), settings, hotkeys);
+	const int version = obs_data_get_int(settings, "version");
+	if (version) {
+		// This enables a special kind of the source version syntax supported by OBS
+		sourceId += "_v" + std::to_string(version);
 	}
-#else
+
 	obs_source_t *source = obs_source_create(sourceId.c_str(), name.c_str(), settings, hotkeys);
-#endif
 	obs_data_release(hotkeys);
 	obs_data_release(settings);
 

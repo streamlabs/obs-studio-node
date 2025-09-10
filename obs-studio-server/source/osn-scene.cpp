@@ -82,7 +82,7 @@ void osn::Scene::Create(void *data, const int64_t id, const std::vector<ipc::val
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
-	const char *sid = obs_source_get_id(source);
+	const char *sid = obs_source_get_unversioned_id(source);
 	rval.push_back(ipc::value(sid ? sid : ""));
 	AUTO_DEBUG;
 }
@@ -106,7 +106,7 @@ void osn::Scene::CreatePrivate(void *data, const int64_t id, const std::vector<i
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
-	const char *sid = obs_source_get_id(source);
+	const char *sid = obs_source_get_unversioned_id(source);
 	rval.push_back(ipc::value(sid ? sid : ""));
 	AUTO_DEBUG;
 }
