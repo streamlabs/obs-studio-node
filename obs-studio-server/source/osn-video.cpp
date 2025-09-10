@@ -343,9 +343,8 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 		blog(LOG_ERROR, error);
 	}
 
-	blog(LOG_INFO, "SetVideoContext - base_width: %d, base_width: %d, output_width: %d, output_height: %d, result: %d",
-		video.base_width, video.base_height, video.output_width, video.output_height, ret
-	);
+	blog(LOG_INFO, "SetVideoContext - base_width: %d, base_width: %d, output_width: %d, output_height: %d, result: %d", video.base_width, video.base_height,
+	     video.output_width, video.output_height, ret);
 
 	if (ret != OBS_VIDEO_SUCCESS) {
 		blog(LOG_ERROR, "Failed to set video context");

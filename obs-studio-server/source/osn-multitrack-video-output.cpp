@@ -18,18 +18,18 @@ static const char *av1_main = "Main";
 ///////////////////////////////////////////////////////////////////////////////////
 // Note: this code block represents essential constants from the libav library;
 //       it was added to not add the libav as a dependency of OBS studio node.
-#define AV_PROFILE_UNKNOWN        -99
+#define AV_PROFILE_UNKNOWN -99
 
-#define AV_PROFILE_H264_CONSTRAINED  (1<<9)  // 8+1; constraint_set1_flag
-#define AV_PROFILE_H264_INTRA        (1<<11) // 8+3; constraint_set3_flag
-#define AV_PROFILE_H264_MAIN                 77
-#define AV_PROFILE_H264_HIGH                 100
-#define AV_PROFILE_H264_CONSTRAINED_BASELINE (66|AV_PROFILE_H264_CONSTRAINED)
+#define AV_PROFILE_H264_CONSTRAINED (1 << 9) // 8+1; constraint_set1_flag
+#define AV_PROFILE_H264_INTRA (1 << 11)      // 8+3; constraint_set3_flag
+#define AV_PROFILE_H264_MAIN 77
+#define AV_PROFILE_H264_HIGH 100
+#define AV_PROFILE_H264_CONSTRAINED_BASELINE (66 | AV_PROFILE_H264_CONSTRAINED)
 
-#define AV_PROFILE_HEVC_MAIN                        1
-#define AV_PROFILE_HEVC_MAIN_10                     2
+#define AV_PROFILE_HEVC_MAIN 1
+#define AV_PROFILE_HEVC_MAIN_10 2
 
-#define AV_PROFILE_AV1_MAIN                         0
+#define AV_PROFILE_AV1_MAIN 0
 ///////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _MSC_VER
@@ -99,7 +99,7 @@ static void adjust_encoder_frame_rate_divisor(const obs_video_info &ovi, obs_enc
 }
 
 static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t encoder_index, const VideoEncoderConfiguration &encoder_config,
-	obs_video_info* canvas_ovi)
+						  obs_video_info *canvas_ovi)
 {
 	auto encoder_type = encoder_config.type.c_str();
 	if (!encoder_available(encoder_type)) {
@@ -133,8 +133,7 @@ static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t
 			} else if (astrcmpi(profile_str, h264_cb) == 0) {
 				vaapi_profile = AV_PROFILE_H264_CONSTRAINED_BASELINE;
 			} else {
-				blog(LOG_WARNING, "Unsupported H264 profile '%s', setting to Main profile",
-				     profile_str);
+				blog(LOG_WARNING, "Unsupported H264 profile '%s', setting to Main profile", profile_str);
 				vaapi_profile = AV_PROFILE_H264_MAIN;
 			}
 		} else if (strcmp(codec, "hevc") == 0) {
@@ -143,8 +142,7 @@ static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t
 			} else if (astrcmpi(profile_str, hevc_main10) == 0) {
 				vaapi_profile = AV_PROFILE_HEVC_MAIN_10;
 			} else {
-				blog(LOG_WARNING, "Unsupported HEVC profile '%s', setting to Main profile",
-				     profile_str);
+				blog(LOG_WARNING, "Unsupported HEVC profile '%s', setting to Main profile", profile_str);
 				vaapi_profile = AV_PROFILE_HEVC_MAIN;
 			}
 		} else if (strcmp(codec, "av1") == 0) {
@@ -162,8 +160,7 @@ static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t
 	}
 	obs_data_set_bool(encoder_settings, "disable_scenecut", true);
 
-	OBSEncoderAutoRelease video_encoder =
-		obs_video_encoder_create(encoder_type, name_buffer, encoder_settings, nullptr);
+	OBSEncoderAutoRelease video_encoder = obs_video_encoder_create(encoder_type, name_buffer, encoder_settings, nullptr);
 	if (!video_encoder) {
 		blog(LOG_ERROR, "Failed to create video encoder '%s'", name_buffer->array);
 		throw std::runtime_error("Failed to start stream. Failed to create video encoder");

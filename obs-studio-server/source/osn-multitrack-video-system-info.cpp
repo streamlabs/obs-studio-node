@@ -240,7 +240,8 @@ void system_info(Capabilities &capabilities)
 		system_data.name = "Windows";
 		system_data.build = ver.build;
 		system_data.release = win_release_id;
-		system_data.revision = std::to_string(ver.revis);;
+		system_data.revision = std::to_string(ver.revis);
+		;
 		system_data.bits = is_64_bit_windows() ? 64 : 32;
 		system_data.arm = is_arm64_windows();
 		system_data.armEmulation = os_get_emulation_status();

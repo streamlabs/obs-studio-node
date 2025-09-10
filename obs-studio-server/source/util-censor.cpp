@@ -87,5 +87,4 @@ std::string censoredJson(nlohmann::json data, bool pretty)
 	return data.dump(pretty ? 4 : -1);
 }
 
-
 }

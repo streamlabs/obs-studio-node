@@ -255,11 +255,8 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 	const size_t contexts = obs_get_video_info_count();
 	for (size_t i = 0; i < contexts; i++) {
 		if (obs_get_video_info_by_index(i, &ovi)) {
-			preferences.canvases.emplace_back(Canvas{ovi.output_width,
-									    ovi.output_height,
-									    ovi.base_width,
-									    ovi.base_height,
-									    {ovi.fps_num, ovi.fps_den}});
+			preferences.canvases.emplace_back(
+				Canvas{ovi.output_width, ovi.output_height, ovi.base_width, ovi.base_height, {ovi.fps_num, ovi.fps_den}});
 		}
 	}
 
@@ -276,8 +273,7 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 
 	if (maximum_video_tracks.has_value()) {
 		/* Cap to maximum supported number of output encoders. */
-		preferences.maximum_video_tracks =
-			std::min(maximum_video_tracks.value(), static_cast<uint32_t>(MAX_OUTPUT_VIDEO_ENCODERS));
+		preferences.maximum_video_tracks = std::min(maximum_video_tracks.value(), static_cast<uint32_t>(MAX_OUTPUT_VIDEO_ENCODERS));
 	}
 
 	return post_data;
