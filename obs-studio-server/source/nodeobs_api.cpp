@@ -1814,7 +1814,7 @@ void OBS_API::destroyOBS_API(void)
 			if (!source)
 				continue;
 
-			const char *source_id = obs_source_get_id(source);
+			const char *source_id = obs_source_get_unversioned_id(source);
 			if (!source_id)
 				continue;
 

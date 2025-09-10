@@ -111,6 +111,12 @@ void osn::Input::Create(void *data, const int64_t id, const std::vector<ipc::val
 		break;
 	}
 
+	const int version = obs_data_get_int(settings, "version");
+	if (version) {
+		// This enables a special kind of the source version syntax supported by OBS
+		sourceId += "_v" + std::to_string(version);
+	}
+
 	obs_source_t *source = obs_source_create(sourceId.c_str(), name.c_str(), settings, hotkeys);
 	obs_data_release(hotkeys);
 	obs_data_release(settings);

@@ -335,7 +335,7 @@ void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::va
 
 	obs_data_t *sets = obs_data_create_from_json(args[1].value_str.c_str());
 
-	if (strcmp(obs_source_get_id(src), "av_capture_input") == 0) {
+	if (strcmp(obs_source_get_unversioned_id(src), "av_capture_input") == 0) {
 		const char *frame_rate_string = obs_data_get_string(sets, "frame_rate");
 		if (frame_rate_string && strcmp(frame_rate_string, "") != 0) {
 			nlohmann::json fps = nlohmann::json::parse(frame_rate_string);
@@ -490,7 +490,7 @@ void osn::Source::GetId(void *data, const int64_t id, const std::vector<ipc::val
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	const char *sid = obs_source_get_id(src);
+	const char *sid = obs_source_get_unversioned_id(src);
 	rval.push_back(ipc::value(sid ? sid : ""));
 	AUTO_DEBUG;
 }

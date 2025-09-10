@@ -291,7 +291,7 @@ bool MemoryManager::isSourceValid(obs_source_t *source) const
 	if (!source)
 		return false;
 
-	const char *source_id = obs_source_get_id(source);
+	const char *source_id = obs_source_get_unversioned_id(source);
 	if (!source_id)
 		return false;
 
