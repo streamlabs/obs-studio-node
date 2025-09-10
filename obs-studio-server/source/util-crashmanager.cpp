@@ -591,7 +591,6 @@ bool util::CrashManager::SetupCrashpad()
 #endif
 
 #ifdef __APPLE__
-	// Creates crashpad folder
 	std::string appdata_path = wstring_to_utf8(globalAppData_path) + "/Crashpad";
 #endif
 	db = base::FilePath(appdata_path);
