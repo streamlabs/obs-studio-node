@@ -475,7 +475,9 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 {
 #ifdef ENABLE_CRASHREPORT
 	globalAppData_path = utf8_to_wstring(appdata);
-	appStateFile = appdata + std::filesystem::path::preferred_separator + "appState";
+	std::ostringstream oss;
+	oss << appdata << std::filesystem::path::preferred_separator << "appState";
+	appStateFile = oss.str();
 
 	annotations.insert({{"crashpad_status", "internal crash handler missed"}});
 	annotations.insert({{"sentry[user][ip_address]", "{{auto}}"}});
