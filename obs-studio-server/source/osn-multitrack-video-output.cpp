@@ -166,7 +166,6 @@ static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t
 		throw std::runtime_error("Failed to start stream. Failed to create video encoder");
 	}
 
-	// TODO: selective recording
 	obs_encoder_set_video_mix(video_encoder, obs_video_mix_get(canvas_ovi, OBS_MAIN_VIDEO_RENDERING));
 
 	adjust_video_encoder_scaling(*canvas_ovi, video_encoder, encoder_config, encoder_index);
@@ -216,11 +215,6 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 		}
 
 		obs_output_set_video_encoder2(output, encoder, i);
-
-		// TODO: remove this or fix the recording output, if needed
-		// for reference, see OBS front-end
-		//if (recording_output)
-		//	obs_output_set_video_encoder2(recording_output, encoder, i);
 	}
 
 	video_encoder_group = encoder_group;
