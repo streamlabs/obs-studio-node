@@ -499,7 +499,7 @@ describe(testName, () => {
         await sleep(1500);
         sceneItem1.visible = false;
         await sleep(1500);
-        sceneItem1.visible = false;
+        sceneItem1.visible = true;
 
         await sleep(1500);
         recording.stop();

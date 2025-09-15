@@ -49,12 +49,12 @@ struct TransitionInfoData {
 };
 
 struct SourceMessageInfo {
-    std::string source_name;
-    std::string message;
+	std::string source_name;
+	std::string message;
 };
 
 struct SourceMessageInfoData {
-    std::vector<std::unique_ptr<SourceMessageInfo>> items;
+	std::vector<std::unique_ptr<SourceMessageInfo>> items;
 };
 
 namespace globalCallback {
