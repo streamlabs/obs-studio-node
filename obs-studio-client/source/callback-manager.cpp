@@ -37,6 +37,7 @@ std::thread *globalCallback::worker_thread = nullptr;
 Napi::ThreadSafeFunction globalCallback::js_source_callback;
 Napi::ThreadSafeFunction globalCallback::js_transition_callback;
 Napi::ThreadSafeFunction globalCallback::js_volmeter_callback;
+Napi::ThreadSafeFunction globalCallback::js_source_message_callback;
 bool globalCallback::m_all_workers_stop = false;
 std::mutex globalCallback::mtx_volmeters;
 std::unordered_set<uint64_t> globalCallback::volmeters;
@@ -51,6 +52,9 @@ void globalCallback::Init(Napi::Env env, Napi::Object exports)
 
 	exports.Set(Napi::String::New(env, "RegisterVolmeterCallback"), Napi::Function::New(env, globalCallback::RegisterVolmeterCallback));
 	exports.Set(Napi::String::New(env, "RemoveVolmeterCallback"), Napi::Function::New(env, globalCallback::RemoveVolmeterCallback));
+
+	exports.Set(Napi::String::New(env, "RegisterSourceMessageCallback"), Napi::Function::New(env, globalCallback::RegisterSourceMessageCallback));
+	exports.Set(Napi::String::New(env, "RemoveSourceMessageCallback"), Napi::Function::New(env, globalCallback::RemoveSourceMessageCallback));
 }
 
 Napi::Value globalCallback::RegisterSourceCallback(const Napi::CallbackInfo &info)
@@ -100,6 +104,20 @@ Napi::Value globalCallback::RegisterVolmeterCallback(const Napi::CallbackInfo &i
 Napi::Value globalCallback::RemoveVolmeterCallback(const Napi::CallbackInfo &info)
 {
 	js_volmeter_callback.Release();
+	return info.Env().Undefined();
+}
+
+Napi::Value globalCallback::RegisterSourceMessageCallback(const Napi::CallbackInfo &info)
+{
+	Napi::Function async_callback = info[0].As<Napi::Function>();
+	js_source_message_callback = Napi::ThreadSafeFunction::New(info.Env(), async_callback, "SourceMessageCallback", 0, 1, [](Napi::Env) {});
+
+	return Napi::Boolean::New(info.Env(), true);
+}
+
+Napi::Value globalCallback::RemoveSourceMessageCallback(const Napi::CallbackInfo &info)
+{
+	js_source_message_callback.Release();
 	return info.Env().Undefined();
 }
 
@@ -210,6 +228,22 @@ void globalCallback::worker()
 		delete dataArray;
 	};
 
+	auto source_message_callback = [](Napi::Env env, Napi::Function jsCallback, SourceMessageInfoData *data) {
+		try {
+			Napi::Array result = Napi::Array::New(env, data->items.size());
+
+			for (size_t i = 0; i < data->items.size(); i++) {
+				Napi::Object obj = Napi::Object::New(env);
+				obj.Set("sourceName", Napi::String::New(env, data->items[i]->source_name));
+				obj.Set("message", Napi::String::New(env, data->items[i]->message));
+				result.Set(static_cast<uint32_t>(i), obj);
+			}
+			jsCallback.Call({result});
+		} catch (...) {
+		}
+		delete data;
+	};
+
 	size_t totalSleepMS = 0;
 
 	while (!worker_stop && !m_all_workers_stop) {
@@ -285,6 +319,30 @@ void globalCallback::worker()
 				}
 			}
 
+			const auto messagesSize = response[index++].value_union.ui32;
+			if (messagesSize) {
+				SourceMessageInfoData *data = new SourceMessageInfoData{{}};
+				for (uint32_t i = 0; i < messagesSize; i++) {
+					SourceMessageInfo *item = new SourceMessageInfo;
+
+					item->source_name = response[index++].value_str;
+					item->message = response[index++].value_str;
+
+					data->items.emplace_back(item);
+				}
+
+				if (data->items.size() > 0) {
+					if (js_source_message_callback) {
+						napi_status status = js_source_message_callback.NonBlockingCall(data, source_message_callback);
+						if (status != napi_ok) {
+							delete data;
+						}
+					} else {
+						delete data;
+					}
+				}
+			}
+
 			auto volmeterDataArray = new VolmeterDataArray;
 			while (volmeters_size--) {
 				VolmeterData *item = new VolmeterData{{}, {}, {}};
@@ -324,7 +382,7 @@ void globalCallback::worker()
 	do_sleep:
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		totalSleepMS = sleepIntervalMS - dur.count();
+		totalSleepMS = std::max(0, static_cast<int>(sleepIntervalMS - dur.count()));
 		if (totalSleepMS > 0)
 			std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
 	}
