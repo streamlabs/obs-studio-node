@@ -624,7 +624,7 @@ describe(testName, () => {
         recording.quality = ERecordingQuality.HighQuality;
         recording.video  = obs.defaultVideoContext;
         recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-browser-rec', );
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-browser-rec-1");
         recording.overwrite = true;
         recording.noSpace   = false;
         recording.signalHandler = (sig) => obs.signals.push(sig);
