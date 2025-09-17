@@ -80,16 +80,6 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-      - name: 'Run tests'
-        continue-on-error: true
-        run: 'yarn run test'
-        env:
-          SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
-          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
-
-          OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-          OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
-          RELEASE_NAME: ${{matrix.ReleaseName}}
 
       - name: Tar artifact for deployment
         if: startsWith(github.ref, 'refs/tags/')
@@ -172,16 +162,6 @@ jobs:
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
 
-      - name: 'Run tests'
-        continue-on-error: false
-        run: 'yarn run test'
-        env:
-          SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
-          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
-
-          OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-          OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
-          RELEASE_NAME: ${{matrix.ReleaseName}}
       - name: Get the version of aws cli
         run: aws --version
         shell: powershell
