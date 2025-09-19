@@ -1169,23 +1169,26 @@ static const char *translate_macvth264_encoder(std::string encoder)
 }
 #endif
 
-static bool isOldJimNvencEncoder(const std::string& encoderId) {
-	return encoderId == ENCODER_JIM_NVENC ||
-			encoderId == ENCODER_JIM_HEVC_NVENC ||
-			encoderId == ENCODER_JIM_AV1_NVENC;
+static bool isOldJimNvencEncoder(const std::string &encoderId)
+{
+	return encoderId == ENCODER_JIM_NVENC || encoderId == ENCODER_JIM_HEVC_NVENC || encoderId == ENCODER_JIM_AV1_NVENC;
 }
 
 // This code should be removed when JIM_ encoders will be removed from OBS
-static void converOldJimNvencEncoder(config_t *config, const std::string& configSection, const std::string& streamEncoderSetting, const std::string& recordingEncoderSetting) {
+static void converOldJimNvencEncoder(config_t *config, const std::string &configSection, const std::string &streamEncoderSetting,
+				     const std::string &recordingEncoderSetting)
+{
 	const std::string streamEncoder = utility::GetSafeString(config_get_string(config, configSection.c_str(), streamEncoderSetting.c_str()));
 	if (isOldJimNvencEncoder(streamEncoder)) {
-		blog(LOG_INFO, "Converting stream encoder for mode '%s' from encoder '%s' to '%s'", configSection.c_str(), streamEncoder.c_str(), ENCODER_NVENC_H264_TEX);
+		blog(LOG_INFO, "Converting stream encoder for mode '%s' from encoder '%s' to '%s'", configSection.c_str(), streamEncoder.c_str(),
+		     ENCODER_NVENC_H264_TEX);
 		config_set_string(config, configSection.c_str(), streamEncoderSetting.c_str(), ENCODER_NVENC_H264_TEX);
 	}
 
 	const std::string recordingEncoder = utility::GetSafeString(config_get_string(config, configSection.c_str(), recordingEncoderSetting.c_str()));
 	if (isOldJimNvencEncoder(recordingEncoder)) {
-		blog(LOG_INFO, "Converting recording encoder for mode '%s' from encoder '%s' to '%s'", configSection.c_str(), recordingEncoder.c_str(), ENCODER_NVENC_H264_TEX);
+		blog(LOG_INFO, "Converting recording encoder for mode '%s' from encoder '%s' to '%s'", configSection.c_str(), recordingEncoder.c_str(),
+		     ENCODER_NVENC_H264_TEX);
 		config_set_string(config, configSection.c_str(), recordingEncoderSetting.c_str(), ENCODER_NVENC_H264_TEX);
 	}
 }
@@ -1248,7 +1251,8 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			entries.push_back(preset);
 			defaultPreset = "balanced";
 
-		} else if (encoder == SIMPLE_ENCODER_NVENC || encoder == ADVANCED_ENCODER_NVENC || encoder == ENCODER_NVENC_H264_TEX || encoder == ENCODER_NVENC_HEVC_TEX) {
+		} else if (encoder == SIMPLE_ENCODER_NVENC || encoder == ADVANCED_ENCODER_NVENC || encoder == ENCODER_NVENC_H264_TEX ||
+			   encoder == ENCODER_NVENC_HEVC_TEX) {
 			preset = createSettingEntry("NVENCPreset2", "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 
 			obs_properties_t *props = obs_get_encoder_properties("ffmpeg_nvenc");

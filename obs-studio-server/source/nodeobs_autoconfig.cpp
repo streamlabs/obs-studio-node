@@ -42,7 +42,7 @@ public:
 		description = a_description;
 		percentage = a_percentage;
 	};
-	~AutoConfigInfo(){};
+	~AutoConfigInfo() {};
 
 	std::string event;
 	std::string description;

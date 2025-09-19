@@ -466,7 +466,8 @@ obs_encoder_t *osn::ISimpleRecording::GetLegacyVideoEncoderSettings()
 		encIdOBS = ADVANCED_ENCODER_AMD;
 	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
 		encIdOBS = ADVANCED_ENCODER_NVENC;
-	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 || strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
+	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 ||
+		   strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
 		encIdOBS = ENCODER_NVENC_H264_TEX;
 	}
 

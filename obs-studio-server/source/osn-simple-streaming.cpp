@@ -443,7 +443,8 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
 	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
 		presetType = "NVENCPreset";
 		encIdOBS = "ffmpeg_nvenc";
-	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 || strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
+	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 ||
+		   strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
 		presetType = "NVENCPreset";
 		encIdOBS = "obs_nvenc_h264_tex";
 	} else {
