@@ -1262,6 +1262,7 @@ export interface ISource extends IConfigurable, IReleasable {
      */
     save(): void;
 
+    sendMessage(message: ISettings): void;
     /**
      * The validity of the source
      */

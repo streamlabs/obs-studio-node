@@ -4,9 +4,11 @@ import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler } from '../util/obs_handler'
+import { IInput, ISettings, ITimeSpec } from '../osn';
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
+import { randomUUID } from 'crypto';
 import path = require('path');
 
 const testName = 'osn-simple-recording';
@@ -431,4 +433,99 @@ describe(testName, () => {
 
         osn.SimpleRecordingFactory.destroy(recording);
     });
+
+    it('Create a browser source and test messages', async function () {
+        if (obs.skipSource(EOBSInputTypes.BrowserSource)) {
+            this.skip();
+        }
+        
+        let secondSceneName = 'scene_' + randomUUID();
+        const scene = osn.SceneFactory.create(secondSceneName);
+        osn.Global.setOutputSource(0, scene);
+
+        const media_path = path.join(path.normalize(__dirname), '..', 'media');
+        const browserSettings = {
+            url:    path.join( media_path, "obs_scene_log_browser.html" ),
+            local_file: path.join( media_path, "obs_scene_log_browser.html" ),
+            width:  1280,
+            height: 720,
+            fps:    30,
+            is_local_file: true,
+            webpage_control_level: 5,
+            shutdown:             false,
+            restart_when_active:  false,
+        };
+
+        const browserInput = osn.InputFactory.create(EOBSInputTypes.BrowserSource, 'browser-input-' + randomUUID(), browserSettings);
+
+        let settings: ISettings = {};
+        settings['message'] = "test message";
+
+        
+        const sceneItem1 = scene.add(browserInput);
+        sceneItem1.video = obs.defaultVideoContext;
+        sceneItem1.visible = true;
+
+        const recording = osn.SimpleRecordingFactory.create();
+        recording.path   = path.join(path.normalize(__dirname), '..', 'osnData');
+        recording.format = ERecordingFormat.MP4;
+        recording.quality = ERecordingQuality.HighQuality;
+        recording.video  = obs.defaultVideoContext;
+        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-browser-rec', );
+        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.overwrite = true;
+        recording.noSpace   = false;
+        recording.signalHandler = (sig) => obs.signals.push(sig);
+
+        obs.setSourceMessageListener();
+        recording.start();
+        let sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Start,);
+
+        if (sig.signal === EOBSOutputSignal.Stop) {
+            throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputDidNotStart,sig.code.toString(),sig.error,),);
+        }
+
+        settings['message'] = "First message";
+        browserInput.sendMessage(settings);
+
+        await sleep(1500);
+        settings['message'] = "Second message after timeout";
+        browserInput.sendMessage(settings);
+        
+        await sleep(1500);
+        settings['message'] = "Third message after timeout";
+        browserInput.sendMessage(settings);
+                
+        await sleep(1500);
+        sceneItem1.visible = false;
+        await sleep(1500);
+        sceneItem1.visible = true;
+
+        await sleep(1500);
+        recording.stop();
+        sig = await obs.getNextSignalInfo(EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+        expect(sig.signal).to.equal(EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Stop,);
+
+        if (sig.code !== 0) {
+            throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
+        }
+        expect(sig.signal).to.equal(EOBSOutputSignal.Stop,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
+
+        sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Wrote,);
+        if (sig.code !== 0) {
+            throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
+        }
+        expect(sig.signal).to.equal(EOBSOutputSignal.Wrote,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
+
+        osn.SimpleRecordingFactory.destroy(recording);
+        browserInput.release();
+        sceneItem1.source.release();
+        sceneItem1.remove();
+
+        scene.release();
+    });
+
+
 });

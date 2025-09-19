@@ -48,6 +48,15 @@ struct TransitionInfoData {
 	std::vector<std::unique_ptr<TransitionInfo>> items;
 };
 
+struct SourceMessageInfo {
+	std::string source_name;
+	std::string message;
+};
+
+struct SourceMessageInfoData {
+	std::vector<std::unique_ptr<SourceMessageInfo>> items;
+};
+
 namespace globalCallback {
 extern bool isWorkerRunning;
 extern bool worker_stop;
@@ -56,6 +65,7 @@ extern std::thread *worker_thread;
 extern Napi::ThreadSafeFunction js_source_callback;
 extern Napi::ThreadSafeFunction js_transition_callback;
 extern Napi::ThreadSafeFunction js_volmeter_callback;
+extern Napi::ThreadSafeFunction js_source_message_callback;
 extern bool m_all_workers_stop;
 
 extern std::mutex mtx_volmeters;
@@ -78,4 +88,7 @@ Napi::Value RemoveTransitionCallback(const Napi::CallbackInfo &info);
 
 Napi::Value RegisterVolmeterCallback(const Napi::CallbackInfo &info);
 Napi::Value RemoveVolmeterCallback(const Napi::CallbackInfo &info);
+
+Napi::Value RegisterSourceMessageCallback(const Napi::CallbackInfo &info);
+Napi::Value RemoveSourceMessageCallback(const Napi::CallbackInfo &info);
 }

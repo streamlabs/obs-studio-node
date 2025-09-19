@@ -1,0 +1,120 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Scene Change Log</title>
+    <style>
+        body {
+            background-color: transparent;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+            margin: 10px;
+        }
+        #log {
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="log"></div>
+    <script>
+        const logDiv = document.getElementById('log');
+
+        function addLogEntry(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.prepend(entry);
+            // Limit to 50 entries to prevent memory issues
+            while (logDiv.children.length > 50) {
+                logDiv.removeChild(logDiv.lastChild);
+            }
+        }
+
+        addLogEntry('Scene change log initialized');
+
+        window.addEventListener('messageFromApp', function(event) {
+            const detail = event.detail || {};
+            console.log('Message from app:', detail);
+            window.obsstudio.messageToApp("Sending message back to app: " + JSON.stringify(detail), "msg2");
+        });
+
+        window.obsstudio.getStatus(function (status) {
+            addLogEntry(`OBS Browser plugin status: ${status}`);
+        });
+        window.obsstudio.getCurrentScene(function(scene) {
+            addLogEntry(`Current scene: ${scene}`);
+        })
+        window.obsstudio.getControlLevel(function (level) {
+            addLogEntry(`Control level: ${level}`);
+        })
+        
+        addLogEntry(`Control level: ${window.obsstudio.controlLevel}`);
+        
+        setTimeout(() => {
+            addLogEntry(`Current scene at timeout `);
+
+            window.obsstudio.getCurrentScene(function(scene) {
+                addLogEntry(`Current scene: ${scene}`);
+                window.obsstudio.messageToApp("Browser source send message to app: Timer on " + JSON.stringify(scene), "msg3");
+            });
+        }, 1000);
+
+        // Optional: Log if obsstudio is available
+        if (window.obsstudio) {
+            addLogEntry(`OBS Browser plugin detected (v${window.obsstudio.pluginVersion})`);
+        } else {
+            addLogEntry('Warning: OBS Browser plugin not detected');
+        }
+    </script>
+</body>
+</html>

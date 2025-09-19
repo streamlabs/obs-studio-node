@@ -35,9 +35,9 @@
 #ifdef __APPLE__
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "util-crashmanager.h"
 #endif
 
+#include "util-crashmanager.h"
 #include <optional>
 
 std::string GetFormatExt(const std::string container);
@@ -1175,8 +1175,12 @@ void OBS_service::setupRecordingAudioEncoder(void)
 
 		AdvancedRecordingAudioEncodersID[i] = "";
 		if (!createAudioEncoder(&(AdvancedRecordingAudioTracks[i]), AdvancedRecordingAudioEncodersID[i], id, GetAdvancedAudioBitrate(i),
-					nameStream.str().c_str(), i))
+					nameStream.str().c_str(), i)) {
+			std::ostringstream errorStream;
+			errorStream << "audio encoder failed id: " << id << nameStream.str();
+			util::CrashManager::AddWarning(errorStream.str());
 			throw std::runtime_error("Failed to create audio encoder (advanced output)");
+		}
 		obs_encoder_set_audio(AdvancedRecordingAudioTracks[i], obs_get_audio());
 	}
 }
