@@ -1552,19 +1552,19 @@ const char *get_simple_output_encoder(const char *encoder)
 		return "h265_texture_amf";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
 		return "av1_texture_amf";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
-		return EncoderAvailable("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
+	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) {
+		return EncoderAvailable("obs_nvenc_h264_tex") ? "obs_nvenc_h264_tex" : "ffmpeg_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC) == 0) {
-		return EncoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
+		return EncoderAvailable("obs_nvenc_hevc_tex") ? "obs_nvenc_hevc_tex" : "ffmpeg_hevc_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1) == 0) {
-		return "jim_av1_nvenc";
+		return "obs_nvenc_av1_tex";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_H264) == 0) {
 		return "com.apple.videotoolbox.videoencoder.ave.avc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC) == 0) {
 		return "com.apple.videotoolbox.videoencoder.ave.hevc";
 	}
 
-	blog(LOG_WARNING, "get_simple_output_encoder - encoder %s is not found, creating default one", encoder);
+	blog(LOG_WARNING, "get_simple_output_encoder - encoder %s is not found, creating a default one", encoder);
 
 	return "obs_x264";
 }
@@ -1590,7 +1590,7 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 		updateVideoRecordingEncoderSettings();
 	} else {
 		const char *recordingEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
-		if (recordingEncoder && strcmp(recordingEncoder, ENCODER_NEW_NVENC) != 0) {
+		if (recordingEncoder && strcmp(recordingEncoder, ENCODER_NVENC_H264_TEX) != 0) {
 			unsigned int cx = 0;
 			unsigned int cy = 0;
 
@@ -2038,9 +2038,9 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 			} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ADVANCED_ENCODER_NVENC) == 0) {
 				presetType = "NVENCPreset";
 				encoderID = "ffmpeg_nvenc";
-			} else if (strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
+			} else if (strcmp(encoder, ENCODER_NVENC_H264_TEX) == 0) {
 				presetType = "NVENCPreset";
-				encoderID = "jim_nvenc";
+				encoderID = ENCODER_NVENC_H264_TEX;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
 				encoderID = APPLE_HARDWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
@@ -2110,7 +2110,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		obs_data_release(aacSettings);
 	} else {
 		const char *streamEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
-		if (streamEncoder && strcmp(streamEncoder, ENCODER_NEW_NVENC) != 0) {
+		if (streamEncoder && strcmp(streamEncoder, ENCODER_NVENC_H264_TEX) != 0) {
 			unsigned int cx = 0;
 			unsigned int cy = 0;
 
@@ -2576,7 +2576,7 @@ void OBS_service::updateVideoRecordingEncoderSettings()
 
 	} else if (videoEncoder.compare(SIMPLE_ENCODER_NVENC) == 0 || videoEncoder.compare(ADVANCED_ENCODER_NVENC) == 0) {
 		UpdateRecordingSettings_nvenc(crf);
-	} else if (videoEncoder.compare(ENCODER_NEW_NVENC) == 0) {
+	} else if (videoEncoder.compare(ENCODER_NVENC_H264_TEX) == 0) {
 		UpdateRecordingSettings_nvenc(crf);
 	} else if (videoEncoder.compare(SIMPLE_ENCODER_NVENC_HEVC) == 0) {
 		UpdateRecordingSettings_nvenc_hevc(crf);

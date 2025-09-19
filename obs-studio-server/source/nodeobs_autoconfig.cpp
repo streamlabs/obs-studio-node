@@ -26,7 +26,7 @@ enum class Type { Invalid, Streaming, Recording };
 
 enum class Service { Twitch, Hitbox, Beam, YouTube, Other };
 
-enum class Encoder { x264, NVENC, QSV, AMD, Stream, appleHW, appleHWM1 };
+enum class Encoder { x264, NVENC, QSV, AMD, Apple, Stream };
 
 enum class Quality { Stream, High };
 
@@ -73,10 +73,9 @@ std::string key;
 
 bool hardwareEncodingAvailable = false;
 bool nvencAvailable = false;
-bool jimnvencAvailable = false;
 bool qsvAvailable = false;
 bool vceAvailable = false;
-bool appleHWAvailable = false;
+bool appleAvailable = false;
 
 int startingBitrate = 4500;
 bool customServer = false;
@@ -157,18 +156,21 @@ void autoConfig::TestHardwareEncoding(void)
 	size_t idx = 0;
 	const char *id;
 	while (obs_enum_encoder_types(idx++, &id)) {
-		if (id == nullptr)
-			continue;
 		if (strcmp(id, "ffmpeg_nvenc") == 0)
 			hardwareEncodingAvailable = nvencAvailable = true;
-		if (strcmp(id, "jim_nvenc") == 0)
-			hardwareEncodingAvailable = jimnvencAvailable = true;
 		else if (strcmp(id, "obs_qsv11") == 0)
 			hardwareEncodingAvailable = qsvAvailable = true;
 		else if (strcmp(id, "h264_texture_amf") == 0)
 			hardwareEncodingAvailable = vceAvailable = true;
-		else if (strcmp(id, APPLE_HARDWARE_VIDEO_ENCODER) == 0 || strcmp(id, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0)
-			hardwareEncodingAvailable = appleHWAvailable = true;
+#ifdef __APPLE__
+		else if (strcmp(id, "com.apple.videotoolbox.videoencoder.ave.avc") == 0
+#ifndef __aarch64__
+			 && os_get_emulation_status() == true
+#endif
+		)
+			if (__builtin_available(macOS 13.0, *))
+				hardwareEncodingAvailable = appleAvailable = true;
+#endif
 	}
 }
 
@@ -1182,7 +1184,7 @@ void autoConfig::TestStreamEncoderThread()
 		FindIdealHardwareResolution();
 
 	if (!softwareTested) {
-		if (nvencAvailable || jimnvencAvailable)
+		if (nvencAvailable)
 			streamingEncoder = Encoder::NVENC;
 		else if (qsvAvailable)
 			streamingEncoder = Encoder::QSV;
@@ -1222,7 +1224,7 @@ void autoConfig::TestRecordingEncoderThread()
 	bool recordingOnly = type == Type::Recording;
 
 	if (hardwareEncodingAvailable) {
-		if (nvencAvailable || jimnvencAvailable)
+		if (nvencAvailable)
 			recordingEncoder = Encoder::NVENC;
 		else if (qsvAvailable)
 			recordingEncoder = Encoder::QSV;
@@ -1251,35 +1253,13 @@ inline const char *GetEncoderId(Encoder enc)
 {
 	switch (enc) {
 	case Encoder::NVENC:
-		return jimnvencAvailable ? "jim_nvenc" : "ffmpeg_nvenc";
-	case Encoder::QSV:
-		return "obs_qsv11";
-	case Encoder::AMD:
-		return "h264_texture_amf";
-	case Encoder::appleHW:
-		return APPLE_HARDWARE_VIDEO_ENCODER;
-	case Encoder::appleHWM1:
-		return APPLE_HARDWARE_VIDEO_ENCODER_M1;
-	case Encoder::x264:
-		return "obs_x264";
-	default:
-		return jimnvencAvailable ? "jim_nvenc" : "ffmpeg_nvenc";
-	}
-};
-
-inline const char *GetEncoderDisplayName(Encoder enc)
-{
-	switch (enc) {
-	case Encoder::NVENC:
 		return SIMPLE_ENCODER_NVENC;
 	case Encoder::QSV:
 		return SIMPLE_ENCODER_QSV;
 	case Encoder::AMD:
 		return SIMPLE_ENCODER_AMD;
-	case Encoder::appleHW:
-		return APPLE_HARDWARE_VIDEO_ENCODER;
-	case Encoder::appleHWM1:
-		return APPLE_HARDWARE_VIDEO_ENCODER_M1;
+	case Encoder::Apple:
+		return SIMPLE_ENCODER_APPLE_H264;
 	default:
 		return SIMPLE_ENCODER_X264;
 	}
@@ -1499,7 +1479,7 @@ void autoConfig::SaveStreamSettings()
 	/* ---------------------------------- */
 	/* save stream settings               */
 	config_set_int(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", idealBitrate);
-	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", GetEncoderDisplayName(streamingEncoder));
+	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", GetEncoderId(streamingEncoder));
 	config_remove_value(ConfigManager::getInstance().getBasic(), "SimpleOutput", "UseAdvanced");
 
 	config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
@@ -1516,7 +1496,7 @@ void autoConfig::SaveSettings()
 	eventsMutex.unlock();
 
 	if (recordingEncoder != Encoder::Stream)
-		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", GetEncoderDisplayName(recordingEncoder));
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", GetEncoderId(recordingEncoder));
 
 	const char *quality = recordingQuality == Quality::High ? "Small" : "Stream";
 

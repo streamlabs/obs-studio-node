@@ -443,9 +443,9 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
 	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
 		presetType = "NVENCPreset";
 		encIdOBS = "ffmpeg_nvenc";
-	} else if (strcmp(encId, ENCODER_NEW_NVENC) == 0) {
+	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 || strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
 		presetType = "NVENCPreset";
-		encIdOBS = "jim_nvenc";
+		encIdOBS = "obs_nvenc_h264_tex";
 	} else {
 		presetType = "Preset";
 		encIdOBS = "obs_x264";
@@ -552,9 +552,9 @@ void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder
 	} else if (strcmp(encIdOBS, "ffmpeg_nvenc") == 0) {
 		presetType = "NVENCPreset";
 		encId = SIMPLE_ENCODER_NVENC;
-	} else if (strcmp(encIdOBS, "jim_nvenc") == 0) {
+	} else if (strcmp(encIdOBS, "obs_nvenc_h264_tex") == 0) {
 		presetType = "NVENCPreset";
-		encId = ENCODER_NEW_NVENC;
+		encId = ENCODER_NVENC_H264_TEX;
 	} else {
 		presetType = "Preset";
 		encId = "obs_x264";

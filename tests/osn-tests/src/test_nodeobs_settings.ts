@@ -351,7 +351,7 @@ describe(testName, function() {
 
         // Getting advanced output settings container
         let settings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-        
+
         // Getting available encoders
         settings.find(category => {
             return category.nameSubCategory === 'Streaming';
@@ -473,7 +473,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, cbrOutputSettings);
 
@@ -1129,7 +1129,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, cbrOutputSettings);
 
@@ -1223,7 +1223,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with ABR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, abrOutputSettings);
 
@@ -1313,7 +1313,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with VBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, vbrOutputSettings);
 
@@ -1395,7 +1395,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CRF parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, crfOutputSettings);
 
@@ -1450,7 +1450,7 @@ describe(testName, function() {
                             expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
-                        // Streaming 
+                        // Streaming
                         case 'TrackIndex': {
                             parameter.currentValue = '4';
                             break;
@@ -1543,7 +1543,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, cbrOutputSettings);
 
@@ -1609,7 +1609,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with VBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, vbrOutputSettings);
 
@@ -1683,7 +1683,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CQP parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, cqpOutputSettings);
 
@@ -1741,7 +1741,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with Lossless parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, losslessOutputSettings);
 
@@ -1776,8 +1776,8 @@ describe(testName, function() {
             this.skip();
         } else {
             // Setting encoder to new NVENC
-            obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'jim_nvenc');
-            obs.setSetting(EOBSSettingsCategories.Output, 'RecEncoder', 'jim_nvenc');
+            obs.setSetting(EOBSSettingsCategories.Output, 'Encoder', 'obs_nvenc_h264_tex');
+            obs.setSetting(EOBSSettingsCategories.Output, 'RecEncoder', 'obs_nvenc_h264_tex');
 
             // Setting rate control to CBR
             obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'CBR');
@@ -1796,13 +1796,13 @@ describe(testName, function() {
                             expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
-                        // Streaming 
+                        // Streaming
                         case 'TrackIndex': {
                             parameter.currentValue = '2';
                             break;
                         }
                         case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'ApplyServiceSettings': {
@@ -1859,7 +1859,7 @@ describe(testName, function() {
                             break;
                         }
                         case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'RecMuxerCustom': {
@@ -1905,7 +1905,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, cbrOutputSettings);
 
@@ -1932,7 +1932,7 @@ describe(testName, function() {
                         }
                         // Streaming
                         case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'rate_control': {
@@ -1949,7 +1949,7 @@ describe(testName, function() {
                         }
                         // Recording
                         case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'Recrate_control': {
@@ -1967,7 +1967,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with VBR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, vbrOutputSettings);
 
@@ -1994,7 +1994,7 @@ describe(testName, function() {
                         }
                         // Streaming
                         case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'rate_control': {
@@ -2015,7 +2015,7 @@ describe(testName, function() {
                         }
                         // Recording
                         case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'Recrate_control': {
@@ -2037,7 +2037,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with CQP parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, cqpOutputSettings);
 
@@ -2064,7 +2064,7 @@ describe(testName, function() {
                         }
                         // Streaming
                         case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'rate_control': {
@@ -2077,7 +2077,7 @@ describe(testName, function() {
                         }
                         // Recording
                         case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('jim_nvenc', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            expect(parameter.currentValue).to.equal('obs_nvenc_h264_tex', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'Recrate_control': {
@@ -2091,7 +2091,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with Lossless parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, losslessOutputSettings);
 

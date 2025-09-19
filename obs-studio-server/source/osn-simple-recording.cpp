@@ -274,7 +274,7 @@ static void UpdateRecordingSettings_crf(enum osn::RecQuality quality, osn::Simpl
 	obs_data_t *settings = nullptr;
 	if (id.compare(SIMPLE_ENCODER_X264) == 0 || id.compare(ADVANCED_ENCODER_X264) == 0 || id.compare(SIMPLE_ENCODER_X264_LOWCPU) == 0) {
 		settings = UpdateRecordingSettings_x264_crf(CalcCRF(crf, recording->lowCPU), recording->lowCPU);
-	} else if (id.compare(SIMPLE_ENCODER_NVENC) == 0 || id.compare(ADVANCED_ENCODER_NVENC) == 0 || id.compare(ENCODER_NEW_NVENC) == 0) {
+	} else if (id.compare(SIMPLE_ENCODER_NVENC) == 0 || id.compare(ADVANCED_ENCODER_NVENC) == 0 || id.compare(ENCODER_NVENC_H264_TEX) == 0) {
 		settings = UpdateRecordingSettings_nvenc(CalcCRF(crf));
 	} else if (id.compare(SIMPLE_ENCODER_NVENC_HEVC) == 0) {
 		settings = UpdateRecordingSettings_nvenc_hevc(CalcCRF(crf));
@@ -457,17 +457,17 @@ obs_encoder_t *osn::ISimpleRecording::GetLegacyVideoEncoderSettings()
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
 	const char *encIdOBS = nullptr;
 	if (strcmp(encId, SIMPLE_ENCODER_X264) == 0 || strcmp(encId, ADVANCED_ENCODER_X264) == 0) {
-		encIdOBS = "obs_x264";
+		encIdOBS = ADVANCED_ENCODER_X264;
 	} else if (strcmp(encId, SIMPLE_ENCODER_X264_LOWCPU) == 0) {
-		encIdOBS = "obs_x264";
+		encIdOBS = ADVANCED_ENCODER_X264;
 	} else if (strcmp(encId, SIMPLE_ENCODER_QSV) == 0 || strcmp(encId, ADVANCED_ENCODER_QSV) == 0) {
-		encIdOBS = "obs_qsv11";
+		encIdOBS = ADVANCED_ENCODER_QSV;
 	} else if (strcmp(encId, SIMPLE_ENCODER_AMD) == 0 || strcmp(encId, ADVANCED_ENCODER_AMD) == 0) {
-		encIdOBS = "h264_texture_amf";
+		encIdOBS = ADVANCED_ENCODER_AMD;
 	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
-		encIdOBS = "ffmpeg_nvenc";
-	} else if (strcmp(encId, ENCODER_NEW_NVENC) == 0) {
-		encIdOBS = "jim_nvenc";
+		encIdOBS = ADVANCED_ENCODER_NVENC;
+	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 || strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
+		encIdOBS = ENCODER_NVENC_H264_TEX;
 	}
 
 	if (simpleQuality.compare("Stream") != 0) {
@@ -633,8 +633,6 @@ void osn::ISimpleRecording::SetLegacySettings(void *data, const int64_t id, cons
 			encId = SIMPLE_ENCODER_AMD;
 		} else if (strcmp(encIdOBS, "ffmpeg_nvenc") == 0) {
 			encId = SIMPLE_ENCODER_NVENC;
-		} else if (strcmp(encIdOBS, "jim_nvenc") == 0) {
-			encId = ENCODER_NEW_NVENC;
 		}
 
 		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", encId);
