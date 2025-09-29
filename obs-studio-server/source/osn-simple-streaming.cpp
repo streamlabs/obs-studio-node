@@ -277,7 +277,7 @@ void osn::SimpleStreaming::UpdateEncoders()
 	int aBitrate = static_cast<int>(obs_data_get_int(audioEncSettings, "bitrate"));
 
 	std::string id = obs_encoder_get_id(videoEncoder);
-	if (id.compare("h264_texture_amf") == 0)
+	if (id.compare(ADVANCED_ENCODER_AMD) == 0)
 		UpdateStreamingSettings_amd(videoEncSettings, vBitrate);
 
 	obs_data_set_string(videoEncSettings, "rate_control", "CBR");
@@ -436,20 +436,20 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
 	const char *presetType = nullptr;
 	if (strcmp(encId, SIMPLE_ENCODER_QSV) == 0 || strcmp(encId, ADVANCED_ENCODER_QSV) == 0) {
 		presetType = "QSVPreset";
-		encIdOBS = "obs_qsv11";
+		encIdOBS = ADVANCED_ENCODER_QSV;
 	} else if (strcmp(encId, SIMPLE_ENCODER_AMD) == 0 || strcmp(encId, ADVANCED_ENCODER_AMD) == 0) {
 		presetType = "AMDPreset";
-		encIdOBS = "h264_texture_amf";
+		encIdOBS = ADVANCED_ENCODER_AMD;
 	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
 		presetType = "NVENCPreset";
-		encIdOBS = "ffmpeg_nvenc";
+		encIdOBS = ADVANCED_ENCODER_NVENC;
 	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 ||
 		   strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
 		presetType = "NVENCPreset";
-		encIdOBS = "obs_nvenc_h264_tex";
+		encIdOBS = ENCODER_NVENC_H264_TEX;
 	} else {
 		presetType = "Preset";
-		encIdOBS = "obs_x264";
+		encIdOBS = ADVANCED_ENCODER_X264;
 	}
 	if (presetType)
 		preset = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType));
@@ -544,21 +544,21 @@ void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder
 
 	const char *preset = nullptr;
 	const char *presetType = nullptr;
-	if (strcmp(encIdOBS, "obs_qsv11") == 0) {
+	if (strcmp(encIdOBS, ADVANCED_ENCODER_QSV) == 0) {
 		presetType = "QSVPreset";
 		encId = SIMPLE_ENCODER_QSV;
-	} else if (strcmp(encIdOBS, "h264_texture_amf") == 0) {
+	} else if (strcmp(encIdOBS, ADVANCED_ENCODER_AMD) == 0) {
 		presetType = "AMDPreset";
 		encId = SIMPLE_ENCODER_AMD;
-	} else if (strcmp(encIdOBS, "ffmpeg_nvenc") == 0) {
+	} else if (strcmp(encIdOBS, ADVANCED_ENCODER_NVENC) == 0) {
 		presetType = "NVENCPreset";
 		encId = SIMPLE_ENCODER_NVENC;
-	} else if (strcmp(encIdOBS, "obs_nvenc_h264_tex") == 0) {
+	} else if (strcmp(encIdOBS, ENCODER_NVENC_H264_TEX) == 0) {
 		presetType = "NVENCPreset";
 		encId = ENCODER_NVENC_H264_TEX;
 	} else {
 		presetType = "Preset";
-		encId = "obs_x264";
+		encId = ADVANCED_ENCODER_X264;
 	}
 	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", encId);
 

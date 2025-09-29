@@ -1014,10 +1014,10 @@ static bool isNvencAvailableForSimpleMode()
 	// Only available if config already uses it
 	const char *current_stream_encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
 	const char *current_rec_encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder");
-	bool nvenc_used_streaming = (current_stream_encoder && strcmp(current_stream_encoder, "nvenc") == 0);
-	bool nvenc_used_recording = (current_rec_encoder && strcmp(current_rec_encoder, "nvenc") == 0);
+	bool nvenc_used_streaming = (current_stream_encoder && strcmp(current_stream_encoder, SIMPLE_ENCODER_NVENC) == 0);
+	bool nvenc_used_recording = (current_rec_encoder && strcmp(current_rec_encoder, SIMPLE_ENCODER_NVENC) == 0);
 
-	return (nvenc_used_streaming || nvenc_used_recording) && EncoderAvailable("ffmpeg_nvenc");
+	return (nvenc_used_streaming || nvenc_used_recording) && EncoderAvailable(ADVANCED_ENCODER_NVENC);
 }
 
 void OBS_settings::getAvailableAudioEncoders(std::vector<std::pair<std::string, ipc::value>> *encoders, bool simple, bool recording,
@@ -1047,42 +1047,45 @@ public:
 
 std::vector<EncoderSettings> encoders_set = {
 	// Software x264
-	{"Software (x264)", "obs_x264", "Software (x264)", "x264", "obs_x264", true, true, false, false, true, false},
+	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, true, true, false, false, true, false},
 	// Software x264 low CPU (only for recording)
-	{"", "", "Software (x264 low CPU usage preset, increases file size)", "x264_lowcpu", "obs_x264", true, false, false, false, true, false},
+	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, true, false, false, false,
+	 true, false},
 	// QuickSync H.264 (v1, deprecated)
 	// This line left here for reference
-	// {"QuickSync H.264 (v1 deprecated)", "obs_qsv11", "(Deprecated v1) Hardware (QSV, H.264)", "qsv", "obs_qsv11", true, true, true, false, true, false},
+	// {"QuickSync H.264 (v1 deprecated)", ADVANCED_ENCODER_QSV, "(Deprecated v1) Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, ADVANCED_ENCODER_QSV, true, true, true, false, true, false},
 	// QuickSync H.264 (v2, new)
-	{"QuickSync H.264", "obs_qsv11_v2", "Hardware (QSV, H.264)", "qsv", "obs_qsv11_v2", true, true, true, false, true, false},
+	{"QuickSync H.264", "obs_qsv11_v2", "Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, "obs_qsv11_v2", true, true, true, false, true, false},
 	// QuickSync AV1
 	{"QuickSync AV1", "obs_qsv11_av1", "", "", "", true, true, true, false, true, false},
 	// QuickSync HEVC
 	{"QuickSync HEVC", "obs_qsv11_hevc", "", "", "", true, true, true, false, true, false},
 	// NVIDIA NVENC H.264
-	{"NVIDIA NVENC H.264", "ffmpeg_nvenc", "NVIDIA NVENC H.264", "nvenc", "ffmpeg_nvenc", true, true, true, false, true, true},
+	{"NVIDIA NVENC H.264", ADVANCED_ENCODER_NVENC, "NVIDIA NVENC H.264", SIMPLE_ENCODER_NVENC, ADVANCED_ENCODER_NVENC, true, true, true, false, true, true},
 	// NVIDIA NVENC H.264 (new)
-	{"NVIDIA NVENC H.264 (new)", "obs_nvenc_h264_tex", "NVIDIA NVENC H.264 (new)", "obs_nvenc_h264_tex", "", true, true, true, false, true, false},
+	{"NVIDIA NVENC H.264 (new)", ENCODER_NVENC_H264_TEX, "NVIDIA NVENC H.264 (new)", ENCODER_NVENC_H264_TEX, "", true, true, true, false, true, false},
 	// NVIDIA NVENC HEVC
-	{"NVIDIA NVENC HEVC", "obs_nvenc_hevc_tex", "Hardware (NVENC, HEVC)", "nvenc_hevc", "obs_nvenc_hevc_tex", true, true, true, true, true, false},
+	{"NVIDIA NVENC HEVC", ENCODER_NVENC_HEVC_TEX, "Hardware (NVENC, HEVC)", SIMPLE_ENCODER_NVENC_HEVC, ENCODER_NVENC_HEVC_TEX, true, true, true, true, true,
+	 false},
 	// NVIDIA NVENC AV1
-	{"NVIDIA NVENC AV1", "obs_nvenc_av1_tex", "Hardware (NVENC, AV1)", "obs_nvenc_av1_tex", "", true, true, true, true, true, false},
+	{"NVIDIA NVENC AV1", ENCODER_NVENC_AV1_TEX, "Hardware (NVENC, AV1)", ENCODER_NVENC_AV1_TEX, "", true, true, true, true, true, false},
 	// Apple VT H264 Hardware Encoder
-	{"Apple VT H264 Hardware Encoder", "com.apple.videotoolbox.videoencoder.h264.gva", "Hardware (Apple, H.264)",
-	 "com.apple.videotoolbox.videoencoder.h264.gva", "", true, true, true, false, true, false},
+	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER, "", true, true, true, false,
+	 true, false},
 	// Apple VT H264 Hardware Encoder
-	{"Apple VT H264 Hardware Encoder", "com.apple.videotoolbox.videoencoder.ave.avc", "Hardware (Apple, H.264)",
-	 "com.apple.videotoolbox.videoencoder.ave.avc", "", true, true, true, false, true, false},
+	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_M1, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true, true,
+	 false, true, false},
 	// AMD HW H.264
-	{"AMD HW H.264", "h264_texture_amf", "Hardware (AMD, H.264)", "amd", "h264_texture_amf", true, true, true, false, true, false},
+	{"AMD HW H.264", ADVANCED_ENCODER_AMD, "Hardware (AMD, H.264)", SIMPLE_ENCODER_AMD, ADVANCED_ENCODER_AMD, true, true, true, false, true, false},
 	// AMD HW H.265 (HEVC)
-	{"AMD HW H.265 (HEVC)", "h265_texture_amf", "Hardware (AMD, HEVC)", "amd_hevc", "h265_texture_amf", true, true, true, true, true, false},
+	{"AMD HW H.265 (HEVC)", ADVANCED_ENCODER_AMD_HEVC, "Hardware (AMD, HEVC)", SIMPLE_ENCODER_AMD_HEVC, ADVANCED_ENCODER_AMD_HEVC, true, true, true, true,
+	 true, false},
 	// AMD HW AV1
-	{"AMD HW AV1", "amd_av1", "Hardware (AMD, AV1)", "av1", "amd_av1", true, true, true, true, true, false},
+	{"AMD HW AV1", SIMPLE_ENCODER_AMD_AV1, "Hardware (AMD, AV1)", "av1", SIMPLE_ENCODER_AMD_AV1, true, true, true, true, true, false},
 	// AOM AV1
-	{"AOM AV1", "ffmpeg_aom_av1", "", "", "", true, true, true, false, true, false},
+	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", true, true, true, false, true, false},
 	// SVT-AV1
-	{"SVT-AV1", "ffmpeg_svt_av1", "", "", "", true, true, true, false, true, false}};
+	{"SVT-AV1", ENCODER_AV1_SVT_FFMPEG, "", "", "", true, true, true, false, true, false}};
 
 void OBS_settings::getSimpleAvailableEncoders(std::vector<std::pair<std::string, ipc::value>> *list, bool recording, const std::string &container)
 {
@@ -1158,9 +1161,9 @@ std::string newValue;
 static const char *translate_macvth264_encoder(std::string encoder)
 {
 	if (strcmp(encoder.c_str(), "vt_h264_hw") == 0) {
-		newValue = "com.apple.videotoolbox.videoencoder.h264.gva";
+		newValue = APPLE_HARDWARE_VIDEO_ENCODER;
 	} else if (strcmp(encoder.c_str(), "vt_h264_sw") == 0) {
-		newValue = "obs_x264"; // fallback to x264 encoder because com.apple.videotoolbox.videoencoder.h264 is not functioning properly
+		newValue = ADVANCED_ENCODER_X264; // fallback to x264 encoder because com.apple.videotoolbox.videoencoder.h264 is not functioning properly
 	} else {
 		newValue = std::string(encoder);
 	}
@@ -1255,7 +1258,7 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			   encoder == ENCODER_NVENC_HEVC_TEX) {
 			preset = createSettingEntry("NVENCPreset2", "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 
-			obs_properties_t *props = obs_get_encoder_properties("ffmpeg_nvenc");
+			obs_properties_t *props = obs_get_encoder_properties(ADVANCED_ENCODER_NVENC);
 
 			obs_property_t *p = obs_properties_get(props, "preset2");
 			size_t num = obs_property_list_item_count(p);
@@ -1941,7 +1944,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	// Encoder settings
 	const char *encoderID = config_get_string(config, "AdvOut", "Encoder");
 	if (encoderID == NULL || OBS_service::isInvalidEncoder(encoderID)) {
-		encoderID = "obs_x264";
+		encoderID = ADVANCED_ENCODER_X264;
 		config_set_string(config, "AdvOut", "Encoder", encoderID);
 		config_save_safe(config, "tmp", nullptr);
 	}
@@ -4259,13 +4262,13 @@ const char *convert_nvenc_simple_preset(const char *old_preset)
 bool update_nvenc_presets(obs_data_t *data, const char *encoderId)
 {
 	bool modified = false;
-	if (astrcmpi(encoderId, "obs_nvenc_h264_tex") == 0 || astrcmpi(encoderId, "ffmpeg_nvenc") == 0) {
+	if (astrcmpi(encoderId, ENCODER_NVENC_H264_TEX) == 0 || astrcmpi(encoderId, ADVANCED_ENCODER_NVENC) == 0) {
 		if (obs_data_has_user_value(data, "preset") && !obs_data_has_user_value(data, "preset2")) {
 			convert_nvenc_h264_presets(data);
 
 			modified = true;
 		}
-	} else if (astrcmpi(encoderId, "obs_nvenc_hevc_tex") == 0 || astrcmpi(encoderId, "ffmpeg_hevc_nvenc") == 0) {
+	} else if (astrcmpi(encoderId, ENCODER_NVENC_HEVC_TEX) == 0 || astrcmpi(encoderId, "ffmpeg_hevc_nvenc") == 0) {
 
 		if (obs_data_has_user_value(data, "preset") && !obs_data_has_user_value(data, "preset2")) {
 			convert_nvenc_hevc_presets(data);

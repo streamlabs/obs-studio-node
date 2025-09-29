@@ -624,15 +624,15 @@ void osn::ISimpleRecording::SetLegacySettings(void *data, const int64_t id, cons
 	if (recording->videoEncoder) {
 		const char *encId = nullptr;
 		const char *encIdOBS = obs_encoder_get_id(recording->videoEncoder);
-		if (strcmp(encIdOBS, "obs_x264") == 0 && !recording->lowCPU) {
+		if (strcmp(encIdOBS, ADVANCED_ENCODER_X264) == 0 && !recording->lowCPU) {
 			encId = SIMPLE_ENCODER_X264;
-		} else if (strcmp(encIdOBS, "obs_x264") == 0 && recording->lowCPU) {
+		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_X264) == 0 && recording->lowCPU) {
 			encId = SIMPLE_ENCODER_X264_LOWCPU;
-		} else if (strcmp(encIdOBS, "obs_qsv11") == 0) {
+		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_QSV) == 0) {
 			encId = SIMPLE_ENCODER_QSV;
-		} else if (strcmp(encIdOBS, "h264_texture_amf") == 0) {
+		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_AMD) == 0) {
 			encId = SIMPLE_ENCODER_AMD;
-		} else if (strcmp(encIdOBS, "ffmpeg_nvenc") == 0) {
+		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_NVENC) == 0) {
 			encId = SIMPLE_ENCODER_NVENC;
 		}
 

@@ -42,7 +42,7 @@ public:
 		description = a_description;
 		percentage = a_percentage;
 	};
-	~AutoConfigInfo(){};
+	~AutoConfigInfo() {};
 
 	std::string event;
 	std::string description;
@@ -156,14 +156,14 @@ void autoConfig::TestHardwareEncoding(void)
 	size_t idx = 0;
 	const char *id;
 	while (obs_enum_encoder_types(idx++, &id)) {
-		if (strcmp(id, "ffmpeg_nvenc") == 0)
+		if (strcmp(id, ADVANCED_ENCODER_NVENC) == 0)
 			hardwareEncodingAvailable = nvencAvailable = true;
-		else if (strcmp(id, "obs_qsv11") == 0)
+		else if (strcmp(id, ADVANCED_ENCODER_QSV) == 0)
 			hardwareEncodingAvailable = qsvAvailable = true;
-		else if (strcmp(id, "h264_texture_amf") == 0)
+		else if (strcmp(id, ADVANCED_ENCODER_AMD) == 0)
 			hardwareEncodingAvailable = vceAvailable = true;
 #ifdef __APPLE__
-		else if (strcmp(id, "com.apple.videotoolbox.videoencoder.ave.avc") == 0
+		else if (strcmp(id, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0
 #ifndef __aarch64__
 			 && os_get_emulation_status() == true
 #endif
@@ -517,7 +517,7 @@ void autoConfig::TestBandwidthThread(void)
 
 	const char *serverType = "rtmp_common";
 
-	OBSEncoder vencoder = obs_video_encoder_create("obs_x264", "test_x264", nullptr, nullptr);
+	OBSEncoder vencoder = obs_video_encoder_create(ADVANCED_ENCODER_X264, "test_x264", nullptr, nullptr);
 	OBSEncoder aencoder = obs_audio_encoder_create("ffmpeg_aac", "test_aac", nullptr, 0, nullptr);
 	OBSService service = obs_service_create(serverType, "test_service", nullptr, nullptr);
 	OBSOutput output = obs_output_create("rtmp_output", "test_stream", nullptr, nullptr);
@@ -911,7 +911,7 @@ void autoConfig::FindIdealHardwareResolution()
 
 bool autoConfig::TestSoftwareEncoding()
 {
-	OBSEncoder vencoder = obs_video_encoder_create("obs_x264", "test_x264", nullptr, nullptr);
+	OBSEncoder vencoder = obs_video_encoder_create(ADVANCED_ENCODER_X264, "test_x264", nullptr, nullptr);
 	OBSEncoder aencoder = obs_audio_encoder_create("ffmpeg_aac", "test_aac", nullptr, 0, nullptr);
 	OBSOutput output = obs_output_create("null_output", "null", nullptr, nullptr);
 
