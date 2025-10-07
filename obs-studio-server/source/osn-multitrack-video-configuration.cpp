@@ -189,8 +189,11 @@ Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 			case StatusResult::Unknown:
 				throw std::runtime_error("Failed to start stream. The reason is unknown");
 			case StatusResult::Warning:
+				// Log and do nothing
+				blog(LOG_WARNING, ("Stream start warning. " + (status.html_en_us ? (" " + *status.html_en_us) : "")).c_str());
+				break;
 			case StatusResult::Error:
-				throw std::runtime_error("Failed to start stream." + (status.html_en_us ? (" " + *status.html_en_us) : ""));
+				throw std::runtime_error("Failed to start stream. " + (status.html_en_us ? (" " + *status.html_en_us) : ""));
 			default:
 			case StatusResult::Success:
 				// do nothing
