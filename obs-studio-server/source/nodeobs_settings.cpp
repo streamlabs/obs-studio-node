@@ -1811,9 +1811,8 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	std::string encoderCurrentValue = utility::GetSafeString(config_get_string(config, "AdvOut", "Encoder"));
 
 #ifdef __APPLE__
-	encoderCurrentValue = translate_macvth264_encoder(std::string(encoderCurrentValue));
-	config_set_string(config, "AdvOut", "Encoder", encoderCurrentValue);
-
+	encoderCurrentValue = translate_macvth264_encoder(encoderCurrentValue);
+	config_set_string(config, "AdvOut", "Encoder", encoderCurrentValue.c_str());
 #endif
 
 	videoEncoders.currentValue.resize(encoderCurrentValue.size());
