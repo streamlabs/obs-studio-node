@@ -16,12 +16,37 @@
 
 #pragma once
 
-#include "util-json.h"
+#include <string>
+#include <optional>
+#include <unordered_set>
 
 #include <obs.h>
 
-#include <string>
-#include <optional>
+#include <nlohmann/json.hpp>
+
+/*
+ * Support for (de-)serialising std::optional
+ * From https://github.com/nlohmann/json/issues/1749#issuecomment-1731266676
+ * whatsnew.hpp's version doesn't seem to work here
+ */
+template<typename T> struct nlohmann::adl_serializer<std::optional<T>> {
+	static void from_json(const json &j, std::optional<T> &opt)
+	{
+		if (j.is_null()) {
+			opt = std::nullopt;
+		} else {
+			opt = j.get<T>();
+		}
+	}
+	static void to_json(json &json, std::optional<T> t)
+	{
+		if (t) {
+			json = *t;
+		} else {
+			json = nullptr;
+		}
+	}
+};
 
 // As 'media_frames_per_second' is in a global namespace, this macro should also be there
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(media_frames_per_second, numerator, denominator)
@@ -34,6 +59,33 @@ NLOHMANN_JSON_SERIALIZE_ENUM(obs_scale_type, {
 						     {OBS_SCALE_LANCZOS, "OBS_SCALE_LANCZOS"},
 						     {OBS_SCALE_AREA, "OBS_SCALE_AREA"},
 					     })
+
+NLOHMANN_JSON_SERIALIZE_ENUM(video_colorspace, {
+						       {VIDEO_CS_DEFAULT, "VIDEO_CS_DEFAULT"},
+						       {VIDEO_CS_601, "VIDEO_CS_601"},
+						       {VIDEO_CS_709, "VIDEO_CS_709"},
+						       {VIDEO_CS_SRGB, "VIDEO_CS_SRGB"},
+						       {VIDEO_CS_2100_PQ, "VIDEO_CS_2100_PQ"},
+						       {VIDEO_CS_2100_HLG, "VIDEO_CS_2100_HLG"},
+					       })
+
+NLOHMANN_JSON_SERIALIZE_ENUM(video_format, {
+						   {VIDEO_FORMAT_NONE, "VIDEO_FORMAT_NONE"},
+						   {VIDEO_FORMAT_I420, "VIDEO_FORMAT_I420"},
+						   {VIDEO_FORMAT_NV12, "VIDEO_FORMAT_NV12"},
+						   {VIDEO_FORMAT_BGRA, "VIDEO_FORMAT_BGRA"},
+						   {VIDEO_FORMAT_I444, "VIDEO_FORMAT_I444"},
+						   {VIDEO_FORMAT_I010, "VIDEO_FORMAT_I010"},
+						   {VIDEO_FORMAT_P010, "VIDEO_FORMAT_P010"},
+						   {VIDEO_FORMAT_P216, "VIDEO_FORMAT_P216"},
+						   {VIDEO_FORMAT_P416, "VIDEO_FORMAT_P416"},
+					   })
+
+NLOHMANN_JSON_SERIALIZE_ENUM(video_range_type, {
+						       {VIDEO_RANGE_DEFAULT, "VIDEO_RANGE_DEFAULT"},
+						       {VIDEO_RANGE_PARTIAL, "VIDEO_RANGE_PARTIAL"},
+						       {VIDEO_RANGE_FULL, "VIDEO_RANGE_FULL"},
+					       })
 
 namespace osn {
 
@@ -54,7 +106,7 @@ NLOHMANN_JSON_SERIALIZE_ENUM(StatusResult, {
 struct Client {
 	std::string name = "obs-studio";
 	std::string version;
-	std::vector<std::string> supported_codecs;
+	std::unordered_set<std::string> supported_codecs;
 
 	NLOHMANN_DEFINE_TYPE_INTRUSIVE(Client, name, version, supported_codecs)
 };
@@ -103,7 +155,7 @@ struct System {
 	std::string name;
 	int build;
 	std::string release;
-	int revision;
+	std::string revision;
 	int bits;
 	bool arm;
 	bool armEmulation;
@@ -121,19 +173,32 @@ struct Capabilities {
 	NLOHMANN_DEFINE_TYPE_INTRUSIVE(Capabilities, cpu, memory, gaming_features, system, gpu)
 };
 
+struct Canvas {
+	uint32_t width;
+	uint32_t height;
+	uint32_t canvas_width;
+	uint32_t canvas_height;
+	media_frames_per_second framerate;
+
+	NLOHMANN_DEFINE_TYPE_INTRUSIVE(Canvas, width, height, canvas_width, canvas_height, framerate)
+};
+
 struct Preferences {
 	std::optional<uint64_t> maximum_aggregate_bitrate;
 	std::optional<uint32_t> maximum_video_tracks;
 	bool vod_track_audio;
-	uint32_t width;
-	uint32_t height;
-	media_frames_per_second framerate;
-	uint32_t canvas_width;
-	uint32_t canvas_height;
 	std::optional<uint32_t> composition_gpu_index;
+	uint32_t audio_samples_per_sec;
+	uint32_t audio_channels;
+	uint32_t audio_max_buffering_ms;
+	bool audio_fixed_buffering;
+	std::vector<Canvas> canvases;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE(Preferences, maximum_aggregate_bitrate, maximum_video_tracks, vod_track_audio, width, height, framerate, canvas_width,
-				       canvas_height, composition_gpu_index)
+	NLOHMANN_DEFINE_TYPE_INTRUSIVE(Preferences, maximum_aggregate_bitrate, maximum_video_tracks, vod_track_audio,
+
+				       composition_gpu_index, audio_samples_per_sec, audio_channels,
+
+				       audio_max_buffering_ms, audio_fixed_buffering, canvases)
 };
 
 struct PostData {
@@ -178,9 +243,14 @@ struct VideoEncoderConfiguration {
 	uint32_t height;
 	std::optional<media_frames_per_second> framerate;
 	std::optional<obs_scale_type> gpu_scale_type;
+	std::optional<video_colorspace> colorspace;
+	std::optional<video_range_type> range;
+	std::optional<video_format> format;
 	nlohmann::json settings;
+	uint32_t canvas_index;
 
-	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(VideoEncoderConfiguration, type, width, height, framerate, gpu_scale_type, settings)
+	NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(VideoEncoderConfiguration, type, width, height, framerate, gpu_scale_type, colorspace, range, format,
+						    settings, canvas_index)
 };
 
 struct AudioEncoderConfiguration {

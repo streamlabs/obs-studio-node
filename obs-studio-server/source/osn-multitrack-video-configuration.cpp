@@ -1,6 +1,8 @@
 #include "osn-multitrack-video-configuration.hpp"
 #include "osn-multitrack-video-system-info.hpp"
 
+#include "util-censor.h"
+
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
 
@@ -152,7 +154,7 @@ static bool GetRemoteFile(const char *url, std::string &str, std::string &error,
 Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 {
 	nlohmann::json post_data_json = post_data;
-	blog(LOG_INFO, "Go live POST data: %s", post_data_json.dump().c_str());
+	blog(LOG_INFO, "Go live POST data: %s", util::censoredJson(post_data_json).c_str());
 
 	if (url.empty()) {
 		throw std::runtime_error("Failed to start stream. Missing config URL");
@@ -175,11 +177,9 @@ Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 		throw std::runtime_error("Failed to start stream. Config request failed");
 	}
 
-	blog(LOG_INFO, "encodeConfigText: %s", encodeConfigText.c_str());
-
 	try {
 		auto data = nlohmann::json::parse(encodeConfigText);
-		blog(LOG_INFO, "Go live response data: %s", data.dump().c_str());
+		blog(LOG_INFO, "Go live response data: %s", util::censoredJson(data, true).c_str());
 		Config config = data;
 
 		if (config.status) {
@@ -189,8 +189,11 @@ Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 			case StatusResult::Unknown:
 				throw std::runtime_error("Failed to start stream. The reason is unknown");
 			case StatusResult::Warning:
+				// Log and do nothing
+				blog(LOG_WARNING, ("Stream start warning. " + (status.html_en_us ? (" " + *status.html_en_us) : "")).c_str());
+				break;
 			case StatusResult::Error:
-				throw std::runtime_error("Failed to start stream." + (status.html_en_us ? (" " + *status.html_en_us) : ""));
+				throw std::runtime_error("Failed to start stream. " + (status.html_en_us ? (" " + *status.html_en_us) : ""));
 			default:
 			case StatusResult::Success:
 				// do nothing
@@ -212,7 +215,6 @@ std::string MultitrackVideoAutoConfigURL(obs_service_t *service)
 {
 	OBSDataAutoRelease settings = obs_service_get_settings(service);
 	auto url = obs_data_get_string(settings, "multitrack_video_configuration_url");
-	blog(LOG_INFO, "Go live URL: %s", url);
 	return url;
 }
 
@@ -221,23 +223,15 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 {
 	PostData post_data{};
 	post_data.service = "IVS";
-	post_data.schema_version = "2024-06-04";
+	post_data.schema_version = "2025-01-25";
 	post_data.authentication = streamKey;
 
 	system_info(post_data.capabilities);
 
 	auto &client = post_data.client;
 
-	client.name = "obs-studio";
+	client.name = "streamlabs";
 	client.version = obs_get_version_string();
-
-	auto add_codec = [&](const char *codec) {
-		auto it = std::find(std::begin(client.supported_codecs), std::end(client.supported_codecs), codec);
-		if (it != std::end(client.supported_codecs))
-			return;
-
-		client.supported_codecs.push_back(codec);
-	};
 
 	const char *encoder_id = nullptr;
 	for (size_t i = 0; obs_enum_encoder_types(i, &encoder_id); i++) {
@@ -246,13 +240,11 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 			continue;
 
 		if (strcmp(codec, "h264") == 0) {
-			add_codec("h264");
-#ifdef ENABLE_HEVC
-		} else if (qstricmp(codec, "hevc")) {
-			add_codec("h265");
-#endif
-		} else if (strcmp(codec, "av1")) {
-			add_codec("av1");
+			client.supported_codecs.emplace("h264");
+		} else if (strcmp(codec, "hevc") == 0) {
+			client.supported_codecs.emplace("h265");
+		} else if (strcmp(codec, "av1") == 0) {
+			client.supported_codecs.emplace("av1");
 		}
 	}
 
@@ -260,22 +252,32 @@ PostData constructGoLivePost(std::string streamKey, const std::optional<uint64_t
 	preferences.vod_track_audio = vod_track_enabled;
 
 	obs_video_info ovi;
-	if (obs_get_video_info(&ovi)) {
-		preferences.width = ovi.output_width;
-		preferences.height = ovi.output_height;
-		preferences.framerate.numerator = ovi.fps_num;
-		preferences.framerate.denominator = ovi.fps_den;
-
-		preferences.canvas_width = ovi.base_width;
-		preferences.canvas_height = ovi.base_height;
-
+	if (obs_get_video_info(&ovi))
 		preferences.composition_gpu_index = ovi.adapter;
+
+	const size_t contexts = obs_get_video_info_count();
+	for (size_t i = 0; i < contexts; i++) {
+		if (obs_get_video_info_by_index(i, &ovi)) {
+			preferences.canvases.emplace_back(
+				Canvas{ovi.output_width, ovi.output_height, ovi.base_width, ovi.base_height, {ovi.fps_num, ovi.fps_den}});
+		}
+	}
+
+	obs_audio_info2 oai2;
+	if (obs_get_audio_info2(&oai2)) {
+		preferences.audio_samples_per_sec = oai2.samples_per_sec;
+		preferences.audio_channels = get_audio_channels(oai2.speakers);
+		preferences.audio_fixed_buffering = oai2.fixed_buffering;
+		preferences.audio_max_buffering_ms = oai2.max_buffering_ms;
 	}
 
 	if (maximum_aggregate_bitrate.has_value())
 		preferences.maximum_aggregate_bitrate = maximum_aggregate_bitrate.value();
-	if (maximum_video_tracks.has_value())
-		preferences.maximum_video_tracks = maximum_video_tracks.value();
+
+	if (maximum_video_tracks.has_value()) {
+		/* Cap to maximum supported number of output encoders. */
+		preferences.maximum_video_tracks = std::min(maximum_video_tracks.value(), static_cast<uint32_t>(MAX_OUTPUT_VIDEO_ENCODERS));
+	}
 
 	return post_data;
 }

@@ -375,14 +375,15 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/util-memory.cpp"
     "${PROJECT_SOURCE_DIR}/source/util-memory.h"
 
-    ###### json utlities ######
-    "${PROJECT_SOURCE_DIR}/source/util-json.h"
-
     ###### crash-manager ######
     "${PROJECT_SOURCE_DIR}/source/util-crashmanager.cpp"
     "${PROJECT_SOURCE_DIR}/source/util-crashmanager.h"
     "${PROJECT_SOURCE_DIR}/source/util-metricsprovider.cpp"
     "${PROJECT_SOURCE_DIR}/source/util-metricsprovider.h"
+
+    ###### miscellaneous utils ######
+    "${PROJECT_SOURCE_DIR}/source/util-censor.cpp"
+    "${PROJECT_SOURCE_DIR}/source/util-censor.h"
 
     ###### callback-manager ######
     "${PROJECT_SOURCE_DIR}/source/callback-manager.cpp"
