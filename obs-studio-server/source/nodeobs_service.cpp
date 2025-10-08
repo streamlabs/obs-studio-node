@@ -819,7 +819,7 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 	}
 
 	if (encoderId == NULL || !EncoderAvailable(encoderId) || isInvalidEncoder(encoderId)) {
-		encoderId = "obs_x264";
+		encoderId = ADVANCED_ENCODER_X264;
 	}
 
 	std::string encoder_name = GetVideoEncoderName(serviceId, isSimpleMode, false, encoderId);
@@ -1022,8 +1022,8 @@ static void remove_reserved_file_characters(std::string &s)
 
 bool OBS_service::createVideoRecordingEncoder()
 {
-	std::string encoderName = GetVideoEncoderName(StreamServiceId::Main, true, true, "obs_x264");
-	obs_encoder_t *newRecordingEncoder = obs_video_encoder_create("obs_x264", encoderName.c_str(), nullptr, nullptr);
+	std::string encoderName = GetVideoEncoderName(StreamServiceId::Main, true, true, ADVANCED_ENCODER_X264);
+	obs_encoder_t *newRecordingEncoder = obs_video_encoder_create(ADVANCED_ENCODER_X264, encoderName.c_str(), nullptr, nullptr);
 	OBS_service::setRecordingEncoder(newRecordingEncoder);
 
 	if (newRecordingEncoder == nullptr) {
@@ -1543,34 +1543,34 @@ void OBS_service::LoadRecordingPreset_Lossy(const char *encoderId)
 const char *get_simple_output_encoder(const char *encoder)
 {
 	if (strcmp(encoder, SIMPLE_ENCODER_X264) == 0) {
-		return "obs_x264";
+		return ADVANCED_ENCODER_X264;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU) == 0) {
-		return "obs_x264";
+		return ADVANCED_ENCODER_X264;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_QSV) == 0) {
 		return "obs_qsv11_v2";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_QSV_AV1) == 0) {
 		return "obs_qsv11_av1";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD) == 0) {
-		return "h264_texture_amf";
+		return ADVANCED_ENCODER_AMD;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_HEVC) == 0) {
-		return "h265_texture_amf";
+		return ADVANCED_ENCODER_AMD_HEVC;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
 		return "av1_texture_amf";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
-		return EncoderAvailable("jim_nvenc") ? "jim_nvenc" : "ffmpeg_nvenc";
+	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) {
+		return EncoderAvailable(ENCODER_NVENC_H264_TEX) ? ENCODER_NVENC_H264_TEX : ADVANCED_ENCODER_NVENC;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC) == 0) {
-		return EncoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
+		return EncoderAvailable(ENCODER_NVENC_HEVC_TEX) ? ENCODER_NVENC_HEVC_TEX : "ffmpeg_hevc_nvenc";
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1) == 0) {
-		return "jim_av1_nvenc";
+		return ENCODER_NVENC_AV1_TEX;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_H264) == 0) {
-		return "com.apple.videotoolbox.videoencoder.ave.avc";
+		return APPLE_HARDWARE_VIDEO_ENCODER_M1;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC) == 0) {
 		return "com.apple.videotoolbox.videoencoder.ave.hevc";
 	}
 
-	blog(LOG_WARNING, "get_simple_output_encoder - encoder %s is not found, creating default one", encoder);
+	blog(LOG_WARNING, "get_simple_output_encoder - encoder %s is not found, creating a default one", encoder);
 
-	return "obs_x264";
+	return ADVANCED_ENCODER_X264;
 }
 
 void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
@@ -1594,7 +1594,7 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 		updateVideoRecordingEncoderSettings();
 	} else {
 		const char *recordingEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
-		if (recordingEncoder && strcmp(recordingEncoder, ENCODER_NEW_NVENC) != 0) {
+		if (recordingEncoder && strcmp(recordingEncoder, ENCODER_NVENC_H264_TEX) != 0) {
 			unsigned int cx = 0;
 			unsigned int cy = 0;
 
@@ -2034,24 +2034,24 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		if (encoder != NULL) {
 			if (strcmp(encoder, SIMPLE_ENCODER_QSV) == 0 || strcmp(encoder, ADVANCED_ENCODER_QSV) == 0) {
 				presetType = "QSVPreset";
-				encoderID = "obs_qsv11";
+				encoderID = ADVANCED_ENCODER_QSV;
 			} else if (strcmp(encoder, SIMPLE_ENCODER_AMD) == 0 || strcmp(encoder, ADVANCED_ENCODER_AMD) == 0) {
 				presetType = "AMDPreset";
 				UpdateStreamingSettings_amd(h264Settings, videoBitrate);
-				encoderID = "h264_texture_amf";
+				encoderID = ADVANCED_ENCODER_AMD;
 			} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ADVANCED_ENCODER_NVENC) == 0) {
 				presetType = "NVENCPreset";
-				encoderID = "ffmpeg_nvenc";
-			} else if (strcmp(encoder, ENCODER_NEW_NVENC) == 0) {
+				encoderID = ADVANCED_ENCODER_NVENC;
+			} else if (strcmp(encoder, ENCODER_NVENC_H264_TEX) == 0) {
 				presetType = "NVENCPreset";
-				encoderID = "jim_nvenc";
+				encoderID = ENCODER_NVENC_H264_TEX;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
 				encoderID = APPLE_HARDWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
 				encoderID = APPLE_HARDWARE_VIDEO_ENCODER_M1;
 			} else {
 				presetType = "Preset";
-				encoderID = "obs_x264";
+				encoderID = ADVANCED_ENCODER_X264;
 			}
 			if (presetType)
 				preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType);
@@ -2114,7 +2114,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		obs_data_release(aacSettings);
 	} else {
 		const char *streamEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
-		if (streamEncoder && strcmp(streamEncoder, ENCODER_NEW_NVENC) != 0) {
+		if (streamEncoder && strcmp(streamEncoder, ENCODER_NVENC_H264_TEX) != 0) {
 			unsigned int cx = 0;
 			unsigned int cy = 0;
 
@@ -2580,7 +2580,7 @@ void OBS_service::updateVideoRecordingEncoderSettings()
 
 	} else if (videoEncoder.compare(SIMPLE_ENCODER_NVENC) == 0 || videoEncoder.compare(ADVANCED_ENCODER_NVENC) == 0) {
 		UpdateRecordingSettings_nvenc(crf);
-	} else if (videoEncoder.compare(ENCODER_NEW_NVENC) == 0) {
+	} else if (videoEncoder.compare(ENCODER_NVENC_H264_TEX) == 0) {
 		UpdateRecordingSettings_nvenc(crf);
 	} else if (videoEncoder.compare(SIMPLE_ENCODER_NVENC_HEVC) == 0) {
 		UpdateRecordingSettings_nvenc_hevc(crf);
@@ -3345,7 +3345,7 @@ bool OBS_service::isInvalidEncoder(const char *encoderID)
 {
 #if defined(__APPLE__)
 	// disable this encoder; not functioning properly
-	return strcmp(encoderID, "com.apple.videotoolbox.videoencoder.h264") == 0;
+	return strcmp(encoderID, APPLE_SOFTWARE_VIDEO_ENCODER) == 0;
 #else
 	return false;
 #endif
