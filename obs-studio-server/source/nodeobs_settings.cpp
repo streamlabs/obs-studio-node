@@ -3889,16 +3889,25 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 	}
 
 	auto dummy_source = obs_source_create(source_id, dummy_device_name, settings, nullptr);
-	if (!dummy_source)
+	if (!dummy_source) {
+		obs_data_release(settings);
 		return;
+	}
 
 	auto props = obs_source_properties(dummy_source);
-	if (!props)
+	if (!props) {
+		obs_source_release(dummy_source);
+		obs_data_release(settings);
 		return;
+	}
 
 	auto prop = obs_properties_get(props, property_name);
-	if (!prop)
+	if (!prop) {
+		obs_properties_destroy(props);
+		obs_source_release(dummy_source);
+		obs_data_release(settings);
 		return;
+	}
 
 	size_t items = obs_property_list_item_count(prop);
 	if (rval.size() > 1)
@@ -4098,7 +4107,7 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	rval.push_back(ipc::value((uint32_t)0));
 	enumVideoDevices(rval);
 #elif __APPLE__
-	const char *source_id = "av_capture_input";
+	const char *source_id = "macos_avcapture";
 	const char *property_name = "device";
 	getDevices(source_id, property_name, rval);
 #endif
