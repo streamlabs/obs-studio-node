@@ -4077,7 +4077,7 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	rval.push_back(ipc::value((uint32_t)0));
 	enumVideoDevices(rval);
 #elif __APPLE__
-	const char *source_id = "av_capture_input";
+	const char *source_id = "macos_avcapture";
 	const char *property_name = "device";
 	getDevices(source_id, property_name, rval);
 #endif
