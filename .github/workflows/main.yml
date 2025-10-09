@@ -117,7 +117,7 @@ jobs:
 
   win64:
     name: 'Windows 64-bit'
-    runs-on: windows-latest
+    runs-on: windows-2022
     strategy:
       matrix:
         ReleaseName: [release]
