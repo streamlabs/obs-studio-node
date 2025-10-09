@@ -3867,17 +3867,17 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 		return;
 
 	auto props = obs_source_properties(dummy_source);
-    if (!props) {
-        obs_source_release(dummy_source);
-        return;
-    }
+	if (!props) {
+		obs_source_release(dummy_source);
+		return;
+	}
 
 	auto prop = obs_properties_get(props, property_name);
-    if (!prop) {
-        obs_properties_destroy(props);
-        obs_source_release(dummy_source);
-        return;
-    }
+	if (!prop) {
+		obs_properties_destroy(props);
+		obs_source_release(dummy_source);
+		return;
+	}
 
 	size_t items = obs_property_list_item_count(prop);
 	if (rval.size() > 1)
