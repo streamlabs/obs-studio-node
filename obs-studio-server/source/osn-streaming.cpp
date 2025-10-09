@@ -91,6 +91,8 @@ void osn::IStreaming::SetVideoCanvas(void *data, const int64_t id, const std::ve
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
 	}
 
+	blog(LOG_INFO, "IStreaming::SetVideoCanvas - canvas: 0x%" PRIXPTR ", uid: %d", (uintptr_t)canvas, (int)args[1].value_union.ui64);
+
 	streaming->canvas = canvas;
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));

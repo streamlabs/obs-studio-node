@@ -49,6 +49,7 @@
 #elif __APPLE__
 #define SIMPLE_ENCODER_X264 "obs_x264"
 #endif
+#define SIMPLE_ENCODER_X264 "x264"
 #define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
 #define SIMPLE_ENCODER_QSV "qsv"
 #define SIMPLE_ENCODER_QSV_AV1 "qsv_av1"
@@ -67,9 +68,15 @@
 #define ADVANCED_ENCODER_AMD "h264_texture_amf"
 #define ADVANCED_ENCODER_AMD_HEVC "h265_texture_amf"
 
-#define ENCODER_NEW_NVENC "jim_nvenc"
-#define ENCODER_NEW_HEVC_NVENC "jim_hevc_nvenc"
-#define ENCODER_AV1_NVENC "jim_av1_nvenc"
+#define ENCODER_NVENC_H264_TEX "obs_nvenc_h264_tex"
+#define ENCODER_NVENC_HEVC_TEX "obs_nvenc_hevc_tex"
+#define ENCODER_NVENC_AV1_TEX "obs_nvenc_av1_tex"
+
+// These 3 are deprecated
+#define ENCODER_JIM_NVENC "jim_nvenc"
+#define ENCODER_JIM_HEVC_NVENC "jim_hevc_nvenc"
+#define ENCODER_JIM_AV1_NVENC "jim_av1_nvenc"
+
 #define ENCODER_AV1_SVT_FFMPEG "ffmpeg_svt_av1"
 #define ENCODER_AV1_AOM_FFMPEG "ffmpeg_aom_av1"
 
