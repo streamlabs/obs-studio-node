@@ -3889,15 +3889,15 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 	}
 
 	auto dummy_source = obs_source_create(source_id, dummy_device_name, settings, nullptr);
-    if (!dummy_source) {
-        obs_data_release(settings);
-        return;
-    }
+	if (!dummy_source) {
+		obs_data_release(settings);
+		return;
+	}
 
 	auto props = obs_source_properties(dummy_source);
 	if (!props) {
 		obs_source_release(dummy_source);
-        obs_data_release(settings);
+		obs_data_release(settings);
 		return;
 	}
 
@@ -3905,7 +3905,7 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 	if (!prop) {
 		obs_properties_destroy(props);
 		obs_source_release(dummy_source);
-        obs_data_release(settings);
+		obs_data_release(settings);
 		return;
 	}
 
