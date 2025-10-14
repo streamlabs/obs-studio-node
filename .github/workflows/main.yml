@@ -75,7 +75,6 @@ jobs:
         env:
           BUILD_CONFIG: ${{matrix.BuildConfig}}
           SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-          ARCHITECTURE: ${{matrix.Architecture}}
       - name: Put version into package.json
         if: startsWith(github.ref, 'refs/tags/')
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
@@ -91,7 +90,6 @@ jobs:
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
-          ARCHITECTURE: ${{matrix.Architecture}}
 
       - name: Tar artifact for deployment
         if: startsWith(github.ref, 'refs/tags/')
