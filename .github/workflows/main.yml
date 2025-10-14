@@ -28,10 +28,21 @@ env:
 jobs:
   macos64:
     name: 'macOS'
-    runs-on: macos-14
+    runs-on: ${{ matrix.image }}
     strategy:
       matrix:
-        target: [arm64, x86_64]
+        BuildReleases: [Release-x86_64, Release-arm64]
+        include:
+          - BuildReleases: Release-x86_64
+            image: macos-14
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
+          - BuildReleases: Release-arm64
+            image: macos-14
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: arm64
     env:
       OS_TAG: "osx"
     steps:
