@@ -61,6 +61,7 @@ describe(testName, () => {
                     file != 'Spout.dll' &&
                     file != 'SpoutDX.dll' &&
                     file != 'SpoutLibrary.dll' &&
+                    file != 'DirectML.dll' && 
                     file != 'mediasoup-connector.dll') { // Doesn't build in debug mode
                     // Opening module
                     console.log('Opening module: ' + file);
