@@ -337,9 +337,8 @@ void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::va
 
 	obs_data_t *sets = obs_data_create_from_json(args[1].value_str.c_str());
 
-    const char* unversioned_id = obs_source_get_unversioned_id(src);
-	if (strcmp(unversioned_id, "macos_avcapture") == 0
-        || strcmp(unversioned_id, "macos_avcapture_fast") == 0) {
+	const char *unversioned_id = obs_source_get_unversioned_id(src);
+	if (strcmp(unversioned_id, "macos_avcapture") == 0 || strcmp(unversioned_id, "macos_avcapture_fast") == 0) {
 		const char *frame_rate_string = obs_data_get_string(sets, "frame_rate");
 		if (frame_rate_string && strcmp(frame_rate_string, "") != 0) {
 			nlohmann::json fps = nlohmann::json::parse(frame_rate_string);
