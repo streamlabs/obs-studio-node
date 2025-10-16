@@ -3888,23 +3888,17 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 		obs_data_set_string(settings, "audio_device_id", dummy_device_name);
 	}
 
-	auto dummy_source = obs_source_create(source_id, dummy_device_name, settings, nullptr);
-	if (!dummy_source) {
-		obs_data_release(settings);
-		return;
-	}
-
-	auto props = obs_source_properties(dummy_source);
+	auto props = obs_get_source_properties(source_id);
 	if (!props) {
-		obs_source_release(dummy_source);
 		obs_data_release(settings);
+		blog(LOG_WARNING, "Could not get source properties for source id: %s", source_id);
 		return;
 	}
 
 	auto prop = obs_properties_get(props, property_name);
 	if (!prop) {
+		blog(LOG_WARNING, "Could not get the property [%s] for source id: %s", property_name, source_id);
 		obs_properties_destroy(props);
-		obs_source_release(dummy_source);
 		obs_data_release(settings);
 		return;
 	}
@@ -3930,7 +3924,6 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 
 	obs_properties_destroy(props);
 	obs_data_release(settings);
-	obs_source_release(dummy_source);
 }
 
 #ifdef WIN32
