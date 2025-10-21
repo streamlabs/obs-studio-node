@@ -13,7 +13,7 @@ on:
     branches: [ "staging" ]
 
 env:
-  InstallPath: "obs-studio-node"
+  InstallPath: "OSN.app"
   SLBUILDDIRECTORY: "streamlabs-build.app" # The .app extension is required to run macOS tests correctly.
   RELEASE_BUCKET: "obsstudionodes3.streamlabs.com"
   RuntimeURL: https://artifacts.electronjs.org/headers/dist

@@ -143,7 +143,7 @@ if(APPLE)
 install(CODE "
     file(GLOB_RECURSE DYLIB_FILES \"${libcurl_BINARY_DIR}/lib/*.dylib\")
     foreach(file \${DYLIB_FILES})
-        file(COPY \${file} DESTINATION \"${CMAKE_INSTALL_PREFIX}/bin\")
+        file(COPY \${file} DESTINATION \"${CMAKE_INSTALL_PREFIX}/OSN.app/Contents/bin\")
     endforeach()
 ")
 endif()

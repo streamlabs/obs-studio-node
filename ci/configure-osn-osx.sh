@@ -9,7 +9,7 @@ cd ..
 
 cmake .. \
 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
--DCMAKE_INSTALL_PREFIX=$PWD/../${SLFullDistributePath}/${InstallPath} \
+-DCMAKE_INSTALL_PREFIX=$PWD/../${SLFullDistributePath} \
 -DSTREAMLABS_BUILD=OFF \
 -DNODEJS_NAME=${RuntimeName} \
 -DNODEJS_URL=${RuntimeURL} \

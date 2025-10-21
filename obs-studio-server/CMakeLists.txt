@@ -10,6 +10,7 @@ ENDIF()
 if(WIN32)
     set(PROJECT_PRODUCT_NAME "OBS Studio for Node.JS (Server)")
     set(PROJECT_COPYRIGHT "Streamlabs © 2017 - 2018")
+    set(OSN_APP_DIR "./")
 
     configure_file(
         ${obs-studio-node_SOURCE_DIR}/cmake/version.rc.in
@@ -21,6 +22,7 @@ endif()
 
 if(APPLE)
     set(LIBOBS_PLATFORM "osx")
+    set(OSN_APP_DIR "OSN.app/Contents") # CEF will not spin up child helper processes unless it is contained within an app bundle
 endif()
 
 ############################
@@ -507,11 +509,11 @@ set(PROGRAM_PERMISSIONS_DEFAULT
 if (WIN32)
 	install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 ELSE()
-	install(TARGETS obs-studio-server RUNTIME DESTINATION "./bin" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
+	install(TARGETS obs-studio-server RUNTIME DESTINATION "${OSN_APP_DIR}/bin" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	set(_COMMAND
 		"${CMAKE_INSTALL_NAME_TOOL} \\
 		-change @rpath/libobs.framework/Versions/A/libobs @executable_path/../Frameworks/libobs.framework/Versions/A/libobs \\
-		\\\"\${CMAKE_INSTALL_PREFIX}/bin/obs64\\\""
+		\\\"\${CMAKE_INSTALL_PREFIX}/${OSN_APP_DIR}/bin/obs64\\\""
 	)
 	install(CODE "execute_process(COMMAND /bin/sh -c \"${_COMMAND}\")")
 ENDIF()
@@ -519,13 +521,14 @@ ENDIF()
 IF(WIN32 AND NOT CLANG_ANALYZE_CONFIG)
     install(FILES $<TARGET_PDB_FILE:obs-studio-server> DESTINATION "./" OPTIONAL)
 ENDIF()
-install(DIRECTORY ${PROJECT_DATA} DESTINATION "./" OPTIONAL USE_SOURCE_PERMISSIONS)
-install(DIRECTORY ${crashpad_SOURCE_DIR}/bin/ DESTINATION "./" USE_SOURCE_PERMISSIONS)
+
+install(DIRECTORY ${PROJECT_DATA} DESTINATION ${OSN_APP_DIR} OPTIONAL USE_SOURCE_PERMISSIONS)
+install(DIRECTORY ${crashpad_SOURCE_DIR}/bin/ DESTINATION ${OSN_APP_DIR} USE_SOURCE_PERMISSIONS)
 
 IF(WIN32)
 	install(DIRECTORY "${libobs_SOURCE_DIR}/data/" DESTINATION "./data" USE_SOURCE_PERMISSIONS)
 else ()
-	install(DIRECTORY "${libobs_SOURCE_DIR}/Frameworks/libobs.framework/Versions/A/Resources/" DESTINATION "./data/libobs" FILES_MATCHING PATTERN "*.effect" PATTERN "cmake" EXCLUDE)
+	install(DIRECTORY "${libobs_SOURCE_DIR}/Frameworks/libobs.framework/Versions/A/Resources/" DESTINATION "${OSN_APP_DIR}/data/libobs" FILES_MATCHING PATTERN "*.effect" PATTERN "cmake" EXCLUDE)
 endif()
 
 if (WIN32)
@@ -536,12 +539,12 @@ if (WIN32)
 else ()
 	install(
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
-		DESTINATION "./" USE_SOURCE_PERMISSIONS PATTERN "Qt*" EXCLUDE
+		DESTINATION "${OSN_APP_DIR}" USE_SOURCE_PERMISSIONS PATTERN "Qt*" EXCLUDE
 		PATTERN "Sparkle*" EXCLUDE
 	)
 	install(
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/MacOS/"
-		DESTINATION "./bin" USE_SOURCE_PERMISSIONS PATTERN "OBS" EXCLUDE
+		DESTINATION "${OSN_APP_DIR}/bin" USE_SOURCE_PERMISSIONS PATTERN "OBS" EXCLUDE
 	)
     # Install library files for unit tests & xcode
 	install(
@@ -559,13 +562,8 @@ install(
 else ()
 install(
 	DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/PlugIns"
-	DESTINATION "./" USE_SOURCE_PERMISSIONS PATTERN "frontend*" EXCLUDE
+	DESTINATION "${OSN_APP_DIR}" USE_SOURCE_PERMISSIONS PATTERN "frontend*" EXCLUDE
 )
-# Disable temporarily
-#install(
-#    DIRECTORY "${libobs_SOURCE_DIR}/data/obs-plugins/slobs-virtual-cam/"
-#    DESTINATION "./data/obs-plugins/slobs-virtual-cam" USE_SOURCE_PERMISSIONS
-#)
 endif()
 
 # This is required for macOS tests. Otherwise CEF will not be able to start child processes.
@@ -573,22 +571,22 @@ endif()
 if (APPLE)
     install(
         DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/Chromium Embedded Framework.framework"
-        DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
+        DESTINATION "../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
         DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper (GPU).app"
-        DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
+        DESTINATION "../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
         DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper (Plugin).app"
-        DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
+        DESTINATION "../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
         DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper (Renderer).app"
-        DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
+        DESTINATION "../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
     install(
         DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper.app"
-        DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
+        DESTINATION "../Contents/Frameworks" USE_SOURCE_PERMISSIONS
     )
 endif()

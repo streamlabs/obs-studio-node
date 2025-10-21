@@ -1895,7 +1895,7 @@ export const enum VCamOutputType {
 };
 
 // Initialization and other stuff which needs local data.
-const __dirnameApple = __dirname + '/bin';
+const __dirnameApple = __dirname + '/OSN.app/Contents/bin';
 if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(__dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'));
 }
