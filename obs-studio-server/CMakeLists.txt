@@ -564,6 +564,12 @@ install(
 	DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/PlugIns"
 	DESTINATION "${OSN_APP_DIR}" USE_SOURCE_PERMISSIONS PATTERN "frontend*" EXCLUDE
 )
+
+install(
+    FILES ${PROJECT_SOURCE_DIR}/OSN-ChildApp-Info.plist
+    DESTINATION ${OSN_APP_DIR}
+    RENAME "Info.plist"
+)
 endif()
 
 # This is required for macOS tests. Otherwise CEF will not be able to start child processes.
