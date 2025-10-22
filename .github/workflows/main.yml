@@ -219,7 +219,7 @@ jobs:
 
       - name: Tar artifact for deployment
         if: startsWith(github.ref, 'refs/tags/')
-        run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} ${{env.InstallPath}}
+        run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} .
         env:
           TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}
       - name: Configure AWS credentials
