@@ -345,7 +345,7 @@ void MemoryManager::unregisterSource(obs_source_t *source)
 			return;
 		}
 		std::unique_lock si_lock(it->second->mtx);
-		
+
 		// Moving pointer to have a valid object when proceeding with further deinit.
 		moved_ptr = std::move(it->second);
 		// Removing object from the collection early to be sure that it is unavailable anymore for outer clients
