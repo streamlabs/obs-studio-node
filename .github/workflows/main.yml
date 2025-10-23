@@ -26,8 +26,64 @@ env:
   PACKAGE_NAME: osn
 
 jobs:
-  macos64:
-    name: 'macOS'
+  build-macos:
+    name: 'Build macOS'
+    runs-on: ${{ matrix.image }}
+    strategy:
+      matrix:
+        BuildReleases: [Release-x86_64, Release-arm64]
+        include:
+          - BuildReleases: Release-x86_64
+            image: macos-15-intel
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
+          - BuildReleases: Release-arm64
+            image: macos-14
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: arm64
+    env:
+      OS_TAG: "osx"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
+        shell: bash
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18.x'
+      - name: Install dependencies
+        shell: bash
+        run: './ci/install-dependencies-osx.sh'
+      - name: 'Configure obs-studio-node'
+        shell: bash
+        run: './ci/configure-osn-osx.sh'
+        env:
+          BUILD_CONFIG: ${{matrix.BuildConfig}}
+          RELEASE_NAME: ${{matrix.ReleaseName}}
+          ARCHITECTURE: ${{matrix.Architecture}}
+          tagartifact: ${{ steps.get_version.outputs.VERSION }}
+      - name: 'Build obs-studio-node'
+        run: ./ci/build-osn-osx.sh
+        shell: bash
+        env:
+          BUILD_CONFIG: ${{matrix.BuildConfig}}
+          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
+      - name: Put version into package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
+        env:
+          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+
+  run-tests-macos:
+    name: 'Run macOS Tests'
+    needs: build-macos
     runs-on: ${{ matrix.image }}
     strategy:
       matrix:
@@ -81,16 +137,46 @@ jobs:
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
       - name: 'Run tests'
+        timeout-minutes: 30
         continue-on-error: true
         run: 'yarn run test'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
-
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
 
+  package-and-deploy-macos:
+    name: 'Package and Deploy macOS'
+    needs: run-tests-macos
+    if: ${{ needs.run-tests-macos.result == 'success' }}
+    runs-on: ${{ matrix.image }}
+    strategy:
+      matrix:
+        BuildReleases: [Release-x86_64, Release-arm64]
+        include:
+          - BuildReleases: Release-x86_64
+            image: macos-15-intel
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
+          - BuildReleases: Release-arm64
+            image: macos-14
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: arm64
+    env:
+      OS_TAG: "osx"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
+        shell: bash
       - name: Tar artifact for deployment
         if: startsWith(github.ref, 'refs/tags/')
         run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} ${{env.InstallPath}}
@@ -108,22 +194,46 @@ jobs:
         run: aws s3 cp ${{env.TARGET_ARTIFACT}}.tar.gz s3://${{env.RELEASE_BUCKET}} --acl public-read
         env:
           TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}-${{matrix.Architecture}}
-      - name: 'Upload debug files to Sentry'
-        if: startsWith(github.ref, 'refs/tags/')
-        run: 'python ./ci/sentry-osx.py'
-        env:
-           SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-           BUILDCONFIG: ${{matrix.BuildConfig}}
 
-  win64:
-    name: 'Windows 64-bit'
-    runs-on: windows-2022
+  upload-sentry-macos:
+    name: 'Upload Debug Files to Sentry macOS'
+    needs: run-tests-macos
+    if: ${{ needs.run-tests-macos.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ${{ matrix.image }}
     strategy:
       matrix:
-        ReleaseName: [release]
+        BuildReleases: [Release-x86_64, Release-arm64]
         include:
-        - ReleaseName: release
-          ReleaseConfig: RelWithDebInfo
+          - BuildReleases: Release-x86_64
+            image: macos-15-intel
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
+          - BuildReleases: Release-arm64
+            image: macos-14
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: arm64
+    env:
+      OS_TAG: "osx"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Get the version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
+        shell: bash
+      - name: 'Upload debug files to Sentry'
+        run: 'python ./ci/sentry-osx.py'
+        env:
+          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
+          BUILDCONFIG: ${{matrix.BuildConfig}}
+
+  build-win64:
+    name: 'Build Windows 64-bit'
+    runs-on: windows-2022
     env:
       OS_TAG: "win64"
     steps:
@@ -171,52 +281,74 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-
-      - name: 'Run tests'
-        continue-on-error: false
-        run: 'yarn run test'
-        env:
-          SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
-          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
-
-          OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
-          OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
-          RELEASE_NAME: ${{matrix.ReleaseName}}
-      - name: Get the version of aws cli
-        run: aws --version
-        shell: powershell
-      - name: Install specific version of AWS CLI
-        run: |
-          $version = "2.15.17"
-          $zipfile = "AWSCLIV2.zip"
-          Invoke-WebRequest -OutFile $zipfile "https://awscli.amazonaws.com/AWSCLIV2-$version.msi"
-          Start-Process msiexec.exe -Wait -ArgumentList "/i $zipfile /qn"
-          rm $zipfile
-        shell: pwsh
-      - name: Get the version of aws cli after install
-        run: aws --version
-        shell: powershell
-      - name: Fetch symsrv-scripts
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 2
-          repository: stream-labs/symsrv-scripts
-          path: symsrv-scripts
-      - name: Run symbol server scripts
-        if: startsWith(github.ref, 'refs/tags/')
-        run: ./symsrv-scripts/main.bat "${{ github.workspace }}/symsrv-scripts" ".\main.ps1 -pdbPaths '${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\lib-streamlabs-ipc,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-client,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-server' -localSourceDir '${{ github.workspace }}' -repo_userId 'stream-labs' -repo_name 'obs-studio-node' -repo_branch '${{ github.sha }}' -subModules 'lib-streamlabs-ipc,stream-labs,lib-streamlabs-ipc,streamlabs'"
-        env:
-          AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
-          AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
-        shell: powershell
-
       - name: 'Copy necessary dll files'
         run: ./ci/copy-files.cmd
       - name: 'Prepare tag artifact'
         if: startsWith(github.ref, 'refs/tags/')
         run: ./ci/prepare-artifact.cmd
 
+  run-tests-win64:
+    name: 'Run Windows Tests'
+    needs: build-win64
+    runs-on: windows-2022
+    env:
+      OS_TAG: "win64"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Get the version
+        id: get_version
+        run: |
+          $version = $env:GITHUB_REF -replace 'refs/tags/', ''
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        shell: pwsh
+      - name: Install dependencies
+        run: |
+          yarn install --immutable --immutable-cache --check-cache
+          yarn add electron@${{env.ElectronVersion}} -D
+      - name: Configure obs-studio-node
+        run: ./ci/configure-osn.cmd
+        env:
+          ReleaseName: ${{matrix.ReleaseName}}
+          tagartifact: ${{ steps.get_version.outputs.VERSION }}
+      - name: Build obs-studio-node
+        run: cmake --build ${{env.SLBUILDDIRECTORY}} --target install --config ${{matrix.ReleaseConfig}}
+      - name: Put version into package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
+        env:
+          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: 'Run tests'
+        timeout-minutes: 20
+        continue-on-error: false
+        run: 'yarn run test'
+        env:
+          SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
+          SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
+          OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
+          OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
+          RELEASE_NAME: ${{matrix.ReleaseName}}
+
+  package-and-deploy-win64:
+    name: 'Package and Deploy Windows'
+    needs: run-tests-win64
+    if: ${{ needs.run-tests-win64.result == 'success' }}
+    runs-on: windows-2022
+    env:
+      OS_TAG: "win64"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Get the version
+        id: get_version
+        run: |
+          $version = $env:GITHUB_REF -replace 'refs/tags/', ''
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        shell: pwsh
       - name: Tar artifact for deployment
         if: startsWith(github.ref, 'refs/tags/')
         run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} ${{env.InstallPath}}
@@ -234,3 +366,30 @@ jobs:
         run: aws s3 cp ${{env.TARGET_ARTIFACT}}.tar.gz s3://${{env.RELEASE_BUCKET}} --acl public-read
         env:
           TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-${{matrix.ReleaseName}}-${{env.OS_TAG}}
+
+  upload-symsrv-win64:
+    name: 'Upload Symbols to Symbol Server Windows'
+    needs: run-tests-win64
+    if: ${{ needs.run-tests-win64.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
+    runs-on: windows-2022
+    env:
+      OS_TAG: "win64"
+    steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+          repository: stream-labs/symsrv-scripts
+          path: symsrv-scripts
+      - name: Get the version
+        id: get_version
+        run: |
+          $version = $env:GITHUB_REF -replace 'refs/tags/', ''
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+        shell: pwsh
+      - name: Run symbol server scripts
+        run: ./symsrv-scripts/main.bat "${{ github.workspace }}/symsrv-scripts" ".\main.ps1 -pdbPaths '${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\lib-streamlabs-ipc,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-client,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-server' -localSourceDir '${{ github.workspace }}' -repo_userId 'stream-labs' -repo_name 'obs-studio-node' -repo_branch '${{ github.sha }}' -subModules 'lib-streamlabs-ipc,stream-labs,lib-streamlabs-ipc,streamlabs'"
+        env:
+          AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
+          AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
+        shell: powershell
