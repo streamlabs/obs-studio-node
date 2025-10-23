@@ -70,8 +70,8 @@ private:
 	void sourceManager(const std::string &sourceName);
 
 	// Data
-	std::mutex mtx;
-	std::map<std::string, std::unique_ptr<source_info>> sources;
+	std::mutex manager_mutex;
+	std::map<std::string, std::shared_ptr<source_info>> sources;
 	uint64_t available_memory;
 	uint64_t current_cached_size;
 	uint64_t allowed_cached_size;
