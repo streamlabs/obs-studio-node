@@ -18,6 +18,19 @@ Building on windows requires additional software:
 * [Visual Studio 2019 or 2022](https://visualstudio.microsoft.com/)
 * [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk) (may be installed by Visual Studio 2022 Installer)
 
+### Mac
+Building on mac requires Xcode.
+
+Example (this assumes desktop repo is also installed in same parent folder and attempts to build a test developer app bundle so you can see browser sources, etc):
+```
+yarn install
+git submodule update --init --recursive
+mkdir build
+cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=../desktop/node_modules/obs-studio-node/OSN.app/distribute/obs-studio-node -DCMAKE_OSX_ARCHITECTURES=arm64 -G Xcode
+cmake --build . --target install --config RelWithDebInfo
+```
+
 ### Example Build
 We use a flexible cmake script to be as broad and generic as possible in order to prevent the need to constantly manage the cmake script for custom uses, while also providing sane defaults. It follows a pretty standard cmake layout and you may execute it however you want.
 
