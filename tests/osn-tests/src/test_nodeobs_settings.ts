@@ -1046,7 +1046,7 @@ describe(testName, function() {
                             break;
                         }
                         case 'ApplyServiceSettings': {
-                            parameter.currentValue = true;
+                            parameter.currentValue = false;
                             break;
                         }
                         case 'rate_control': {
