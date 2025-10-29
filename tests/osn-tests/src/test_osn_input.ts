@@ -46,13 +46,13 @@ describe(testName, () => {
     it('Check list of input types', () => {
         // have to ignore vlc_source and mediasoupconnector as they are not available on CI
         const ignoreInputTypes = ["vlc_source", "mediasoupconnector"];
-        let expectedInputTypes = ["audio_line", "image_source", "color_source", "color_source_v2", "color_source_v3", "slideshow", "mediasoupconnector", "browser_source", "ffmpeg_source", "text_ft2_source", "text_ft2_source_v2", "vlc_source", "window_capture", "screen_capture", "slideshow_v2"];
+        let expectedInputTypes = ["audio_line", "image_source", "color_source", "color_source_v2", "color_source_v3", "slideshow", "mediasoupconnector", "browser_source", "ffmpeg_source", "text_ft2_source", "text_ft2_source_v2", "vlc_source", "window_capture", "slideshow_v2"];
 
         if (obs.os == 'darwin') {
-            let additionalDarwinTypes = ["macos-avcapture", "macos-avcapture-fast", "sck_audio_capture", "av_capture_input","av_capture_input_v2","display_capture","coreaudio_input_capture","coreaudio_output_capture"];
+            let additionalDarwinTypes = ["macos_avcapture", "macos_avcapture_fast", "mac_screen_capture", "sck_audio_capture", "av_capture_input","av_capture_input_v2","display_capture","coreaudio_input_capture","coreaudio_output_capture","ndi_source"];
             expectedInputTypes.push(...additionalDarwinTypes);
         } else if (obs.os == 'win32') {
-            let additionalWin32Types = [ "text_gdiplus", "text_gdiplus_v2", "text_gdiplus_v3", "monitor_capture", "game_capture", "dshow_input", "openvr_capture", "spout_capture", "wasapi_input_capture", "wasapi_output_capture", "wasapi_process_output_capture"];
+            let additionalWin32Types = [ "text_gdiplus", "text_gdiplus_v2", "text_gdiplus_v3", "monitor_capture", "game_capture", "dshow_input", "openvr_capture", "spout_capture", "wasapi_input_capture", "wasapi_output_capture", "wasapi_process_output_capture", "screen_capture",];
             expectedInputTypes.push(...additionalWin32Types);
         }
         let missingDiff = expectedInputTypes.filter(x => !obs.inputTypes.includes(x));
