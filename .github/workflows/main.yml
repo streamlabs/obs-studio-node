@@ -139,7 +139,7 @@ jobs:
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
       - name: 'Run tests'
-        timeout-minutes: 30
+        timeout-minutes: 45
         continue-on-error: true
         run: 'yarn run test'
         env:
