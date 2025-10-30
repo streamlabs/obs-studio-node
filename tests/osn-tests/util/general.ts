@@ -75,7 +75,7 @@ export function getCppErrorMsg(errorStack: any): string {
 export function deleteConfigFiles(): void {
     const fs = require('fs');
     const path = require('path');
-    const configFolderPath = path.join(path.normalize(__dirname), '..', 'osnData/slobs-client');
+    const configFolderPath = path.join(process.cwd(), 'osnData', 'slobs-client');
     console.log(`configFolderPath ${configFolderPath}`);
     let currentFile: string;
     try {
