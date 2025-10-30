@@ -76,23 +76,20 @@ export function deleteConfigFiles(): void {
     const fs = require('fs');
     const path = require('path');
     const configFolderPath = path.join(path.normalize(__dirname), '..', 'osnData/slobs-client');
-    let files;
     let currentFile: string;
-
-    try {
-        files = fs.readdirSync(configFolderPath);
-
-        files.forEach(file => {
-            if (file !== 'node-obs') {
-                currentFile = file;
+    let files = fs.readdirSync(configFolderPath);
+    files.forEach(file => {
+        if (file !== 'node-obs') {
+            currentFile = file;
+            try {
                 fs.unlinkSync(path.join(configFolderPath, file));
+            } catch(error) {
+                if (error.code === "EBUSY") {
+                    throw ('Error: the file ' + currentFile + ' or slobs-client folder is busy');
+                }
             }
-        });
-    } catch(error) {
-        if (error.code === "EBUSY") {
-            throw ('Error: the file ' + currentFile + ' or slobs-client folder is busy');
         }
-    }
+    });
 }
 
 export function getRandomValue(list: any) {

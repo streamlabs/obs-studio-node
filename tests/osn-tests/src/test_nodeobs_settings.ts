@@ -1136,273 +1136,275 @@ describe(testName, function() {
             // Checking settings were updated correctly
             const updatedCBROutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
             expect(cbrOutputSettings).to.eql(updatedCBROutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
-
-            // Setting rate control to ABR
-            obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'ABR');
-            obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'ABR');
-
-            // Setting use buff size
-            obs.setSetting(EOBSSettingsCategories.Output, 'use_bufsize', true);
-            obs.setSetting(EOBSSettingsCategories.Output, 'Recuse_bufsize', true);
-
-            // Setting recording format
-            obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'mp4');
-
-            // Getting advanced output settings container with ABR parameters
-            let abrOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-
-            abrOutputSettings.forEach(subCategory => {
-                subCategory.parameters.forEach(parameter => {
-                    switch(parameter.name) {
-                        case 'Mode': {
-                            expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        // Streaming
-                        case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'rate_control': {
-                            expect(parameter.currentValue).to.equal('ABR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'preset': {
-                            parameter.currentValue = 'superfast';
-                            break;
-                        }
-                        case 'profile': {
-                            parameter.currentValue = 'main';
-                            break;
-                        }
-                        case 'tune': {
-                            parameter.currentValue = 'animation';
-                            break;
-                        }
-                        case 'use_bufsize': {
-                            expect(parameter.currentValue).to.equal(true, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'buffer_size': {
-                            parameter.currentValue = 3500;
-                            break;
-                        }
-                        // Recording
-                        case 'RecFormat': {
-                            expect(parameter.currentValue).to.equal('mp4', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recrate_control': {
-                            expect(parameter.currentValue).to.equal('ABR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recpreset': {
-                            parameter.currentValue = 'veryslow';
-                            break;
-                        }
-                        case 'Recprofile': {
-                            parameter.currentValue = 'main';
-                            break;
-                        }
-                        case 'Rectune': {
-                            parameter.currentValue = 'fastdecode';
-                            break;
-                        }
-                        case 'Recuse_bufsize': {
-                            expect(parameter.currentValue).to.equal(true, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recbuffer_size': {
-                            parameter.currentValue = 1500;
-                            break;
-                        }
-                    }
-                });
-            });
-
-            // Setting advanced output settings container with ABR parameters
-            obs.setSettingsContainer(EOBSSettingsCategories.Output, abrOutputSettings);
-
-            // Checking if settings were updated correctly
-            const updatedABROutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-            expect(abrOutputSettings).to.eql(updatedABROutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
-
-            // Setting rate control to VBR
-            obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'VBR');
-            obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'VBR');
-
-            // Setting recording format
-            obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'mov');
-
-            // Getting advanced output settings container with VBR parameters
-            let vbrOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-
-            vbrOutputSettings.forEach(subCategory => {
-                subCategory.parameters.forEach(parameter => {
-                    switch(parameter.name) {
-                        case 'Mode': {
-                            expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        // Streaming
-                        case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'rate_control': {
-                            expect(parameter.currentValue).to.equal('VBR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'preset': {
-                            parameter.currentValue = 'veryfast';
-                            break;
-                        }
-                        case 'profile': {
-                            parameter.currentValue = 'high';
-                            break;
-                        }
-                        case 'tune': {
-                            parameter.currentValue = 'grain';
-                            break;
-                        }
-                        case 'crf': {
-                            parameter.currentValue = 26;
-                            break;
-                        }
-                        case 'keyint_sec': {
-                            parameter.currentValue = 2;
-                            break;
-                        }
-                        // Recording
-                        case 'RecFormat': {
-                            expect(parameter.currentValue).to.equal('mov', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recrate_control': {
-                            expect(parameter.currentValue).to.equal('VBR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recpreset': {
-                            parameter.currentValue = 'slower';
-                            break;
-                        }
-                        case 'Recprofile': {
-                            parameter.currentValue = 'baseline';
-                            break;
-                        }
-                        case 'Rectune': {
-                            parameter.currentValue = 'ssim';
-                            break;
-                        }
-                        case 'Reccrf': {
-                            parameter.currentValue = 18;
-                            break;
-                        }
-                        case 'Reckeyint_sec': {
-                            parameter.currentValue = 7;
-                            break;
-                        }
-                    }
-                });
-            });
-
-            // Setting advanced output settings container with VBR parameters
-            obs.setSettingsContainer(EOBSSettingsCategories.Output, vbrOutputSettings);
-
-            // Checking if settings were updated correctly
-            const updatedVBROutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-            expect(vbrOutputSettings).to.eql(updatedVBROutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
-
-            // Setting rate control to CRF
-            obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'CRF');
-            obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'CRF');
-
-            // Setting recording format
-            obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'mkv');
-
-            // Getting advanced output settings container with CRF parameters
-            let crfOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-
-            crfOutputSettings.forEach(subCategory => {
-                subCategory.parameters.forEach(parameter => {
-                    switch(parameter.name) {
-                        case 'Mode': {
-                            expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        // Streaming
-                        case 'Encoder': {
-                            expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'rate_control': {
-                            expect(parameter.currentValue).to.equal('CRF', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'preset': {
-                            parameter.currentValue = 'faster';
-                            break;
-                        }
-                        case 'tune': {
-                            parameter.currentValue = 'stillimage';
-                            break;
-                        }
-                        case 'crf': {
-                            parameter.currentValue = 8;
-                            break;
-                        }
-                        case 'keyint_sec': {
-                            parameter.currentValue = 6;
-                            break;
-                        }
-                        // Recording
-                        case 'RecFormat': {
-                            expect(parameter.currentValue).to.equal('mkv', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'RecEncoder': {
-                            expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recrate_control': {
-                            expect(parameter.currentValue).to.equal('CRF', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
-                            break;
-                        }
-                        case 'Recpreset': {
-                            parameter.currentValue = 'slow';
-                            break;
-                        }
-                        case 'Rectune': {
-                            parameter.currentValue = 'psnr';
-                            break;
-                        }
-                        case 'Reccrf': {
-                            parameter.currentValue = 11;
-                            break;
-                        }
-                        case 'Reckeyint_sec': {
-                            parameter.currentValue = 2;
-                            break;
-                        }
-                    }
-                });
-            });
-
-            // Setting advanced output settings container with CRF parameters
-            obs.setSettingsContainer(EOBSSettingsCategories.Output, crfOutputSettings);
-
-            // Checking if settings were updated correctly
-            const updatedCRFOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
-            expect(crfOutputSettings).to.eql(updatedCRFOutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
         }
+    });
+
+    it('Get and set ABR and CRF', function() {
+        // Setting rate control to ABR
+        obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'ABR');
+        obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'ABR');
+
+        // Setting use buff size
+        obs.setSetting(EOBSSettingsCategories.Output, 'use_bufsize', true);
+        obs.setSetting(EOBSSettingsCategories.Output, 'Recuse_bufsize', true);
+
+        // Setting recording format
+        obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'mp4');
+
+        // Getting advanced output settings container with ABR parameters
+        let abrOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
+
+        abrOutputSettings.forEach(subCategory => {
+            subCategory.parameters.forEach(parameter => {
+                switch(parameter.name) {
+                    case 'Mode': {
+                        expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    // Streaming
+                    case 'Encoder': {
+                        expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'rate_control': {
+                        expect(parameter.currentValue).to.equal('ABR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'preset': {
+                        parameter.currentValue = 'superfast';
+                        break;
+                    }
+                    case 'profile': {
+                        parameter.currentValue = 'main';
+                        break;
+                    }
+                    case 'tune': {
+                        parameter.currentValue = 'animation';
+                        break;
+                    }
+                    case 'use_bufsize': {
+                        expect(parameter.currentValue).to.equal(true, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'buffer_size': {
+                        parameter.currentValue = 3500;
+                        break;
+                    }
+                    // Recording
+                    case 'RecFormat': {
+                        expect(parameter.currentValue).to.equal('mp4', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'RecEncoder': {
+                        expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recrate_control': {
+                        expect(parameter.currentValue).to.equal('ABR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recpreset': {
+                        parameter.currentValue = 'veryslow';
+                        break;
+                    }
+                    case 'Recprofile': {
+                        parameter.currentValue = 'main';
+                        break;
+                    }
+                    case 'Rectune': {
+                        parameter.currentValue = 'fastdecode';
+                        break;
+                    }
+                    case 'Recuse_bufsize': {
+                        expect(parameter.currentValue).to.equal(true, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recbuffer_size': {
+                        parameter.currentValue = 1500;
+                        break;
+                    }
+                }
+            });
+        });
+        
+        // Setting advanced output settings container with ABR parameters
+        obs.setSettingsContainer(EOBSSettingsCategories.Output, abrOutputSettings);
+
+        // Checking if settings were updated correctly
+        const updatedABROutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
+        expect(abrOutputSettings).to.eql(updatedABROutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
+
+        // Setting rate control to VBR
+        obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'VBR');
+        obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'VBR');
+
+        // Setting recording format
+        obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'mov');
+
+        // Getting advanced output settings container with VBR parameters
+        let vbrOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
+
+        vbrOutputSettings.forEach(subCategory => {
+            subCategory.parameters.forEach(parameter => {
+                switch(parameter.name) {
+                    case 'Mode': {
+                        expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    // Streaming
+                    case 'Encoder': {
+                        expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'rate_control': {
+                        expect(parameter.currentValue).to.equal('VBR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'preset': {
+                        parameter.currentValue = 'veryfast';
+                        break;
+                    }
+                    case 'profile': {
+                        parameter.currentValue = 'high';
+                        break;
+                    }
+                    case 'tune': {
+                        parameter.currentValue = 'grain';
+                        break;
+                    }
+                    case 'crf': {
+                        parameter.currentValue = 26;
+                        break;
+                    }
+                    case 'keyint_sec': {
+                        parameter.currentValue = 2;
+                        break;
+                    }
+                    // Recording
+                    case 'RecFormat': {
+                        expect(parameter.currentValue).to.equal('mov', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'RecEncoder': {
+                        expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recrate_control': {
+                        expect(parameter.currentValue).to.equal('VBR', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recpreset': {
+                        parameter.currentValue = 'slower';
+                        break;
+                    }
+                    case 'Recprofile': {
+                        parameter.currentValue = 'baseline';
+                        break;
+                    }
+                    case 'Rectune': {
+                        parameter.currentValue = 'ssim';
+                        break;
+                    }
+                    case 'Reccrf': {
+                        parameter.currentValue = 18;
+                        break;
+                    }
+                    case 'Reckeyint_sec': {
+                        parameter.currentValue = 7;
+                        break;
+                    }
+                }
+            });
+        });
+
+        // Setting advanced output settings container with VBR parameters
+        obs.setSettingsContainer(EOBSSettingsCategories.Output, vbrOutputSettings);
+
+        // Checking if settings were updated correctly
+        const updatedVBROutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
+        expect(vbrOutputSettings).to.eql(updatedVBROutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
+
+        // Setting rate control to CRF
+        obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'CRF');
+        obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'CRF');
+
+        // Setting recording format
+        obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'mkv');
+
+        // Getting advanced output settings container with CRF parameters
+        let crfOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
+
+        crfOutputSettings.forEach(subCategory => {
+            subCategory.parameters.forEach(parameter => {
+                switch(parameter.name) {
+                    case 'Mode': {
+                        expect(parameter.currentValue).to.equal('Advanced', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    // Streaming
+                    case 'Encoder': {
+                        expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'rate_control': {
+                        expect(parameter.currentValue).to.equal('CRF', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'preset': {
+                        parameter.currentValue = 'faster';
+                        break;
+                    }
+                    case 'tune': {
+                        parameter.currentValue = 'stillimage';
+                        break;
+                    }
+                    case 'crf': {
+                        parameter.currentValue = 8;
+                        break;
+                    }
+                    case 'keyint_sec': {
+                        parameter.currentValue = 6;
+                        break;
+                    }
+                    // Recording
+                    case 'RecFormat': {
+                        expect(parameter.currentValue).to.equal('mkv', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'RecEncoder': {
+                        expect(parameter.currentValue).to.equal('obs_x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recrate_control': {
+                        expect(parameter.currentValue).to.equal('CRF', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        break;
+                    }
+                    case 'Recpreset': {
+                        parameter.currentValue = 'slow';
+                        break;
+                    }
+                    case 'Rectune': {
+                        parameter.currentValue = 'psnr';
+                        break;
+                    }
+                    case 'Reccrf': {
+                        parameter.currentValue = 11;
+                        break;
+                    }
+                    case 'Reckeyint_sec': {
+                        parameter.currentValue = 2;
+                        break;
+                    }
+                }
+            });
+        });
+
+        // Setting advanced output settings container with CRF parameters
+        obs.setSettingsContainer(EOBSSettingsCategories.Output, crfOutputSettings);
+
+        // Checking if settings were updated correctly
+        const updatedCRFOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
+        expect(crfOutputSettings).to.eql(updatedCRFOutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
     });
 
     it('Get and set NVENC encoder streaming and recording advanced output settings', function() {
