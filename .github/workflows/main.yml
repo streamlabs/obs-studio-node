@@ -351,11 +351,6 @@ jobs:
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: pwsh
-      - name: Tar artifact for deployment
-        if: startsWith(github.ref, 'refs/tags/')
-        run: tar -cvzf ${{env.TARGET_ARTIFACT}}.tar.gz -C ${{env.SLFullDistributePath}} ${{env.InstallPath}}
-        env:
-          TARGET_ARTIFACT: ${{env.PACKAGE_NAME}}-${{ steps.get_version.outputs.VERSION }}-release-${{env.OS_TAG}}
       - name: Configure AWS credentials
         if: startsWith(github.ref, 'refs/tags/')
         uses: aws-actions/configure-aws-credentials@v1
