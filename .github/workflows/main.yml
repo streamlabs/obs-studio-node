@@ -82,6 +82,12 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: Upload compiled artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            ${{env.SLFullDistributePath}}/${{env.InstallPath}}/
 
   run-tests-macos:
     name: 'Run macOS Tests'
@@ -119,25 +125,14 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: './ci/install-dependencies-osx.sh'
-      - name: 'Configure obs-studio-node'
-        shell: bash
-        run: './ci/configure-osn-osx.sh'
-        env:
-          BUILD_CONFIG: ${{matrix.BuildConfig}}
-          RELEASE_NAME: ${{matrix.ReleaseName}}
-          ARCHITECTURE: ${{matrix.Architecture}}
-          tagartifact: ${{ steps.get_version.outputs.VERSION }}
-      - name: 'Build obs-studio-node'
-        run: ./ci/build-osn-osx.sh
-        shell: bash
-        env:
-          BUILD_CONFIG: ${{matrix.BuildConfig}}
-          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-      - name: Put version into package.json
-        if: startsWith(github.ref, 'refs/tags/')
-        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
-        env:
-          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./  # extracts them into current directory
+      - run: |
+          echo "List of folders I unpacked/downloaded"
+          ls -R .
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
@@ -175,6 +170,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -322,6 +322,9 @@ jobs:
         with:
           name: build-artifacts
           path: ./  # extracts them into current directory
+      - run: |
+          echo "List of folders I unpacked/downloaded"
+          ls -R .
       - name: 'Run tests'
         timeout-minutes: 20
         continue-on-error: false
