@@ -75,7 +75,10 @@ export function getCppErrorMsg(errorStack: any): string {
 export function deleteConfigFiles(): void {
     const fs = require('fs');
     const path = require('path');
-    const configFolderPath = path.join(process.cwd(), 'osnData', 'slobs-client');
+    //const configFolderPath = path.join(process.cwd(), 'osnData', 'slobs-client');
+    const configFolderPath = path.join(path.normalize(__dirname), '..', 'osnData/slobs-client');
+
+    console.log('__dirname:', __dirname);
     console.log(`configFolderPath ${configFolderPath}`);
     let currentFile: string;
     try {
@@ -93,7 +96,7 @@ export function deleteConfigFiles(): void {
             }
         });
     } catch (error) {
-        console.error(`config error ${error}`);
+        console.error(`config ${__filename} ${error}`);
     }
 }
 
