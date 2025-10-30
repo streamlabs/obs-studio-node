@@ -288,6 +288,13 @@ jobs:
       - name: 'Prepare tag artifact'
         if: startsWith(github.ref, 'refs/tags/')
         run: ./ci/prepare-artifact.cmd
+      - name: Upload compiled artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            ${{env.SLBUILDDIRECTORY}}/
+            ${{env.SLFullDistributePath}}/${{env.InstallPath}}/
 
   run-tests-win64:
     name: 'Run Windows Tests'
@@ -315,13 +322,11 @@ jobs:
         env:
           ReleaseName: release
           tagartifact: ${{ steps.get_version.outputs.VERSION }}
-      - name: Build obs-studio-node
-        run: cmake --build ${{env.SLBUILDDIRECTORY}} --target install --config RelWithDebInfo
-      - name: Put version into package.json
-        if: startsWith(github.ref, 'refs/tags/')
-        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
-        env:
-          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./  # extracts them into current directory
       - name: 'Run tests'
         timeout-minutes: 20
         continue-on-error: false
@@ -345,6 +350,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: |
