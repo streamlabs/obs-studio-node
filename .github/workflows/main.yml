@@ -87,7 +87,7 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: |
-            ${{env.SLFullDistributePath}}/${{env.InstallPath}}/
+            ${{env.SLBUILDDIRECTORY}}/
 
   run-tests-macos:
     name: 'Run macOS Tests'
@@ -129,7 +129,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
       - run: |
           echo "List of folders I unpacked/downloaded"
           ls -R .
@@ -174,7 +174,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -223,6 +223,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-mac-${{matrix.Architecture}}
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -406,6 +411,16 @@ jobs:
           fetch-depth: 2
           repository: stream-labs/symsrv-scripts
           path: symsrv-scripts
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows-compiled
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows-distribute
+          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: |
