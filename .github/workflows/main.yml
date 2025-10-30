@@ -129,7 +129,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ./  # extracts them into current directory
+          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - run: |
           echo "List of folders I unpacked/downloaded"
           ls -R .
@@ -174,7 +174,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ./  # extracts them into current directory
+          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -291,9 +291,14 @@ jobs:
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts-windows
+          name: build-artifacts-windows-compiled
           path: |
             ${{env.SLBUILDDIRECTORY}}/
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-windows-distribute
+          path: |
             ${{env.SLFullDistributePath}}/${{env.InstallPath}}/
 
   run-tests-win64:
@@ -320,8 +325,13 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-windows
-          path: ./  # extracts them into current directory
+          name: build-artifacts-windows-compiled
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows-distribute
+          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - run: |
           echo "List of folders I unpacked/downloaded"
           ls -R .
@@ -351,8 +361,13 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: build-artifacts-windows
-          path: ./  # extracts them into current directory
+          name: build-artifacts-windows-compiled
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows-distribute
+          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: |
