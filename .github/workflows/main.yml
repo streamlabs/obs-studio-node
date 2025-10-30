@@ -317,11 +317,6 @@ jobs:
         run: |
           yarn install --immutable --immutable-cache --check-cache
           yarn add electron@${{env.ElectronVersion}} -D
-      - name: Configure obs-studio-node
-        run: ./ci/configure-osn.cmd
-        env:
-          ReleaseName: release
-          tagartifact: ${{ steps.get_version.outputs.VERSION }}
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
