@@ -88,6 +88,7 @@ jobs:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: |
             ${{env.SLBUILDDIRECTORY}}/
+            tests/osn-tests/osn/index.ts
 
   run-tests-macos:
     name: 'Run macOS Tests'
@@ -130,6 +131,9 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+      - name: Move index.ts
+        shell: bash
+        run: 'mv ${{env.SLBUILDDIRECTORY}}/tests/osn-tests/osn/index.ts tests/osn-tests/osn/index.ts'
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
@@ -296,6 +300,7 @@ jobs:
           name: build-artifacts-windows-compiled
           path: |
             ${{env.SLBUILDDIRECTORY}}/
+            tests/osn-tests/osn/index.ts
 
   run-tests-win64:
     name: 'Run Windows Tests'
@@ -313,6 +318,9 @@ jobs:
         with:
           name: build-artifacts-windows-compiled
           path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+      - name: Move index.ts
+        shell: bash
+        run: 'mv ${{env.SLBUILDDIRECTORY}}/tests/osn-tests/osn/index.ts tests/osn-tests/osn/index.ts'
       - name: Get the version
         id: get_version
         run: |
