@@ -130,10 +130,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
-      - name: Move index.ts
-        shell: bash
-        run: 'mv ${{env.SLBUILDDIRECTORY}}/tests/osn-tests/osn/index.ts tests/osn-tests/osn/index.ts'
+          path: .
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
@@ -175,7 +172,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+          path: .
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -228,7 +225,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+          path: .
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -317,10 +314,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-windows-compiled
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
-      - name: Move index.ts
-        shell: bash
-        run: 'mv ${{env.SLBUILDDIRECTORY}}/tests/osn-tests/osn/index.ts tests/osn-tests/osn/index.ts'
+          path: .
       - name: Get the version
         id: get_version
         run: |
@@ -358,7 +352,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-windows-compiled
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+          path: .
       - name: Get the version
         id: get_version
         run: |
@@ -401,7 +395,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-windows-compiled
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+          path: .
       - name: Get the version
         id: get_version
         run: |
