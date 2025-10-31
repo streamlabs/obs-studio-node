@@ -213,6 +213,10 @@ jobs:
     env:
       OS_TAG: "osx"
     steps:
+      - name: 'Checkout'
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
