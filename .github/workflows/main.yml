@@ -130,9 +130,6 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
-      - run: |
-          echo "List of folders I unpacked/downloaded"
-          ls -R .
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
@@ -299,12 +296,6 @@ jobs:
           name: build-artifacts-windows-compiled
           path: |
             ${{env.SLBUILDDIRECTORY}}/
-      - name: Upload distribution artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts-windows-distribute
-          path: |
-            ${{env.SLFullDistributePath}}/${{env.InstallPath}}/
 
   run-tests-win64:
     name: 'Run Windows Tests'
@@ -317,6 +308,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows-compiled
+          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: |
@@ -327,19 +323,6 @@ jobs:
         run: |
           yarn install --immutable --immutable-cache --check-cache
           yarn add electron@${{env.ElectronVersion}} -D
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts-windows-compiled
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts-windows-distribute
-          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
-      - run: |
-          echo "List of folders I unpacked/downloaded"
-          ls -R .
       - name: 'Run tests'
         timeout-minutes: 20
         continue-on-error: false
@@ -368,11 +351,6 @@ jobs:
         with:
           name: build-artifacts-windows-compiled
           path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts-windows-distribute
-          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: |
@@ -416,11 +394,6 @@ jobs:
         with:
           name: build-artifacts-windows-compiled
           path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
-      - name: Download distribution artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts-windows-distribute
-          path: ${{env.SLFullDistributePath}}/${{env.InstallPath}}/  # extracts them into current directory
       - name: Get the version
         id: get_version
         run: |
