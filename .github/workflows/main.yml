@@ -130,10 +130,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
+          path: ${{env.SLBUILDDIRECTORY}}/
       - name: Move index.ts
         shell: bash
-        run: 'mv ${{env.SLBUILDDIRECTORY}}/tests/osn-tests/osn/index.ts tests/osn-tests/osn/index.ts'
+        run: 'mv ${{env.SLBUILDDIRECTORY}}/index.ts tests/osn-tests/osn/index.ts'
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
@@ -320,7 +320,7 @@ jobs:
           path: ${{env.SLBUILDDIRECTORY}}/  # extracts them into current directory
       - name: Move index.ts
         shell: bash
-        run: 'mv ${{env.SLBUILDDIRECTORY}}/tests/osn-tests/osn/index.ts tests/osn-tests/osn/index.ts'
+        run: 'mv ${{env.SLBUILDDIRECTORY}}/index.ts tests/osn-tests/osn/index.ts'
       - name: Get the version
         id: get_version
         run: |
