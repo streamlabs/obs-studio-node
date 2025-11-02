@@ -88,6 +88,7 @@ jobs:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: |
             ${{env.SLBUILDDIRECTORY}}/
+            {{env.SLBUILDDIRECTORY}}/**/.git/
             tests/osn-tests/osn/index.ts
 
   run-tests-macos:
