@@ -126,6 +126,14 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: './ci/install-dependencies-osx.sh'
+      - name: 'Configure obs-studio-node'
+        shell: bash
+        run: './ci/configure-osn-osx.sh'
+        env:
+          BUILD_CONFIG: ${{matrix.BuildConfig}}
+          RELEASE_NAME: ${{matrix.ReleaseName}}
+          ARCHITECTURE: ${{matrix.Architecture}}
+          tagartifact: ${{ steps.get_version.outputs.VERSION }}
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
