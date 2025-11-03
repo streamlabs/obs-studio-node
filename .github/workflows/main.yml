@@ -122,7 +122,8 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
-      - name: Remove quarantine attribute
+      - name: Run tests
+        timeout-minutes: 30
         continue-on-error: true
         run: |
           xattr streamlabs-build.app/distribute/obs-studio-node/bin/obs64
@@ -130,11 +131,8 @@ jobs:
           file streamlabs-build.app/distribute/obs-studio-node/bin/obs64
           xattr -d streamlabs-build.app
           xattr -d streamlabs-build.app/distribute/obs-studio-node/bin/obs64
+          yarn run test
         shell: bash
-      - name: 'Run tests'
-        timeout-minutes: 30
-        continue-on-error: true
-        run: 'yarn run test'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
