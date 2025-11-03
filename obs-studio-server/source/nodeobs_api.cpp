@@ -199,6 +199,7 @@ void replaceAll(std::string &str, const std::string &from, const std::string &to
 void OBS_API::SetWorkingDirectory(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	g_moduleDirectory = args[0].value_str;
+    blog(LOG_INFO, "rno SetWorkingDirectory %s", g_moduleDirectory.c_str());
 	replaceAll(g_moduleDirectory, "\\", "/");
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(g_moduleDirectory));
