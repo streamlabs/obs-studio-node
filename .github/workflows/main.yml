@@ -122,8 +122,8 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
-      - name: List artifacts
-        run: 'ls streamlabs-build.app/distribute/obs-studio-node'
+      - name: Remove quarantine attribute
+        run: 'xattr -d com.apple.quarantine streamlabs-build.app/distribute/obs-studio-node/bin/obs64'
         shell: bash
       - name: 'Run tests'
         timeout-minutes: 30
