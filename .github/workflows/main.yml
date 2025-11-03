@@ -82,6 +82,14 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: Upload compiled artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-mac-${{matrix.Architecture}}
+          path: |
+            ${{env.SLBUILDDIRECTORY}}/
+            ${{env.SLBUILDDIRECTORY}}/**/.git/
+            tests/osn-tests/osn/index.ts
 
   run-tests-macos:
     name: 'Run macOS Tests'
@@ -119,25 +127,14 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: './ci/install-dependencies-osx.sh'
-      - name: 'Configure obs-studio-node'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-mac-${{matrix.Architecture}}
+          path: .
+      - name: Set obs64 permissions
+        run: 'chmod +x streamlabs-build.app/distribute/obs-studio-node/bin/obs64'
         shell: bash
-        run: './ci/configure-osn-osx.sh'
-        env:
-          BUILD_CONFIG: ${{matrix.BuildConfig}}
-          RELEASE_NAME: ${{matrix.ReleaseName}}
-          ARCHITECTURE: ${{matrix.Architecture}}
-          tagartifact: ${{ steps.get_version.outputs.VERSION }}
-      - name: 'Build obs-studio-node'
-        run: ./ci/build-osn-osx.sh
-        shell: bash
-        env:
-          BUILD_CONFIG: ${{matrix.BuildConfig}}
-          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
-      - name: Put version into package.json
-        if: startsWith(github.ref, 'refs/tags/')
-        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
-        env:
-          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
@@ -171,10 +168,11 @@ jobs:
     env:
       OS_TAG: "osx"
     steps:
-      - name: 'Checkout'
-        uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          submodules: 'recursive'
+          name: build-artifacts-mac-${{matrix.Architecture}}
+          path: .
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -223,6 +221,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-mac-${{matrix.Architecture}}
+          path: .
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -288,6 +291,13 @@ jobs:
       - name: 'Prepare tag artifact'
         if: startsWith(github.ref, 'refs/tags/')
         run: ./ci/prepare-artifact.cmd
+      - name: Upload compiled artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-windows
+          path: |
+            ${{env.SLBUILDDIRECTORY}}/
+            tests/osn-tests/osn/index.ts
 
   run-tests-win64:
     name: 'Run Windows Tests'
@@ -300,6 +310,11 @@ jobs:
         uses: actions/checkout@v3
         with:
           submodules: 'recursive'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows
+          path: .
       - name: Get the version
         id: get_version
         run: |
@@ -310,18 +325,6 @@ jobs:
         run: |
           yarn install --immutable --immutable-cache --check-cache
           yarn add electron@${{env.ElectronVersion}} -D
-      - name: Configure obs-studio-node
-        run: ./ci/configure-osn.cmd
-        env:
-          ReleaseName: release
-          tagartifact: ${{ steps.get_version.outputs.VERSION }}
-      - name: Build obs-studio-node
-        run: cmake --build ${{env.SLBUILDDIRECTORY}} --target install --config RelWithDebInfo
-      - name: Put version into package.json
-        if: startsWith(github.ref, 'refs/tags/')
-        run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
-        env:
-          PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
       - name: 'Run tests'
         timeout-minutes: 20
         continue-on-error: false
@@ -341,10 +344,11 @@ jobs:
     env:
       OS_TAG: "win64"
     steps:
-      - name: 'Checkout'
-        uses: actions/checkout@v3
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          submodules: 'recursive'
+          name: build-artifacts-windows
+          path: .
       - name: Get the version
         id: get_version
         run: |
@@ -383,6 +387,11 @@ jobs:
           fetch-depth: 2
           repository: stream-labs/symsrv-scripts
           path: symsrv-scripts
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-windows
+          path: .
       - name: Get the version
         id: get_version
         run: |
