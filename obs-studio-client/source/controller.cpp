@@ -292,7 +292,6 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 		return nullptr;
 	}
 #else
-    std::cout << "Controller::host workdir " << workingDirectory.c_str() << std::endl;
 	g_util_osx->setServerWorkingDirectoryPath(workingDirectory);
 	pid_t pids[2048];
 	int bytes = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
@@ -307,7 +306,6 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 			}
 		}
 	}
-    std::cout << "Controller::host setServerPath " << serverBinaryPath.c_str() << std::endl;
 
 	pid_t pid;
 	std::vector<char> uri_str(uri.c_str(), uri.c_str() + uri.size() + 1);
@@ -315,11 +313,14 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	remove(uri.c_str());
 
 	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, argv, environ);
-    std::cout << "Controller::host posix_spawnp " << ret << std::endl;
+    if (ret != 0) {
+        std::cerr << "Could not spawn the server at " << serverBinaryPath.c_str() << " with error code: " << ret << std::endl;
+        return nullptr;
+    }
 	// Connect
 	std::shared_ptr<ipc::client> cl = connect(uri);
 	if (!cl) { // Assume the server broke or was not allowed to run.
-        std::cerr << "ipc::client fails" << std::endl;
+        std::cerr << "Could not connect to ipc::server" << std::endl;
 		disconnect();
 		uint32_t exitcode;
 		kill(pid, SIGKILL);
@@ -412,7 +413,6 @@ Napi::Value js_setServerPath(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 	}
 	serverBinaryPath = info[0].ToString().Utf8Value();
-    std::cout << "js_setServerPath " << serverBinaryPath.c_str() << std::endl;
 
 	if (info.Length() == 2) {
 		if (!info[1].IsString()) {
