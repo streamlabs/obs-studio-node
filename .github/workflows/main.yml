@@ -122,6 +122,9 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
+      - name: List artifacts
+        run: 'ls streamlabs-build.app/distribute/obs-studio-node'
+        shell: bash
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
