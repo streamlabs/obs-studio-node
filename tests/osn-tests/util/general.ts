@@ -38,7 +38,7 @@ let showHideInputHotkeys: string[] = ['SHOW_SCENE_ITEM.WASAPI_OUTPUT_CAPTURE', '
 'HIDE_SCENE_ITEM.AV_CAPTURE_INPUT_V2','SHOW_SCENE_ITEM.SPOUT_CAPTURE','HIDE_SCENE_ITEM.SPOUT_CAPTURE',
 'SHOW_SCENE_ITEM.SLIDESHOW_V2', 'HIDE_SCENE_ITEM.SLIDESHOW_V2', 'SHOW_SCENE_ITEM.TEXT_GDIPLUS_V3', 'HIDE_SCENE_ITEM.TEXT_GDIPLUS_V3',
 'SHOW_SCENE_ITEM.MACOS_AVCAPTURE', 'HIDE_SCENE_ITEM.MACOS_AVCAPTURE', 'SHOW_SCENE_ITEM.MACOS_AVCAPTURE_FAST', 'HIDE_SCENE_ITEM.MACOS_AVCAPTURE_FAST',
-'SHOW_SCENE_ITEM.SCK_AUDIO_CAPTURE', 'HIDE_SCENE_ITEM.SCK_AUDIO_CAPTURE'];
+'SHOW_SCENE_ITEM.SCK_AUDIO_CAPTURE', 'HIDE_SCENE_ITEM.SCK_AUDIO_CAPTURE', 'SHOW_SCENE_ITEM.MAC_SCREEN_CAPTURE', 'HIDE_SCENE_ITEM.MAC_SCREEN_CAPTURE'];
 
 export {showHideInputHotkeys};
 
@@ -76,22 +76,21 @@ export function deleteConfigFiles(): void {
     const fs = require('fs');
     const path = require('path');
     const configFolderPath = path.join(path.normalize(__dirname), '..', 'osnData/slobs-client');
-    let files;
-    let currentFile: string;
-
-    try {
-        files = fs.readdirSync(configFolderPath);
-
+    if (fs.existsSync(configFolderPath)) {
+        let currentFile: string;
+        let files = fs.readdirSync(configFolderPath);
         files.forEach(file => {
             if (file !== 'node-obs') {
                 currentFile = file;
-                fs.unlinkSync(path.join(configFolderPath, file));
+                try {
+                    fs.unlinkSync(path.join(configFolderPath, file));
+                } catch(error) {
+                    if (error.code === "EBUSY") {
+                        throw ('Error: the file ' + currentFile + ' or slobs-client folder is busy');
+                    }
+                }
             }
         });
-    } catch(error) {
-        if (error.code === "EBUSY") {
-            throw ('Error: the file ' + currentFile + ' or slobs-client folder is busy');
-        }
     }
 }
 
