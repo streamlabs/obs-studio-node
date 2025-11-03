@@ -33,8 +33,13 @@ jobs:
     runs-on: ${{ matrix.image }}
     strategy:
       matrix:
-        BuildReleases: [Release-arm64]
+        BuildReleases: [Release-x86_64, Release-arm64]
         include:
+          - BuildReleases: Release-x86_64
+            image: macos-15-intel
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
           - BuildReleases: Release-arm64
             image: macos-14
             BuildConfig: RelWithDebInfo
@@ -92,8 +97,13 @@ jobs:
     runs-on: ${{ matrix.image }}
     strategy:
       matrix:
-        BuildReleases: [Release-arm64]
+        BuildReleases: [Release-x86_64, Release-arm64]
         include:
+          - BuildReleases: Release-x86_64
+            image: macos-15-intel
+            BuildConfig: RelWithDebInfo
+            ReleaseName: release
+            Architecture: x86_64
           - BuildReleases: Release-arm64
             image: macos-14
             BuildConfig: RelWithDebInfo
