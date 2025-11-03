@@ -1223,7 +1223,7 @@ describe(testName, function() {
                     }
                 });
             });
-            
+
             // Setting advanced output settings container with ABR parameters
             obs.setSettingsContainer(EOBSSettingsCategories.Output, abrOutputSettings);
 
