@@ -132,23 +132,6 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
-      - name: 'Remove distribute folder (avoid symlink issues)'
-        shell: bash
-        run: 'rm -rf ${{ env.SLFullDistributePath }}'
-      - name: 'Configure obs-studio-node'
-        shell: bash
-        run: './ci/configure-osn-osx.sh'
-        env:
-          BUILD_CONFIG: ${{matrix.BuildConfig}}
-          RELEASE_NAME: ${{matrix.ReleaseName}}
-          ARCHITECTURE: ${{matrix.Architecture}}
-          tagartifact: ${{ steps.get_version.outputs.VERSION }}
-      - name: 'Build obs-studio-node'
-        run: ./ci/build-osn-osx.sh
-        shell: bash
-        env:
-          BUILD_CONFIG: ${{matrix.BuildConfig}}
-          SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
       - name: 'Run tests'
         timeout-minutes: 30
         continue-on-error: true
