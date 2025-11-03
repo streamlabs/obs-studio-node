@@ -307,7 +307,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 			}
 		}
 	}
-    std::cout << "Controller::host posixspawn" << std::endl;
+    std::cout << "Controller::host setServerPath " << serverBinaryPath.c_str() << std::endl;
 
 	pid_t pid;
 	std::vector<char> uri_str(uri.c_str(), uri.c_str() + uri.size() + 1);
@@ -412,6 +412,7 @@ Napi::Value js_setServerPath(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 	}
 	serverBinaryPath = info[0].ToString().Utf8Value();
+    std::cout << "js_setServerPath " << serverBinaryPath.c_str() << std::endl;
 
 	if (info.Length() == 2) {
 		if (!info[1].IsString()) {
