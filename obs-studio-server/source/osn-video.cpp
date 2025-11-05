@@ -101,7 +101,9 @@ void osn::Video::GetEncodedFrames(void *data, const int64_t id, const std::vecto
 void osn::Video::GetVideoContext(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[0].value_union.ui64);
-
+	if (!canvas) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
+	}
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
 	rval.push_back(ipc::value(canvas->fps_num));
@@ -299,6 +301,9 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 	}
 
 	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[11].value_union.ui64);
+	if (!canvas) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
+	}
 	obs_video_info video = *canvas;
 
 #ifdef _WIN32
@@ -403,7 +408,7 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		ret = obs_remove_video_info(canvas);
 
 	} catch (const char *error) {
-		blog(LOG_ERROR, error);
+		blog(LOG_ERROR, "Error occurred while removing video %s", error);
 	}
 
 	if (ret != OBS_VIDEO_SUCCESS) {

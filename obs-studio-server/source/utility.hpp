@@ -151,14 +151,23 @@ public:
 
 	void for_each(std::function<void(T *)> for_each_method)
 	{
+		std::lock_guard<std::recursive_mutex> lock(internal_mutex);
 		for (auto it = object_map.begin(); it != object_map.end(); ++it) {
 			for_each_method(it->second);
 		}
 	}
 
-	size_t size() { return object_map.size(); }
+	size_t size()
+	{
+		std::lock_guard<std::recursive_mutex> lock(internal_mutex);
+		return object_map.size();
+	}
 
-	void clear() { object_map.clear(); }
+	void clear()
+	{
+		std::lock_guard<std::recursive_mutex> lock(internal_mutex);
+		object_map.clear();
+	}
 };
 
 template<typename T> class generic_object_manager {
@@ -234,14 +243,23 @@ public:
 
 	void for_each(std::function<void(T &)> for_each_method)
 	{
+		std::lock_guard<std::recursive_mutex> lock(internal_mutex);
 		for (auto it = object_map.begin(); it != object_map.end(); ++it) {
 			for_each_method(it->second);
 		}
 	}
 
-	size_t size() { return object_map.size(); }
+	size_t size()
+	{
+		std::lock_guard<std::recursive_mutex> lock(internal_mutex);
+		return object_map.size();
+	}
 
-	void clear() { object_map.clear(); }
+	void clear()
+	{
+		std::lock_guard<std::recursive_mutex> lock(internal_mutex);
+		object_map.clear();
+	}
 };
 
 void ProcessProperties(obs_properties_t *prp, obs_data *settings, std::vector<ipc::value> &rval);

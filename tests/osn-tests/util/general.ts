@@ -80,7 +80,8 @@ export function deleteConfigFiles(): void {
         let currentFile: string;
         let files = fs.readdirSync(configFolderPath);
         files.forEach(file => {
-            if (file !== 'node-obs') {
+            // Ignore mac Crashpad and node-obs/logs folders.
+            if (file !== 'node-obs' && file !== 'Crashpad') {
                 currentFile = file;
                 try {
                     fs.unlinkSync(path.join(configFolderPath, file));

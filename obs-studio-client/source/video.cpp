@@ -104,7 +104,7 @@ void osn::Video::Destroy(const Napi::CallbackInfo &info)
 		return;
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "RemoveVideoContext", {ipc::value((uint64_t)(this->canvasId))});
-
+	isLastVideoValid = false;
 	return;
 }
 

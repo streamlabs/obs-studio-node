@@ -22,12 +22,12 @@ describe(testName, () => {
     });
 
     // Shutdown OBS process
-    after(async function() {
+    after(function() {
         obs.shutdown();
 
         if (hasTestFailed === true) {
             logInfo(testName, 'One or more test cases failed. Uploading cache');
-            await obs.uploadTestCache();
+            obs.uploadTestCache();
         }
 
         obs = null;
@@ -42,7 +42,7 @@ describe(testName, () => {
         }
     });
 
-    it('Set source to output channel and get it', () => {
+    it('Set source to output channel and get it', function () {
         // Creating input source
         const input = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'test_osn_global_source');
 
@@ -51,11 +51,11 @@ describe(testName, () => {
         expect(input.id).to.equal(EOBSInputTypes.ImageSource, GetErrorMessage(ETestErrorMsg.InputId, EOBSInputTypes.ImageSource));
         expect(input.name).to.equal('test_osn_global_source', GetErrorMessage(ETestErrorMsg.InputName, EOBSInputTypes.ImageSource));
 
+        const channel = 1;
         // Setting input source to output channel
-        osn.Global.setOutputSource(1, input);
+        osn.Global.setOutputSource(channel, input);
 
         // Getting input source from output channel
-        const channel = 1;
         const returnSource = osn.Global.getOutputSource(channel);
 
         // Checking if input source returned previously is correct
@@ -65,7 +65,7 @@ describe(testName, () => {
         input.release();
     });
 
-    it('Get flags (capabilities) of a source type', () => {
+    it('Get flags (capabilities) of a source type', function ()  {
         let flags: number = undefined;
 
         // For each input type available get their flags and check if they are not undefined
@@ -77,7 +77,7 @@ describe(testName, () => {
         });
     });
 
-    it('Get lagged frames value', () => {
+    it('Get lagged frames value', function () {
         let laggedFrames: number = undefined;
 
         // Getting lagged frames value
@@ -87,7 +87,7 @@ describe(testName, () => {
         expect(laggedFrames).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.LaggedFrames));
     });
 
-    it('Get total frames value', () => {
+    it('Get total frames value', function () {
         let totalFrames: number = undefined;
 
         // Getting total frames value
@@ -97,7 +97,7 @@ describe(testName, () => {
         expect(totalFrames).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.TotalFrames));
     });
 
-    it('Set locale and get it', () => {
+    it('Set locale and get it', function () {
         let locale: string;
 
         // Setting locale
@@ -110,7 +110,7 @@ describe(testName, () => {
         expect(locale).to.equal('pt-BR', GetErrorMessage(ETestErrorMsg.Locale));
     });
 
-    it('Get CPU percentage', () => {
+    it('Get CPU percentage', function () {
         let cpuPercent: number = undefined;
 
         // Getting CPU %
@@ -120,7 +120,7 @@ describe(testName, () => {
         expect(cpuPercent).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.CPUPercent));
     });
 
-    it('Get current frame rate', () => {
+    it('Get current frame rate', function () {
         let frameRate: number = undefined;
 
         // Getting CPU %
@@ -130,7 +130,7 @@ describe(testName, () => {
         expect(frameRate).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.FrameRate));
     });
 
-    it('Get average time to render', () => {
+    it('Get average time to render', function () {
         let renderTime: number = undefined;
 
         // Getting CPU %
@@ -140,7 +140,7 @@ describe(testName, () => {
         expect(renderTime).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.FrameRenderTime));
     });
 
-    it('Get available disk space', () => {
+    it('Get available disk space', function () {
         let diskSpace: number = undefined;
 
         // Getting CPU %
@@ -150,17 +150,17 @@ describe(testName, () => {
         expect(diskSpace).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.DiskSpace));
     });
 
-    it('Get memory usage', () => {
+    it('Get memory usage', function () {
         let mem: number = undefined;
 
         // Getting CPU %
-        mem = osn.Global.diskSpaceAvailable;
+        mem = osn.Global.memoryUsage;
 
         // Checking if CPU % was returned correctly
         expect(mem).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.MemUsage));
     });
 
-    it('Fail test - Get source from empty output channel', () => {
+    it('Fail test - Get source from empty output channel', function () {
         let input: ISource;
         let channel: number = 5;
 
