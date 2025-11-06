@@ -228,7 +228,7 @@ void osn::Source::Release(void *data, const int64_t id, const std::vector<ipc::v
 
 		obs_source_release(src);
 	} else {
-        obs_source_release(src);
+		obs_source_release(src);
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
