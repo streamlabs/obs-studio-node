@@ -93,14 +93,18 @@ void osn::Global::SetOutputSource(void *data, const int64_t id, const std::vecto
 	}
 
 	obs_set_output_source(channel, source);
-	obs_source_t *newsource = obs_get_output_source(channel);
-	if (newsource != source) {
+	if (source) {
+		obs_source_t *newsource = obs_get_output_source(channel);
+		if (newsource != source) {
+			obs_source_release(newsource);
+			PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to set output source.");
+		} else {
+			rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		}
 		obs_source_release(newsource);
-		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to set output source.");
 	} else {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	}
-	obs_source_release(newsource);
 	AUTO_DEBUG;
 }
 

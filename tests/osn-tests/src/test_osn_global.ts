@@ -62,6 +62,8 @@ describe(testName, () => {
         expect(returnSource).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.NoInputInChannel, channel.toString()));
         expect(returnSource.id).to.equal(EOBSInputTypes.ImageSource, GetErrorMessage(ETestErrorMsg.InputFromChannelId));
         expect(returnSource.name).to.equal('test_osn_global_source', GetErrorMessage(ETestErrorMsg.InputFromChannelName));
+        const nullSource : ISource = null;
+        osn.Global.setOutputSource(channel, nullSource); // We must clear the channel before deleting the input source to prevent audio thread crash
         input.release();
     });
 
