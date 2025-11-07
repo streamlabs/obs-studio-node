@@ -345,7 +345,7 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 		OBS_service::stopConnectingOutputs();
 		ret = obs_set_video_info(canvas, &video);
 	} catch (const char *error) {
-		blog(LOG_ERROR, error);
+		blog(LOG_ERROR, "Failed to set video context %s", error);
 	}
 
 	blog(LOG_INFO, "SetVideoContext - base_width: %d, base_width: %d, output_width: %d, output_height: %d, result: %d", video.base_width, video.base_height,
