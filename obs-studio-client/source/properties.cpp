@@ -266,6 +266,8 @@ Napi::Value osn::PropertyObject::GetValue(const Napi::CallbackInfo &info)
 			return Napi::Boolean::New(info.Env(), static_cast<bool>(cast_property->current_value_int));
 		case ListProperty::Format::STRING:
 			return Napi::String::New(info.Env(), cast_property->current_value_str);
+		case ListProperty::Format::INVALID:
+			return info.Env().Undefined();
 		}
 		break;
 	}
@@ -412,6 +414,12 @@ Napi::Value osn::PropertyObject::GetDetails(const Napi::CallbackInfo &info)
 	Napi::Object object = Napi::Object::New(info.Env());
 
 	switch (iter->second->type) {
+	case osn::Property::Type::INVALID:
+	case osn::Property::Type::BOOL:
+	case osn::Property::Type::COLOR:
+	case osn::Property::Type::BUTTON:
+	case osn::Property::Type::FONT:
+		break;
 	case osn::Property::Type::INT: {
 		std::shared_ptr<osn::NumberProperty> prop = std::static_pointer_cast<osn::NumberProperty>(iter->second);
 
@@ -470,6 +478,9 @@ Napi::Value osn::PropertyObject::GetDetails(const Napi::CallbackInfo &info)
 				break;
 			case ListProperty::Format::STRING:
 				iobj.Set("value", Napi::String::New(info.Env(), itm.value_str));
+				break;
+			case ListProperty::Format::INVALID:
+				continue;
 				break;
 			}
 			itemsobj.Set((uint32_t)idx++, iobj);
@@ -691,6 +702,8 @@ osn::property_map_t osn::ProcessProperties(const std::vector<ipc::value> &data, 
 			case obs::ListProperty::Format::String:
 				pr2->current_value_str = cast_property->current_value_str;
 				break;
+			case obs::ListProperty::Format::Invalid:
+				break;
 			}
 
 			for (auto &item : cast_property->items) {
@@ -709,6 +722,9 @@ osn::property_map_t osn::ProcessProperties(const std::vector<ipc::value> &data, 
 					break;
 				case obs::ListProperty::Format::String:
 					item2.value_str = item.value_string;
+					break;
+				case obs::ListProperty::Format::Invalid:
+					continue;
 					break;
 				}
 				pr2->items.push_back(std::move(item2));
