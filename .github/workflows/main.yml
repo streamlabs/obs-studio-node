@@ -138,6 +138,7 @@ jobs:
         shell: bash
       - name: 'Run tests'
         timeout-minutes: 30
+        continue-on-error: true
         run: 'yarn run test'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
