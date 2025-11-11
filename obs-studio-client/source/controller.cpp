@@ -310,11 +310,6 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	pid_t pid;
 	std::vector<const char *> argv = {"obs64", uri.c_str(), version.c_str(), serverBinaryPath.c_str(), nullptr};
 
-	for (const char *text : argv) {
-		const char *c = text != 0 ? text : "NULL";
-		std::cout << "argv client " << c << std::endl;
-	}
-
 	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
 	if (ret != 0) {
 		std::cerr << "Could not spawn the server at " << serverBinaryPath.c_str() << " with error code: " << ret << std::endl;
