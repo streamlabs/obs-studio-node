@@ -1381,6 +1381,16 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 		obs_property_type typeProperty = obs_property_get_type(property);
 
 		switch (typeProperty) {
+		case OBS_PROPERTY_COLOR:
+		case OBS_PROPERTY_INVALID:
+		case OBS_PROPERTY_BUTTON:
+		case OBS_PROPERTY_FONT:
+		case OBS_PROPERTY_FRAME_RATE:
+		case OBS_PROPERTY_GROUP:
+		case OBS_PROPERTY_COLOR_ALPHA:
+		case OBS_PROPERTY_CAPTURE:
+			blog(LOG_DEBUG, "Ignoring property %s type %d", param.name.c_str(), typeProperty);
+			break;
 		case OBS_PROPERTY_BOOL: {
 			param.type = "OBS_PROPERTY_BOOL";
 			param.description = obs_property_description(property);

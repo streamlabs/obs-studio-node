@@ -558,7 +558,7 @@ int OBS_service::doResetVideoContext(obs_video_info *ovi)
 
 		return ret;
 	} catch (const char *error) {
-		blog(LOG_ERROR, error);
+		blog(LOG_ERROR, "Failed to reset video: %s", error);
 		return OBS_VIDEO_FAIL;
 	}
 }
