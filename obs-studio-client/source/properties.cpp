@@ -481,7 +481,6 @@ Napi::Value osn::PropertyObject::GetDetails(const Napi::CallbackInfo &info)
 				break;
 			case ListProperty::Format::INVALID:
 				continue;
-				break;
 			}
 			itemsobj.Set((uint32_t)idx++, iobj);
 		}
@@ -725,7 +724,6 @@ osn::property_map_t osn::ProcessProperties(const std::vector<ipc::value> &data, 
 					break;
 				case obs::ListProperty::Format::Invalid:
 					continue;
-					break;
 				}
 				pr2->items.push_back(std::move(item2));
 			}
