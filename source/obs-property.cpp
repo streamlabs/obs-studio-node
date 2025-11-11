@@ -24,6 +24,8 @@ std::shared_ptr<obs::Property> obs::Property::deserialize(std::vector<char> cons
 
 	std::shared_ptr<Property> prop;
 	switch (type) {
+	case Type::Group:
+	case Type::ColorAlpha:
 	case Type::Invalid:
 		return nullptr;
 		break;
@@ -554,6 +556,8 @@ size_t obs::ListProperty::size()
 			total += sizeof(size_t);
 			total += entry.value_string.size();
 			break;
+		case Format::Invalid:
+			break;
 		}
 	}
 
@@ -569,6 +573,8 @@ size_t obs::ListProperty::size()
 		break;
 	case Format::String:
 		total += sizeof(size_t) + current_value_str.size();
+		break;
+	case Format::Invalid:
 		break;
 	}
 
@@ -590,6 +596,7 @@ bool obs::ListProperty::serialize(std::vector<char> &buf)
 	offset += sizeof(uint8_t);
 	buf[offset] = uint8_t(format);
 	offset += sizeof(uint8_t);
+	bool isPropertyValid = true;
 
 	reinterpret_cast<size_t &>(buf[offset]) = items.size();
 	offset += sizeof(size_t);
@@ -623,6 +630,9 @@ bool obs::ListProperty::serialize(std::vector<char> &buf)
 				offset += entry.value_string.size();
 			}
 			break;
+		case Format::Invalid:
+			isPropertyValid = false;
+			break;
 		}
 	}
 
@@ -647,9 +657,12 @@ bool obs::ListProperty::serialize(std::vector<char> &buf)
 			offset += current_value_str.size();
 		}
 		break;
+	case Format::Invalid:
+		isPropertyValid = false;
+		break;
 	}
 
-	return true;
+	return isPropertyValid;
 }
 
 bool obs::ListProperty::read(std::vector<char> const &buf)
@@ -703,10 +716,14 @@ bool obs::ListProperty::read(std::vector<char> const &buf)
 				offset += length;
 			}
 			break;
+		case Format::Invalid:
+			continue;
+			break;
 		}
 		items.push_back(std::move(entry));
 	}
 
+	bool isPropertyValid = true;
 	size_t length = 0;
 	switch (format) {
 	case Format::Integer:
@@ -729,9 +746,12 @@ bool obs::ListProperty::read(std::vector<char> const &buf)
 			offset += length;
 		}
 		break;
+	case Format::Invalid:
+		isPropertyValid = false;
+		break;
 	}
 
-	return true;
+	return isPropertyValid;
 }
 
 obs::Property::Type obs::ColorProperty::type()
