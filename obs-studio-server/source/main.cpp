@@ -212,7 +212,7 @@ int main(int argc, char *argv[])
 
 	// Check versions
 	if (receivedVersion != myVersion) {
-		std::cerr << "Versions mismatch. Server version: " << myVersion << "but received client version: " << receivedVersion;
+		std::cerr << "Versions mismatch. Server version: " << myVersion << " but received client version: " << receivedVersion << std::endl;
 		return ipc::ProcessInfo::ExitCode::VERSION_MISMATCH;
 	}
 
