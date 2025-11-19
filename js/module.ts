@@ -1,6 +1,9 @@
-const obs = require('./obs_studio_client.node');
 import * as path from 'path';
 import * as fs from 'fs';
+const hasDeveloperApp = fs.existsSync(path.join(__dirname, 'OSN.app')); // search for local developer OSN.app bundle which stores CEF helper apps, etc
+const obs = hasDeveloperApp
+  ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
+  : require('./obs_studio_client.node');
 
 /* Convenient paths to modules */
 export const DefaultD3D11Path: string =
@@ -1895,7 +1898,9 @@ export const enum VCamOutputType {
 };
 
 // Initialization and other stuff which needs local data.
-const __dirnameApple = fs.existsSync(__dirname + '/OSN.app') ? __dirname + '/OSN.app/distribute/obs-studio-node/bin' : __dirname + '/bin'; // search for local developer OSN.app bundle which stores CEF helper apps
+const __dirnameApple = hasDeveloperApp
+  ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
+  : path.join(__dirname, 'bin');
 if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(__dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'));
 }

@@ -1,49 +1,50 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.NodeObs = exports.getSourcesSize = exports.createSources = exports.addItems = exports.AdvancedReplayBufferFactory = exports.SimpleReplayBufferFactory = exports.AudioEncoderFactory = exports.AdvancedRecordingFactory = exports.SimpleRecordingFactory = exports.AudioTrackFactory = exports.NetworkFactory = exports.ReconnectFactory = exports.DelayFactory = exports.AdvancedStreamingFactory = exports.SimpleStreamingFactory = exports.ServiceFactory = exports.VideoEncoderFactory = exports.IPC = exports.ModuleFactory = exports.AudioFactory = exports.Audio = exports.FaderFactory = exports.VolmeterFactory = exports.DisplayFactory = exports.TransitionFactory = exports.FilterFactory = exports.SceneFactory = exports.InputFactory = exports.VideoFactory = exports.Video = exports.Global = exports.DefaultPluginPathMac = exports.DefaultPluginDataPath = exports.DefaultPluginPath = exports.DefaultDataPath = exports.DefaultBinPath = exports.DefaultDrawPluginPath = exports.DefaultOpenGLPath = exports.DefaultD3D11Path = void 0;
-const obs = require('./obs_studio_client.node');
-const path = require("path");
-const fs = require("fs");
-exports.DefaultD3D11Path = path.resolve(__dirname, `libobs-d3d11.dll`);
-exports.DefaultOpenGLPath = path.resolve(__dirname, `libobs-opengl.dll`);
-exports.DefaultDrawPluginPath = path.resolve(__dirname, `simple_draw.dll`);
-exports.DefaultBinPath = path.resolve(__dirname);
-exports.DefaultDataPath = path.resolve(__dirname, `data`);
-exports.DefaultPluginPath = path.resolve(__dirname, `obs-plugins`);
-exports.DefaultPluginDataPath = path.resolve(__dirname, `data/obs-plugins/%module%`);
-exports.DefaultPluginPathMac = path.resolve(__dirname, `PlugIns`);
-exports.Global = obs.Global;
-exports.Video = obs.Video;
-exports.VideoFactory = obs.Video;
-exports.InputFactory = obs.Input;
-exports.SceneFactory = obs.Scene;
-exports.FilterFactory = obs.Filter;
-exports.TransitionFactory = obs.Transition;
-exports.DisplayFactory = obs.Display;
-exports.VolmeterFactory = obs.Volmeter;
-exports.FaderFactory = obs.Fader;
-exports.Audio = obs.Audio;
-exports.AudioFactory = obs.Audio;
-exports.ModuleFactory = obs.Module;
-exports.IPC = obs.IPC;
-exports.VideoEncoderFactory = obs.VideoEncoder;
-exports.ServiceFactory = obs.Service;
-exports.SimpleStreamingFactory = obs.SimpleStreaming;
-exports.AdvancedStreamingFactory = obs.AdvancedStreaming;
-exports.DelayFactory = obs.Delay;
-exports.ReconnectFactory = obs.Reconnect;
-exports.NetworkFactory = obs.Network;
-exports.AudioTrackFactory = obs.AudioTrack;
-exports.SimpleRecordingFactory = obs.SimpleRecording;
-exports.AdvancedRecordingFactory = obs.AdvancedRecording;
-exports.AudioEncoderFactory = obs.AudioEncoder;
-exports.SimpleReplayBufferFactory = obs.SimpleReplayBuffer;
-exports.AdvancedReplayBufferFactory = obs.AdvancedReplayBuffer;
+import * as path from 'path';
+import * as fs from 'fs';
+const hasDeveloperApp = fs.existsSync(path.join(__dirname, 'OSN.app')); // search for local developer OSN.app bundle which stores CEF helper apps, etc
+const obs = hasDeveloperApp
+    ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
+    : require('./obs_studio_client.node');
+/* Convenient paths to modules */
+export const DefaultD3D11Path = path.resolve(__dirname, `libobs-d3d11.dll`);
+export const DefaultOpenGLPath = path.resolve(__dirname, `libobs-opengl.dll`);
+export const DefaultDrawPluginPath = path.resolve(__dirname, `simple_draw.dll`);
+export const DefaultBinPath = path.resolve(__dirname);
+export const DefaultDataPath = path.resolve(__dirname, `data`);
+export const DefaultPluginPath = path.resolve(__dirname, `obs-plugins`);
+export const DefaultPluginDataPath = path.resolve(__dirname, `data/obs-plugins/%module%`);
+export const DefaultPluginPathMac = path.resolve(__dirname, `PlugIns`);
+export const Global = obs.Global;
+export const Video = obs.Video;
+export const VideoFactory = obs.Video;
+export const InputFactory = obs.Input;
+export const SceneFactory = obs.Scene;
+export const FilterFactory = obs.Filter;
+export const TransitionFactory = obs.Transition;
+export const DisplayFactory = obs.Display;
+export const VolmeterFactory = obs.Volmeter;
+export const FaderFactory = obs.Fader;
+export const Audio = obs.Audio;
+export const AudioFactory = obs.Audio;
+export const ModuleFactory = obs.Module;
+export const IPC = obs.IPC;
+export const VideoEncoderFactory = obs.VideoEncoder;
+export const ServiceFactory = obs.Service;
+export const SimpleStreamingFactory = obs.SimpleStreaming;
+export const AdvancedStreamingFactory = obs.AdvancedStreaming;
+export const DelayFactory = obs.Delay;
+export const ReconnectFactory = obs.Reconnect;
+export const NetworkFactory = obs.Network;
+export const AudioTrackFactory = obs.AudioTrack;
+export const SimpleRecordingFactory = obs.SimpleRecording;
+export const AdvancedRecordingFactory = obs.AdvancedRecording;
+export const AudioEncoderFactory = obs.AudioEncoder;
+export const SimpleReplayBufferFactory = obs.SimpleReplayBuffer;
+export const AdvancedReplayBufferFactory = obs.AdvancedReplayBuffer;
 ;
 ;
 ;
 ;
-function addItems(scene, sceneItems) {
+export function addItems(scene, sceneItems) {
     const items = [];
     if (Array.isArray(sceneItems)) {
         sceneItems.forEach(function (sceneItem) {
@@ -54,19 +55,18 @@ function addItems(scene, sceneItems) {
     }
     return items;
 }
-exports.addItems = addItems;
-function createSources(sources) {
+export function createSources(sources) {
     const items = [];
     if (Array.isArray(sources)) {
         sources.forEach(function (source) {
             let newSource = null;
             try {
                 newSource = obs.Input.create(source.type, source.name, source.settings);
-            } catch (error) {
+            }
+            catch (error) {
                 console.error(`[OSN] Failed to create input for source "${source.name}":`, error instanceof Error ? error.message : error);
                 return; // Skip the rest of this iteration if input creation fails
             }
-            
             if (newSource) {
                 if (newSource.audioMixers) {
                     newSource.muted = source.muted ?? false;
@@ -76,17 +76,16 @@ function createSources(sources) {
                 newSource.deinterlaceMode = source.deinterlaceMode;
                 newSource.deinterlaceFieldOrder = source.deinterlaceFieldOrder;
                 items.push(newSource);
-                
                 const filters = source.filters;
                 if (Array.isArray(filters)) {
                     filters.forEach(function (filter) {
                         let ObsFilter = null;
                         try {
                             ObsFilter = obs.Filter.create(filter.type, filter.name, filter.settings);
-                        } catch (filterError) {
+                        }
+                        catch (filterError) {
                             console.error(`[OSN] Failed to create filter "${filter.name}" for source "${source.name}":`, filterError instanceof Error ? filterError.message : filterError);
                         }
-                        
                         if (ObsFilter) {
                             ObsFilter.enabled = filter.enabled ?? true;
                             newSource.addFilter(ObsFilter);
@@ -94,17 +93,18 @@ function createSources(sources) {
                         }
                     });
                 }
-            } else {
+            }
+            else {
                 console.warn(`[OSN] Input creation failed for source: ${source.name}`);
             }
         });
-    } else {
+    }
+    else {
         console.error(`[OSN] Invalid sources array provided:`, sources);
     }
     return items;
 }
-exports.createSources = createSources;
-function getSourcesSize(sourcesNames) {
+export function getSourcesSize(sourcesNames) {
     const sourcesSize = [];
     if (Array.isArray(sourcesNames)) {
         sourcesNames.forEach(function (sourceName) {
@@ -116,8 +116,11 @@ function getSourcesSize(sourcesNames) {
     }
     return sourcesSize;
 }
-exports.getSourcesSize = getSourcesSize;
-const __dirnameApple = fs.existsSync(__dirname + '/OSN.app') ? __dirname + '/OSN.app/distribute/obs-studio-node/bin' : __dirname + '/bin'; // search for local developer OSN.app bundle which stores CEF helper apps
+;
+// Initialization and other stuff which needs local data.
+const __dirnameApple = hasDeveloperApp
+    ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
+    : path.join(__dirname, 'bin');
 if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(__dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'));
 }
@@ -127,4 +130,4 @@ else if (fs.existsSync(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 
 else {
     obs.IPC.setServerPath(path.resolve(__dirname, `obs32.exe`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirname).replace('app.asar', 'app.asar.unpacked'));
 }
-exports.NodeObs = obs;
+export const NodeObs = obs;
