@@ -45,7 +45,7 @@ cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=/Users/<you>/streamlabs/desktop/node_modules/obs-studio-node/OSN.app/distribute/obs-studio-node -DCMAKE_OSX_ARCHITECTURES=arm64 -G Xcode
 cmake --build . --target install --config RelWithDebInfo
 ```
-Note, the only gotcha is that if you later run `yarn package:mac` command in the desktop folder instead, then you should remove *OSN.app* from the `CMAKE_INSTALL_PREFIX` path. This is because the electron-builder scripts will throw an error this is not a fully formed app bundle during codesign.
+Note, the only gotcha is that if you later run `yarn package:mac-arm64` command in the desktop folder instead, then you should remove *OSN.app* from the `CMAKE_INSTALL_PREFIX` path. This is because the electron-builder scripts will throw an error this is not a fully formed app bundle during codesign.
 
 ### Custom OBS Build
 By default, we download a pre-built version of libobs if none is specified. However, this pre-built version may not be what you want to use or maybe you're testing a new obs feature.
