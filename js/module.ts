@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
-const hasDeveloperApp = fs.existsSync(path.join(__dirname, 'OSN.app')); // search for local developer OSN.app bundle which stores CEF helper apps, etc
+// Mac- search for optional OSN.app bundle (Chromium requires an app bundle to finder helper apps)
+const hasDeveloperApp = process.platform === 'darwin' && fs.existsSync(path.join(__dirname, 'OSN.app'));
 const obs = hasDeveloperApp
   ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
   : require('./obs_studio_client.node');
