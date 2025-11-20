@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-// Mac- search for optional OSN.app bundle (Chromium requires an app bundle to finder helper apps)
+// Mac- search for optional OSN.app bundle (Chromium requires an app bundle to find obs64 helper apps)
 const hasDeveloperApp = process.platform === 'darwin' && fs.existsSync(path.join(__dirname, 'OSN.app'));
 const obs = hasDeveloperApp
   ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
