@@ -1,9 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NodeObs = exports.getSourcesSize = exports.createSources = exports.addItems = exports.AdvancedReplayBufferFactory = exports.SimpleReplayBufferFactory = exports.AudioEncoderFactory = exports.AdvancedRecordingFactory = exports.SimpleRecordingFactory = exports.AudioTrackFactory = exports.NetworkFactory = exports.ReconnectFactory = exports.DelayFactory = exports.AdvancedStreamingFactory = exports.SimpleStreamingFactory = exports.ServiceFactory = exports.VideoEncoderFactory = exports.IPC = exports.ModuleFactory = exports.AudioFactory = exports.Audio = exports.FaderFactory = exports.VolmeterFactory = exports.DisplayFactory = exports.TransitionFactory = exports.FilterFactory = exports.SceneFactory = exports.InputFactory = exports.VideoFactory = exports.Video = exports.Global = exports.DefaultPluginPathMac = exports.DefaultPluginDataPath = exports.DefaultPluginPath = exports.DefaultDataPath = exports.DefaultBinPath = exports.DefaultDrawPluginPath = exports.DefaultOpenGLPath = exports.DefaultD3D11Path = void 0;
-const obs = require('./obs_studio_client.node');
 const path = require("path");
 const fs = require("fs");
+const hasDeveloperApp = fs.existsSync(path.join(__dirname, 'OSN.app')); // search for local developer OSN.app bundle which stores CEF helper apps, etc
+const obs = hasDeveloperApp
+  ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
+  : require('./obs_studio_client.node');
 exports.DefaultD3D11Path = path.resolve(__dirname, `libobs-d3d11.dll`);
 exports.DefaultOpenGLPath = path.resolve(__dirname, `libobs-opengl.dll`);
 exports.DefaultDrawPluginPath = path.resolve(__dirname, `simple_draw.dll`);
@@ -117,7 +120,9 @@ function getSourcesSize(sourcesNames) {
     return sourcesSize;
 }
 exports.getSourcesSize = getSourcesSize;
-const __dirnameApple = fs.existsSync(__dirname + '/OSN.app') ? __dirname + '/OSN.app/distribute/obs-studio-node/bin' : __dirname + '/bin'; // search for local developer OSN.app bundle which stores CEF helper apps
+const __dirnameApple = hasDeveloperApp
+  ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
+  : path.join(__dirname, 'bin');
 if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(__dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'));
 }
