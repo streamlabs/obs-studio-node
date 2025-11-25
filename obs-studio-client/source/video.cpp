@@ -104,24 +104,24 @@ void osn::Video::Destroy(const Napi::CallbackInfo &info)
 		return;
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "RemoveVideoContext", {ipc::value((uint64_t)(this->canvasId))});
-
+	isLastVideoValid = false;
 	return;
 }
 
 inline void CreateVideo(const Napi::CallbackInfo &info, const std::vector<ipc::value> &response, Napi::Object &video, uint32_t index)
 {
-	video.Set("fpsNum", response[index++].value_union.ui32);
-	video.Set("fpsDen", response[index++].value_union.ui32);
-	video.Set("baseWidth", response[index++].value_union.ui32);
-	video.Set("baseHeight", response[index++].value_union.ui32);
-	video.Set("outputWidth", response[index++].value_union.ui32);
-	video.Set("outputHeight", response[index++].value_union.ui32);
-	video.Set("outputFormat", response[index++].value_union.ui32);
-	video.Set("colorspace", response[index++].value_union.ui32);
-	video.Set("range", response[index++].value_union.ui32);
-	video.Set("scaleType", response[index++].value_union.ui32);
+	video.Set("fpsNum", response.at(index++).value_union.ui32);
+	video.Set("fpsDen", response.at(index++).value_union.ui32);
+	video.Set("baseWidth", response.at(index++).value_union.ui32);
+	video.Set("baseHeight", response.at(index++).value_union.ui32);
+	video.Set("outputWidth", response.at(index++).value_union.ui32);
+	video.Set("outputHeight", response.at(index++).value_union.ui32);
+	video.Set("outputFormat", response.at(index++).value_union.ui32);
+	video.Set("colorspace", response.at(index++).value_union.ui32);
+	video.Set("range", response.at(index++).value_union.ui32);
+	video.Set("scaleType", response.at(index++).value_union.ui32);
 	if (response.size() >= 12)
-		video.Set("fpsType", response[index++].value_union.ui32);
+		video.Set("fpsType", response.at(index++).value_union.ui32);
 }
 
 inline void SerializeVideoData(const Napi::Object &video, std::vector<ipc::value> &args)

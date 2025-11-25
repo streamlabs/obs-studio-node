@@ -209,6 +209,12 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 			return false;
 		}
 
+		if (obs_get_multiple_rendering()) {
+			obs_encoder_set_video_mix(encoder, obs_video_mix_get(ovi, OBS_STREAMING_VIDEO_RENDERING));
+		} else {
+			obs_encoder_set_video_mix(encoder, obs_video_mix_get(ovi, OBS_MAIN_VIDEO_RENDERING));
+		}
+
 		if (!obs_encoder_set_group(encoder, encoder_group.get())) {
 			blog(LOG_ERROR, "create_video_encoders - failed to set video encoder group - i: %d", config.canvas_index);
 			return false;

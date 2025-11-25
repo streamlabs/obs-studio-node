@@ -261,6 +261,9 @@ void utility::ProcessProperties(obs_properties_t *prp, obs_data *settings, std::
 				case obs::ListProperty::Format::String:
 					entry.value_string = (buf = obs_property_list_item_string(p, idx)) != nullptr ? buf : "";
 					break;
+				case obs::ListProperty::Format::Invalid:
+					blog(LOG_INFO, "Encountered an invalid property");
+					break;
 				}
 				prop2->items.push_back(std::move(entry));
 			}
@@ -279,6 +282,9 @@ void utility::ProcessProperties(obs_properties_t *prp, obs_data *settings, std::
 			}
 			case obs::ListProperty::Format::String: {
 				prop2->current_value_str = (buf = obs_data_get_string(settings, name)) != nullptr ? buf : "";
+				break;
+			}
+			case obs::ListProperty::Format::Invalid: {
 				break;
 			}
 			}

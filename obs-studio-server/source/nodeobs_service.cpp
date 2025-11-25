@@ -558,7 +558,7 @@ int OBS_service::doResetVideoContext(obs_video_info *ovi)
 
 		return ret;
 	} catch (const char *error) {
-		blog(LOG_ERROR, error);
+		blog(LOG_ERROR, "Failed to reset video: %s", error);
 		return OBS_VIDEO_FAIL;
 	}
 }
@@ -2773,8 +2773,8 @@ void OBS_service::OBS_service_connectOutputSignals(void *data, const int64_t id,
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "wrote"));
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "writing_error"));
 
-	virtualCamSignals.push_back(SignalInfo("virtual-camera", "reconnect_success"));
-	virtualCamSignals.push_back(SignalInfo("virtual-camera", "deactivate"));
+	virtualCamSignals.push_back(SignalInfo("virtual-camera", "start"));
+	virtualCamSignals.push_back(SignalInfo("virtual-camera", "stop"));
 
 	connectOutputSignals(StreamServiceId::Main);
 	connectOutputSignals(StreamServiceId::Second);

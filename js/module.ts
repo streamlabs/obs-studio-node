@@ -1890,7 +1890,7 @@ export const enum VCamOutputType {
 };
 
 // Initialization and other stuff which needs local data.
-const __dirnameApple = __dirname + '/bin';
+const __dirnameApple = fs.existsSync(__dirname + '/OSN.app') ? __dirname + '/OSN.app/distribute/obs-studio-node/bin' : __dirname + '/bin'; // search for local developer OSN.app bundle which stores CEF helper apps
 if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(__dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'));
 }

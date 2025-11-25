@@ -308,14 +308,17 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	}
 
 	pid_t pid;
-	std::vector<char> uri_str(uri.c_str(), uri.c_str() + uri.size() + 1);
-	char *argv[] = {"obs64", uri_str.data(), (char *)version.c_str(), (char *)serverBinaryPath.c_str(), NULL};
-	remove(uri.c_str());
+	std::vector<const char *> argv = {"obs64", uri.c_str(), version.c_str(), serverBinaryPath.c_str(), nullptr};
 
-	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, argv, environ);
+	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
+	if (ret != 0) {
+		std::cerr << "Could not spawn the server at " << serverBinaryPath.c_str() << " with error code: " << ret << std::endl;
+		return nullptr;
+	}
 	// Connect
 	std::shared_ptr<ipc::client> cl = connect(uri);
 	if (!cl) { // Assume the server broke or was not allowed to run.
+		std::cerr << "Could not connect to ipc::server" << std::endl;
 		disconnect();
 		uint32_t exitcode;
 		kill(pid, SIGKILL);

@@ -33,6 +33,20 @@ cmake --build . --target install --config RelWithDebInfo
 
 This will will download any required dependencies, build the module, and then place it in an archive compatible with npm or yarn that you may specify in a given package.json.
 
+### Mac
+Building on Mac requires Xcode.
+
+Example (this assumes desktop repo is also installed in same parent folder and attempts to build a test developer app bundle so you can see browser sources, etc):
+```
+yarn install
+git submodule update --init --recursive
+mkdir build
+cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=~/streamlabs/desktop/node_modules/obs-studio-node/OSN.app/distribute/obs-studio-node -DCMAKE_OSX_ARCHITECTURES=arm64 -G Xcode
+cmake --build . --target install --config RelWithDebInfo
+```
+Note, the only gotcha is that if you later run `yarn package:mac` command in the desktop folder instead, then you should remove *OSN.app* from the `CMAKE_INSTALL_PREFIX` path. This is because the electron-builder scripts will throw an error this is not a fully formed app bundle during codesign.
+
 ### Custom OBS Build
 By default, we download a pre-built version of libobs if none is specified. However, this pre-built version may not be what you want to use or maybe you're testing a new obs feature.
 

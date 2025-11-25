@@ -1046,7 +1046,7 @@ describe(testName, function() {
                             break;
                         }
                         case 'ApplyServiceSettings': {
-                            parameter.currentValue = true;
+                            parameter.currentValue = false;
                             break;
                         }
                         case 'rate_control': {
@@ -1402,7 +1402,7 @@ describe(testName, function() {
             // Checking if settings were updated correctly
             const updatedCRFOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
             expect(crfOutputSettings).to.eql(updatedCRFOutputSettings, GetErrorMessage(ETestErrorMsg.OutputSettings));
-        }
+        } // else if
     });
 
     it('Get and set NVENC encoder streaming and recording advanced output settings', function() {
