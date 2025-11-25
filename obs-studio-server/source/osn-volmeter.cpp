@@ -84,7 +84,6 @@ void osn::Volmeter::Create(void *data, const int64_t id, const std::vector<ipc::
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(meter->id));
-	rval.push_back(ipc::value(obs_volmeter_get_update_interval(meter->self)));
 	AUTO_DEBUG;
 }
 

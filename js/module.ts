@@ -577,12 +577,12 @@ export interface IGlobal {
     readonly version: number;
 
     /**
-     * Percentage of CPU being used 
+     * Percentage of CPU being used
      */
     readonly cpuPercentage: number;
 
     /**
-     * Current FPS 
+     * Current FPS
      */
     readonly currentFrameRate: number;
 
@@ -597,7 +597,7 @@ export interface IGlobal {
     readonly diskSpaceAvailable: number;
 
     /**
-     * Current memory usage 
+     * Current memory usage
      */
     readonly memoryUsage: number;
 }
@@ -1377,11 +1377,6 @@ export interface IVolmeterFactory {
  * Object representing a volmeter control corresponding to a source.
  */
 export interface IVolmeter {
-    /**
-     * The interval at which the volmeter will call the callback.
-     */
-    updateInterval: number;
-
     /**
      * Destroy the volmeter object object
      */
