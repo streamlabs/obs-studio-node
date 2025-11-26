@@ -972,6 +972,18 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	SetPrivilegeForGPUPriority();
 #endif
 
+	// This code initializes the graphics susbsystem and hardware acceleration features
+	obs_video_info *ovi = obs_create_video_info();
+	const auto resetResult = obs_reset_video(ovi);
+	if (resetResult != OBS_VIDEO_SUCCESS) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::CriticalError));
+		rval.push_back(ipc::value(resetResult));
+	}
+	obs_remove_video_info(ovi);
+	if (resetResult != OBS_VIDEO_SUCCESS) {
+		return;
+	}
+
 	osn::Source::initialize_global_signals();
 
 	cpuUsageInfo = os_cpu_usage_info_start();
