@@ -82,13 +82,16 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: Package compiled artifacts
+        run: |
+          tar -cvzf build-artifacts.tar.gz \
+            -C "${{env.SLBUILDDIRECTORY}}" . \
+            -C tests/osn-tests/osn index.ts
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: |
-            ${{env.SLBUILDDIRECTORY}}/
-            tests/osn-tests/osn/index.ts
+          path: build-artifacts.tar.gz
 
   run-tests-macos:
     name: 'Run macOS Tests'
@@ -131,11 +134,8 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
-      - name: Set executable permissions
-        run: |
-          chmod +x streamlabs-build.app/distribute/obs-studio-node/bin/obs64
-          chmod +x streamlabs-build.app/distribute/obs-studio-node/crashpad_*
-        shell: bash
+      - name: Extract artifacts
+        run: tar -xvzf build-artifacts.tar.gz
       - name: 'Run tests'
         timeout-minutes: 30
         run: 'yarn run test'
@@ -173,6 +173,8 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
+      - name: Extract artifacts
+        run: tar -xvzf build-artifacts.tar.gz
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -226,6 +228,8 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
+      - name: Extract artifacts
+        run: tar -xvzf build-artifacts.tar.gz
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
