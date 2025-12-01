@@ -86,7 +86,7 @@ jobs:
         run: |
           tar -cvzf build-artifacts.tar.gz \
             -C "${{env.SLBUILDDIRECTORY}}" . \
-            -C tests/osn-tests/osn index.ts
+            -C tests/osn-tests/osn .
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
