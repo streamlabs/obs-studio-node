@@ -85,13 +85,14 @@ jobs:
       - name: Package compiled artifacts
         run: |
           tar -cvzf build-artifacts.tar.gz \
-            -C "${{env.SLBUILDDIRECTORY}}" . \
-            -C tests/osn-tests/osn .
+            -C "${{env.SLBUILDDIRECTORY}}" .
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
-          path: build-artifacts.tar.gz
+          path: |
+            build-artifacts.tar.gz
+            tests/osn-tests/osn/index.ts
 
   run-tests-macos:
     name: 'Run macOS Tests'
