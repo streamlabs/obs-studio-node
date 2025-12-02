@@ -136,8 +136,8 @@ jobs:
           path: .
       - name: Extract artifacts
         run: |
-          mkdir -p streamlabs-build.app
-          tar -xvzf build-artifacts.tar.gz -C ${{env.SLBUILDDIRECTORY}}
+          mkdir -p "${{env.SLBUILDDIRECTORY}}"
+          tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: 'Run tests'
         timeout-minutes: 30
         run: 'yarn run test'
@@ -177,8 +177,8 @@ jobs:
           path: .
       - name: Extract artifacts
         run: |
-          mkdir -p streamlabs-build.app
-          tar -xvzf build-artifacts.tar.gz -C ${{env.SLBUILDDIRECTORY}}
+          mkdir -p "${{env.SLBUILDDIRECTORY}}"
+          tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -234,8 +234,8 @@ jobs:
           path: .
       - name: Extract artifacts
         run: |
-          mkdir -p streamlabs-build.app
-          tar -xvzf build-artifacts.tar.gz -C ${{env.SLBUILDDIRECTORY}}
+          mkdir -p "${{env.SLBUILDDIRECTORY}}"
+          tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
