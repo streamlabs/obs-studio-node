@@ -193,6 +193,19 @@ void OBS_service::OBS_service_setVideoInfo(void *data, const int64_t id, const s
 void OBS_service::OBS_service_startStreaming(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	StreamServiceId serviceid = static_cast<StreamServiceId>(args[0].value_union.i64);
+	blog(LOG_INFO, "OBS_service_startStreaming - serviceid: %d", serviceid);
+
+	// TODO: fixme
+	//serviceid = StreamServiceId::Both;
+	//serviceid = StreamServiceId::Main;
+	//serviceid = StreamServiceId::Second;
+
+	bool dualStreamingMode = false;
+	if (serviceid == StreamServiceId::Both) {
+		// TODO: comment here
+		serviceid = StreamServiceId::Main;
+		dualStreamingMode = true;
+	}
 
 	if (isStreamingOutputActive(serviceid)) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -200,7 +213,7 @@ void OBS_service::OBS_service_startStreaming(void *data, const int64_t id, const
 		return;
 	}
 
-	if (!startStreaming(serviceid)) {
+	if (!startStreaming(serviceid, dualStreamingMode)) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to start streaming!");
 	} else {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -1354,9 +1367,9 @@ bool OBS_service::startSingleTrackStreaming(StreamServiceId serviceId)
 	return isStreaming[serviceId];
 }
 
-bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId)
+bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId, bool dualStreamingMode)
 {
-	blog(LOG_INFO, "startMultiTrackStreaming - serviceId: %d", serviceId);
+	blog(LOG_INFO, "startMultiTrackStreaming - serviceId: %d, dualStreamingMode: %d", serviceId, (int)dualStreamingMode);
 
 	const bool is_custom = strncmp("rtmp_custom", obs_service_get_type(services[serviceId]), 11) == 0;
 
@@ -1389,7 +1402,7 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId)
 
 	auto vod_track_mixer = IsVodTrackEnabled(services[serviceId]) ? std::optional{vodTrackIndex} : std::nullopt;
 
-	auto go_live_post = osn::constructGoLivePost(key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
+	auto go_live_post = osn::constructGoLivePost(serviceId, dualStreamingMode, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
 	std::optional<osn::Config> go_live_config = osn::DownloadGoLiveConfig(auto_config_url, go_live_post);
 	if (!go_live_config.has_value()) {
 		throw std::runtime_error("startStreaming - go live config is empty");
@@ -1430,7 +1443,7 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId)
 	return isStreaming[serviceId];
 }
 
-bool OBS_service::startStreaming(StreamServiceId serviceId)
+bool OBS_service::startStreaming(StreamServiceId serviceId, bool dualStreamingMode)
 {
 	if (streamingOutput[serviceId]) {
 		obs_output_release(streamingOutput[serviceId]);
@@ -1438,8 +1451,8 @@ bool OBS_service::startStreaming(StreamServiceId serviceId)
 	}
 
 	try {
-		if (isTwitchStream(serviceId) && IsMultitrackVideoEnabled()) {
-			return startMultiTrackStreaming(serviceId);
+		if (isTwitchStream(serviceId) && (IsMultitrackVideoEnabled() || dualStreamingMode)) {
+			return startMultiTrackStreaming(serviceId, dualStreamingMode);
 		}
 
 		return startSingleTrackStreaming(serviceId);
