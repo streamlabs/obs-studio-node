@@ -195,14 +195,10 @@ void OBS_service::OBS_service_startStreaming(void *data, const int64_t id, const
 	StreamServiceId serviceid = static_cast<StreamServiceId>(args[0].value_union.i64);
 	blog(LOG_INFO, "OBS_service_startStreaming - serviceid: %d", serviceid);
 
-	// TODO: fixme
-	//serviceid = StreamServiceId::Both;
-	//serviceid = StreamServiceId::Main;
-	//serviceid = StreamServiceId::Second;
-
 	bool dualStreamingMode = false;
 	if (serviceid == StreamServiceId::Both) {
-		// TODO: comment here
+		// Both is the special mode than needs to be implemented as a full scale service one day.
+		// For now for simplicity and compatibility we just fall back to the Main.
 		serviceid = StreamServiceId::Main;
 		dualStreamingMode = true;
 	}
