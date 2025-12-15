@@ -91,7 +91,12 @@
 
 #define MAX_AUDIO_MIXES 6
 
-enum StreamServiceId : int { Main = 0, Second = 1 };
+/*
+ Main - is a horizontal canvas
+ Second - is a vertical one
+ Both - is a little bit special; it soes not create a service, but signals a special streaming mode.
+*/
+enum StreamServiceId : int { Main = 0, Second = 1, Both = 2 };
 
 class SignalInfo {
 private:
@@ -158,9 +163,9 @@ public:
 	static void OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 private:
-	static bool startStreaming(StreamServiceId serviceId);
+	static bool startStreaming(StreamServiceId serviceId, bool dualStreamingMode);
 	static bool startSingleTrackStreaming(StreamServiceId serviceId);
-	static bool startMultiTrackStreaming(StreamServiceId serviceId);
+	static bool startMultiTrackStreaming(StreamServiceId serviceId, bool dualStreamingMode);
 	static void stopStreaming(bool forceStop, StreamServiceId serviceId);
 	static bool startRecording(void);
 	static bool startReplayBuffer(void);

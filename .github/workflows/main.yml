@@ -24,7 +24,7 @@ env:
   SLGenerator: Visual Studio 17 2022
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 31.1.2test3
+  LibOBSVersion: 31.1.2test4
   PACKAGE_NAME: osn
 
 jobs:
@@ -82,12 +82,15 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
+      - name: Package compiled artifacts
+        run: |
+          tar -cvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}" .
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: |
-            ${{env.SLBUILDDIRECTORY}}/
+            build-artifacts.tar.gz
             tests/osn-tests/osn/index.ts
 
   run-tests-macos:
@@ -131,11 +134,10 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
-      - name: Set executable permissions
+      - name: Extract artifacts
         run: |
-          chmod +x streamlabs-build.app/distribute/obs-studio-node/bin/obs64
-          chmod +x streamlabs-build.app/distribute/obs-studio-node/crashpad_*
-        shell: bash
+          mkdir -p "${{env.SLBUILDDIRECTORY}}"
+          tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: 'Run tests'
         timeout-minutes: 30
         run: 'yarn run test'
@@ -173,6 +175,10 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
+      - name: Extract artifacts
+        run: |
+          mkdir -p "${{env.SLBUILDDIRECTORY}}"
+          tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
@@ -226,6 +232,10 @@ jobs:
         with:
           name: build-artifacts-mac-${{matrix.Architecture}}
           path: .
+      - name: Extract artifacts
+        run: |
+          mkdir -p "${{env.SLBUILDDIRECTORY}}"
+          tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: Get the version
         id: get_version
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT

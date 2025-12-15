@@ -268,6 +268,8 @@ int service::getServiceIdByName(std::string serviceName)
 		return 0;
 	} else if (serviceName == "vertical") {
 		return 1;
+	} else if (serviceName == "both") {
+		return 2;
 	}
 	return 0;
 }
