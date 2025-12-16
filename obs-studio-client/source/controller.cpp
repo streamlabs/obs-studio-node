@@ -449,7 +449,9 @@ Napi::Value js_connect(const Napi::CallbackInfo &info)
 	if (exit_code == STATUS_DLL_NOT_FOUND)
 		exit_code = ProcessInfo::MISSING_DEPENDENCY;
 #endif
-
+	if (exit_code == 0 && cl == nullptr) {
+		exit_code = ProcessInfo::OTHER_ERROR; // missing ipc client. likely due to missing obs64
+	}
 	return Napi::Number::New(info.Env(), exit_code);
 }
 
@@ -475,6 +477,9 @@ Napi::Value js_host(const Napi::CallbackInfo &info)
 		exit_code = ProcessInfo::MISSING_DEPENDENCY;
 #endif
 
+	if (exit_code == 0 && cl == nullptr) {
+		exit_code = ProcessInfo::OTHER_ERROR; // missing ipc client. likely due to missing obs64
+	}
 	return Napi::Number::New(info.Env(), exit_code);
 }
 
