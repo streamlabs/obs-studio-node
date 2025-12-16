@@ -108,7 +108,13 @@ export class OBSHandler {
         logInfo(this.osnTestName, 'Initializing OBS');
 
         try {
-            osn.NodeObs.IPC.host(this.pipeName);
+            const exitCode = osn.NodeObs.IPC.host(this.pipeName);
+            if (exitCode != osn.EVideoCodes.Success) {
+                if (exitCode == osn.EIPCError.OTHER_ERROR) {
+                    throw Error('OBS IPC host failed: missing executable or some other error.');
+                }
+                throw Error(`OBS IPC host failed with code ${exitCode}. See osn.EIPCError for more details.`);
+            }
             osn.NodeObs.SetWorkingDirectory(this.workingDirectory);
             initResult = osn.NodeObs.OBS_API_initAPI(this.language, this.obsPath, this.version, this.crashServer);
         } catch (e) {
