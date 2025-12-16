@@ -4,7 +4,8 @@ exports.NodeObs = exports.getSourcesSize = exports.createSources = exports.addIt
 const path = require("path");
 const fs = require("fs");
 // Mac- search for optional OSN.app bundle (Chromium requires an app bundle to find obs64 helper apps)
-const hasDeveloperApp = process.platform === 'darwin' && fs.existsSync(path.join(__dirname, 'OSN.app'));
+const isDarwin = process.platform === 'darwin';
+const hasDeveloperApp = isDarwin && fs.existsSync(path.join(__dirname, 'OSN.app'));
 const obs = hasDeveloperApp
   ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
   : require('./obs_studio_client.node');
@@ -121,11 +122,13 @@ function getSourcesSize(sourcesNames) {
     return sourcesSize;
 }
 exports.getSourcesSize = getSourcesSize;
-const __dirnameApple = hasDeveloperApp
-  ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
-  : path.join(__dirname, 'bin');
-if (fs.existsSync(path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
-    obs.IPC.setServerPath(path.resolve(__dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirnameApple).replace('app.asar', 'app.asar.unpacked'));
+if (isDarwin) {
+    const dirnameApple = hasDeveloperApp
+    ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
+    : path.join(__dirname, 'bin');
+    if (fs.existsSync(path.resolve(dirnameApple).replace('app.asar', 'app.asar.unpacked'))) {
+        obs.IPC.setServerPath(path.resolve(dirnameApple, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(dirnameApple).replace('app.asar', 'app.asar.unpacked'));
+    }
 }
 else if (fs.existsSync(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirname).replace('app.asar', 'app.asar.unpacked'));
