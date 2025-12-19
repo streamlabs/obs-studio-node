@@ -299,22 +299,18 @@ void osn::IStreaming::Query(void *data, const int64_t id, const std::vector<ipc:
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	std::unique_lock<std::mutex> ulock(streaming->signalsMtx);
-	if (streaming->signalsReceived.empty()) {
+	auto signalOpt = streaming->PopReceivedSignal();
+	if (!signalOpt.has_value()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
 		return;
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
-	auto signal = streaming->signalsReceived.front();
 	rval.push_back(ipc::value("streaming"));
-	rval.push_back(ipc::value(signal.signal));
-	rval.push_back(ipc::value(signal.code));
-	rval.push_back(ipc::value(signal.errorMessage));
-
-	streaming->signalsReceived.pop();
+	rval.push_back(ipc::value(signalOpt.value().signal));
+	rval.push_back(ipc::value(signalOpt.value().code));
+	rval.push_back(ipc::value(signalOpt.value().errorMessage));
 
 	AUTO_DEBUG;
 }

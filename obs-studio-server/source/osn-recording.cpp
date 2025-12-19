@@ -68,22 +68,18 @@ void osn::IRecording::Query(void *data, const int64_t id, const std::vector<ipc:
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
 
-	std::unique_lock<std::mutex> ulock(recording->signalsMtx);
-	if (recording->signalsReceived.empty()) {
+	auto signalOpt = recording->PopReceivedSignal();
+	if (!signalOpt.has_value()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
 		return;
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
-	auto signal = recording->signalsReceived.front();
 	rval.push_back(ipc::value("recording"));
-	rval.push_back(ipc::value(signal.signal));
-	rval.push_back(ipc::value(signal.code));
-	rval.push_back(ipc::value(signal.errorMessage));
-
-	recording->signalsReceived.pop();
+	rval.push_back(ipc::value(signalOpt.value().signal));
+	rval.push_back(ipc::value(signalOpt.value().code));
+	rval.push_back(ipc::value(signalOpt.value().errorMessage));
 
 	AUTO_DEBUG;
 }

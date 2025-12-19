@@ -47,7 +47,7 @@ void osn::Output::createOutput(const std::string &type, const std::string &name)
 
 	auto onStopped = [](void *data, calldata_t *) {
 		osn::Output *context = reinterpret_cast<osn::Output *>(data);
-		std::unique_lock<std::mutex> lock(context->m_mtxOutputStop);
+		std::unique_lock lock(context->m_mtxOutputStop);
 		context->m_cvStop.notify_one();
 	};
 
@@ -64,14 +64,14 @@ void osn::Output::deleteOutput()
 
 	if (obs_output_active(output)) {
 		obs_output_stop(output);
-		std::unique_lock<std::mutex> lock(m_mtxOutputStop);
+		std::unique_lock lock(m_mtxOutputStop);
 		m_cvStop.wait_for(lock, std::chrono::seconds(20));
 	}
 	obs_output_release(output);
 	output = nullptr;
 }
 
-static void callback(void *data, calldata_t *params)
+void osn::OutputSignalCallback(void *data, calldata_t *params)
 {
 	auto info = reinterpret_cast<CallbackData *>(data);
 
@@ -86,8 +86,8 @@ static void callback(void *data, calldata_t *params)
 
 	const char *error = obs_output_get_last_error(outputClass->output);
 
-	std::unique_lock<std::mutex> ulock(outputClass->signalsMtx);
-	outputClass->signalsReceived.push({signal, (int)calldata_int(params, "code"), error ? std::string(error) : ""});
+	std::unique_lock ulock(outputClass->m_signalsMtx);
+	outputClass->m_signalsReceived.push({signal, (int)calldata_int(params, "code"), error ? std::string(error) : ""});
 }
 
 void osn::Output::ConnectSignals()
@@ -100,7 +100,7 @@ void osn::Output::ConnectSignals()
 		auto *cd = new CallbackData();
 		cd->signal = signal;
 		cd->outputClass = this;
-		signal_handler_connect(handler, signal.c_str(), callback, cd);
+		signal_handler_connect(handler, signal.c_str(), osn::OutputSignalCallback, cd);
 	}
 }
 
@@ -132,6 +132,19 @@ void osn::Output::startOutput()
 		code = OBS_OUTPUT_ERROR;
 	}
 
-	std::unique_lock<std::mutex> ulock(signalsMtx);
-	signalsReceived.push({"stop", code, errorMessage});
+	std::unique_lock ulock(m_signalsMtx);
+	m_signalsReceived.push({"stop", code, errorMessage});
+}
+
+std::optional<osn::Output::SignalInfo> osn::Output::PopReceivedSignal()
+{
+    std::unique_lock ulock(m_signalsMtx);
+
+	if (m_signalsReceived.empty()) {
+		return {};
+	}
+
+    const auto result = m_signalsReceived.front();
+	m_signalsReceived.pop();
+    return result;
 }

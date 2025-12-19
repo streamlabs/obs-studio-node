@@ -134,22 +134,18 @@ void osn::IReplayBuffer::Query(void *data, const int64_t id, const std::vector<i
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "ReplayBuffer reference is not valid.");
 	}
 
-	std::unique_lock<std::mutex> ulock(replayBuffer->signalsMtx);
-	if (replayBuffer->signalsReceived.empty()) {
+	auto signalOpt = replayBuffer->PopReceivedSignal();
+	if (!signalOpt.has_value()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
 		return;
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
-	auto signal = replayBuffer->signalsReceived.front();
 	rval.push_back(ipc::value("replay-buffer"));
-	rval.push_back(ipc::value(signal.signal));
-	rval.push_back(ipc::value(signal.code));
-	rval.push_back(ipc::value(signal.errorMessage));
-
-	replayBuffer->signalsReceived.pop();
+	rval.push_back(ipc::value(signalOpt.value().signal));
+	rval.push_back(ipc::value(signalOpt.value().code));
+	rval.push_back(ipc::value(signalOpt.value().errorMessage));
 
 	AUTO_DEBUG;
 }

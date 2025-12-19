@@ -19,19 +19,22 @@
 #pragma once
 
 #include <obs.h>
+
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <vector>
 
 namespace osn {
 
-struct OutputSignalInfo {
-	std::string signal;
-	int code = 0;
-	std::string errorMessage;
-};
-
 class Output {
+public:
+    struct SignalInfo {
+        std::string signal;
+        int code = 0;
+        std::string errorMessage;
+    };
+
 public:
 	Output(const std::vector<std::string> &signals);
 	virtual ~Output();
@@ -41,13 +44,18 @@ public:
 	void deleteOutput();
 	void startOutput();
 
+    // If no signal, will return an empty optional. Thread safe.
+    std::optional<SignalInfo> PopReceivedSignal();
 
     obs_output_t *output;
-    std::mutex signalsMtx;
-    std::queue<OutputSignalInfo> signalsReceived;
     obs_video_info *canvas;
 
 private:
+    friend void OutputSignalCallback(void *data, calldata_t *params);
+
+    std::mutex m_signalsMtx;
+    std::queue<SignalInfo> m_signalsReceived;
+
 	std::condition_variable m_cvStop;
 	std::mutex m_mtxOutputStop;
 
