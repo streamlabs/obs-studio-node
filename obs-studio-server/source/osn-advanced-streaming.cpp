@@ -366,9 +366,10 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 {
 	AdvancedStreaming *streaming = static_cast<AdvancedStreaming *>(osn::IAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Advanced streaming reference is not valid.");
 	}
 
+	// TODO: enhanced broadcasting case
 	if (!streaming->videoEncoder) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
@@ -388,10 +389,6 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	if (!streaming->output) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the streaming output.");
-	}
-
-	if (!streaming->videoEncoder) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the video encoder.");
 	}
 
 	if (!setAudioEncoder(streaming)) {

@@ -19,12 +19,12 @@
 #pragma once
 #include <obs.h>
 #include "utility.hpp"
-#include "osn-output-signals.hpp"
+#include "osn-output.hpp"
 
 namespace osn {
-class FileOutput : public OutputSignals {
+class FileOutput : public Output {
 public:
-	FileOutput() : OutputSignals()
+	FileOutput(const std::vector<std::string> &signals) : Output(signals)
 	{
 		path = "";
 		format = "mp4";

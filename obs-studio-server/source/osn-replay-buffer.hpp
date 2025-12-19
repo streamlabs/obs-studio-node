@@ -25,13 +25,13 @@
 namespace osn {
 class ReplayBuffer : public FileOutput {
 public:
-	ReplayBuffer()
+	ReplayBuffer() : FileOutput({"start", "stop", "stopping", "writing", "wrote", "writing_error"})
 	{
 		duration = 20;
 		prefix = "Replay";
 		suffix = "";
 		usesStream = false;
-		signals = {"start", "stop", "stopping", "writing", "wrote", "writing_error"};
+		//signals = {"start", "stop", "stopping", "writing", "wrote", "writing_error"};
 	}
 	virtual ~ReplayBuffer();
 

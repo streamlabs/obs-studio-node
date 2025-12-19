@@ -17,3 +17,41 @@
 ******************************************************************************/
 
 #pragma once
+
+#include <obs.h>
+#include <mutex>
+#include <queue>
+#include <vector>
+
+namespace osn {
+
+struct OutputSignalInfo {
+	std::string signal;
+	int code = 0;
+	std::string errorMessage;
+};
+
+class Output {
+public:
+	Output(const std::vector<std::string> &signals);
+	virtual ~Output();
+
+    void ConnectSignals();
+    void createOutput(const std::string &type, const std::string &name);
+	void deleteOutput();
+	void startOutput();
+
+
+    obs_output_t *output;
+    std::mutex signalsMtx;
+    std::queue<OutputSignalInfo> signalsReceived;
+    obs_video_info *canvas;
+
+private:
+	std::condition_variable m_cvStop;
+	std::mutex m_mtxOutputStop;
+
+    const std::vector<std::string> m_signals;
+};
+
+}

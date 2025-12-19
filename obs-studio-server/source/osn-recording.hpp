@@ -27,10 +27,10 @@ enum SplitFileType : uint32_t { TIME, SIZE, MANUAL };
 
 class Recording : public FileOutput {
 public:
-	Recording() : FileOutput()
+	Recording() : FileOutput({"start", "stop", "stopping", "wrote"})
 	{
 		videoEncoder = nullptr;
-		signals = {"start", "stop", "stopping", "wrote"};
+		//signals = {"start", "stop", "stopping", "wrote"};
 		enableFileSplit = false;
 		splitType = SplitFileType::TIME;
 		splitTime = 15;

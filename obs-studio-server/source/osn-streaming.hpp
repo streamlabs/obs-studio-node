@@ -22,25 +22,27 @@
 #include "osn-delay.hpp"
 #include "osn-reconnect.hpp"
 #include "osn-network.hpp"
-#include "osn-output-signals.hpp"
+#include "osn-output.hpp"
 #include "osn-video-encoder.hpp"
 
 #include "nodeobs_configManager.hpp"
 
 namespace osn {
-class Streaming : public OutputSignals {
+class Streaming : public Output {
 public:
-	Streaming()
+	Streaming() : Output({"start", "stop", "starting", "stopping", "activate",
+		                  "deactivate", "reconnect", "reconnect_success"})
 	{
 		videoEncoder = nullptr;
 		streamArchive = nullptr;
 		service = nullptr;
 		enforceServiceBitrate = true;
 		enableTwitchVOD = false;
+		enhancedBroadcasting = false;
 		twitchVODSupported = false;
 		oldMixer_desktopSource1 = 0;
 		oldMixer_desktopSource2 = 0;
-		signals = {"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"};
+		//signals = {"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"};
 		delay = new Delay();
 		reconnect = new Reconnect();
 		network = new Network();
@@ -55,6 +57,7 @@ public:
 	obs_service_t *service;
 	bool enforceServiceBitrate;
 	bool enableTwitchVOD;
+	bool enhancedBroadcasting;
 	bool twitchVODSupported;
 	uint32_t oldMixer_desktopSource1;
 	uint32_t oldMixer_desktopSource2;
