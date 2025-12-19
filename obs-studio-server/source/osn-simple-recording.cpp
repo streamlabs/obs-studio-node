@@ -153,8 +153,8 @@ static void LoadLosslessPreset(osn::Recording *recording)
 	obs_data_set_string(settings, "video_encoder", "utvideo");
 	obs_data_set_string(settings, "audio_encoder", "pcm_s16le");
 
-	obs_output_set_mixers(recording->output, 1);
-	obs_output_update(recording->output, settings);
+	obs_output_set_mixers(recording->GetOutput(), 1);
+	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
 }
 
@@ -344,10 +344,10 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	}
 
 	const char *ffmpegMuxer = "ffmpeg_muxer";
-	if (!recording->output || strcmp(obs_output_get_id(recording->output), ffmpegMuxer) == 0)
-		recording->createOutput("ffmpeg_muxer", "recording");
+	if (!recording->GetOutput() || strcmp(obs_output_get_id(recording->GetOutput()), ffmpegMuxer) == 0)
+		recording->CreateOutput("ffmpeg_muxer", "recording");
 
-	if (!recording->output) {
+	if (!recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the recording output.");
 	}
 
@@ -355,7 +355,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	std::string pathProperty = "path";
 
 	if (recording->quality == RecQuality::Lossless) {
-		recording->createOutput("ffmpeg_output", "recording");
+		recording->CreateOutput("ffmpeg_output", "recording");
 		LoadLosslessPreset(recording);
 		format = "avi";
 		pathProperty = "url";
@@ -371,10 +371,10 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		}
 
 		obs_encoder_set_audio(recording->audioEncoder, obs_get_audio());
-		obs_output_set_audio_encoder(recording->output, recording->audioEncoder, 0);
+		obs_output_set_audio_encoder(recording->GetOutput(), recording->audioEncoder, 0);
 		obs_encoder_set_video_mix(recording->audioEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 
-		obs_output_set_video_encoder(recording->output, recording->videoEncoder);
+		obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 	}
 
 	if (!recording->path.size()) {
@@ -395,13 +395,13 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, pathProperty.c_str(), path.c_str());
 	obs_data_set_string(settings, "muxer_settings", recording->muxerSettings.c_str());
-	obs_output_update(recording->output, settings);
+	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
 
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
 
-	recording->startOutput();
+	recording->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -413,11 +413,11 @@ void osn::ISimpleRecording::Stop(void *data, const int64_t id, const std::vector
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
 	}
-	if (!recording->output) {
+	if (!recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording output.");
 	}
 
-	obs_output_stop(recording->output);
+	obs_output_stop(recording->GetOutput());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

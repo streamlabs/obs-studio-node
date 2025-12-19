@@ -38,10 +38,10 @@ osn::Output::~Output()
 {
 }
 
-void osn::Output::createOutput(const std::string &type, const std::string &name)
+void osn::Output::CreateOutput(const std::string &type, const std::string &name)
 {
-	deleteOutput();
-	output = obs_output_create(type.c_str(), name.c_str(), nullptr, nullptr);
+	DeleteOutput();
+	m_output = obs_output_create(type.c_str(), name.c_str(), nullptr, nullptr);
 
 	auto onStopped = [](void *data, calldata_t *) {
 		osn::Output *context = reinterpret_cast<osn::Output *>(data);
@@ -49,24 +49,24 @@ void osn::Output::createOutput(const std::string &type, const std::string &name)
 		context->m_cvStop.notify_one();
 	};
 
-	signal_handler *sh = obs_output_get_signal_handler(output);
+	signal_handler *sh = obs_output_get_signal_handler(m_output);
 	signal_handler_connect(sh, "stop", onStopped, this);
 
 	ConnectSignals();
 }
 
-void osn::Output::deleteOutput()
+void osn::Output::DeleteOutput()
 {
-	if (!output)
+	if (!m_output)
 		return;
 
-	if (obs_output_active(output)) {
-		obs_output_stop(output);
+	if (obs_output_active(m_output)) {
+		obs_output_stop(m_output);
 		std::unique_lock lock(m_mtxOutputStop);
 		m_cvStop.wait_for(lock, std::chrono::seconds(20));
 	}
-	obs_output_release(output);
-	output = nullptr;
+	obs_output_release(m_output);
+	m_output = nullptr;
 }
 
 void osn::OutputSignalCallback(void *data, calldata_t *params)
@@ -79,10 +79,10 @@ void osn::OutputSignalCallback(void *data, calldata_t *params)
 	std::string signal = info->signal;
 	auto outputClass = info->outputClass;
 
-	if (!outputClass->output)
+	if (!outputClass->m_output)
 		return;
 
-	const char *error = obs_output_get_last_error(outputClass->output);
+	const char *error = obs_output_get_last_error(outputClass->m_output);
 
 	std::unique_lock ulock(outputClass->m_signalsMtx);
 	outputClass->m_signalsReceived.push({signal, (int)calldata_int(params, "code"), error ? std::string(error) : ""});
@@ -90,10 +90,10 @@ void osn::OutputSignalCallback(void *data, calldata_t *params)
 
 void osn::Output::ConnectSignals()
 {
-	if (!output)
+	if (!m_output)
 		return;
 
-	signal_handler *handler = obs_output_get_signal_handler(output);
+	signal_handler *handler = obs_output_get_signal_handler(m_output);
 	for (const auto &signal : m_signals) {
 		auto *cd = new CallbackData();
 		cd->signal = signal;
@@ -102,13 +102,13 @@ void osn::Output::ConnectSignals()
 	}
 }
 
-void osn::Output::startOutput()
+void osn::Output::StartOutput()
 {
-	if (!output)
+	if (!m_output)
 		return;
 
 	outdated_driver_error::instance()->set_active(true);
-	bool result = obs_output_start(output);
+	bool result = obs_output_start(m_output);
 	outdated_driver_error::instance()->set_active(false);
 
 	if (result)
@@ -122,7 +122,7 @@ void osn::Output::startOutput()
 		errorMessage = outdated_driver_error;
 		code = OBS_OUTPUT_OUTDATED_DRIVER;
 	} else {
-		const char *error = obs_output_get_last_error(output);
+		const char *error = obs_output_get_last_error(m_output);
 		if (error) {
 			errorMessage = error;
 			blog(LOG_INFO, "Last streaming error: %s", error);
@@ -160,4 +160,12 @@ obs_video_info *osn::Output::GetCanvas()
 const obs_video_info *osn::Output::GetCanvas() const
 {
     return m_canvas;
+}
+
+obs_output_t *osn::Output::GetOutput() {
+    return m_output;
+}
+
+const obs_output_t *osn::Output::GetOutput() const {
+    return m_output;
 }

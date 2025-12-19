@@ -26,7 +26,7 @@
 
 osn::Streaming::~Streaming()
 {
-	deleteOutput();
+	DeleteOutput();
 	if (streamArchive && !obs_encoder_active(streamArchive)) {
 		obs_encoder_release(streamArchive);
 		streamArchive = nullptr;
@@ -389,8 +389,8 @@ void osn::IStreaming::GetDroppedFrames(void *data, const int64_t id, const std::
 
 	int totalDropped = 0;
 
-	if (streaming->output && obs_output_active(streaming->output)) {
-		totalDropped = obs_output_get_frames_dropped(streaming->output);
+	if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
+		totalDropped = obs_output_get_frames_dropped(streaming->GetOutput());
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -407,8 +407,8 @@ void osn::IStreaming::GetTotalFrames(void *data, const int64_t id, const std::ve
 
 	int totalFrames = 0;
 
-	if (streaming->output && obs_output_active(streaming->output)) {
-		totalFrames = obs_output_get_total_frames(streaming->output);
+	if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
+		totalFrames = obs_output_get_total_frames(streaming->GetOutput());
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -425,9 +425,9 @@ void osn::IStreaming::GetKBitsPerSec(void *data, const int64_t id, const std::ve
 
 	double kbitsPerSec = 0;
 
-	if (streaming->output && obs_output_active(streaming->output)) {
+	if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
 
-		uint64_t bytesSent = obs_output_get_total_bytes(streaming->output);
+		uint64_t bytesSent = obs_output_get_total_bytes(streaming->GetOutput());
 		uint64_t bytesSentTime = os_gettime_ns();
 
 		if (bytesSent < streaming->lastBytesSent)
@@ -462,9 +462,9 @@ void osn::IStreaming::GetDataOutput(void *data, const int64_t id, const std::vec
 
 	double dataOutput = 0;
 
-	if (streaming->output && obs_output_active(streaming->output)) {
+	if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
 
-		uint64_t bytesSent = obs_output_get_total_bytes(streaming->output);
+		uint64_t bytesSent = obs_output_get_total_bytes(streaming->GetOutput());
 		uint64_t bytesSentTime = os_gettime_ns();
 
 		if (bytesSent < streaming->lastBytesSent)

@@ -123,15 +123,15 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple replay buffer reference is not valid.");
 	}
 
-	if (!replayBuffer->output)
-		replayBuffer->createOutput("replay_buffer", "replay-buffer");
+	if (!replayBuffer->GetOutput())
+		replayBuffer->CreateOutput("replay_buffer", "replay-buffer");
 
 	int idx = 0;
 	for (int i = 0; i < MAX_AUDIO_MIXES; i++) {
 		osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTracks[i];
 		if ((replayBuffer->mixer & (1 << i)) != 0 && audioTrack && audioTrack->audioEnc) {
 			obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
-			obs_output_set_audio_encoder(replayBuffer->output, audioTrack->audioEnc, idx);
+			obs_output_set_audio_encoder(replayBuffer->GetOutput(), audioTrack->audioEnc, idx);
 			idx++;
 		}
 	}
@@ -154,7 +154,7 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
-	obs_output_set_video_encoder(replayBuffer->output, videoEncoder);
+	obs_output_set_video_encoder(replayBuffer->GetOutput(), videoEncoder);
 
 	if (!replayBuffer->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
@@ -185,10 +185,10 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 	obs_data_set_bool(settings, "allow_spaces", !replayBuffer->noSpace);
 	obs_data_set_int(settings, "max_time_sec", replayBuffer->duration);
 	obs_data_set_int(settings, "max_size_mb", rbSize);
-	obs_output_update(replayBuffer->output, settings);
+	obs_output_update(replayBuffer->GetOutput(), settings);
 	obs_data_release(settings);
 
-	replayBuffer->startOutput();
+	replayBuffer->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -200,11 +200,11 @@ void osn::IAdvancedReplayBuffer::Stop(void *data, const int64_t id, const std::v
 	if (!replayBuffer) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple replay buffer reference is not valid.");
 	}
-	if (!replayBuffer->output) {
+	if (!replayBuffer->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid replay buffer output.");
 	}
 
-	obs_output_stop(replayBuffer->output);
+	obs_output_stop(replayBuffer->GetOutput());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

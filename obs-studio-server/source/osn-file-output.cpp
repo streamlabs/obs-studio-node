@@ -233,7 +233,7 @@ void osn::IFileOutput::GetLastFile(void *data, const int64_t id, const std::vect
 	}
 
 	calldata_t cd = {0};
-	proc_handler_t *ph = obs_output_get_proc_handler(fileOutput->output);
+	proc_handler_t *ph = obs_output_get_proc_handler(fileOutput->GetOutput());
 	proc_handler_call(ph, "get_last_file", &cd);
 	const char *path = calldata_string(&cd, "path");
 	path = path ? path : "";

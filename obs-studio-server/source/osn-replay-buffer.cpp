@@ -24,7 +24,7 @@
 
 osn::ReplayBuffer::~ReplayBuffer()
 {
-	deleteOutput();
+	DeleteOutput();
 }
 
 void osn::IReplayBuffer::GetDuration(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

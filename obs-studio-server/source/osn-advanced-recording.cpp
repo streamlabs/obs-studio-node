@@ -201,10 +201,10 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
 	}
 
-	if (!recording->output)
-		recording->createOutput("ffmpeg_muxer", "recording");
+	if (!recording->GetOutput())
+		recording->CreateOutput("ffmpeg_muxer", "recording");
 
-	if (!recording->output) {
+	if (!recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the recording output.");
 	}
 
@@ -213,7 +213,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTracks[i];
 		if ((recording->mixer & (1 << i)) != 0 && audioTrack && audioTrack->audioEnc) {
 			obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
-			obs_output_set_audio_encoder(recording->output, audioTrack->audioEnc, idx);
+			obs_output_set_audio_encoder(recording->GetOutput(), audioTrack->audioEnc, idx);
 
 			obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 			idx++;
@@ -224,7 +224,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
-	obs_output_set_video_encoder(recording->output, recording->videoEncoder);
+	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 
 	std::string path = recording->path;
 
@@ -241,13 +241,13 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, "path", path.c_str());
 	obs_data_set_string(settings, "muxer_settings", recording->muxerSettings.c_str());
-	obs_output_update(recording->output, settings);
+	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
 
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
 
-	recording->startOutput();
+	recording->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -260,7 +260,7 @@ void osn::IAdvancedRecording::Stop(void *data, const int64_t id, const std::vect
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
 	}
 
-	obs_output_stop(recording->output);
+	obs_output_stop(recording->GetOutput());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

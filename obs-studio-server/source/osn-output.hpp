@@ -40,23 +40,26 @@ public:
 	virtual ~Output();
 
     void ConnectSignals();
-    void createOutput(const std::string &type, const std::string &name);
-	void deleteOutput();
-	void startOutput();
+    void CreateOutput(const std::string &type, const std::string &name);
+	void DeleteOutput();
+	void StartOutput();
 
     // If no signal, will return an empty optional. Thread safe.
     std::optional<SignalInfo> PopReceivedSignal();
 
-    obs_output_t *output;
 
     void SetCanvas(obs_video_info *canvas);
     obs_video_info *GetCanvas();
     const obs_video_info *GetCanvas() const;
 
+    obs_output_t *GetOutput();
+    const obs_output_t *GetOutput() const;
+
 private:
     friend void OutputSignalCallback(void *data, calldata_t *params);
 
     obs_video_info *m_canvas = nullptr;
+    obs_output_t *m_output = nullptr;
 
     std::mutex m_signalsMtx;
     std::queue<SignalInfo> m_signalsReceived;

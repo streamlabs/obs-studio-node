@@ -26,7 +26,7 @@ extern char *osn_generate_formatted_filename(const char *extension, bool space, 
 
 osn::Recording::~Recording()
 {
-	deleteOutput();
+	DeleteOutput();
 }
 
 void osn::IRecording::GetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -149,13 +149,13 @@ obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t t
 void osn::IRecording::SplitFile(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording || !recording->output) {
+	if (!recording || !recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
 
 	calldata_t cd = {0};
 
-	proc_handler_t *ph = obs_output_get_proc_handler(recording->output);
+	proc_handler_t *ph = obs_output_get_proc_handler(recording->GetOutput());
 	proc_handler_call(ph, "split_file", &cd);
 	calldata_free(&cd);
 
@@ -306,6 +306,6 @@ void osn::Recording::ConfigureRecFileSplitting()
 
 	obs_data_set_bool(settings, "reset_timestamps", fileResetTimestamps);
 
-	obs_output_update(output, settings);
+	obs_output_update(this->GetOutput(), settings);
 	obs_data_release(settings);
 }
