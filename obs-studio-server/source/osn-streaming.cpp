@@ -72,7 +72,7 @@ void osn::IStreaming::GetVideoCanvas(void *data, const int64_t id, const std::ve
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
-	uint64_t uid = osn::Video::Manager::GetInstance().find(streaming->canvas);
+	uint64_t uid = osn::Video::Manager::GetInstance().find(streaming->GetCanvas());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
@@ -93,7 +93,7 @@ void osn::IStreaming::SetVideoCanvas(void *data, const int64_t id, const std::ve
 
 	blog(LOG_INFO, "IStreaming::SetVideoCanvas - canvas: 0x%" PRIXPTR ", uid: %d", (uintptr_t)canvas, (int)args[1].value_union.ui64);
 
-	streaming->canvas = canvas;
+	streaming->SetCanvas(canvas);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

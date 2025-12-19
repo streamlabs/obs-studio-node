@@ -186,9 +186,9 @@ bool osn::AdvancedRecording::UpdateEncoders()
 		return false;
 
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_RECORDING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 	} else {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
 
 	return true;
@@ -215,7 +215,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 			obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
 			obs_output_set_audio_encoder(recording->output, audioTrack->audioEnc, idx);
 
-			obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(recording->canvas, OBS_RECORDING_VIDEO_RENDERING));
+			obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 			idx++;
 		}
 	}
@@ -232,8 +232,8 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->fileFormat, recording->canvas->base_width,
-					  recording->canvas->base_height);
+	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->fileFormat, recording->GetCanvas()->base_width,
+					  recording->GetCanvas()->base_height);
 
 	if (!recording->overwrite)
 		FindBestFilename(path, recording->noSpace);

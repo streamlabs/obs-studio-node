@@ -242,7 +242,7 @@ static bool setAudioEncoder(osn::AdvancedStreaming *streaming)
 
 	obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
 	obs_output_set_audio_encoder(streaming->output, audioTrack->audioEnc, 0);
-	obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(streaming->canvas, OBS_STREAMING_VIDEO_RENDERING));
+	obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
 	return true;
 }
@@ -290,7 +290,7 @@ static void SetupTwitchSoundtrackAudio(osn::AdvancedStreaming *streaming)
 	}
 
 	obs_output_set_audio_encoder(streaming->output, streaming->streamArchive, kSoundtrackArchiveEncoderIdx);
-	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->canvas, OBS_STREAMING_VIDEO_RENDERING));
+	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
 	osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTracks[streaming->twitchTrack];
 	if (!audioTrack)
@@ -356,9 +356,9 @@ void osn::AdvancedStreaming::UpdateEncoders()
 	obs_data_release(settings);
 
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_STREAMING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
 }
 

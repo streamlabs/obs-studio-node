@@ -48,10 +48,15 @@ public:
     std::optional<SignalInfo> PopReceivedSignal();
 
     obs_output_t *output;
-    obs_video_info *canvas;
+
+    void SetCanvas(obs_video_info *canvas);
+    obs_video_info *GetCanvas();
+    const obs_video_info *GetCanvas() const;
 
 private:
     friend void OutputSignalCallback(void *data, calldata_t *params);
+
+    obs_video_info *m_canvas = nullptr;
 
     std::mutex m_signalsMtx;
     std::queue<SignalInfo> m_signalsReceived;

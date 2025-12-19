@@ -219,7 +219,7 @@ static void SetupTwitchSoundtrackAudio(osn::SimpleStreaming *streaming)
 	}
 
 	obs_output_set_audio_encoder(streaming->output, streaming->streamArchive, kSoundtrackArchiveEncoderIdx);
-	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->canvas, OBS_STREAMING_VIDEO_RENDERING));
+	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
 	obs_data_t *settings = obs_data_create();
 
@@ -317,9 +317,9 @@ void osn::SimpleStreaming::UpdateEncoders()
 	obs_data_release(audioEncSettings);
 
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_STREAMING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
 }
 
@@ -356,7 +356,7 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	streaming->UpdateEncoders();
 	obs_encoder_set_audio(streaming->audioEncoder, obs_get_audio());
 	obs_output_set_audio_encoder(streaming->output, streaming->audioEncoder, 0);
-	obs_encoder_set_video_mix(streaming->audioEncoder, obs_video_mix_get(streaming->canvas, OBS_STREAMING_VIDEO_RENDERING));
+	obs_encoder_set_video_mix(streaming->audioEncoder, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
 	obs_output_set_video_encoder(streaming->output, streaming->videoEncoder);
 

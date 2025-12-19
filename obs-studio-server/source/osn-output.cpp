@@ -32,8 +32,6 @@ struct CallbackData {
 osn::Output::Output(const std::vector<std::string> &signals) :
     m_signals(signals)
 {
-    output = nullptr;
-    canvas = nullptr;
 }
 
 osn::Output::~Output()
@@ -147,4 +145,19 @@ std::optional<osn::Output::SignalInfo> osn::Output::PopReceivedSignal()
     const auto result = m_signalsReceived.front();
 	m_signalsReceived.pop();
     return result;
+}
+
+void osn::Output::SetCanvas(obs_video_info *canvas)
+{
+    m_canvas = canvas;
+}
+
+obs_video_info *osn::Output::GetCanvas()
+{
+    return m_canvas;
+}
+
+const obs_video_info *osn::Output::GetCanvas() const
+{
+    return m_canvas;
 }

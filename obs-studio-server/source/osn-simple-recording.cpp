@@ -293,9 +293,9 @@ static void UpdateRecordingSettings_crf(enum osn::RecQuality quality, osn::Simpl
 	if (!settings)
 		return;
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->canvas, OBS_STREAMING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
-		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->canvas, OBS_MAIN_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
 	obs_encoder_update(recording->videoEncoder, settings);
 	obs_data_release(settings);
@@ -372,7 +372,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 
 		obs_encoder_set_audio(recording->audioEncoder, obs_get_audio());
 		obs_output_set_audio_encoder(recording->output, recording->audioEncoder, 0);
-		obs_encoder_set_video_mix(recording->audioEncoder, obs_video_mix_get(recording->canvas, OBS_RECORDING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(recording->audioEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 
 		obs_output_set_video_encoder(recording->output, recording->videoEncoder);
 	}
@@ -387,7 +387,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->canvas->base_width, recording->canvas->base_height);
+	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->GetCanvas()->base_width, recording->GetCanvas()->base_height);
 
 	if (!recording->overwrite)
 		FindBestFilename(path, recording->noSpace);
