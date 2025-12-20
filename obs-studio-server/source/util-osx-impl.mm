@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "util-osx-impl.h"
+#include "obs.h"
 #include <iostream>
 #include <unistd.h>
 #include <sys/types.h>
@@ -43,13 +44,13 @@ void UtilObjCInt::wait_terminate(void)
 		return;
 
 	while (true) {
-		if (!appRunning) {
+		if (state == UtilObjCInt::EState::Stop) {
 			break;
 		}
 		int ret = ::read(file_descriptor, buffer.data(), count);
 		if (ret > 0) {
 			bool appCrashed = *reinterpret_cast<bool *>(buffer.data());
-			if (appCrashed && appRunning)
+			if (appCrashed && state != UtilObjCInt::EState::Stop)
 				this->stopApplication();
 			break;
 		}
@@ -86,17 +87,33 @@ std::string UtilObjCInt::getDefaultVideoSavePath(void)
 
 void UtilObjCInt::runApplication(void)
 {
-	worker = new std::thread(&UtilObjCInt::wait_terminate, this);
+	// Wait for OBS_API_initAPI to be invoked
+	while (!hasInitApi() && isRunning()) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+	if (isRunning()) {
+		// Create a dummy source to init obs-browser plugin. Must be init from main thread before [NSApplication run]
+		obs_source_t *source = obs_source_create("browser_source", "dummy", NULL, NULL);
+		obs_source_release(source);
+		nextState();
 
-	@autoreleasepool {
-		NSApplication *app = [NSApplication sharedApplication];
-		appRunning = true;
-		[app run];
+		worker = new std::thread(&UtilObjCInt::wait_terminate, this);
+
+		@autoreleasepool {
+			NSApplication *app = [NSApplication sharedApplication];
+			[app run];
+		}
 	}
 }
 
 void UtilObjCInt::stopApplication(void)
 {
+	if (!hasInitCef()) {
+		state = UtilObjCInt::EState::Stop;
+		return;
+	} else {
+		state = UtilObjCInt::EState::Stop;
+	}
 	dispatch_async(dispatch_get_main_queue(), ^{
 		[[NSApplication sharedApplication] stop:nil];
 		NSEvent *event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
@@ -110,10 +127,15 @@ void UtilObjCInt::stopApplication(void)
 						       data2:0];
 		[NSApp postEvent:event atStart:TRUE];
 
-		appRunning = false;
+		state = UtilObjCInt::EState::Stop;
 		if (worker->joinable())
 			worker->join();
 	});
+}
+
+bool UtilObjCInt::isRunning(void)
+{
+	return state != UtilObjCInt::EState::Stop;
 }
 
 unsigned long long UtilObjCInt::getTotalPhysicalMemory(void)
@@ -191,4 +213,22 @@ int UtilObjCInt::getPhysicalCores(void)
 		return 0;
 	return physical_cores;
 }
+
+void UtilObjCInt::nextState(void)
+{
+	if (state + 1 < UtilObjCInt::EState::Max) {
+		state = state + 1;
+	}
+}
+
+bool UtilObjCInt::hasInitApi(void)
+{
+	return state == UtilObjCInt::EState::InitializedApi;
+}
+
+bool UtilObjCInt::hasInitCef(void)
+{
+	return state == UtilObjCInt::EState::InitializedCEF;
+}
+
 @end
