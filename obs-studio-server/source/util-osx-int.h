@@ -32,6 +32,7 @@ public:
 	std::string getDefaultVideoSavePath(void);
 	void runApplication(void);
 	void stopApplication(void);
+	bool isRunning(void);
 	unsigned long long getTotalPhysicalMemory(void);
 	unsigned long long getAvailableMemory(void);
 	std::vector<std::pair<uint32_t, uint32_t>> getAvailableScreenResolutions(void);
@@ -40,10 +41,20 @@ public:
 	std::string getComputerName(void);
 	int getPhysicalCores(void);
 	void wait_terminate(void);
+	void nextState(void);
+	bool hasInitApi(void);
+	bool hasInitCef(void);
 
 private:
+	enum EState {
+		Idle = 0,
+		InitializedApi, // Was initAPI invoked?
+		InitializedCEF, // Was CefInitialize() invoked?
+		Stop,
+		Max
+	};
 	void *self;
-	std::atomic<bool> appRunning;
+	std::atomic<int> state; // See EState enum. Tracks application state
 	std::thread *worker;
 };
 
