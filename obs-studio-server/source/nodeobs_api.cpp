@@ -1049,6 +1049,13 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(OBS_VIDEO_SUCCESS));
 
+#if defined(__APPLE__)
+	// Block until CEF has been initialized by the main thread.
+	g_util_osx->nextState();
+	while (!g_util_osx->hasInitCef()) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+#endif
 	AUTO_DEBUG;
 }
 
