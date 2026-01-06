@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Clean up Homebrew to remove deprecated/broken entries
+# Clean up Homebrew to remove deprecated/broken entries and broken symlinks
 brew cleanup 2>/dev/null || true
 brew untap homebrew/core 2>/dev/null || true
 brew untap homebrew/cask 2>/dev/null || true
@@ -10,17 +10,14 @@ brew untap homebrew/cask 2>/dev/null || true
 brew update
 brew doctor || true
 
-# Install system dependencies (avoiding deprecated versions)
-# Using explicit versions to prevent deprecated formula warnings
+# Install minimal system dependencies
+# Note: Node.js is managed by actions/setup-node, not Homebrew
+# OpenSSL is built statically in libcurl (CURL_USE_OPENSSL is OFF in CMakeLists.txt)
+# Python comes with macOS, no need to install
+
 brew install cmake
-brew install python@3.11
-brew install openssl@3
 
-# Export PATH for consistency
-export PATH="/usr/local/opt/python@3.11/bin:$PATH"
-
-# Verify installations
-python3 --version
+# Verify cmake installation
 cmake --version
 
 # Install module dependencies
