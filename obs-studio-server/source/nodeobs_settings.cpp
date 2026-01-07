@@ -890,7 +890,7 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 	}
 
 	obs_data_t *hotkeyData = obs_hotkeys_save_service(currentService);
-		
+
 	obs_service_t *newService = obs_service_create(newserviceTypeValue.c_str(), "default_service", settings, hotkeyData);
 
 	if (serviceChanged) {
