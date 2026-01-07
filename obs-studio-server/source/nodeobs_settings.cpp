@@ -846,7 +846,7 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 					}
 					newserviceTypeValue = value;
 
-					//first setting is always stream type (if it's sent at all) - get default settings to be filled in 
+					//first setting is always stream type (if it's sent at all) - get default settings to be filled in
 					settings = obs_service_defaults(newserviceTypeValue.c_str());
 					if (currentStreamType.compare(newserviceTypeValue) != 0) {
 						if (newserviceTypeValue.compare("rtmp_common") == 0) {
