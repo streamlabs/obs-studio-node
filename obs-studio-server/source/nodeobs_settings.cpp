@@ -1893,7 +1893,11 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	memcpy(rescale.currentValue.data(), &doRescale, sizeof(doRescale));
 	rescale.sizeOfCurrentValue = sizeof(doRescale);
 
+#if defined(WIN32)
 	rescale.visible = (encoderCurrentValue == ENCODER_NVENC_H264_TEX);
+#else
+	rescale.visible = true;
+#endif
 	rescale.enabled = isCategoryEnabled;
 	rescale.masked = false;
 
