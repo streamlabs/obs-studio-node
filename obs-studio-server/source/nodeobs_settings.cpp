@@ -802,7 +802,6 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 	streamSettings.push_back(serviceConfiguration);
 
 	obs_properties_destroy(properties);
-	obs_data_release(settings);
 
 	return streamSettings;
 }
