@@ -529,7 +529,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 	bool isCategoryEnabled = !OBS_service::isStreamingOutputActive(serviceId);
 
 	obs_service_t *currentService = OBS_service::getService(serviceId);
-	obs_data_t *settings = obs_service_get_settings(currentService);
+	OBSDataAutoRelease settings = obs_service_get_settings(currentService);
 
 	std::vector<SubCategory> streamSettings;
 	SubCategory service;
@@ -802,7 +802,6 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 	streamSettings.push_back(serviceConfiguration);
 
 	obs_properties_destroy(properties);
-	obs_data_release(settings);
 
 	return streamSettings;
 }
