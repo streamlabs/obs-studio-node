@@ -41,6 +41,7 @@ public:
 
     void ConnectSignals();
     void CreateOutput(const std::string &type, const std::string &name);
+    void SetOutput(obs_output_t *output);
 	void DeleteOutput();
 	void StartOutput();
 
@@ -57,6 +58,8 @@ public:
 
 private:
     friend void OutputSignalCallback(void *data, calldata_t *params);
+
+    void InitOutput(obs_output_t *output);
 
     obs_video_info *m_canvas = nullptr;
     obs_output_t *m_output = nullptr;

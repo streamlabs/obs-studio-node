@@ -37,6 +37,7 @@ Napi::Object osn::AdvancedStreaming::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("service", &osn::AdvancedStreaming::GetService, &osn::AdvancedStreaming::SetService),
 		 InstanceAccessor("enforceServiceBitrate", &osn::AdvancedStreaming::GetEnforceServiceBirate, &osn::AdvancedStreaming::SetEnforceServiceBirate),
 		 InstanceAccessor("enableTwitchVOD", &osn::AdvancedStreaming::GetEnableTwitchVOD, &osn::AdvancedStreaming::SetEnableTwitchVOD),
+		 InstanceAccessor("enhancedBroadcasting", &osn::AdvancedStreaming::GetEnhancedBroadcasting, &osn::AdvancedStreaming::SetEnhancedBroadcasting),
 		 InstanceAccessor("signalHandler", &osn::AdvancedStreaming::GetSignalHandler, &osn::AdvancedStreaming::SetSignalHandler),
 		 InstanceAccessor("delay", &osn::AdvancedStreaming::GetDelay, &osn::AdvancedStreaming::SetDelay),
 		 InstanceAccessor("reconnect", &osn::AdvancedStreaming::GetReconnect, &osn::AdvancedStreaming::SetReconnect),

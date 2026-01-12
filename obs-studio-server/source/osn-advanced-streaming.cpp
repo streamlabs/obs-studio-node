@@ -24,6 +24,8 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
 
+#include "osn-multitrack-video.hpp"
+
 void osn::IAdvancedStreaming::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("AdvancedStreaming");
@@ -42,6 +44,9 @@ void osn::IAdvancedStreaming::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetEnableTwitchVOD", std::vector<ipc::type>{ipc::type::UInt64}, GetEnableTwitchVOD));
 	cls->register_function(
 		std::make_shared<ipc::function>("SetEnableTwitchVOD", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnableTwitchVOD));
+	cls->register_function(std::make_shared<ipc::function>("GetEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt64}, GetEnhancedBroadcasting));
+	cls->register_function(
+		std::make_shared<ipc::function>("SetEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnhancedBroadcasting));
 	cls->register_function(std::make_shared<ipc::function>("GetAudioTrack", std::vector<ipc::type>{ipc::type::UInt64}, GetAudioTrack));
 	cls->register_function(std::make_shared<ipc::function>("SetAudioTrack", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetAudioTrack));
 	cls->register_function(std::make_shared<ipc::function>("GetTwitchTrack", std::vector<ipc::type>{ipc::type::UInt64}, GetTwitchTrack));
@@ -369,16 +374,93 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Advanced streaming reference is not valid.");
 	}
 
+	if (!streaming->service) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
+	}
+
+	if (streaming->enhancedBroadcasting) {
+		const bool dualStreamingMode = true;
+
+		blog(LOG_INFO, "osn::IAdvancedStreaming::Start - service id: %s", obs_service_get_id(streaming->service));
+
+		const bool is_custom = strncmp("rtmp_custom", obs_service_get_type(streaming->service), 11) == 0;
+
+		OBSDataAutoRelease settings = obs_service_get_settings(streaming->service);
+		std::string key = obs_data_get_string(settings, "key");
+
+		const char *service_name = "<unknown>";
+		if (is_custom && obs_data_has_user_value(settings, "service_name")) {
+			service_name = obs_data_get_string(settings, "service_name");
+		} else if (!is_custom) {
+			service_name = obs_data_get_string(settings, "service");
+		}
+
+		std::optional<std::string> custom_rtmp_url;
+		auto server = obs_data_get_string(settings, "server");
+		if (strcmp(server, "auto") != 0) {
+			custom_rtmp_url = server;
+		}
+
+		auto service_custom_server = obs_data_get_bool(settings, "using_custom_server");
+		if (custom_rtmp_url.has_value()) {
+			blog(LOG_INFO, "Using %sserver '%s'", service_custom_server ? "custom " : "", custom_rtmp_url->c_str());
+		}
+
+		auto auto_config_url = osn::MultitrackVideoAutoConfigURL(streaming->service);
+		blog(LOG_INFO, "Auto config URL: %s", auto_config_url.c_str());
+
+		// TODO: !!!!!!!!!!!!!!!! VOD track index from options instead of global config??????????????????????????????????????????????????????
+		const auto vodTrackIndex = int(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex")) - 1;
+		blog(LOG_INFO, "vodTrackIndex: %d", vodTrackIndex);
+
+		auto vod_track_mixer = streaming->enableTwitchVOD ? std::optional{vodTrackIndex} : std::nullopt;
+
+		auto go_live_post = osn::constructGoLivePost(StreamServiceId::Main, dualStreamingMode, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
+		std::optional<osn::Config> go_live_config = osn::DownloadGoLiveConfig(auto_config_url, go_live_post);
+		if (!go_live_config.has_value()) {
+			throw std::runtime_error("startStreaming - go live config is empty");
+		}
+
+		const auto audio_bitrate = osn::GetMultitrackAudioBitrate();
+		const auto audio_encoder_id = osn::GetSimpleAACEncoderForBitrate(audio_bitrate);
+
+		std::vector<OBSEncoderAutoRelease> audio_encoders;
+		std::shared_ptr<obs_encoder_group_t> video_encoder_group;
+		auto output =
+			osn::SetupOBSOutput("Enhanced Broadcasting", go_live_config.value(), audio_encoders, video_encoder_group, audio_encoder_id, 0, vod_track_mixer);
+		if (!output) {
+			throw std::runtime_error("startStreaming - failed to create multitrack output");
+		}
+
+		auto multitrack_video_service = osn::create_service(*go_live_config, std::nullopt, ""); // Stream key is defined by config from Twitch
+		if (!multitrack_video_service) {
+			throw std::runtime_error("startStreaming - failed to create multitrack video service");
+		}
+
+		streaming->SetOutput(output.Get());
+		obs_output_set_service(output, multitrack_video_service);
+
+		// Register the BPM (Broadcast Performance Metrics) callback
+		obs_output_add_packet_callback(output, bpm_inject, NULL);
+
+		streaming->StartOutput();
+
+		streaming->enhancedBroadcastContext.emplace(EnhancedBroadcastOutputObjects{
+			std::move(output),
+			video_encoder_group,
+			std::move(audio_encoders),
+			std::move(multitrack_video_service),
+		});
+	}
+
 	// TODO: enhanced broadcasting case
+	return;
+
 	if (!streaming->videoEncoder) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
 	streaming->UpdateEncoders();
-
-	if (!streaming->service) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
-	}
 
 	const char *type = OBS_service::getStreamOutputType(streaming->service);
 	if (!type)

@@ -40,6 +40,8 @@ protected:
 	void SetEnforceServiceBirate(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetEnableTwitchVOD(const Napi::CallbackInfo &info);
 	void SetEnableTwitchVOD(const Napi::CallbackInfo &info, const Napi::Value &value);
+	Napi::Value GetEnhancedBroadcasting(const Napi::CallbackInfo &info);
+	void SetEnhancedBroadcasting(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetDelay(const Napi::CallbackInfo &info);
 	void SetDelay(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetReconnect(const Napi::CallbackInfo &info);

@@ -798,6 +798,7 @@ export interface IStreaming {
     service: IService;
     enforceServiceBitrate: boolean;
     enableTwitchVOD: boolean;
+    enhancedBroadcasting: boolean;
     delay: IDelay;
     reconnect: IReconnect;
     network: INetwork;

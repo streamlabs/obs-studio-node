@@ -38,21 +38,32 @@ osn::Output::~Output()
 {
 }
 
-void osn::Output::CreateOutput(const std::string &type, const std::string &name)
-{
-	DeleteOutput();
-	m_output = obs_output_create(type.c_str(), name.c_str(), nullptr, nullptr);
-
+void osn::Output::InitOutput(obs_output_t *output) {
 	auto onStopped = [](void *data, calldata_t *) {
 		osn::Output *context = reinterpret_cast<osn::Output *>(data);
 		std::unique_lock lock(context->m_mtxOutputStop);
 		context->m_cvStop.notify_one();
 	};
 
-	signal_handler *sh = obs_output_get_signal_handler(m_output);
+	signal_handler *sh = obs_output_get_signal_handler(output);
 	signal_handler_connect(sh, "stop", onStopped, this);
 
 	ConnectSignals();
+}
+
+void osn::Output::CreateOutput(const std::string &type, const std::string &name)
+{
+	DeleteOutput();
+	m_output = obs_output_create(type.c_str(), name.c_str(), nullptr, nullptr);
+
+	InitOutput(m_output);
+}
+
+void osn::Output::SetOutput(obs_output_t *output)
+{
+	DeleteOutput();
+	m_output = obs_output_get_ref(output);
+	InitOutput(m_output);
 }
 
 void osn::Output::DeleteOutput()

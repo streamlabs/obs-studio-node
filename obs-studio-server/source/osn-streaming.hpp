@@ -24,6 +24,7 @@
 #include "osn-network.hpp"
 #include "osn-output.hpp"
 #include "osn-video-encoder.hpp"
+#include "osn-multitrack-video.hpp"
 
 #include "nodeobs_configManager.hpp"
 
@@ -38,8 +39,8 @@ public:
 		service = nullptr;
 		enforceServiceBitrate = true;
 		enableTwitchVOD = false;
-		enhancedBroadcasting = false;
 		twitchVODSupported = false;
+		enhancedBroadcasting = false;
 		oldMixer_desktopSource1 = 0;
 		oldMixer_desktopSource2 = 0;
 		//signals = {"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"};
@@ -57,8 +58,8 @@ public:
 	obs_service_t *service;
 	bool enforceServiceBitrate;
 	bool enableTwitchVOD;
-	bool enhancedBroadcasting;
 	bool twitchVODSupported;
+	bool enhancedBroadcasting;
 	uint32_t oldMixer_desktopSource1;
 	uint32_t oldMixer_desktopSource2;
 	Delay *delay;
@@ -66,6 +67,8 @@ public:
 	Network *network;
 	uint64_t lastBytesSent;
 	uint64_t lastBytesSentTime;
+
+	std::optional<osn::EnhancedBroadcastOutputObjects> enhancedBroadcastContext;
 
 	bool isTwitchVODSupported();
 	void getDelayLegacySettings();
@@ -104,6 +107,8 @@ public:
 	static void SetEnforceServiceBirate(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetEnableTwitchVOD(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetEnableTwitchVOD(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetDelay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetDelay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetReconnect(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

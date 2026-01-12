@@ -156,6 +156,31 @@ void osn::IStreaming::SetEnforceServiceBirate(void *data, const int64_t id, cons
 	AUTO_DEBUG;
 }
 
+void osn::IStreaming::GetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(streaming->enhancedBroadcasting));
+	AUTO_DEBUG;
+}
+
+void osn::IStreaming::SetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	streaming->enhancedBroadcasting = args[1].value_union.ui32;
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
 void osn::IStreaming::GetEnableTwitchVOD(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);

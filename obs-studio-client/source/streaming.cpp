@@ -143,6 +143,29 @@ void osn::Streaming::SetEnforceServiceBirate(const Napi::CallbackInfo &info, con
 	conn->call_synchronous_helper(className, "SetEnforceServiceBirate", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
 }
 
+Napi::Value osn::Streaming::GetEnhancedBroadcasting(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetEnhancedBroadcasting", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
+}
+
+void osn::Streaming::SetEnhancedBroadcasting(const Napi::CallbackInfo &info, const Napi::Value &value)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	conn->call_synchronous_helper(className, "SetEnhancedBroadcasting", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+}
+
 Napi::Value osn::Streaming::GetEnableTwitchVOD(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

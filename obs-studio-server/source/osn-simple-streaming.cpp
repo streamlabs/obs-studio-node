@@ -49,6 +49,9 @@ void osn::ISimpleStreaming::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetEnableTwitchVOD", std::vector<ipc::type>{ipc::type::UInt64}, GetEnableTwitchVOD));
 	cls->register_function(
 		std::make_shared<ipc::function>("SetEnableTwitchVOD", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnableTwitchVOD));
+	cls->register_function(std::make_shared<ipc::function>("GetEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt64}, GetEnhancedBroadcasting));
+	cls->register_function(
+		std::make_shared<ipc::function>("SetEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnhancedBroadcasting));
 	cls->register_function(std::make_shared<ipc::function>("GetDelay", std::vector<ipc::type>{ipc::type::UInt64}, GetDelay));
 	cls->register_function(std::make_shared<ipc::function>("SetDelay", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64}, SetDelay));
 	cls->register_function(std::make_shared<ipc::function>("GetReconnect", std::vector<ipc::type>{ipc::type::UInt64}, GetReconnect));
