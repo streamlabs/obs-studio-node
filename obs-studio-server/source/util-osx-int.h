@@ -40,6 +40,7 @@ public:
 	std::string getWorkingDirectory(void);
 	std::string getComputerName(void);
 	int getPhysicalCores(void);
+	std::string getCpuName(void);
 	void wait_terminate(void);
 	void nextState(void);
 	bool hasInitApi(void);
