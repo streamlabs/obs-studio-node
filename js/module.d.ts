@@ -794,7 +794,8 @@ export interface IVideoEncoderFactory {
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;
 }
 export interface IStreaming {
-    videoEncoder: IVideoEncoder;
+    // Video encoder value is ignored when enhancedBroadcasting === true
+    videoEncoder?: IVideoEncoder;
     service: IService;
     enforceServiceBitrate: boolean;
     enableTwitchVOD: boolean;

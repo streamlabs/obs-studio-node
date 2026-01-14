@@ -71,6 +71,8 @@ void osn::Output::DeleteOutput()
 	if (!m_output)
 		return;
 
+	blog(LOG_INFO, "osn::Output::DeleteOutput");
+
 	if (obs_output_active(m_output)) {
 		obs_output_stop(m_output);
 		std::unique_lock lock(m_mtxOutputStop);

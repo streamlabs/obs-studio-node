@@ -28,6 +28,8 @@
 
 #include "nodeobs_configManager.hpp"
 
+#include <optional>
+
 namespace osn {
 class Streaming : public Output {
 public:
@@ -43,7 +45,6 @@ public:
 		enhancedBroadcasting = false;
 		oldMixer_desktopSource1 = 0;
 		oldMixer_desktopSource2 = 0;
-		//signals = {"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"};
 		delay = new Delay();
 		reconnect = new Reconnect();
 		network = new Network();
@@ -51,6 +52,8 @@ public:
 		lastBytesSentTime = 0;
 	}
 	virtual ~Streaming();
+
+	void DeleteOutput() override;
 
 public:
 	obs_encoder_t *videoEncoder;
@@ -68,8 +71,6 @@ public:
 	uint64_t lastBytesSent;
 	uint64_t lastBytesSentTime;
 
-	std::optional<osn::EnhancedBroadcastOutputObjects> enhancedBroadcastContext;
-
 	bool isTwitchVODSupported();
 	void getDelayLegacySettings();
 	void getReconnectLegacySettings();
@@ -77,6 +78,10 @@ public:
 	void setDelayLegacySettings();
 	void setReconnectLegacySettings();
 	void setNetworkLegacySettings();
+	void StartEnhancedBroadcastingStream(std::optional<size_t> vod_track_mixer = std::nullopt);
+
+protected:
+	std::optional<osn::EnhancedBroadcastOutputObjects> enhancedBroadcastingContext;
 };
 
 class IStreaming {

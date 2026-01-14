@@ -337,6 +337,11 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
+	if (streaming->enhancedBroadcasting) {
+		streaming->StartEnhancedBroadcastingStream();
+		return;
+	}
+
 	const char *type = OBS_service::getStreamOutputType(streaming->service);
 	if (!type)
 		type = "rtmp_output";

@@ -42,7 +42,7 @@ public:
     void ConnectSignals();
     void CreateOutput(const std::string &type, const std::string &name);
     void SetOutput(obs_output_t *output);
-	void DeleteOutput();
+	virtual void DeleteOutput();
 	void StartOutput();
 
     // If no signal, will return an empty optional. Thread safe.
