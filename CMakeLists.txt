@@ -136,7 +136,14 @@ if(NOT libcurl_POPULATED)
   set(USE_LIBIDN2 OFF CACHE BOOL "" FORCE)
   set(USE_LIBPSL  OFF CACHE BOOL "" FORCE)
   set(CURL_ZLIB   OFF CACHE BOOL "" FORCE)
+
+if(APPLE)
+  # Enable Secure Transport on Apple platforms
+  set(CURL_USE_SECTRANSP ON CACHE BOOL "" FORCE)
+  set(CMAKE_USE_SCHANNEL OFF CACHE BOOL "" FORCE)
+else()
   set(CMAKE_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+endif()
 
   FetchContent_Populate(libcurl)
   add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)

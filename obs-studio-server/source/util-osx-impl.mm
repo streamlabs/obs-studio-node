@@ -215,6 +215,21 @@ int UtilObjCInt::getPhysicalCores(void)
 	return physical_cores;
 }
 
+std::string UtilObjCInt::getCpuName(void)
+{
+	char buffer[256];
+	size_t size = sizeof(buffer);
+	std::string name;
+
+	if (sysctlbyname("machdep.cpu.brand_string", buffer, &size, nullptr, 0) == 0) {
+		name = std::string(buffer);
+	} else if (sysctlbyname("hw.model", buffer, &size, nullptr, 0) == 0) {
+		name = std::string(buffer);
+	}
+
+	return name;
+}
+
 void UtilObjCInt::nextState(void)
 {
 	if (state + 1 < UtilObjCInt::EState::Max) {
