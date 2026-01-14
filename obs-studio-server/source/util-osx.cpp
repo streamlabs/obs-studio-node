@@ -89,6 +89,11 @@ int UtilInt::getPhysicalCores(void)
 	return _impl->getPhysicalCores();
 }
 
+std::string UtilInt::getCpuName(void)
+{
+	return _impl->getCpuName();
+}
+
 void UtilInt::nextState(void)
 {
 	_impl->nextState();
