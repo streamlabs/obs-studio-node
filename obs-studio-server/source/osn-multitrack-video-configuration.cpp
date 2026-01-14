@@ -174,6 +174,7 @@ Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 						      5);      // timeout in seconds
 
 	if (!encodeConfigDownloadedOk) {
+		blog(LOG_ERROR, "Go live error: %s", libraryError.c_str());
 		throw std::runtime_error("Failed to start stream. Config request failed");
 	}
 
