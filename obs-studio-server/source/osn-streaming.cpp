@@ -446,8 +446,7 @@ void osn::Streaming::StartEnhancedBroadcastingStream(std::optional<size_t> vod_t
 	auto auto_config_url = osn::MultitrackVideoAutoConfigURL(this->service);
 	blog(LOG_INFO, "Auto config URL: %s", auto_config_url.c_str());
 
-	const bool dualStreamingMode = true; // TODO: revise this??????? Make this dynamic?????
-	auto go_live_post = osn::constructGoLivePost(StreamServiceId::Main, dualStreamingMode, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
+	auto go_live_post = osn::constructGoLivePost({this->GetCanvas()}, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
 	std::optional<osn::Config> go_live_config = osn::DownloadGoLiveConfig(auto_config_url, go_live_post);
 	if (!go_live_config.has_value()) {
 		throw std::runtime_error("startStreaming - go live config is empty");

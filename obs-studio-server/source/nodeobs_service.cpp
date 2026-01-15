@@ -1373,7 +1373,17 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId, bool dualS
 
 	auto vod_track_mixer = IsVodTrackEnabled(services[serviceId]) ? std::optional{vodTrackIndex} : std::nullopt;
 
-	auto go_live_post = osn::constructGoLivePost(serviceId, dualStreamingMode, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
+	std::vector<obs_video_info*> canvases;
+	canvases.push_back(videoInfo[serviceId]);
+	if (dualStreamingMode) {
+		if (serviceId == StreamServiceId::Main) {
+			canvases.push_back(videoInfo[StreamServiceId::Second]);
+		} else if (serviceId == StreamServiceId::Second) {
+			canvases.push_back(videoInfo[StreamServiceId::Main]);
+		}
+	}
+
+	auto go_live_post = osn::constructGoLivePost(canvases, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
 	std::optional<osn::Config> go_live_config = osn::DownloadGoLiveConfig(auto_config_url, go_live_post);
 	if (!go_live_config.has_value()) {
 		throw std::runtime_error("startStreaming - go live config is empty");
