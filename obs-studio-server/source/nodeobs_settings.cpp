@@ -1892,12 +1892,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	rescale.currentValue.resize(sizeof(doRescale));
 	memcpy(rescale.currentValue.data(), &doRescale, sizeof(doRescale));
 	rescale.sizeOfCurrentValue = sizeof(doRescale);
-
-#if defined(WIN32)
-	rescale.visible = (encoderCurrentValue == ENCODER_NVENC_H264_TEX);
-#else
-	rescale.visible = true;
-#endif
+	rescale.visible = (encoderCurrentValue != ENCODER_NVENC_H264_TEX);
 	rescale.enabled = isCategoryEnabled;
 	rescale.masked = false;
 
@@ -1946,8 +1941,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 		rescaleRes.sizeOfValues = rescaleRes.values.size();
 		rescaleRes.countValues = outputResolutions.size();
-
-		rescaleRes.visible = (encoderCurrentValue == ENCODER_NVENC_H264_TEX);
+		rescaleRes.visible = (encoderCurrentValue != ENCODER_NVENC_H264_TEX);
 		rescaleRes.enabled = isCategoryEnabled;
 		rescaleRes.masked = false;
 
