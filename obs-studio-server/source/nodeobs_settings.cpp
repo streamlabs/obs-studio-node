@@ -73,6 +73,8 @@ void OBS_settings::Register(ipc::server &srv)
 		"OBS_settings_saveSettings", std::vector<ipc::type>{ipc::type::String, ipc::type::UInt32, ipc::type::UInt32, ipc::type::Binary},
 		OBS_settings_saveSettings));
 	cls->register_function(
+		std::make_shared<ipc::function>("OBS_settings_isValidEncoder", std::vector<ipc::type>{}, OBS_settings_isValidEncoder));
+	cls->register_function(
 		std::make_shared<ipc::function>("OBS_settings_getInputAudioDevices", std::vector<ipc::type>{}, OBS_settings_getInputAudioDevices));
 	cls->register_function(
 		std::make_shared<ipc::function>("OBS_settings_getOutputAudioDevices", std::vector<ipc::type>{}, OBS_settings_getOutputAudioDevices));
@@ -1195,6 +1197,61 @@ static void converOldJimNvencEncoder(config_t *config, const std::string &config
 		config_set_string(config, configSection.c_str(), recordingEncoderSetting.c_str(), ENCODER_NVENC_H264_TEX);
 	}
 }
+
+static bool validateEncoderForService(StreamServiceId serviceId, const char *encoderToFind)
+{
+	bool validEncoder = false;
+
+	//have encoder - find in encoders_set, validate 'streaming' flag and check availability based on 'check_availability_streaming' flag
+	for (int i = 0; i < encoders_set.size(); i++) {
+		if (std::string(encoderToFind) == encoders_set[i].simple_name || std::string(encoderToFind) == encoders_set[i].advanced_name) {
+			if (encoders_set[i].streaming) {
+				if (encoders_set[i].check_availability_streaming) {
+					if (isEncoderAvailableForStreaming(encoderToFind, OBS_service::getService(serviceId))) {
+						validEncoder = true;
+						break;
+					}
+				} else {
+					validEncoder = true;
+				}
+			}
+			break;
+		}
+	}
+
+	return validEncoder;
+}
+
+void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	const char *mode = NULL;
+	const char *curEncoder = NULL;
+	bool validEncoder = false;
+	std::string serviceToCheck = args[0].value_str;
+
+	//get mode and configured encoder
+	mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+	if (mode == NULL) {
+		mode = "Simple";
+	}
+	if (strcmp(mode, "Advanced") == 0) {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
+	} else {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamingEncoder");
+	}
+
+	if (serviceToCheck == "Both") {
+		validEncoder = validateEncoderForService(StreamServiceId::Main, curEncoder) && validateEncoderForService(StreamServiceId::Second, curEncoder);
+	} else if (serviceToCheck == "Stream") {
+		validEncoder = validateEncoderForService(StreamServiceId::Main, curEncoder);
+	} else if (serviceToCheck == "StreamSecond") {
+		validEncoder = validateEncoderForService(StreamServiceId::Second, curEncoder);
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(validEncoder));
+}
+
 
 void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSettings, config_t *config, bool isCategoryEnabled)
 {
