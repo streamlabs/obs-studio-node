@@ -72,8 +72,7 @@ void OBS_settings::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>(
 		"OBS_settings_saveSettings", std::vector<ipc::type>{ipc::type::String, ipc::type::UInt32, ipc::type::UInt32, ipc::type::Binary},
 		OBS_settings_saveSettings));
-	cls->register_function(
-		std::make_shared<ipc::function>("OBS_settings_isValidEncoder", std::vector<ipc::type>{}, OBS_settings_isValidEncoder));
+	cls->register_function(std::make_shared<ipc::function>("OBS_settings_isValidEncoder", std::vector<ipc::type>{}, OBS_settings_isValidEncoder));
 	cls->register_function(
 		std::make_shared<ipc::function>("OBS_settings_getInputAudioDevices", std::vector<ipc::type>{}, OBS_settings_getInputAudioDevices));
 	cls->register_function(
@@ -1251,7 +1250,6 @@ void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, con
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(validEncoder));
 }
-
 
 void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSettings, config_t *config, bool isCategoryEnabled)
 {
