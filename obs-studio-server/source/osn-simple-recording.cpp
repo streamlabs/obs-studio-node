@@ -387,7 +387,8 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->GetCanvas()->base_width, recording->GetCanvas()->base_height);
+	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->GetCanvas()->base_width,
+					  recording->GetCanvas()->base_height);
 
 	if (!recording->overwrite)
 		FindBestFilename(path, recording->noSpace);

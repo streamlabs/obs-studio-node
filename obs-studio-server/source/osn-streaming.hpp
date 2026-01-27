@@ -33,8 +33,7 @@
 namespace osn {
 class Streaming : public Output {
 public:
-	Streaming() : Output({"start", "stop", "starting", "stopping", "activate",
-		                  "deactivate", "reconnect", "reconnect_success"})
+	Streaming() : Output({"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"})
 	{
 		videoEncoder = nullptr;
 		streamArchive = nullptr;

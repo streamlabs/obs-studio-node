@@ -5,7 +5,6 @@
 #include "nodeobs_configManager.hpp"
 #include <util/config-file.h>
 
-
 namespace osn {
 
 bool IsMultitrackVideoEnabled()

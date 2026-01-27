@@ -34,31 +34,43 @@ Napi::Object osn::EnhancedBroadcastingAdvancedStreaming::Init(Napi::Env env, Nap
 		{StaticMethod("create", &osn::EnhancedBroadcastingAdvancedStreaming::Create),
 		 StaticMethod("destroy", &osn::EnhancedBroadcastingAdvancedStreaming::Destroy),
 
-		 InstanceAccessor("videoEncoder", &osn::EnhancedBroadcastingAdvancedStreaming::GetVideoEncoder, &osn::EnhancedBroadcastingAdvancedStreaming::SetVideoEncoder),
+		 InstanceAccessor("videoEncoder", &osn::EnhancedBroadcastingAdvancedStreaming::GetVideoEncoder,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetVideoEncoder),
 		 InstanceAccessor("service", &osn::EnhancedBroadcastingAdvancedStreaming::GetService, &osn::EnhancedBroadcastingAdvancedStreaming::SetService),
-		 InstanceAccessor("enforceServiceBitrate", &osn::EnhancedBroadcastingAdvancedStreaming::GetEnforceServiceBirate, &osn::EnhancedBroadcastingAdvancedStreaming::SetEnforceServiceBirate),
-		 InstanceAccessor("enableTwitchVOD", &osn::EnhancedBroadcastingAdvancedStreaming::GetEnableTwitchVOD, &osn::EnhancedBroadcastingAdvancedStreaming::SetEnableTwitchVOD),
-		 InstanceAccessor("signalHandler", &osn::EnhancedBroadcastingAdvancedStreaming::GetSignalHandler, &osn::EnhancedBroadcastingAdvancedStreaming::SetSignalHandler),
+		 InstanceAccessor("enforceServiceBitrate", &osn::EnhancedBroadcastingAdvancedStreaming::GetEnforceServiceBirate,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetEnforceServiceBirate),
+		 InstanceAccessor("enableTwitchVOD", &osn::EnhancedBroadcastingAdvancedStreaming::GetEnableTwitchVOD,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetEnableTwitchVOD),
+		 InstanceAccessor("signalHandler", &osn::EnhancedBroadcastingAdvancedStreaming::GetSignalHandler,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetSignalHandler),
 		 InstanceAccessor("delay", &osn::EnhancedBroadcastingAdvancedStreaming::GetDelay, &osn::EnhancedBroadcastingAdvancedStreaming::SetDelay),
-		 InstanceAccessor("reconnect", &osn::EnhancedBroadcastingAdvancedStreaming::GetReconnect, &osn::EnhancedBroadcastingAdvancedStreaming::SetReconnect),
+		 InstanceAccessor("reconnect", &osn::EnhancedBroadcastingAdvancedStreaming::GetReconnect,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetReconnect),
 		 InstanceAccessor("network", &osn::EnhancedBroadcastingAdvancedStreaming::GetNetwork, &osn::EnhancedBroadcastingAdvancedStreaming::SetNetwork),
 		 InstanceAccessor("video", &osn::EnhancedBroadcastingAdvancedStreaming::GetCanvas, &osn::EnhancedBroadcastingAdvancedStreaming::SetCanvas),
-		 InstanceAccessor("additionalVideo", &osn::EnhancedBroadcastingAdvancedStreaming::GetAdditionalCanvas, &osn::EnhancedBroadcastingAdvancedStreaming::SetAdditionalCanvas),
+		 InstanceAccessor("additionalVideo", &osn::EnhancedBroadcastingAdvancedStreaming::GetAdditionalCanvas,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetAdditionalCanvas),
 		 InstanceAccessor("droppedFrames", &osn::EnhancedBroadcastingAdvancedStreaming::GetDroppedFrames, nullptr),
 		 InstanceAccessor("totalFrames", &osn::EnhancedBroadcastingAdvancedStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::EnhancedBroadcastingAdvancedStreaming::GetKBitsPerSec, nullptr),
 		 InstanceAccessor("dataOutput", &osn::EnhancedBroadcastingAdvancedStreaming::GetDataOutput, nullptr),
 
-		 InstanceAccessor("audioTrack", &osn::EnhancedBroadcastingAdvancedStreaming::GetAudioTrack, &osn::EnhancedBroadcastingAdvancedStreaming::SetAudioTrack),
-		 InstanceAccessor("twitchTrack", &osn::EnhancedBroadcastingAdvancedStreaming::GetTwitchTrack, &osn::EnhancedBroadcastingAdvancedStreaming::SetTwitchTrack),
-		 InstanceAccessor("rescaling", &osn::EnhancedBroadcastingAdvancedStreaming::GetRescaling, &osn::EnhancedBroadcastingAdvancedStreaming::SetRescaling),
-		 InstanceAccessor("outputWidth", &osn::EnhancedBroadcastingAdvancedStreaming::GetOutputWidth, &osn::EnhancedBroadcastingAdvancedStreaming::SetOutputWidth),
-		 InstanceAccessor("outputHeight", &osn::EnhancedBroadcastingAdvancedStreaming::GetOutputHeight, &osn::EnhancedBroadcastingAdvancedStreaming::SetOutputHeight),
+		 InstanceAccessor("audioTrack", &osn::EnhancedBroadcastingAdvancedStreaming::GetAudioTrack,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetAudioTrack),
+		 InstanceAccessor("twitchTrack", &osn::EnhancedBroadcastingAdvancedStreaming::GetTwitchTrack,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetTwitchTrack),
+		 InstanceAccessor("rescaling", &osn::EnhancedBroadcastingAdvancedStreaming::GetRescaling,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetRescaling),
+		 InstanceAccessor("outputWidth", &osn::EnhancedBroadcastingAdvancedStreaming::GetOutputWidth,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetOutputWidth),
+		 InstanceAccessor("outputHeight", &osn::EnhancedBroadcastingAdvancedStreaming::GetOutputHeight,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetOutputHeight),
 
 		 InstanceMethod("start", &osn::EnhancedBroadcastingAdvancedStreaming::Start),
 		 InstanceMethod("stop", &osn::EnhancedBroadcastingAdvancedStreaming::Stop),
 
-		 StaticAccessor("legacySettings", &osn::EnhancedBroadcastingAdvancedStreaming::GetLegacySettings, &osn::EnhancedBroadcastingAdvancedStreaming::SetLegacySettings)});
+		 StaticAccessor("legacySettings", &osn::EnhancedBroadcastingAdvancedStreaming::GetLegacySettings,
+				&osn::EnhancedBroadcastingAdvancedStreaming::SetLegacySettings)});
 
 	exports.Set("EnhancedBroadcastingAdvancedStreaming", func);
 	osn::EnhancedBroadcastingAdvancedStreaming::constructor = Napi::Persistent(func);
@@ -67,7 +79,8 @@ Napi::Object osn::EnhancedBroadcastingAdvancedStreaming::Init(Napi::Env env, Nap
 	return exports;
 }
 
-osn::EnhancedBroadcastingAdvancedStreaming::EnhancedBroadcastingAdvancedStreaming(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>(info)
+osn::EnhancedBroadcastingAdvancedStreaming::EnhancedBroadcastingAdvancedStreaming(const Napi::CallbackInfo &info)
+	: Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>(info)
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
@@ -93,7 +106,8 @@ Napi::Value osn::EnhancedBroadcastingAdvancedStreaming::Create(const Napi::Callb
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::EnhancedBroadcastingAdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
+	auto instance =
+		osn::EnhancedBroadcastingAdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -161,7 +175,8 @@ Napi::Value osn::EnhancedBroadcastingAdvancedStreaming::GetLegacySettings(const 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::EnhancedBroadcastingAdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
+	auto instance =
+		osn::EnhancedBroadcastingAdvancedStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }

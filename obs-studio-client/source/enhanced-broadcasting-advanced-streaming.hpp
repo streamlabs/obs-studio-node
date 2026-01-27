@@ -21,8 +21,7 @@
 #include "advanced-streaming.hpp"
 
 namespace osn {
-class EnhancedBroadcastingAdvancedStreaming : public Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>,
-                                              public osn::AdvancedStreamingBase {
+class EnhancedBroadcastingAdvancedStreaming : public Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>, public osn::AdvancedStreamingBase {
 public:
 	static Napi::FunctionReference constructor;
 	static Napi::Object Init(Napi::Env env, Napi::Object exports);

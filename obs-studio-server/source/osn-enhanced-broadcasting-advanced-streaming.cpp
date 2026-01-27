@@ -70,8 +70,10 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetKBitsPerSec", std::vector<ipc::type>{ipc::type::UInt64}, GetKBitsPerSec));
 	cls->register_function(std::make_shared<ipc::function>("GetDataOutput", std::vector<ipc::type>{ipc::type::UInt64}, GetDataOutput));
 
-	cls->register_function(std::make_shared<ipc::function>("GetAdditionalVideoCanvas", std::vector<ipc::type>{ipc::type::UInt64}, GetAdditionalVideoCanvas));
-	cls->register_function(std::make_shared<ipc::function>("SetAdditionalVideoCanvas", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64}, SetAdditionalVideoCanvas));
+	cls->register_function(
+		std::make_shared<ipc::function>("GetAdditionalVideoCanvas", std::vector<ipc::type>{ipc::type::UInt64}, GetAdditionalVideoCanvas));
+	cls->register_function(std::make_shared<ipc::function>("SetAdditionalVideoCanvas", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64},
+							       SetAdditionalVideoCanvas));
 
 	srv.register_collection(cls);
 }
@@ -90,7 +92,8 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Create(void *data, const int64
 
 void osn::IEnhancedBroadcastingAdvancedStreaming::Destroy(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(
+		osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
@@ -104,7 +107,8 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Destroy(void *data, const int6
 
 void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(
+		osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
@@ -113,11 +117,8 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
-	auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD) ?
-		std::optional{streaming->twitchTrack} :
-		std::nullopt;
+	auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD) ? std::optional{streaming->twitchTrack} : std::nullopt;
 	streaming->StartEnhancedBroadcastingStream(vod_track_mixer);
-
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -125,7 +126,8 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 
 void osn::IEnhancedBroadcastingAdvancedStreaming::Stop(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(
+		osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
@@ -137,9 +139,11 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Stop(void *data, const int64_t
 	AUTO_DEBUG;
 }
 
-void osn::IEnhancedBroadcastingAdvancedStreaming::GetAdditionalVideoCanvas(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void osn::IEnhancedBroadcastingAdvancedStreaming::GetAdditionalVideoCanvas(void *data, const int64_t id, const std::vector<ipc::value> &args,
+									   std::vector<ipc::value> &rval)
 {
-	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(
+		osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
@@ -152,9 +156,11 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::GetAdditionalVideoCanvas(void 
 	AUTO_DEBUG;
 }
 
-void osn::IEnhancedBroadcastingAdvancedStreaming::SetAdditionalVideoCanvas(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void osn::IEnhancedBroadcastingAdvancedStreaming::SetAdditionalVideoCanvas(void *data, const int64_t id, const std::vector<ipc::value> &args,
+									   std::vector<ipc::value> &rval)
 {
-	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	EnhancedBroadcastingAdvancedStreaming *streaming = static_cast<EnhancedBroadcastingAdvancedStreaming *>(
+		osn::IEnhancedBroadcastingAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}

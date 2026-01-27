@@ -218,11 +218,8 @@ std::string MultitrackVideoAutoConfigURL(obs_service_t *service)
 	return url;
 }
 
-PostData constructGoLivePost(std::vector<obs_video_info*> canvases,
-	                         std::string streamKey,
-							 const std::optional<uint64_t> &maximum_aggregate_bitrate,
-			     			 const std::optional<uint32_t> &maximum_video_tracks,
-							 bool vod_track_enabled)
+PostData constructGoLivePost(std::vector<obs_video_info *> canvases, std::string streamKey, const std::optional<uint64_t> &maximum_aggregate_bitrate,
+			     const std::optional<uint32_t> &maximum_video_tracks, bool vod_track_enabled)
 {
 	PostData post_data{};
 	post_data.service = "IVS";
@@ -258,15 +255,13 @@ PostData constructGoLivePost(std::vector<obs_video_info*> canvases,
 	if (obs_get_video_info(&ovi))
 		preferences.composition_gpu_index = ovi.adapter;
 
-
-	for (const auto& c : canvases) {
+	for (const auto &c : canvases) {
 		if (!c) {
 			blog(LOG_WARNING, "constructGoLivePost - empty canvas, skipping");
 			continue;
 		}
 
-		preferences.canvases.emplace_back(
-				Canvas{c->output_width, c->output_height, c->base_width, c->base_height, {c->fps_num, c->fps_den}});
+		preferences.canvases.emplace_back(Canvas{c->output_width, c->output_height, c->base_width, c->base_height, {c->fps_num, c->fps_den}});
 	}
 
 	// TODO: remove

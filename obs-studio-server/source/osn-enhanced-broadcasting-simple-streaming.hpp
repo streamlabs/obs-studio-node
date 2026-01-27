@@ -30,14 +30,11 @@
 
 #include "nodeobs_configManager.hpp"
 
-
 namespace osn {
 
 class EnhancedBroadcastingSimpleStreaming : public EnhancedBroadcasting<SimpleStreaming> {
 public:
-	EnhancedBroadcastingSimpleStreaming() : EnhancedBroadcasting<SimpleStreaming>()
-	{
-	}
+	EnhancedBroadcastingSimpleStreaming() : EnhancedBroadcasting<SimpleStreaming>() {}
 	~EnhancedBroadcastingSimpleStreaming() {}
 };
 

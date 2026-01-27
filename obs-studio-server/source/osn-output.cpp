@@ -29,16 +29,12 @@ struct CallbackData {
 
 } // namespace
 
-osn::Output::Output(const std::vector<std::string> &signals) :
-    m_signals(signals)
-{
-}
+osn::Output::Output(const std::vector<std::string> &signals) : m_signals(signals) {}
 
-osn::Output::~Output()
-{
-}
+osn::Output::~Output() {}
 
-void osn::Output::InitOutput(obs_output_t *output) {
+void osn::Output::InitOutput(obs_output_t *output)
+{
 	auto onStopped = [](void *data, calldata_t *) {
 		osn::Output *context = reinterpret_cast<osn::Output *>(data);
 		std::unique_lock lock(context->m_mtxOutputStop);
@@ -149,36 +145,38 @@ void osn::Output::StartOutput()
 
 std::optional<osn::Output::SignalInfo> osn::Output::PopReceivedSignal()
 {
-    std::unique_lock ulock(m_signalsMtx);
+	std::unique_lock ulock(m_signalsMtx);
 
 	if (m_signalsReceived.empty()) {
 		return {};
 	}
 
-    const auto result = m_signalsReceived.front();
+	const auto result = m_signalsReceived.front();
 	m_signalsReceived.pop();
-    return result;
+	return result;
 }
 
 void osn::Output::SetCanvas(obs_video_info *canvas)
 {
-    m_canvas = canvas;
+	m_canvas = canvas;
 }
 
 obs_video_info *osn::Output::GetCanvas()
 {
-    return m_canvas;
+	return m_canvas;
 }
 
 const obs_video_info *osn::Output::GetCanvas() const
 {
-    return m_canvas;
+	return m_canvas;
 }
 
-obs_output_t *osn::Output::GetOutput() {
-    return m_output;
+obs_output_t *osn::Output::GetOutput()
+{
+	return m_output;
 }
 
-const obs_output_t *osn::Output::GetOutput() const {
-    return m_output;
+const obs_output_t *osn::Output::GetOutput() const
+{
+	return m_output;
 }

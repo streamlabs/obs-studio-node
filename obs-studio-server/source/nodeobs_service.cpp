@@ -1373,7 +1373,7 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId, bool dualS
 
 	auto vod_track_mixer = IsVodTrackEnabled(services[serviceId]) ? std::optional{vodTrackIndex} : std::nullopt;
 
-	std::vector<obs_video_info*> canvases;
+	std::vector<obs_video_info *> canvases;
 	canvases.push_back(videoInfo[serviceId]);
 	if (dualStreamingMode) {
 		if (serviceId == StreamServiceId::Main) {

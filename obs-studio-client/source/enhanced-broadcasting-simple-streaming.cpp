@@ -34,20 +34,30 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 		{StaticMethod("create", &osn::EnhancedBroadcastingSimpleStreaming::Create),
 		 StaticMethod("destroy", &osn::EnhancedBroadcastingSimpleStreaming::Destroy),
 
-		 InstanceAccessor("videoEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetVideoEncoder, &osn::EnhancedBroadcastingSimpleStreaming::SetVideoEncoder),
-		 InstanceAccessor("audioEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetAudioEncoder, &osn::EnhancedBroadcastingSimpleStreaming::SetAudioEncoder),
+		 InstanceAccessor("videoEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetVideoEncoder,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetVideoEncoder),
+		 InstanceAccessor("audioEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetAudioEncoder,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetAudioEncoder),
 		 InstanceAccessor("service", &osn::EnhancedBroadcastingSimpleStreaming::GetService, &osn::EnhancedBroadcastingSimpleStreaming::SetService),
-		 InstanceAccessor("enforceServiceBitrate", &osn::EnhancedBroadcastingSimpleStreaming::GetEnforceServiceBirate, &osn::EnhancedBroadcastingSimpleStreaming::SetEnforceServiceBirate),
-		 InstanceAccessor("enableTwitchVOD", &osn::EnhancedBroadcastingSimpleStreaming::GetEnableTwitchVOD, &osn::EnhancedBroadcastingSimpleStreaming::SetEnableTwitchVOD),
-		 InstanceAccessor("audioEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetAudioEncoder, &osn::EnhancedBroadcastingSimpleStreaming::SetAudioEncoder),
-		 InstanceAccessor("useAdvanced", &osn::EnhancedBroadcastingSimpleStreaming::GetUseAdvanced, &osn::EnhancedBroadcastingSimpleStreaming::SetUseAdvanced),
-		 InstanceAccessor("customEncSettings", &osn::EnhancedBroadcastingSimpleStreaming::GetCustomEncSettings, &osn::EnhancedBroadcastingSimpleStreaming::SetCustomEncSettings),
-		 InstanceAccessor("signalHandler", &osn::EnhancedBroadcastingSimpleStreaming::GetSignalHandler, &osn::EnhancedBroadcastingSimpleStreaming::SetSignalHandler),
+		 InstanceAccessor("enforceServiceBitrate", &osn::EnhancedBroadcastingSimpleStreaming::GetEnforceServiceBirate,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetEnforceServiceBirate),
+		 InstanceAccessor("enableTwitchVOD", &osn::EnhancedBroadcastingSimpleStreaming::GetEnableTwitchVOD,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetEnableTwitchVOD),
+		 InstanceAccessor("audioEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetAudioEncoder,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetAudioEncoder),
+		 InstanceAccessor("useAdvanced", &osn::EnhancedBroadcastingSimpleStreaming::GetUseAdvanced,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetUseAdvanced),
+		 InstanceAccessor("customEncSettings", &osn::EnhancedBroadcastingSimpleStreaming::GetCustomEncSettings,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetCustomEncSettings),
+		 InstanceAccessor("signalHandler", &osn::EnhancedBroadcastingSimpleStreaming::GetSignalHandler,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetSignalHandler),
 		 InstanceAccessor("delay", &osn::EnhancedBroadcastingSimpleStreaming::GetDelay, &osn::EnhancedBroadcastingSimpleStreaming::SetDelay),
-		 InstanceAccessor("reconnect", &osn::EnhancedBroadcastingSimpleStreaming::GetReconnect, &osn::EnhancedBroadcastingSimpleStreaming::SetReconnect),
+		 InstanceAccessor("reconnect", &osn::EnhancedBroadcastingSimpleStreaming::GetReconnect,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetReconnect),
 		 InstanceAccessor("network", &osn::EnhancedBroadcastingSimpleStreaming::GetNetwork, &osn::EnhancedBroadcastingSimpleStreaming::SetNetwork),
 		 InstanceAccessor("video", &osn::EnhancedBroadcastingSimpleStreaming::GetCanvas, &osn::EnhancedBroadcastingSimpleStreaming::SetCanvas),
-		 InstanceAccessor("additionalVideo", &osn::EnhancedBroadcastingSimpleStreaming::GetAdditionalCanvas, &osn::EnhancedBroadcastingSimpleStreaming::SetAdditionalCanvas),
+		 InstanceAccessor("additionalVideo", &osn::EnhancedBroadcastingSimpleStreaming::GetAdditionalCanvas,
+				  &osn::EnhancedBroadcastingSimpleStreaming::SetAdditionalCanvas),
 		 InstanceAccessor("droppedFrames", &osn::EnhancedBroadcastingSimpleStreaming::GetDroppedFrames, nullptr),
 		 InstanceAccessor("totalFrames", &osn::EnhancedBroadcastingSimpleStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::EnhancedBroadcastingSimpleStreaming::GetKBitsPerSec, nullptr),
@@ -56,7 +66,8 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 		 InstanceMethod("start", &osn::EnhancedBroadcastingSimpleStreaming::Start),
 		 InstanceMethod("stop", &osn::EnhancedBroadcastingSimpleStreaming::Stop),
 
-		 StaticAccessor("legacySettings", &osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings, &osn::EnhancedBroadcastingSimpleStreaming::SetLegacySettings)});
+		 StaticAccessor("legacySettings", &osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings,
+				&osn::EnhancedBroadcastingSimpleStreaming::SetLegacySettings)});
 
 	exports.Set("EnhancedBroadcastingSimpleStreaming", func);
 	osn::EnhancedBroadcastingSimpleStreaming::constructor = Napi::Persistent(func);
@@ -65,7 +76,8 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 	return exports;
 }
 
-osn::EnhancedBroadcastingSimpleStreaming::EnhancedBroadcastingSimpleStreaming(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::EnhancedBroadcastingSimpleStreaming>(info)
+osn::EnhancedBroadcastingSimpleStreaming::EnhancedBroadcastingSimpleStreaming(const Napi::CallbackInfo &info)
+	: Napi::ObjectWrap<osn::EnhancedBroadcastingSimpleStreaming>(info)
 {
 	Napi::Env env = info.Env();
 	Napi::HandleScope scope(env);
@@ -91,7 +103,8 @@ Napi::Value osn::EnhancedBroadcastingSimpleStreaming::Create(const Napi::Callbac
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::EnhancedBroadcastingSimpleStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
+	auto instance =
+		osn::EnhancedBroadcastingSimpleStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }
@@ -159,7 +172,8 @@ Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings(const Na
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	auto instance = osn::EnhancedBroadcastingSimpleStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
+	auto instance =
+		osn::EnhancedBroadcastingSimpleStreaming::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
 }

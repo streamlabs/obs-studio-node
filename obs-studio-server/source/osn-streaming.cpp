@@ -33,7 +33,8 @@ osn::Streaming::~Streaming()
 	}
 }
 
-void osn::Streaming::DeleteOutput() {
+void osn::Streaming::DeleteOutput()
+{
 	Output::DeleteOutput();
 }
 

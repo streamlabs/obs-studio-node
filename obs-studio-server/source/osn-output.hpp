@@ -29,48 +29,47 @@ namespace osn {
 
 class Output {
 public:
-    struct SignalInfo {
-        std::string signal;
-        int code = 0;
-        std::string errorMessage;
-    };
+	struct SignalInfo {
+		std::string signal;
+		int code = 0;
+		std::string errorMessage;
+	};
 
 public:
 	Output(const std::vector<std::string> &signals);
 	virtual ~Output();
 
-    void ConnectSignals();
-    void CreateOutput(const std::string &type, const std::string &name);
-    void SetOutput(obs_output_t *output);
+	void ConnectSignals();
+	void CreateOutput(const std::string &type, const std::string &name);
+	void SetOutput(obs_output_t *output);
 	virtual void DeleteOutput();
 	void StartOutput();
 
-    // If no signal, will return an empty optional. Thread safe.
-    std::optional<SignalInfo> PopReceivedSignal();
+	// If no signal, will return an empty optional. Thread safe.
+	std::optional<SignalInfo> PopReceivedSignal();
 
+	void SetCanvas(obs_video_info *canvas);
+	obs_video_info *GetCanvas();
+	const obs_video_info *GetCanvas() const;
 
-    void SetCanvas(obs_video_info *canvas);
-    obs_video_info *GetCanvas();
-    const obs_video_info *GetCanvas() const;
-
-    obs_output_t *GetOutput();
-    const obs_output_t *GetOutput() const;
+	obs_output_t *GetOutput();
+	const obs_output_t *GetOutput() const;
 
 private:
-    friend void OutputSignalCallback(void *data, calldata_t *params);
+	friend void OutputSignalCallback(void *data, calldata_t *params);
 
-    void InitOutput(obs_output_t *output);
+	void InitOutput(obs_output_t *output);
 
-    obs_video_info *m_canvas = nullptr;
-    obs_output_t *m_output = nullptr;
+	obs_video_info *m_canvas = nullptr;
+	obs_output_t *m_output = nullptr;
 
-    std::mutex m_signalsMtx;
-    std::queue<SignalInfo> m_signalsReceived;
+	std::mutex m_signalsMtx;
+	std::queue<SignalInfo> m_signalsReceived;
 
 	std::condition_variable m_cvStop;
 	std::mutex m_mtxOutputStop;
 
-    const std::vector<std::string> m_signals;
+	const std::vector<std::string> m_signals;
 };
 
 }
