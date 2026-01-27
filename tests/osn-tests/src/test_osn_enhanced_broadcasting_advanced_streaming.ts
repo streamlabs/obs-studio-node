@@ -139,6 +139,7 @@ describe(testName, () => {
         stream.stop();
 
         // Scene cleanup
+        osn.Global.setOutputSource(0, null);
         sceneItem.remove();
         videoSource.release();
         scene.release();
@@ -240,6 +241,7 @@ describe(testName, () => {
         stream.stop();
 
         // Scene cleanup
+        osn.Global.setOutputSource(0, null);
         sceneItem1.remove();
         sceneItem2.remove();
         videoSource.release();

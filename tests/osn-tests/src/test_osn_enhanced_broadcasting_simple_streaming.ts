@@ -10,7 +10,7 @@ import * as inputSettings from '../util/input_settings';
 
 import path = require('path');
 
-const testName = 'osn-enhanced-broadcasting-advanced-streaming';
+const testName = 'osn-enhanced-broadcasting-simple-streaming';
 
 describe(testName, () => {
     let obs: OBSHandler;
@@ -133,6 +133,7 @@ describe(testName, () => {
         stream.stop();
 
         // Scene cleanup
+        osn.Global.setOutputSource(0, null);
         sceneItem.remove();
         videoSource.release();
         scene.release();
@@ -233,6 +234,7 @@ describe(testName, () => {
         stream.stop();
 
         // Scene cleanup
+        osn.Global.setOutputSource(0, null);
         sceneItem1.remove();
         sceneItem2.remove();
         videoSource.release();
