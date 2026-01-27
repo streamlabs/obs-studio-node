@@ -98,10 +98,18 @@ SET(osn-client_SOURCES
     "source/audio.cpp"
     "source/streaming.hpp"
     "source/streaming.cpp"
+    "source/simple-streaming-base.hpp"
+    "source/simple-streaming-base.cpp"
     "source/simple-streaming.hpp"
     "source/simple-streaming.cpp"
+    "source/advanced-streaming-base.hpp"
+    "source/advanced-streaming-base.cpp"
     "source/advanced-streaming.hpp"
     "source/advanced-streaming.cpp"
+    "source/enhanced-broadcasting-advanced-streaming.hpp"
+    "source/enhanced-broadcasting-advanced-streaming.cpp"
+    "source/enhanced-broadcasting-simple-streaming.hpp"
+    "source/enhanced-broadcasting-simple-streaming.cpp"
     "source/worker-signals.hpp"
     "source/delay.hpp"
     "source/delay.cpp"
@@ -187,7 +195,7 @@ target_link_libraries(${PROJECT_NAME} ${LIBOBS_LIBRARIES})
 add_definitions(-DNAPI_VERSION=7)
 
 #Define the OSN_VERSION
-add_compile_definitions(OSN_VERSION=\"$ENV{tagartifact}\") 
+add_compile_definitions(OSN_VERSION=\"$ENV{tagartifact}\")
 set_target_properties(
     obs_studio_client
     PROPERTIES
@@ -235,5 +243,5 @@ install(
     TARGETS obs_studio_client
     RUNTIME DESTINATION "./" COMPONENT Runtime
     LIBRARY DESTINATION "./" COMPONENT Runtime
-    ARCHIVE DESTINATION "./" COMPONENT Runtime    
+    ARCHIVE DESTINATION "./" COMPONENT Runtime
 )

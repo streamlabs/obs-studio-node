@@ -24,8 +24,6 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
 
-#include "osn-multitrack-video.hpp"
-
 void osn::IAdvancedStreaming::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("AdvancedStreaming");
@@ -44,9 +42,6 @@ void osn::IAdvancedStreaming::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetEnableTwitchVOD", std::vector<ipc::type>{ipc::type::UInt64}, GetEnableTwitchVOD));
 	cls->register_function(
 		std::make_shared<ipc::function>("SetEnableTwitchVOD", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnableTwitchVOD));
-	cls->register_function(std::make_shared<ipc::function>("GetEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt64}, GetEnhancedBroadcasting));
-	cls->register_function(
-		std::make_shared<ipc::function>("SetEnhancedBroadcasting", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnhancedBroadcasting));
 	cls->register_function(std::make_shared<ipc::function>("GetAudioTrack", std::vector<ipc::type>{ipc::type::UInt64}, GetAudioTrack));
 	cls->register_function(std::make_shared<ipc::function>("SetAudioTrack", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetAudioTrack));
 	cls->register_function(std::make_shared<ipc::function>("GetTwitchTrack", std::vector<ipc::type>{ipc::type::UInt64}, GetTwitchTrack));
@@ -378,14 +373,6 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
-	if (streaming->enhancedBroadcasting) {
-		auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD) ?
-			std::optional{streaming->twitchTrack} :
-			std::nullopt;
-		streaming->StartEnhancedBroadcastingStream(vod_track_mixer);
-		return;
-	}
-
 	if (!streaming->videoEncoder) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
@@ -452,9 +439,10 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 void osn::IAdvancedStreaming::Stop(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	blog(LOG_INFO, "IAdvancedStreaming::Stop");
 	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
 	if (!streaming->GetOutput()) {

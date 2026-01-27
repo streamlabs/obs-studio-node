@@ -42,7 +42,6 @@ public:
 		enforceServiceBitrate = true;
 		enableTwitchVOD = false;
 		twitchVODSupported = false;
-		enhancedBroadcasting = false;
 		oldMixer_desktopSource1 = 0;
 		oldMixer_desktopSource2 = 0;
 		delay = new Delay();
@@ -62,7 +61,6 @@ public:
 	bool enforceServiceBitrate;
 	bool enableTwitchVOD;
 	bool twitchVODSupported;
-	bool enhancedBroadcasting;
 	uint32_t oldMixer_desktopSource1;
 	uint32_t oldMixer_desktopSource2;
 	Delay *delay;
@@ -78,10 +76,6 @@ public:
 	void setDelayLegacySettings();
 	void setReconnectLegacySettings();
 	void setNetworkLegacySettings();
-	void StartEnhancedBroadcastingStream(std::optional<size_t> vod_track_mixer = std::nullopt);
-
-protected:
-	std::optional<osn::EnhancedBroadcastOutputObjects> enhancedBroadcastingContext;
 };
 
 class IStreaming {
@@ -112,8 +106,6 @@ public:
 	static void SetEnforceServiceBirate(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetEnableTwitchVOD(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetEnableTwitchVOD(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static void GetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static void SetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetDelay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetDelay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetReconnect(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

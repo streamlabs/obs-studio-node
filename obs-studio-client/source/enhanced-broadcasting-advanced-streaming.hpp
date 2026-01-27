@@ -18,18 +18,21 @@
 
 #pragma once
 #include <napi.h>
-#include "simple-streaming-base.hpp"
+#include "advanced-streaming.hpp"
 
 namespace osn {
-
-class SimpleStreaming : public Napi::ObjectWrap<osn::SimpleStreaming>, public SimpleStreamingBase {
+class EnhancedBroadcastingAdvancedStreaming : public Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>,
+                                              public osn::AdvancedStreamingBase {
 public:
 	static Napi::FunctionReference constructor;
 	static Napi::Object Init(Napi::Env env, Napi::Object exports);
-	SimpleStreaming(const Napi::CallbackInfo &info);
+	EnhancedBroadcastingAdvancedStreaming(const Napi::CallbackInfo &info);
 
 	static Napi::Value Create(const Napi::CallbackInfo &info);
 	static void Destroy(const Napi::CallbackInfo &info);
+
+	Napi::Value GetAdditionalCanvas(const Napi::CallbackInfo &info);
+	void SetAdditionalCanvas(const Napi::CallbackInfo &info, const Napi::Value &value);
 
 	static Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
 	static void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);

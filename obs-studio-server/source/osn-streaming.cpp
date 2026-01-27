@@ -34,11 +34,7 @@ osn::Streaming::~Streaming()
 }
 
 void osn::Streaming::DeleteOutput() {
-	blog(LOG_INFO, "osn::Streaming::DeleteOutput");
 	Output::DeleteOutput();
-	if (enhancedBroadcasting) {
-		enhancedBroadcastingContext.reset();
-	}
 }
 
 void osn::IStreaming::GetService(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -159,31 +155,6 @@ void osn::IStreaming::SetEnforceServiceBirate(void *data, const int64_t id, cons
 	}
 
 	streaming->enforceServiceBitrate = args[1].value_union.ui32;
-
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	AUTO_DEBUG;
-}
-
-void osn::IStreaming::GetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
-{
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(streaming->enhancedBroadcasting));
-	AUTO_DEBUG;
-}
-
-void osn::IStreaming::SetEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
-{
-	Streaming *streaming = osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	streaming->enhancedBroadcasting = args[1].value_union.ui32;
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -411,78 +382,6 @@ void osn::Streaming::setNetworkLegacySettings()
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "DynamicBitrate", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "NewSocketLoopEnable", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "LowLatencyEnable", network->enableDynamicBitrate);
-}
-
-void osn::Streaming::StartEnhancedBroadcastingStream(std::optional<size_t> vod_track_mixer) {
-	blog(LOG_INFO, "Streaming::StartEnhancedBroadcastingStream - service id: %s", obs_service_get_id(this->service));
-
-	if (vod_track_mixer.has_value()) {
-		blog(LOG_INFO, "vod_track_mixer: %d", vod_track_mixer.value());
-	}
-
-	const bool is_custom = strncmp("rtmp_custom", obs_service_get_type(this->service), 11) == 0;
-
-	OBSDataAutoRelease settings = obs_service_get_settings(this->service);
-	const std::string key = obs_data_get_string(settings, "key");
-
-	const char *service_name = "<unknown>";
-	if (is_custom && obs_data_has_user_value(settings, "service_name")) {
-		service_name = obs_data_get_string(settings, "service_name");
-	} else if (!is_custom) {
-		service_name = obs_data_get_string(settings, "service");
-	}
-
-	std::optional<std::string> custom_rtmp_url;
-	auto server = obs_data_get_string(settings, "server");
-	if (strcmp(server, "auto") != 0) {
-		custom_rtmp_url = server;
-	}
-
-	auto service_custom_server = obs_data_get_bool(settings, "using_custom_server");
-	if (custom_rtmp_url.has_value()) {
-		blog(LOG_INFO, "Using %s server '%s'", service_custom_server ? "custom " : "", custom_rtmp_url->c_str());
-	}
-
-	auto auto_config_url = osn::MultitrackVideoAutoConfigURL(this->service);
-	blog(LOG_INFO, "Auto config URL: %s", auto_config_url.c_str());
-
-	auto go_live_post = osn::constructGoLivePost({this->GetCanvas()}, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
-	std::optional<osn::Config> go_live_config = osn::DownloadGoLiveConfig(auto_config_url, go_live_post);
-	if (!go_live_config.has_value()) {
-		throw std::runtime_error("startStreaming - go live config is empty");
-	}
-
-	const auto audio_bitrate = osn::GetMultitrackAudioBitrate();
-	const auto audio_encoder_id = osn::GetSimpleAACEncoderForBitrate(audio_bitrate);
-
-	std::vector<OBSEncoderAutoRelease> audio_encoders;
-	std::shared_ptr<obs_encoder_group_t> video_encoder_group;
-	auto output =
-		osn::SetupOBSOutput("Enhanced Broadcasting", go_live_config.value(), audio_encoders, video_encoder_group, audio_encoder_id, 0, vod_track_mixer);
-	if (!output) {
-		throw std::runtime_error("startStreaming - failed to create multitrack output");
-	}
-
-	// Stream key is defined by config from Twitch
-	auto multitrack_video_service = osn::create_service(*go_live_config, std::nullopt, "");
-	if (!multitrack_video_service) {
-		throw std::runtime_error("startStreaming - failed to create multitrack video service");
-	}
-
-	this->SetOutput(output.Get());
-	obs_output_set_service(output, multitrack_video_service);
-
-	// Register the BPM (Broadcast Performance Metrics) callback
-	obs_output_add_packet_callback(output, bpm_inject, NULL);
-
-	this->StartOutput();
-
-	enhancedBroadcastingContext.emplace(EnhancedBroadcastOutputObjects{
-		std::move(output),
-		video_encoder_group,
-		std::move(audio_encoders),
-		std::move(multitrack_video_service),
-	});
 }
 
 void osn::IStreaming::GetDroppedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

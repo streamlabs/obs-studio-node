@@ -307,6 +307,8 @@ export declare const VideoEncoderFactory: IVideoEncoderFactory;
 export declare const ServiceFactory: IServiceFactory;
 export declare const SimpleStreamingFactory: ISimpleStreamingFactory;
 export declare const AdvancedStreamingFactory: IAdvancedStreamingFactory;
+export declare const EnhancedBroadcastingAdvancedStreamingFactory: IEnhancedBroadcastingAdvancedStreamingFactory;
+export declare const EnhancedBroadcastingSimpleStreamingFactory: IEnhancedBroadcastingSimpleStreamingFactory;
 export declare const DelayFactory: IDelayFactory;
 export declare const ReconnectFactory: IReconnectFactory;
 export declare const NetworkFactory: INetworkFactory;
@@ -794,12 +796,11 @@ export interface IVideoEncoderFactory {
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;
 }
 export interface IStreaming {
-    // Video encoder value is ignored when enhancedBroadcasting === true
+    // Video encoder value is ignored in the Enhanced Broadcasting mode
     videoEncoder?: IVideoEncoder;
     service: IService;
     enforceServiceBitrate: boolean;
     enableTwitchVOD: boolean;
-    enhancedBroadcasting: boolean;
     delay: IDelay;
     reconnect: IReconnect;
     network: INetwork;
@@ -839,6 +840,26 @@ export interface IAdvancedStreamingFactory {
     create(): IAdvancedStreaming;
     destroy(stream: IAdvancedStreaming): void;
     legacySettings: IAdvancedStreaming;
+}
+export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
+    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
+    // This value should be initialized before the stream start.
+    additionalVideo?: IVideo,
+}
+export interface IEnhancedBroadcastingAdvancedStreamingFactory {
+    create(): IEnhancedBroadcastingAdvancedStreaming;
+    destroy(stream: IEnhancedBroadcastingAdvancedStreaming): void;
+    legacySettings: IEnhancedBroadcastingAdvancedStreaming;
+}
+export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
+    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
+    // This value should be initialized before the stream start.
+    additionalVideo?: IVideo,
+}
+export interface IEnhancedBroadcastingSimpleStreamingFactory {
+    create(): IEnhancedBroadcastingSimpleStreaming;
+    destroy(stream: IEnhancedBroadcastingSimpleStreaming): void;
+    legacySettings: IEnhancedBroadcastingSimpleStreaming;
 }
 export interface IFileOutput {
     path: string;

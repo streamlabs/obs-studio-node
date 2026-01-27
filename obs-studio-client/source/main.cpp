@@ -54,6 +54,8 @@
 #include "advanced-recording.hpp"
 #include "simple-replay-buffer.hpp"
 #include "advanced-replay-buffer.hpp"
+#include "enhanced-broadcasting-advanced-streaming.hpp"
+#include "enhanced-broadcasting-simple-streaming.hpp"
 
 #if defined(_WIN32)
 // Checks ForceGPUAsRenderDevice setting
@@ -138,6 +140,8 @@ Napi::Object main_node(Napi::Env env, Napi::Object exports)
 	osn::AdvancedRecording::Init(env, exports);
 	osn::SimpleReplayBuffer::Init(env, exports);
 	osn::AdvancedReplayBuffer::Init(env, exports);
+	osn::EnhancedBroadcastingAdvancedStreaming::Init(env, exports);
+	osn::EnhancedBroadcastingSimpleStreaming::Init(env, exports);
 	return exports;
 };
 

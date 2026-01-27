@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NodeObs = exports.getSourcesSize = exports.createSources = exports.addItems = exports.AdvancedReplayBufferFactory = exports.SimpleReplayBufferFactory = exports.AudioEncoderFactory = exports.AdvancedRecordingFactory = exports.SimpleRecordingFactory = exports.AudioTrackFactory = exports.NetworkFactory = exports.ReconnectFactory = exports.DelayFactory = exports.AdvancedStreamingFactory = exports.SimpleStreamingFactory = exports.ServiceFactory = exports.VideoEncoderFactory = exports.IPC = exports.ModuleFactory = exports.AudioFactory = exports.Audio = exports.FaderFactory = exports.VolmeterFactory = exports.DisplayFactory = exports.TransitionFactory = exports.FilterFactory = exports.SceneFactory = exports.InputFactory = exports.VideoFactory = exports.Video = exports.Global = exports.DefaultPluginPathMac = exports.DefaultPluginDataPath = exports.DefaultPluginPath = exports.DefaultDataPath = exports.DefaultBinPath = exports.DefaultDrawPluginPath = exports.DefaultOpenGLPath = exports.DefaultD3D11Path = void 0;
+exports.NodeObs = exports.getSourcesSize = exports.createSources = exports.addItems = exports.AdvancedReplayBufferFactory = exports.SimpleReplayBufferFactory = exports.AudioEncoderFactory = exports.AdvancedRecordingFactory = exports.SimpleRecordingFactory = exports.AudioTrackFactory = exports.NetworkFactory = exports.ReconnectFactory = exports.DelayFactory = exports.AdvancedStreamingFactory = exports.EnhancedBroadcastingSimpleStreamingFactory = exports.EnhancedBroadcastingAdvancedStreamingFactory = exports.SimpleStreamingFactory = exports.ServiceFactory = exports.VideoEncoderFactory = exports.IPC = exports.ModuleFactory = exports.AudioFactory = exports.Audio = exports.FaderFactory = exports.VolmeterFactory = exports.DisplayFactory = exports.TransitionFactory = exports.FilterFactory = exports.SceneFactory = exports.InputFactory = exports.VideoFactory = exports.Video = exports.Global = exports.DefaultPluginPathMac = exports.DefaultPluginDataPath = exports.DefaultPluginPath = exports.DefaultDataPath = exports.DefaultBinPath = exports.DefaultDrawPluginPath = exports.DefaultOpenGLPath = exports.DefaultD3D11Path = void 0;
 const path = require("path");
 const fs = require("fs");
 // Mac- search for optional OSN.app bundle (Chromium requires an app bundle to find obs64 helper apps)
@@ -34,6 +34,8 @@ exports.VideoEncoderFactory = obs.VideoEncoder;
 exports.ServiceFactory = obs.Service;
 exports.SimpleStreamingFactory = obs.SimpleStreaming;
 exports.AdvancedStreamingFactory = obs.AdvancedStreaming;
+exports.EnhancedBroadcastingAdvancedStreamingFactory = obs.EnhancedBroadcastingAdvancedStreaming;
+exports.EnhancedBroadcastingSimpleStreamingFactory = obs.EnhancedBroadcastingSimpleStreaming;
 exports.DelayFactory = obs.Delay;
 exports.ReconnectFactory = obs.Reconnect;
 exports.NetworkFactory = obs.Network;
@@ -70,7 +72,7 @@ function createSources(sources) {
                 console.error(`[OSN] Failed to create input for source "${source.name}":`, error instanceof Error ? error.message : error);
                 return; // Skip the rest of this iteration if input creation fails
             }
-            
+
             if (newSource) {
                 if (newSource.audioMixers) {
                     newSource.muted = source.muted ?? false;
@@ -80,7 +82,7 @@ function createSources(sources) {
                 newSource.deinterlaceMode = source.deinterlaceMode;
                 newSource.deinterlaceFieldOrder = source.deinterlaceFieldOrder;
                 items.push(newSource);
-                
+
                 const filters = source.filters;
                 if (Array.isArray(filters)) {
                     filters.forEach(function (filter) {
@@ -90,7 +92,7 @@ function createSources(sources) {
                         } catch (filterError) {
                             console.error(`[OSN] Failed to create filter "${filter.name}" for source "${source.name}":`, filterError instanceof Error ? filterError.message : filterError);
                         }
-                        
+
                         if (ObsFilter) {
                             ObsFilter.enabled = filter.enabled ?? true;
                             newSource.addFilter(ObsFilter);
