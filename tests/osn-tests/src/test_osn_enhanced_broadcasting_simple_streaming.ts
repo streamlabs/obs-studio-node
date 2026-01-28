@@ -77,7 +77,7 @@ describe(testName, () => {
         }
 
         if (obs.isCI()) {
-            // Skipping this test because CI server doesn't have GPU
+            // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
 
@@ -173,7 +173,7 @@ describe(testName, () => {
         }
 
         if (obs.isCI()) {
-            // Skipping this test because CI server doesn't have GPU
+            // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
 

@@ -71,7 +71,6 @@ describe(testName, () => {
     });
 
     // TODO: more tests:
-    // - not set main canvas (error handling)
     // - vertical primary canvas
 
     it('Enhanced Broadcasting Advanced Streaming Single Canvas', async function() {
@@ -80,7 +79,7 @@ describe(testName, () => {
         }
 
         if (obs.isCI()) {
-            // Skipping this test because CI server doesn't have GPU
+            // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
 
@@ -178,7 +177,7 @@ describe(testName, () => {
         }
 
         if (obs.isCI()) {
-            // Skipping this test because CI server doesn't have GPU
+            // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
 

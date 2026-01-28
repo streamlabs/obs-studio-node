@@ -353,6 +353,10 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid audio encoder.");
 	}
 
+	if (!streaming->GetCanvas()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	}
+
 	streaming->UpdateEncoders();
 	obs_encoder_set_audio(streaming->audioEncoder, obs_get_audio());
 	obs_output_set_audio_encoder(streaming->GetOutput(), streaming->audioEncoder, 0);

@@ -377,6 +377,10 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
+	if (!streaming->GetCanvas()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	}
+
 	streaming->UpdateEncoders();
 
 	const char *type = OBS_service::getStreamOutputType(streaming->service);

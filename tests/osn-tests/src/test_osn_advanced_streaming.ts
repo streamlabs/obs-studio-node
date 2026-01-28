@@ -99,6 +99,63 @@ describe(testName, () => {
         osn.AdvancedStreamingFactory.destroy(stream);
     });
 
+    it('Stream with missing video encoder', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.AdvancedStreamingFactory.create();
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid video encoder');
+
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing service', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.AdvancedStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid service');
+
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing canvas', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.AdvancedStreamingFactory.create();
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid main canvas');
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
     it('Start streaming', async function() {
         if (obs.isDarwin()) {
             this.skip();

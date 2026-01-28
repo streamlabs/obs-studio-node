@@ -160,7 +160,7 @@ void osn::EnhancedBroadcastingSimpleStreaming::SetAdditionalCanvas(const Napi::C
 
 	conn->call(className, "SetAdditionalVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
 }
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

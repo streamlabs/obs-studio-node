@@ -290,7 +290,8 @@ void osn::Streaming::Start(const Napi::CallbackInfo &info)
 
 	startWorker(info.Env(), this->cb.Value(), className, this->uid);
 
-	conn->call(className, "Start", {ipc::value(this->uid)});
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "Start", {ipc::value(this->uid)});
+	ValidateResponse(info, response);
 }
 
 void osn::Streaming::Stop(const Napi::CallbackInfo &info)

@@ -264,28 +264,6 @@ PostData constructGoLivePost(std::vector<obs_video_info *> canvases, std::string
 		preferences.canvases.emplace_back(Canvas{c->output_width, c->output_height, c->base_width, c->base_height, {c->fps_num, c->fps_den}});
 	}
 
-	// TODO: remove
-	/*
-	const size_t contexts = obs_get_video_info_count();
-	for (size_t i = 0; i < contexts; i++) {
-		if (obs_get_video_info_by_index(i, &ovi)) {
-			const bool isHorizontalCanvas = ovi.base_width >= ovi.base_height;
-			if (!dualStreamingMode && isHorizontalCanvas && serviceId != StreamServiceId::Main) {
-				blog(LOG_INFO, "constructGoLivePost - skipping horizontal canvas");
-				continue;
-			}
-
-			if (!dualStreamingMode && !isHorizontalCanvas && serviceId != StreamServiceId::Second) {
-				blog(LOG_INFO, "constructGoLivePost - skipping vertical canvas");
-				continue;
-			}
-
-			preferences.canvases.emplace_back(
-				Canvas{ovi.output_width, ovi.output_height, ovi.base_width, ovi.base_height, {ovi.fps_num, ovi.fps_den}});
-		}
-	}
-	*/
-
 	obs_audio_info2 oai2;
 	if (obs_get_audio_info2(&oai2)) {
 		preferences.audio_samples_per_sec = oai2.samples_per_sec;

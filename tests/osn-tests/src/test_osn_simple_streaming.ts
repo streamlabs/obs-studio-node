@@ -84,6 +84,77 @@ describe(testName, () => {
         osn.SimpleStreamingFactory.destroy(stream);
     });
 
+    it('Stream with missing video encoder', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid video encoder');
+
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing audio encoder', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid audio encoder');
+
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing service', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.video = obs.defaultVideoContext;
+        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid service');
+
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing canvas', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid main canvas');
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
     it('Start streaming', async function() {
         if (obs.isDarwin()) {
             this.skip();
