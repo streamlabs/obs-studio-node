@@ -796,7 +796,7 @@ export interface IVideoEncoderFactory {
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;
 }
 export interface IStreaming {
-    // Video encoder value is ignored in the Enhanced Broadcasting mode
+    // Video encoder value is ignored in the Enhanced Broadcasting mode, otherwise it should be set
     videoEncoder?: IVideoEncoder;
     service: IService;
     enforceServiceBitrate: boolean;

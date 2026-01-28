@@ -75,6 +75,12 @@ describe(testName, () => {
         if (obs.isDarwin()) {
             this.skip();
         }
+
+        if (obs.isCI()) {
+            // Skipping this test because CI server doesn't have GPU
+            this.skip();
+        }
+
         const stream = osn.EnhancedBroadcastingSimpleStreamingFactory.create();
         // Note: no video encoder set, because it is automatically created by the enhanced broadcasting
         stream.service = osn.ServiceFactory.legacySettings;
@@ -163,6 +169,11 @@ describe(testName, () => {
 
     it('Enhanced Broadcasting Simple Streaming Dual Canvas', async function() {
         if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        if (obs.isCI()) {
+            // Skipping this test because CI server doesn't have GPU
             this.skip();
         }
 

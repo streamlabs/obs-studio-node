@@ -82,6 +82,7 @@ export class OBSHandler {
     filterTypes: string[];
     transitionTypes: string[];
     os: string;
+    ci: boolean;
 
     userStreamKey: string;
     defaultVideoContext: osn.IVideo;
@@ -90,6 +91,7 @@ export class OBSHandler {
         this.os = process.platform;
         this.osnTestName = testName;
         this.cacheUploader = new CacheUploader(testName, this.obsPath);
+        this.ci = process.env.CI === 'true';
         this.startup();
         if (needDefaultVideoContext) {
             this.createDefaultVideoContext();
@@ -308,7 +310,7 @@ export class OBSHandler {
 
     skipSource(inputType: string) {
         if (process.platform === 'darwin') {
-            if (inputType === 'browser_source' || 
+            if (inputType === 'browser_source' ||
                 inputType === 'window_capture' ||
                 inputType === 'monitor_capture' ||
                 inputType === 'display_capture' ||
@@ -335,5 +337,11 @@ export class OBSHandler {
     {
         // Wrapped this in a function- just incase we want to add more conditions later or disable only within the build agent.
         return this.os === 'darwin';
+    }
+
+    // is the build server environment
+    isCI()
+    {
+        return this.ci;
     }
 }

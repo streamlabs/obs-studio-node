@@ -79,6 +79,11 @@ describe(testName, () => {
             this.skip();
         }
 
+        if (obs.isCI()) {
+            // Skipping this test because CI server doesn't have GPU
+            this.skip();
+        }
+
         const stream = osn.EnhancedBroadcastingAdvancedStreamingFactory.create();
         expect(stream).to.not.be.null;
         stream.service = osn.ServiceFactory.legacySettings;
@@ -169,6 +174,11 @@ describe(testName, () => {
 
     it('Enhanced Broadcasting Advanced Streaming Dual Canvas', async function() {
         if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        if (obs.isCI()) {
+            // Skipping this test because CI server doesn't have GPU
             this.skip();
         }
 
