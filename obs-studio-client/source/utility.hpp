@@ -122,7 +122,7 @@ static FORCE_INLINE std::shared_ptr<ipc::client> GetConnection(const Napi::Callb
 {
 	auto conn = Controller::GetInstance().GetConnection();
 	if (!conn) {
-		Napi::Error::New(info.Env(), "Failed to obtain IPC connection.").ThrowAsJavaScriptException();
+		std::cerr << "Failed to obtain IPC connection." << std::endl;
 		exit(1);
 	}
 	return conn;

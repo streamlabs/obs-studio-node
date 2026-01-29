@@ -406,6 +406,21 @@ void settings::OBS_settings_saveSettings(const Napi::CallbackInfo &info)
 		return;
 }
 
+Napi::Value settings::OBS_settings_isValidEncoder(const Napi::CallbackInfo &info)
+{
+	std::string category = info[0].ToString().Utf8Value();
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("Settings", "OBS_settings_isValidEncoder", {ipc::value(category)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
+}
+
 std::vector<std::string> settings::getListCategories(void)
 {
 	std::vector<std::string> categories;
@@ -525,6 +540,7 @@ void settings::Init(Napi::Env env, Napi::Object exports)
 {
 	exports.Set(Napi::String::New(env, "OBS_settings_getSettings"), Napi::Function::New(env, settings::OBS_settings_getSettings));
 	exports.Set(Napi::String::New(env, "OBS_settings_saveSettings"), Napi::Function::New(env, settings::OBS_settings_saveSettings));
+	exports.Set(Napi::String::New(env, "OBS_settings_isValidEncoder"), Napi::Function::New(env, settings::OBS_settings_isValidEncoder));
 	exports.Set(Napi::String::New(env, "OBS_settings_getListCategories"), Napi::Function::New(env, settings::OBS_settings_getListCategories));
 	exports.Set(Napi::String::New(env, "OBS_settings_getInputAudioDevices"), Napi::Function::New(env, settings::OBS_settings_getInputAudioDevices));
 	exports.Set(Napi::String::New(env, "OBS_settings_getOutputAudioDevices"), Napi::Function::New(env, settings::OBS_settings_getOutputAudioDevices));
