@@ -28,7 +28,7 @@
 #include <string.h>
 #include <string>
 #include <vector>
-#include <queue>
+#include <deque>
 #include "nodeobs_configManager.hpp"
 #include "nodeobs_service.h"
 #include "util-osx.hpp"
@@ -44,27 +44,33 @@ class OBS_API {
 
 public:
 	struct LogReport {
-		static const int MaximumGeneralMessages = 150;
+		static const int MaximumMessages = 150;
 
 		void push(std::string message, int logLevel)
 		{
-			general.push(message);
-			if (general.size() >= MaximumGeneralMessages) {
-				general.pop();
+			general.push_back(message);
+			if (general.size() > MaximumMessages) {
+				general.pop_front();
 			}
 
 			if (logLevel == LOG_ERROR) {
 				errors.push_back(message);
+				if (errors.size() > MaximumMessages) {
+					errors.pop_front();
+				}
 			}
 
 			if (logLevel == LOG_WARNING) {
 				warnings.push_back(message);
+				if (warnings.size() > MaximumMessages) {
+					warnings.pop_front();
+				}
 			}
 		}
 
-		std::vector<std::string> errors;
-		std::vector<std::string> warnings;
-		std::queue<std::string> general;
+		std::deque<std::string> errors;
+		std::deque<std::string> warnings;
+		std::deque<std::string> general;
 	};
 
 	struct OutputStats {
@@ -130,9 +136,9 @@ public:
 	static double getMemoryUsage();
 	static void getCurrentOutputStats(obs_output_t *output, OBS_API::OutputStats &outputStats);
 
-	static const std::vector<std::string> &getOBSLogErrors();
-	static const std::vector<std::string> &getOBSLogWarnings();
-	static std::queue<std::string> &getOBSLogGeneral();
+	static std::deque<std::string> &getOBSLogErrors();
+	static std::deque<std::string> &getOBSLogWarnings();
+	static std::deque<std::string> &getOBSLogGeneral();
 
 	static std::string getCurrentVersion();
 	static std::string getUsername();

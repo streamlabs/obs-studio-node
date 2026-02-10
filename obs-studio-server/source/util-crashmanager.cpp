@@ -1028,15 +1028,19 @@ nlohmann::json util::CrashManager::RequestOBSLog(OBSLogType type)
 	switch (type) {
 	case OBSLogType::Errors: {
 		auto &errors = OBS_API::getOBSLogErrors();
-		for (auto &msg : errors)
-			result.push_back(msg);
+		while (!errors.empty()) {
+			result.push_back(errors.front());
+			errors.pop_front();
+		}
 		break;
 	}
 
 	case OBSLogType::Warnings: {
 		auto &warnings = OBS_API::getOBSLogWarnings();
-		for (auto &msg : warnings)
-			result.push_back(msg);
+		while (!warnings.empty()) {
+			result.push_back(warnings.front());
+			warnings.pop_front();
+		}
 		break;
 	}
 
@@ -1044,7 +1048,7 @@ nlohmann::json util::CrashManager::RequestOBSLog(OBSLogType type)
 		auto &general = OBS_API::getOBSLogGeneral();
 		while (!general.empty()) {
 			result.push_back(general.front());
-			general.pop();
+			general.pop_front();
 		}
 
 		break;

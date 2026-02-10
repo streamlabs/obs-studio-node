@@ -2048,17 +2048,17 @@ double OBS_API::getMemoryUsage()
 	return (double)os_get_proc_resident_size() / (1024.0 * 1024.0);
 }
 
-const std::vector<std::string> &OBS_API::getOBSLogErrors()
+std::deque<std::string> &OBS_API::getOBSLogErrors()
 {
 	return logReport.errors;
 }
 
-const std::vector<std::string> &OBS_API::getOBSLogWarnings()
+std::deque<std::string> &OBS_API::getOBSLogWarnings()
 {
 	return logReport.warnings;
 }
 
-std::queue<std::string> &OBS_API::getOBSLogGeneral()
+std::deque<std::string> &OBS_API::getOBSLogGeneral()
 {
 	return logReport.general;
 }
