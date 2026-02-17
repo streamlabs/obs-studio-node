@@ -35,6 +35,7 @@ public:
 		rescaling = false;
 		outputWidth = 1280;
 		outputHeight = 720;
+		simple = false;
 	}
 	~AdvancedStreaming() {}
 

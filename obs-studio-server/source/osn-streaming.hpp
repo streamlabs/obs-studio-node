@@ -46,6 +46,7 @@ public:
 		network = new Network();
 		lastBytesSent = 0;
 		lastBytesSentTime = 0;
+		simple = true;
 	}
 	virtual ~Streaming();
 
@@ -63,6 +64,7 @@ public:
 	Network *network;
 	uint64_t lastBytesSent;
 	uint64_t lastBytesSentTime;
+	bool simple;
 
 	bool isTwitchVODSupported();
 	void getDelayLegacySettings();

@@ -22,6 +22,7 @@
 #include "shared.hpp"
 #include "memory-manager.h"
 #include "osn-video.hpp"
+#include "osn-encoders.hpp"
 
 #ifdef WIN32
 #include <windows.h>
@@ -44,9 +45,6 @@
 std::vector<const char *> tabStreamTypes;
 const char *currentServiceName;
 std::vector<SubCategory> currentAudioSettings;
-
-bool update_nvenc_presets(obs_data_t *data, const char *encoderId);
-const char *convert_nvenc_simple_preset(const char *old_preset);
 
 /* some nice default output resolution vals */
 static const double vals[] = {1.0, 1.25, (1.0 / 0.75), 1.5, (1.0 / 0.6), 1.75, 2.0, 2.25, 2.5, 2.75, 3.0};
@@ -293,7 +291,6 @@ SubCategory OBS_settings::serializeSettingsData(const std::string &nameSubCatego
 						config_t *config, const std::string &section, bool isVisible, bool isEnabled)
 {
 	SubCategory sc;
-
 	for (int i = 0; i < entries.size(); i++) {
 		Parameter param;
 
@@ -328,13 +325,13 @@ SubCategory OBS_settings::serializeSettingsData(const std::string &nameSubCatego
 						currentValue = config_get_string(config, "AdvVideo", param.name.c_str());
 					}
 				} else if (section.compare("SimpleOutput") == 0) {
-					if (param.name.compare("NVENCPreset2") == 0) {
+					if (param.name.compare(PRESET_NVENC) == 0) {
 						currentValue = config_get_string(config, "SimpleOutput", param.name.c_str());
 						if (currentValue == NULL) {
-							const char *oldParamName = "NVENCPreset";
+							const char *oldParamName = PRESET_NVENC_DEP;
 							const char *oldValue = config_get_string(config, "SimpleOutput", oldParamName);
 							if (oldValue != NULL) {
-								currentValue = convert_nvenc_simple_preset(oldValue);
+								currentValue = osn::EncoderUtils::convertNvencSimplePreset(oldValue);
 								blog(LOG_INFO, "NVENC presets converted from %s to %s", oldValue, currentValue);
 							}
 						}
@@ -947,213 +944,35 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 	return true;
 }
 
-bool EncoderAvailable(const std::string &encoder)
-{
-	const char *val;
-	int i = 0;
-
-	while (obs_enum_encoder_types(i++, &val)) {
-		if (val == nullptr)
-			continue;
-		if (std::string(val) == encoder)
-			return true;
-	}
-
-	return false;
-}
-
-static bool isEncoderAvailableForStreaming(const char *encoder, obs_service_t *service)
-{
-	if (!encoder || !service)
-		return false;
-
-	auto supportedCodecs = obs_service_get_supported_video_codecs(service);
-	auto encoderCodec = obs_get_encoder_codec(encoder);
-
-	if (!supportedCodecs || !encoderCodec)
-		return false;
-
-	while (*supportedCodecs) {
-		if (strcmp(*supportedCodecs, encoderCodec) == 0)
-			return true;
-		supportedCodecs++;
-	}
-
-	return false;
-}
-
-// Codect/Container support check.
-// from OBS code UI\window-basic-settings.cpp
-static const std::unordered_map<std::string, std::unordered_set<std::string>> codec_compat = {
-	// Technically our muxer supports HEVC and AV1 as well, but nothing else does
-	{"flv", {"h264", "aac"}},
-	{"mpegts", {"h264", "hevc", "aac", "opus"}},
-	{"hls", {"h264", "hevc", "aac"}}, // Also using MPEG-TS, but no Opus support
-	{"mov", {"h264", "hevc", "prores", "aac", "alac", "pcm_s16le", "pcm_s24le", "pcm_f32le"}},
-	{"mp4", {"h264", "hevc", "av1", "aac", "opus", "alac", "flac"}},
-	{"fragmented_mov", {"h264", "hevc", "prores", "aac", "alac", "pcm_s16le", "pcm_s24le", "pcm_f32le"}},
-	{"fragmented_mp4", {"h264", "hevc", "av1", "aac", "opus", "alac", "flac"}},
-	// MKV supports everything
-	{"mkv", {}},
-};
-
-static bool ContainerSupportsCodec(const std::string &container, const std::string &codec)
-{
-	auto iter = codec_compat.find(container);
-	if (iter == codec_compat.end())
-		return false;
-
-	auto codecs = iter->second;
-	// Assume everything is supported
-	if (codecs.empty())
-		return true;
-	return codecs.count(codec) > 0;
-}
-
-static bool isNvencAvailableForSimpleMode()
-{
-	// Only available if config already uses it
-	const char *current_stream_encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
-	const char *current_rec_encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder");
-	bool nvenc_used_streaming = (current_stream_encoder && strcmp(current_stream_encoder, SIMPLE_ENCODER_NVENC) == 0);
-	bool nvenc_used_recording = (current_rec_encoder && strcmp(current_rec_encoder, SIMPLE_ENCODER_NVENC) == 0);
-
-	return (nvenc_used_streaming || nvenc_used_recording) && EncoderAvailable(ADVANCED_ENCODER_NVENC);
-}
 
 void OBS_settings::getAvailableAudioEncoders(std::vector<std::pair<std::string, ipc::value>> *encoders, bool simple, bool recording,
 					     const std::string &container)
 {
-	if (EncoderAvailable(SIMPLE_AUDIO_ENCODER_AAC))
+	if (osn::EncoderUtils::isEncoderRegistered(SIMPLE_AUDIO_ENCODER_AAC))
 		encoders->push_back(std::make_pair("AAC (Default)", ipc::value(SIMPLE_AUDIO_ENCODER_AAC)));
-	if (recording && EncoderAvailable(SIMPLE_AUDIO_ENCODER_OPUS))
+	if (recording && osn::EncoderUtils::isEncoderRegistered(SIMPLE_AUDIO_ENCODER_OPUS))
 		encoders->push_back(std::make_pair("Opus", ipc::value(SIMPLE_AUDIO_ENCODER_OPUS)));
 }
 
-class EncoderSettings {
-public:
-	std::string advanced_title;
-	std::string advanced_name;
-	std::string simple_title;
-	std::string simple_name;
-	std::string simple_intenal_name;
-	bool recording;
-	bool streaming;
-	bool check_availability;
-	bool check_availability_streaming;
-	bool check_availability_format;
-	bool only_for_reuse_simple;
-	const std::string getSimpleName() const { return simple_intenal_name.empty() ? simple_name : simple_intenal_name; }
-};
-
-std::vector<EncoderSettings> encoders_set = {
-	// Software x264
-	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, true, true, false, false, true, false},
-	// Software x264 low CPU (only for recording)
-	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, true, false, false, false,
-	 true, false},
-	// QuickSync H.264 (v1, deprecated)
-	// This line left here for reference
-	// {"QuickSync H.264 (v1 deprecated)", ADVANCED_ENCODER_QSV, "(Deprecated v1) Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, ADVANCED_ENCODER_QSV, true, true, true, false, true, false},
-	// QuickSync H.264 (v2, new)
-	{"QuickSync H.264", "obs_qsv11_v2", "Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, "obs_qsv11_v2", true, true, true, false, true, false},
-	// QuickSync AV1
-	{"QuickSync AV1", "obs_qsv11_av1", "", "", "", true, true, true, false, true, false},
-	// QuickSync HEVC
-	{"QuickSync HEVC", "obs_qsv11_hevc", "", "", "", true, true, true, false, true, false},
-	// NVIDIA NVENC H.264
-	{"NVIDIA NVENC H.264", ADVANCED_ENCODER_NVENC, "NVIDIA NVENC H.264", SIMPLE_ENCODER_NVENC, ADVANCED_ENCODER_NVENC, true, true, true, false, true, true},
-	// NVIDIA NVENC H.264 (new)
-	{"NVIDIA NVENC H.264 (new)", ENCODER_NVENC_H264_TEX, "NVIDIA NVENC H.264 (new)", ENCODER_NVENC_H264_TEX, "", true, true, true, false, true, false},
-	// NVIDIA NVENC HEVC
-	{"NVIDIA NVENC HEVC", ENCODER_NVENC_HEVC_TEX, "Hardware (NVENC, HEVC)", SIMPLE_ENCODER_NVENC_HEVC, ENCODER_NVENC_HEVC_TEX, true, true, true, true, true,
-	 false},
-	// NVIDIA NVENC AV1
-	{"NVIDIA NVENC AV1", ENCODER_NVENC_AV1_TEX, "Hardware (NVENC, AV1)", ENCODER_NVENC_AV1_TEX, "", true, true, true, true, true, false},
-	// Apple VT H264 Hardware Encoder
-	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER, "", true, true, true, false,
-	 true, false},
-	// Apple VT H264 Hardware Encoder
-	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_M1, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true, true,
-	 false, true, false},
-	// AMD HW H.264
-	{"AMD HW H.264", ADVANCED_ENCODER_AMD, "Hardware (AMD, H.264)", SIMPLE_ENCODER_AMD, ADVANCED_ENCODER_AMD, true, true, true, false, true, false},
-	// AMD HW H.265 (HEVC)
-	{"AMD HW H.265 (HEVC)", ADVANCED_ENCODER_AMD_HEVC, "Hardware (AMD, HEVC)", SIMPLE_ENCODER_AMD_HEVC, ADVANCED_ENCODER_AMD_HEVC, true, true, true, true,
-	 true, false},
-	// AMD HW AV1
-	{"AMD HW AV1", SIMPLE_ENCODER_AMD_AV1, "Hardware (AMD, AV1)", "av1", SIMPLE_ENCODER_AMD_AV1, true, true, true, true, true, false},
-	// AOM AV1
-	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", true, true, true, false, true, false},
-	// SVT-AV1
-	{"SVT-AV1", ENCODER_AV1_SVT_FFMPEG, "", "", "", true, true, true, false, true, false}};
-
 void OBS_settings::getSimpleAvailableEncoders(std::vector<std::pair<std::string, ipc::value>> *list, bool recording, const std::string &container)
 {
-	for (const auto &encoderSetting : encoders_set) {
-		if (encoderSetting.simple_name.empty())
-			continue;
-
-		if (!recording && !encoderSetting.streaming)
-			continue;
-
-		if (recording && !encoderSetting.recording)
-			continue;
-
-		if (encoderSetting.check_availability && !EncoderAvailable(encoderSetting.getSimpleName()))
-			continue;
-
-		if (!recording && encoderSetting.check_availability_streaming &&
-		    !isEncoderAvailableForStreaming(encoderSetting.getSimpleName().c_str(), OBS_service::getService(StreamServiceId::Main)))
-			continue;
-
-		if (encoderSetting.only_for_reuse_simple && !isNvencAvailableForSimpleMode())
-			continue;
-
-		if (recording && encoderSetting.check_availability_format) {
-			const char *codec = obs_get_encoder_codec(encoderSetting.getSimpleName().c_str());
-			if (!codec) {
-				blog(LOG_DEBUG, "[ENCODER_SKIPPED] codec is null");
-				continue;
-			}
-			if (!ContainerSupportsCodec(container, codec))
-				continue;
+	for (int i = 0; i < osn::EncoderUtils::videoEncoderOptions.size(); i++) {
+		if (osn::EncoderUtils::isEncoderCompatible(osn::EncoderUtils::videoEncoderOptions[i].getSimpleName(),
+							   OBS_service::getService(StreamServiceId::Main), true, recording, container, i)) {
+			list->push_back(std::make_pair(osn::EncoderUtils::videoEncoderOptions[i].simple_title,
+						       ipc::value(osn::EncoderUtils::videoEncoderOptions[i].simple_name)));
 		}
-
-		list->push_back(std::make_pair(encoderSetting.simple_title, ipc::value(encoderSetting.simple_name)));
 	}
 }
 
 void OBS_settings::getAdvancedAvailableEncoders(std::vector<std::pair<std::string, ipc::value>> *list, bool recording, const std::string &container)
 {
-	for (const auto &encoderSetting : encoders_set) {
-		if (encoderSetting.advanced_name.empty())
-			continue;
-
-		if (!recording && !encoderSetting.streaming)
-			continue;
-
-		if (recording && !encoderSetting.recording)
-			continue;
-
-		if (encoderSetting.check_availability && !EncoderAvailable(encoderSetting.advanced_name))
-			continue;
-
-		if (!recording && encoderSetting.check_availability_streaming &&
-		    !isEncoderAvailableForStreaming(encoderSetting.advanced_name.c_str(), OBS_service::getService(StreamServiceId::Main)))
-			continue;
-
-		if (recording && encoderSetting.check_availability_format) {
-			const char *codec = obs_get_encoder_codec(encoderSetting.advanced_name.c_str());
-			if (!codec) {
-				blog(LOG_WARNING, "[SUPPORTED_CODECS] codec is null for %s", encoderSetting.advanced_name.c_str());
-				continue;
-			}
-			if (!ContainerSupportsCodec(container, codec))
-				continue;
+	for (int i = 0; i < osn::EncoderUtils::videoEncoderOptions.size(); i++) {
+		if (osn::EncoderUtils::isEncoderCompatible(osn::EncoderUtils::videoEncoderOptions[i].advanced_name,
+							   OBS_service::getService(StreamServiceId::Main), false, recording, container, i)) {
+			list->push_back(std::make_pair(osn::EncoderUtils::videoEncoderOptions[i].advanced_title,
+						       ipc::value(osn::EncoderUtils::videoEncoderOptions[i].advanced_name)));
 		}
-
-		list->push_back(std::make_pair(encoderSetting.advanced_title, ipc::value(encoderSetting.advanced_name)));
 	}
 }
 
@@ -1173,59 +992,12 @@ static const char *translate_macvth264_encoder(std::string encoder)
 }
 #endif
 
-static bool isOldJimNvencEncoder(const std::string &encoderId)
-{
-	return encoderId == ENCODER_JIM_NVENC || encoderId == ENCODER_JIM_HEVC_NVENC || encoderId == ENCODER_JIM_AV1_NVENC;
-}
-
-// This code should be removed when JIM_ encoders will be removed from OBS
-static void converOldJimNvencEncoder(config_t *config, const std::string &configSection, const std::string &streamEncoderSetting,
-				     const std::string &recordingEncoderSetting)
-{
-	const std::string streamEncoder = utility::GetSafeString(config_get_string(config, configSection.c_str(), streamEncoderSetting.c_str()));
-	if (isOldJimNvencEncoder(streamEncoder)) {
-		blog(LOG_INFO, "Converting stream encoder for mode '%s' from encoder '%s' to '%s'", configSection.c_str(), streamEncoder.c_str(),
-		     ENCODER_NVENC_H264_TEX);
-		config_set_string(config, configSection.c_str(), streamEncoderSetting.c_str(), ENCODER_NVENC_H264_TEX);
-	}
-
-	const std::string recordingEncoder = utility::GetSafeString(config_get_string(config, configSection.c_str(), recordingEncoderSetting.c_str()));
-	if (isOldJimNvencEncoder(recordingEncoder)) {
-		blog(LOG_INFO, "Converting recording encoder for mode '%s' from encoder '%s' to '%s'", configSection.c_str(), recordingEncoder.c_str(),
-		     ENCODER_NVENC_H264_TEX);
-		config_set_string(config, configSection.c_str(), recordingEncoderSetting.c_str(), ENCODER_NVENC_H264_TEX);
-	}
-}
-
-static bool validateEncoderForService(StreamServiceId serviceId, const char *encoderToFind)
-{
-	bool validEncoder = false;
-
-	//have encoder - find in encoders_set, validate 'streaming' flag and check availability based on 'check_availability_streaming' flag
-	for (int i = 0; i < encoders_set.size(); i++) {
-		if (std::string(encoderToFind) == encoders_set[i].simple_name || std::string(encoderToFind) == encoders_set[i].advanced_name) {
-			if (encoders_set[i].streaming) {
-				if (encoders_set[i].check_availability_streaming) {
-					if (isEncoderAvailableForStreaming(encoderToFind, OBS_service::getService(serviceId))) {
-						validEncoder = true;
-						break;
-					}
-				} else {
-					validEncoder = true;
-				}
-			}
-			break;
-		}
-	}
-
-	return validEncoder;
-}
-
 void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	const char *mode = NULL;
 	const char *curEncoder = NULL;
 	bool validEncoder = false;
+	bool simpleMode = false;
 	std::string serviceToCheck = args[0].value_str;
 
 	//get mode and configured encoder
@@ -1233,18 +1005,21 @@ void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, con
 	if (mode == NULL) {
 		mode = "Simple";
 	}
-	if (strcmp(mode, "Advanced") == 0) {
+	simpleMode = (strcmp(mode, "Simple") == 0);
+
+	if (!simpleMode) {
 		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
 	} else {
 		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamingEncoder");
 	}
 
 	if (serviceToCheck == "Both") {
-		validEncoder = validateEncoderForService(StreamServiceId::Main, curEncoder) && validateEncoderForService(StreamServiceId::Second, curEncoder);
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Main), curEncoder, simpleMode) &&
+			       osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Second), curEncoder, simpleMode);
 	} else if (serviceToCheck == "Stream") {
-		validEncoder = validateEncoderForService(StreamServiceId::Main, curEncoder);
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Main), curEncoder, simpleMode);
 	} else if (serviceToCheck == "StreamSecond") {
-		validEncoder = validateEncoderForService(StreamServiceId::Second, curEncoder);
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Second), curEncoder, simpleMode);
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -1253,7 +1028,7 @@ void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, con
 
 void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSettings, config_t *config, bool isCategoryEnabled)
 {
-	converOldJimNvencEncoder(config, "SimpleOutput", "StreamEncoder", "RecEncoder");
+	osn::EncoderUtils::convertOldJimNvencEncoder(config, "SimpleOutput", "StreamEncoder", "RecEncoder");
 
 	std::vector<std::vector<std::pair<std::string, ipc::value>>> entries;
 
@@ -1301,17 +1076,17 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 
 		std::vector<std::pair<std::string, ipc::value>> preset;
 
-		if (encoder == SIMPLE_ENCODER_QSV || encoder == ADVANCED_ENCODER_QSV) {
-			preset = createSettingEntry("QSVPreset", "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
+		std::string presetName = osn::EncoderUtils::getEncoderPreset(encoder.c_str());
+		if (presetName == PRESET_QSV) {
+			preset = createSettingEntry(PRESET_QSV, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 			preset.push_back({"Speed", ipc::value("speed")});
 			preset.push_back({"Balanced", ipc::value("balanced")});
 			preset.push_back({"Quality", ipc::value("quality")});
 			entries.push_back(preset);
 			defaultPreset = "balanced";
-
-		} else if (encoder == SIMPLE_ENCODER_NVENC || encoder == ADVANCED_ENCODER_NVENC || encoder == ENCODER_NVENC_H264_TEX ||
-			   encoder == ENCODER_NVENC_HEVC_TEX) {
-			preset = createSettingEntry("NVENCPreset2", "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
+		}
+		else if (presetName == PRESET_NVENC) {
+			preset = createSettingEntry(PRESET_NVENC, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 
 			obs_properties_t *props = obs_get_encoder_properties(ADVANCED_ENCODER_NVENC);
 
@@ -1320,7 +1095,6 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			for (size_t i = 0; i < num; i++) {
 				const char *name = obs_property_list_item_name(p, i);
 				const char *val = obs_property_list_item_string(p, i);
-
 				preset.push_back(std::make_pair(name, ipc::value(val)));
 			}
 
@@ -1328,22 +1102,25 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 
 			defaultPreset = "p5";
 			entries.push_back(preset);
-		} else if (encoder == SIMPLE_ENCODER_AMD || encoder == ADVANCED_ENCODER_AMD) {
-			preset = createSettingEntry("AMDPreset", "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
+		}
+		else if (presetName == PRESET_AMD) {
+			preset = createSettingEntry(PRESET_AMD, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 			preset.push_back({"Speed", ipc::value("speed")});
 			preset.push_back({"Balanced", ipc::value("balanced")});
 			preset.push_back({"Quality", ipc::value("quality")});
 			entries.push_back(preset);
 			defaultPreset = "balanced";
-		} else if (encoder == APPLE_SOFTWARE_VIDEO_ENCODER || encoder == APPLE_HARDWARE_VIDEO_ENCODER || encoder == APPLE_HARDWARE_VIDEO_ENCODER_M1) {
-			preset = createSettingEntry("Profile", "OBS_PROPERTY_LIST", "", "OBS_COMBO_FORMAT_STRING");
+		} else if (presetName == PRESET_APPLE) {
+			preset = createSettingEntry(PRESET_APPLE, "OBS_PROPERTY_LIST", "", "OBS_COMBO_FORMAT_STRING");
 			preset.push_back({"(None)", ipc::value("")});
 			preset.push_back({"baseline", ipc::value("baseline")});
 			preset.push_back({"main", ipc::value("main")});
 			preset.push_back({"high", ipc::value("high")});
 			entries.push_back(preset);
-		} else {
-			preset = createSettingEntry("Preset", "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
+		}
+		else if (presetName == DEFAULT_PRESET)
+			{
+			preset = createSettingEntry(DEFAULT_PRESET, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 			preset.push_back({"ultrafast", ipc::value("ultrafast")});
 			preset.push_back({"superfast", ipc::value("superfast")});
 			preset.push_back({"veryfast", ipc::value("veryfast")});
@@ -1723,7 +1500,7 @@ void OBS_settings::getEncoderSettings(const obs_encoder_t *encoder, obs_data_t *
 
 SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, bool isCategoryEnabled)
 {
-	converOldJimNvencEncoder(config, "AdvOut", "Encoder", "RecEncoder");
+	osn::EncoderUtils::convertOldJimNvencEncoder(config, "AdvOut", "Encoder", "RecEncoder");
 
 	int index = 0;
 
@@ -2005,7 +1782,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 	// Encoder settings
 	const char *encoderID = config_get_string(config, "AdvOut", "Encoder");
-	if (encoderID == NULL || OBS_service::isInvalidEncoder(encoderID)) {
+	if (encoderID == NULL || osn::EncoderUtils::isInvalidAppleEncoder(encoderID)) {
 		encoderID = ADVANCED_ENCODER_X264;
 		config_set_string(config, "AdvOut", "Encoder", encoderID);
 		config_save_safe(config, "tmp", nullptr);
@@ -2050,7 +1827,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 		} else {
 			obs_data_t *data = obs_data_create_from_json_file_safe(streamConfigFile.c_str(), "bak");
 
-			update_nvenc_presets(data, encoderID);
+			osn::EncoderUtils::updateNvencPresets(data, encoderID);
 
 			obs_data_apply(settings, data);
 			streamingEncoder = obs_video_encoder_create(encoderID, encoder_name.c_str(), settings, nullptr);
@@ -2213,6 +1990,8 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 	recEncoder.currentValue.resize(strlen(recEncoderCurrentValue));
 	memcpy(recEncoder.currentValue.data(), recEncoderCurrentValue, strlen(recEncoderCurrentValue));
 	recEncoder.sizeOfCurrentValue = strlen(recEncoderCurrentValue);
+
+	std::vector<std::pair<std::string, ipc::value>> encoderValues3;
 
 	std::vector<std::pair<std::string, ipc::value>> Encoder;
 	Encoder.push_back(std::make_pair("Use stream encoder", ipc::value("none")));
@@ -2538,7 +2317,7 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 	if (obs_output_active(recordOutput)) {
 		settings = obs_encoder_get_settings(recordingEncoder);
 	} else if (!recordingEncoder || (recordingEncoder && !obs_encoder_active(recordingEncoder))) {
-		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, true, true, recEncoderCurrentValue);
+		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, true, recEncoderCurrentValue);
 		if (!fileExist) {
 			recordingEncoder = obs_video_encoder_create(recEncoderCurrentValue, recEncoderName.c_str(), nullptr, nullptr);
 			OBS_service::setRecordingEncoder(recordingEncoder);
@@ -2548,7 +2327,7 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 			}
 		} else if (strcmp(recEncoderCurrentValue, "none") != 0) {
 			obs_data_t *data = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getRecord().c_str(), "bak");
-			update_nvenc_presets(data, recEncoderCurrentValue);
+			osn::EncoderUtils::updateNvencPresets(data, recEncoderCurrentValue);
 			obs_data_apply(settings, data);
 			recordingEncoder = obs_video_encoder_create(recEncoderCurrentValue, recEncoderName.c_str(), settings, nullptr);
 			OBS_service::setRecordingEncoder(recordingEncoder);
@@ -3008,8 +2787,16 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 	int ret = config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 
 	if (newEncoderType) {
+		//this is called immediately on encoder change so no other settings have been changed - start with defaults
 		encoderSettings = obs_encoder_defaults(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
-		OBS_service::createVideoRecordingEncoder();
+		
+		//this defaults to obs_x264 so create the correct encoder with default settings - getSettings called immediately after and will update it correctly but 
+		//do it right here just in case 
+		//OBS_service::createDefaultSimpleVideoRecordingEncoder();
+		const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
+		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, true, curEncoder);
+		obs_encoder_t *recordingEncoder = obs_video_encoder_create(curEncoder, recEncoderName.c_str(), encoderSettings, nullptr);
+		OBS_service::setRecordingEncoder(recordingEncoder);
 	} else {
 		obs_encoder_update(encoder, encoderSettings);
 	}
@@ -4193,163 +3980,4 @@ void OBS_settings::OBS_settings_setEnhancedBroadcasting(void *data, const int64_
 	config_set_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo", args[0].value_union.ui32);
 
 	AUTO_DEBUG;
-}
-
-void convert_nvenc_h264_presets(obs_data_t *data)
-{
-	const char *preset = obs_data_get_string(data, "preset");
-	const char *rc = obs_data_get_string(data, "rate_control");
-
-	// If already using SDK10+ preset, return early.
-	if (astrcmpi_n(preset, "p", 1) == 0) {
-		obs_data_set_string(data, "preset2", preset);
-		return;
-	}
-
-	if (astrcmpi(rc, "lossless") == 0 && astrcmpi(preset, "mq")) {
-		obs_data_set_string(data, "preset2", "p3");
-		obs_data_set_string(data, "tune", "lossless");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(rc, "lossless") == 0 && astrcmpi(preset, "hp")) {
-		obs_data_set_string(data, "preset2", "p2");
-		obs_data_set_string(data, "tune", "lossless");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "mq") == 0) {
-		obs_data_set_string(data, "preset2", "p5");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "qres");
-
-	} else if (astrcmpi(preset, "hq") == 0) {
-		obs_data_set_string(data, "preset2", "p5");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "default") == 0) {
-		obs_data_set_string(data, "preset2", "p3");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "hp") == 0) {
-		obs_data_set_string(data, "preset2", "p1");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "ll") == 0) {
-		obs_data_set_string(data, "preset2", "p3");
-		obs_data_set_string(data, "tune", "ll");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "llhq") == 0) {
-		obs_data_set_string(data, "preset2", "p4");
-		obs_data_set_string(data, "tune", "ll");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "llhp") == 0) {
-		obs_data_set_string(data, "preset2", "p2");
-		obs_data_set_string(data, "tune", "ll");
-		obs_data_set_string(data, "multipass", "disabled");
-	}
-}
-
-void convert_nvenc_hevc_presets(obs_data_t *data)
-{
-	const char *preset = obs_data_get_string(data, "preset");
-	const char *rc = obs_data_get_string(data, "rate_control");
-
-	// If already using SDK10+ preset, return early.
-	if (astrcmpi_n(preset, "p", 1) == 0) {
-		obs_data_set_string(data, "preset2", preset);
-		return;
-	}
-
-	if (astrcmpi(rc, "lossless") == 0 && astrcmpi(preset, "mq")) {
-		obs_data_set_string(data, "preset2", "p5");
-		obs_data_set_string(data, "tune", "lossless");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(rc, "lossless") == 0 && astrcmpi(preset, "hp")) {
-		obs_data_set_string(data, "preset2", "p3");
-		obs_data_set_string(data, "tune", "lossless");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "mq") == 0) {
-		obs_data_set_string(data, "preset2", "p6");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "qres");
-
-	} else if (astrcmpi(preset, "hq") == 0) {
-		obs_data_set_string(data, "preset2", "p6");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "default") == 0) {
-		obs_data_set_string(data, "preset2", "p5");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "hp") == 0) {
-		obs_data_set_string(data, "preset2", "p1");
-		obs_data_set_string(data, "tune", "hq");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "ll") == 0) {
-		obs_data_set_string(data, "preset2", "p3");
-		obs_data_set_string(data, "tune", "ll");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "llhq") == 0) {
-		obs_data_set_string(data, "preset2", "p4");
-		obs_data_set_string(data, "tune", "ll");
-		obs_data_set_string(data, "multipass", "disabled");
-
-	} else if (astrcmpi(preset, "llhp") == 0) {
-		obs_data_set_string(data, "preset2", "p2");
-		obs_data_set_string(data, "tune", "ll");
-		obs_data_set_string(data, "multipass", "disabled");
-	}
-}
-
-const char *convert_nvenc_simple_preset(const char *old_preset)
-{
-	if (astrcmpi(old_preset, "mq") == 0) {
-		return "p5";
-	} else if (astrcmpi(old_preset, "hq") == 0) {
-		return "p5";
-	} else if (astrcmpi(old_preset, "default") == 0) {
-		return "p3";
-	} else if (astrcmpi(old_preset, "hp") == 0) {
-		return "p1";
-	} else if (astrcmpi(old_preset, "ll") == 0) {
-		return "p3";
-	} else if (astrcmpi(old_preset, "llhq") == 0) {
-		return "p4";
-	} else if (astrcmpi(old_preset, "llhp") == 0) {
-		return "p2";
-	}
-	return "p5";
-}
-
-bool update_nvenc_presets(obs_data_t *data, const char *encoderId)
-{
-	bool modified = false;
-	if (astrcmpi(encoderId, ENCODER_NVENC_H264_TEX) == 0 || astrcmpi(encoderId, ADVANCED_ENCODER_NVENC) == 0) {
-		if (obs_data_has_user_value(data, "preset") && !obs_data_has_user_value(data, "preset2")) {
-			convert_nvenc_h264_presets(data);
-
-			modified = true;
-		}
-	} else if (astrcmpi(encoderId, ENCODER_NVENC_HEVC_TEX) == 0 || astrcmpi(encoderId, "ffmpeg_hevc_nvenc") == 0) {
-
-		if (obs_data_has_user_value(data, "preset") && !obs_data_has_user_value(data, "preset2")) {
-			convert_nvenc_hevc_presets(data);
-
-			modified = true;
-		}
-	}
-	if (modified)
-		blog(LOG_INFO, "Updated nvenc preset for %s", encoderId);
-
-	return modified;
 }

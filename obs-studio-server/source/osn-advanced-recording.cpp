@@ -21,6 +21,7 @@
 #include "shared.hpp"
 #include "osn-audio-track.hpp"
 #include "osn-file-output.hpp"
+#include <osn-encoders.hpp>
 
 void osn::IAdvancedRecording::Register(ipc::server &srv)
 {
@@ -185,6 +186,7 @@ bool osn::AdvancedRecording::UpdateEncoders()
 	if (!videoEncoder)
 		return false;
 
+	//TODO this is done in streaming->updateEncoders - put this in an else? unless canvas is different - comes from OutputSignals so check if that is diff for streaming/recording
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_RECORDING_VIDEO_RENDERING));
 	} else {
@@ -223,6 +225,9 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	if (!recording->UpdateEncoders() || !recording->videoEncoder) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
+
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, false))
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 
 	obs_output_set_video_encoder(recording->output, recording->videoEncoder);
 
@@ -347,9 +352,27 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 	recording->useStreamEncoders = encId.compare("") == 0 || encId.compare("none") == 0;
 
 	if (!recording->useStreamEncoders) {
-		obs_data_t *videoEncSettings = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getRecord().c_str(), "bak");
-		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", videoEncSettings, nullptr);
+		obs_data_t *existingVideoEncSettings = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getRecord().c_str(), "bak");
+		obs_data_t *newSettings = obs_encoder_defaults(encId.c_str());
+
+		//old API gets defaults, reads recordEncoder.json if exists, converts if it does, then creates - need to handle null settings from missing config file
+		if (existingVideoEncSettings != nullptr) {
+			osn::EncoderUtils::updateNvencPresets(existingVideoEncSettings, encId.c_str());
+			obs_data_apply(newSettings, existingVideoEncSettings);
+		}
+		//TODO do we want to check and fail here without returning settings or just check on start? unsure how often this will be called so just check in SetVideoEncoder and Start
+		//if (!osn::EncoderUtils::isEncoderCompatibleRecording(encId.c_str(), recording->fileFormat, false)) {
+		//	PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
+		//}
+		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", newSettings, nullptr);
 		osn::VideoEncoder::Manager::GetInstance().allocate(recording->videoEncoder);
+	}else {
+		//TODO validate streaming encoder is valid for recording or wait until start? don't know if streaming is even set yet here and unsure how often this will be called so just check in SetVideoEncoder and Start
+		//if (recording->streaming) {
+		//	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->streaming->videoEncoder), recording->fileFormat, false)) {
+		//		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified streaming video encoder is not valid for recording.");
+		//	}
+		//}
 	}
 
 	recording->enableFileSplit = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFile");

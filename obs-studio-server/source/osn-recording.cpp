@@ -18,9 +18,11 @@
 
 #include "osn-recording.hpp"
 #include "osn-video-encoder.hpp"
+#include "osn-audio-encoder.hpp"
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "util/platform.h"
+#include "osn-encoders.hpp"
 
 extern char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, int width, int height);
 
@@ -53,6 +55,11 @@ void osn::IRecording::SetVideoEncoder(void *data, const int64_t id, const std::v
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[1].value_union.ui64);
 	if (!encoder) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Encoder reference is not valid.");
+	}
+
+	//verify the encoder is compatible before setting it
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(encoder), recording->format, recording->simple)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
 
 	recording->videoEncoder = encoder;
@@ -143,8 +150,12 @@ obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t t
 
 	if (obs_encoder_get_type(src) == OBS_ENCODER_AUDIO) {
 		dst = obs_audio_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), trackIndex, nullptr);
+		//TODO added so it eventually gets released...is this correct? dont' even include osn-audio-encoder here
+		osn::AudioEncoder::Manager::GetInstance().allocate(dst);
 	} else if (obs_encoder_get_type(src) == OBS_ENCODER_VIDEO) {
 		dst = obs_video_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), nullptr);
+		//TODO added so it eventually gets released...is this correct? 
+		osn::VideoEncoder::Manager::GetInstance().allocate(dst);
 	}
 
 	return dst;

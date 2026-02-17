@@ -62,8 +62,8 @@ public:
 	static void SetLowCPU(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static obs_encoder_t *GetLegacyVideoEncoderSettings();
-	static obs_encoder_t *GetLegacyAudioEncoderSettings();
+	static obs_encoder_t *CreateLegacyVideoEncoder();
+	static obs_encoder_t *CreateLegacyAudioEncoder();
 	static void GetStreaming(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetStreaming(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 };

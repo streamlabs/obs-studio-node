@@ -21,6 +21,7 @@
 #include <future>
 #include "osn-error.hpp"
 #include "shared.hpp"
+#include "osn-encoders.hpp"
 
 enum class Type { Invalid, Streaming, Recording };
 

@@ -44,48 +44,7 @@
 #include <unistd.h>
 #endif
 
-#ifdef WIN32
-#define SIMPLE_ENCODER_X264 "x264"
-#elif __APPLE__
-#define SIMPLE_ENCODER_X264 "obs_x264"
-#endif
-#define SIMPLE_ENCODER_X264 "x264"
-#define SIMPLE_ENCODER_X264_LOWCPU "x264_lowcpu"
-#define SIMPLE_ENCODER_QSV "qsv"
-#define SIMPLE_ENCODER_QSV_AV1 "qsv_av1"
-#define SIMPLE_ENCODER_NVENC "nvenc"
-#define SIMPLE_ENCODER_NVENC_AV1 "nvenc_av1"
-#define SIMPLE_ENCODER_NVENC_HEVC "nvenc_hevc"
-#define SIMPLE_ENCODER_AMD "amd"
-#define SIMPLE_ENCODER_AMD_HEVC "amd_hevc"
-#define SIMPLE_ENCODER_AMD_AV1 "amd_av1"
-#define SIMPLE_ENCODER_APPLE_H264 "apple_h264"
-#define SIMPLE_ENCODER_APPLE_HEVC "apple_hevc"
-
-#define ADVANCED_ENCODER_X264 "obs_x264"
-#define ADVANCED_ENCODER_QSV "obs_qsv11"
-#define ADVANCED_ENCODER_NVENC "ffmpeg_nvenc"
-#define ADVANCED_ENCODER_AMD "h264_texture_amf"
-#define ADVANCED_ENCODER_AMD_HEVC "h265_texture_amf"
-
-#define ENCODER_NVENC_H264_TEX "obs_nvenc_h264_tex"
-#define ENCODER_NVENC_HEVC_TEX "obs_nvenc_hevc_tex"
-#define ENCODER_NVENC_AV1_TEX "obs_nvenc_av1_tex"
-
-// These 3 are deprecated
-#define ENCODER_JIM_NVENC "jim_nvenc"
-#define ENCODER_JIM_HEVC_NVENC "jim_hevc_nvenc"
-#define ENCODER_JIM_AV1_NVENC "jim_av1_nvenc"
-
-#define ENCODER_AV1_SVT_FFMPEG "ffmpeg_svt_av1"
-#define ENCODER_AV1_AOM_FFMPEG "ffmpeg_aom_av1"
-
-#define APPLE_SOFTWARE_VIDEO_ENCODER "com.apple.videotoolbox.videoencoder.h264"
-#define APPLE_HARDWARE_VIDEO_ENCODER "com.apple.videotoolbox.videoencoder.h264.gva"
-#define APPLE_HARDWARE_VIDEO_ENCODER_M1 "com.apple.videotoolbox.videoencoder.ave.avc"
-
 #define ARCHIVE_NAME "archive_aac"
-
 #define SIMPLE_AUDIO_ENCODER_AAC "ffmpeg_aac"
 #define SIMPLE_AUDIO_ENCODER_OPUS "ffmpeg_opus"
 
@@ -211,7 +170,7 @@ public:
 	static bool createVideoStreamingEncoder(StreamServiceId serviceId);
 	static std::string GetVideoEncoderName(StreamServiceId serviceId, bool isSimpleMode, bool recording, const char *encoder);
 	static void createAudioStreamingEncoder(StreamServiceId serviceId, bool isSimpleMode, const std::string &encoder_id);
-	static bool createVideoRecordingEncoder();
+	static bool createDefaultSimpleVideoRecordingEncoder();
 	static obs_encoder_t *getStreamingEncoder(StreamServiceId serviceId);
 	static void setStreamingEncoder(obs_encoder_t *encoder, StreamServiceId serviceId);
 	static obs_encoder_t *getRecordingEncoder(void);
@@ -293,5 +252,4 @@ public:
 	static void stopAllOutputs(void);
 	static void setupVodTrack(bool isSimpleMode);
 	static void clearArchiveVodEncoder();
-	static bool isInvalidEncoder(const char *encoderID);
 };
