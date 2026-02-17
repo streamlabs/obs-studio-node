@@ -357,8 +357,8 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	if (!streaming->GetCanvas()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
-	//make sure the encoder is valid for the current service
 	
+	//make sure the encoder is valid for the current service
 	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(streaming->videoEncoder), streaming->simple)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
 	}

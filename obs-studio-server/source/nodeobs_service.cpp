@@ -834,6 +834,7 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 	obs_data_t *settings = obs_encoder_defaults(encoderId);
 	obs_data_apply(settings, data);
 
+	blog(LOG_INFO, "MLH create encoder type %s", encoderId);
 	obs_encoder_t *new_encoder = obs_video_encoder_create(encoderId, encoder_name.c_str(), settings, nullptr);
 	OBS_service::setStreamingEncoder(new_encoder, serviceId);
 

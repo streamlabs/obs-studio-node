@@ -360,19 +360,9 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 			osn::EncoderUtils::updateNvencPresets(existingVideoEncSettings, encId.c_str());
 			obs_data_apply(newSettings, existingVideoEncSettings);
 		}
-		//TODO do we want to check and fail here without returning settings or just check on start? unsure how often this will be called so just check in SetVideoEncoder and Start
-		//if (!osn::EncoderUtils::isEncoderCompatibleRecording(encId.c_str(), recording->fileFormat, false)) {
-		//	PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
-		//}
+
 		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", newSettings, nullptr);
 		osn::VideoEncoder::Manager::GetInstance().allocate(recording->videoEncoder);
-	} else {
-		//TODO validate streaming encoder is valid for recording or wait until start? don't know if streaming is even set yet here and unsure how often this will be called so just check in SetVideoEncoder and Start
-		//if (recording->streaming) {
-		//	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->streaming->videoEncoder), recording->fileFormat, false)) {
-		//		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified streaming video encoder is not valid for recording.");
-		//	}
-		//}
 	}
 
 	recording->enableFileSplit = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFile");

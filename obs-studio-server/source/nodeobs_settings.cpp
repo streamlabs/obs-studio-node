@@ -327,6 +327,7 @@ SubCategory OBS_settings::serializeSettingsData(const std::string &nameSubCatego
 				} else if (section.compare("SimpleOutput") == 0) {
 					if (param.name.compare(PRESET_NVENC) == 0) {
 						currentValue = config_get_string(config, "SimpleOutput", param.name.c_str());
+						blog(LOG_INFO, "MLH serializeSettingsData: currentValue %s", currentValue);
 						if (currentValue == NULL) {
 							const char *oldParamName = PRESET_NVENC_DEP;
 							const char *oldValue = config_get_string(config, "SimpleOutput", oldParamName);
@@ -1814,6 +1815,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 		std::string encoder_name = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, false, encoderID);
 		if (!fileExist) {
+			blog(LOG_INFO, "MLH create encoder type %s", encoderID);
 			streamingEncoder = obs_video_encoder_create(encoderID, encoder_name.c_str(), nullptr, nullptr);
 			OBS_service::setStreamingEncoder(streamingEncoder, StreamServiceId::Main);
 
@@ -1826,6 +1828,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 			osn::EncoderUtils::updateNvencPresets(data, encoderID);
 
 			obs_data_apply(settings, data);
+			blog(LOG_INFO, "MLH create encoder type %s", encoderID);
 			streamingEncoder = obs_video_encoder_create(encoderID, encoder_name.c_str(), settings, nullptr);
 			OBS_service::setStreamingEncoder(streamingEncoder, StreamServiceId::Main);
 		}
@@ -2786,9 +2789,6 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 		//this is called immediately on encoder change so no other settings have been changed - start with defaults
 		encoderSettings = obs_encoder_defaults(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
 
-		//this defaults to obs_x264 so create the correct encoder with default settings - getSettings called immediately after and will update it correctly but
-		//do it right here just in case
-		//OBS_service::createDefaultSimpleVideoRecordingEncoder();
 		const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
 		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, true, curEncoder);
 		obs_encoder_t *recordingEncoder = obs_video_encoder_create(curEncoder, recEncoderName.c_str(), encoderSettings, nullptr);
