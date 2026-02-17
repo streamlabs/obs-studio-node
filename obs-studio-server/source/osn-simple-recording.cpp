@@ -23,6 +23,7 @@
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
 #include "osn-file-output.hpp"
+#include "osn-encoders.hpp"
 
 void osn::ISimpleRecording::Register(ipc::server &srv)
 {
@@ -272,23 +273,22 @@ static void UpdateRecordingSettings_crf(enum osn::RecQuality quality, osn::Simpl
 	int crf = CalcCRF(ultra_hq ? 16 : 23);
 
 	obs_data_t *settings = nullptr;
-	if (id.compare(SIMPLE_ENCODER_X264) == 0 || id.compare(ADVANCED_ENCODER_X264) == 0 || id.compare(SIMPLE_ENCODER_X264_LOWCPU) == 0) {
-		settings = UpdateRecordingSettings_x264_crf(CalcCRF(crf, recording->lowCPU), recording->lowCPU);
-	} else if (id.compare(SIMPLE_ENCODER_NVENC) == 0 || id.compare(ADVANCED_ENCODER_NVENC) == 0 || id.compare(ENCODER_NVENC_H264_TEX) == 0) {
-		settings = UpdateRecordingSettings_nvenc(CalcCRF(crf));
-	} else if (id.compare(SIMPLE_ENCODER_NVENC_HEVC) == 0) {
-		settings = UpdateRecordingSettings_nvenc_hevc(CalcCRF(crf));
-	} else if (id.compare(SIMPLE_ENCODER_QSV) == 0 || id.compare(ADVANCED_ENCODER_QSV) == 0) {
-		settings = UpdateRecordingSettings_qsv11(CalcCRF(crf), recording->videoEncoder);
-	} else if (id.compare(SIMPLE_ENCODER_AMD) == 0 || id.compare(SIMPLE_ENCODER_AMD_HEVC) == 0 || id.compare(ADVANCED_ENCODER_AMD) == 0) {
-		settings = UpdateRecordingSettings_amd_cqp(CalcCRF(crf));
-	} else if (id.compare(APPLE_SOFTWARE_VIDEO_ENCODER) == 0 || id.compare(APPLE_HARDWARE_VIDEO_ENCODER) == 0 ||
-		   id.compare(APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
-		/* These are magic numbers. 0 - 100, more is better. */
-		UpdateRecordingSettings_apple(ultra_hq ? 70 : 50);
-	} else {
-		return;
-	}
+	std::string encFamily = osn::EncoderUtils::getEncoderFamily(id.c_str());
+
+	if (encFamily == FAMILY_OBS)
+		settings = UpdateRecordingSettings_x264_crf(crf, recording->lowCPU);
+	else if (encFamily == FAMILY_NVENC)
+		settings = UpdateRecordingSettings_nvenc(crf);
+	else if (encFamily == FAMILY_NVENC_HEVC)
+		settings = UpdateRecordingSettings_nvenc_hevc(crf);
+	else if (encFamily == FAMILY_QSV)
+		settings = UpdateRecordingSettings_qsv11(crf, recording->videoEncoder);
+	else if (encFamily == FAMILY_AMD)
+		settings = UpdateRecordingSettings_amd_cqp(crf);
+	else if (encFamily == FAMILY_APPLE)
+		settings = UpdateRecordingSettings_apple(ultra_hq ? 70 : 50);
+	else
+		blog(LOG_WARNING, "Unable to update settings with unknown encoder family.");
 
 	if (!settings)
 		return;
@@ -317,16 +317,20 @@ void osn::SimpleRecording::UpdateEncoders()
 		videoEncoder = streaming->videoEncoder;
 		audioEncoder = streaming->audioEncoder;
 		if (obs_get_multiple_rendering()) {
-			obs_encoder_t *videoEncDup = osn::IRecording::duplicate_encoder(videoEncoder);
-			videoEncoder = videoEncDup;
+			//TODO this doesn't register with the manager, should it?
+			videoEncoder = osn::IRecording::duplicate_encoder(videoEncoder);
 		}
 		break;
 	}
 	case RecQuality::HighQuality: {
+		if (!videoEncoder)
+			return;
 		UpdateRecordingSettings_crf(RecQuality::HighQuality, this);
 		break;
 	}
 	case RecQuality::HigherQuality: {
+		if (!videoEncoder)
+			return;
 		UpdateRecordingSettings_crf(RecQuality::HigherQuality, this);
 		break;
 	}
@@ -362,8 +366,14 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	} else {
 		recording->UpdateEncoders();
 
+		//TODO - does update not create an encoder if not using streaming and it doesn't exist? should it?
+
 		if (!recording->videoEncoder) {
 			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
+		}
+
+		if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_name(recording->videoEncoder), recording->fileFormat, true)) {
+			PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 		}
 
 		if (!recording->audioEncoder) {
@@ -448,42 +458,36 @@ void osn::ISimpleRecording::SetLowCPU(void *data, const int64_t id, const std::v
 	AUTO_DEBUG;
 }
 
-obs_encoder_t *osn::ISimpleRecording::GetLegacyVideoEncoderSettings()
+obs_encoder_t *osn::ISimpleRecording::CreateLegacyVideoEncoder()
 {
+	osn::EncoderUtils::convertOldJimNvencEncoder(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", "RecEncoder");
+
 	obs_encoder_t *videoEncoder = nullptr;
 
 	std::string simpleQuality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
 
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
-	const char *encIdOBS = nullptr;
-	if (strcmp(encId, SIMPLE_ENCODER_X264) == 0 || strcmp(encId, ADVANCED_ENCODER_X264) == 0) {
-		encIdOBS = ADVANCED_ENCODER_X264;
-	} else if (strcmp(encId, SIMPLE_ENCODER_X264_LOWCPU) == 0) {
-		encIdOBS = ADVANCED_ENCODER_X264;
-	} else if (strcmp(encId, SIMPLE_ENCODER_QSV) == 0 || strcmp(encId, ADVANCED_ENCODER_QSV) == 0) {
-		encIdOBS = ADVANCED_ENCODER_QSV;
-	} else if (strcmp(encId, SIMPLE_ENCODER_AMD) == 0 || strcmp(encId, ADVANCED_ENCODER_AMD) == 0) {
-		encIdOBS = ADVANCED_ENCODER_AMD;
-	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
-		encIdOBS = ADVANCED_ENCODER_NVENC;
-	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 ||
-		   strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
-		encIdOBS = ENCODER_NVENC_H264_TEX;
-	}
+	//TODO do we need to check low CPU here before we convert?
+	std::string encIdOBS = osn::EncoderUtils::getInternalEncoderFromSimple(encId);
 
+	//don't create the encoder if using the streaming encoder
 	if (simpleQuality.compare("Stream") != 0) {
-		videoEncoder = obs_video_encoder_create(encIdOBS, "video-encoder", nullptr, nullptr);
+		//TODO should there be a descriptive name? why aren't we using settings?
+		videoEncoder = obs_video_encoder_create(encIdOBS.c_str(), "video-encoder", nullptr, nullptr);
+		osn::VideoEncoder::Manager::GetInstance().allocate(videoEncoder);
 	}
 
 	return videoEncoder;
 }
 
-obs_encoder_t *osn::ISimpleRecording::GetLegacyAudioEncoderSettings()
+obs_encoder_t *osn::ISimpleRecording::CreateLegacyAudioEncoder()
 {
 	obs_data_t *audioEncSettings = obs_data_create();
 	obs_data_set_int(audioEncSettings, "bitrate", 192); // Hardcoded default value
 	obs_encoder_t *audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "audio-encoder", audioEncSettings, 0, nullptr);
 	obs_data_release(audioEncSettings);
+
+	osn::AudioEncoder::Manager::GetInstance().allocate(audioEncoder);
 
 	return audioEncoder;
 }
@@ -519,12 +523,14 @@ void osn::ISimpleRecording::GetLegacySettings(void *data, const int64_t id, cons
 		recording->lowCPU = true;
 
 	if (recording->quality != RecQuality::Stream) {
-		recording->videoEncoder = GetLegacyVideoEncoderSettings();
-		osn::VideoEncoder::Manager::GetInstance().allocate(recording->videoEncoder);
+		recording->videoEncoder = CreateLegacyVideoEncoder();
+		//TODO do we want to check here and fail and not return the settings? or wait until start? unsure how often this will be called so just check in SetVideoEncoder and Start
+		//if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_name(recording->videoEncoder), recording->fileFormat, true)) {
+		//	PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
+		//}
 	}
 
-	recording->audioEncoder = GetLegacyAudioEncoderSettings();
-	osn::AudioEncoder::Manager::GetInstance().allocate(recording->audioEncoder);
+	recording->audioEncoder = CreateLegacyAudioEncoder();
 
 	recording->enableFileSplit = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFile");
 	const char *splitFileType = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFileType");
@@ -621,22 +627,16 @@ void osn::ISimpleRecording::SetLegacySettings(void *data, const int64_t id, cons
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "OverwriteIfExists", recording->overwrite);
 	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "MuxerCustom", recording->muxerSettings.c_str());
 
-	if (recording->videoEncoder) {
-		const char *encId = nullptr;
+	//don't save the encoder if using the streaming encoder, set it to empty string in that case
+	if (recording->quality != RecQuality::Stream && recording->videoEncoder) {
 		const char *encIdOBS = obs_encoder_get_id(recording->videoEncoder);
-		if (strcmp(encIdOBS, ADVANCED_ENCODER_X264) == 0 && !recording->lowCPU) {
-			encId = SIMPLE_ENCODER_X264;
-		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_X264) == 0 && recording->lowCPU) {
+		std::string encId = osn::EncoderUtils::getSimpleEncoderFromInternal(encIdOBS);
+		if ((encId == SIMPLE_ENCODER_X264) == 0 && recording->lowCPU) {
 			encId = SIMPLE_ENCODER_X264_LOWCPU;
-		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_QSV) == 0) {
-			encId = SIMPLE_ENCODER_QSV;
-		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_AMD) == 0) {
-			encId = SIMPLE_ENCODER_AMD;
-		} else if (strcmp(encIdOBS, ADVANCED_ENCODER_NVENC) == 0) {
-			encId = SIMPLE_ENCODER_NVENC;
-		}
-
-		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", encId);
+		} 
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", encId.c_str());
+	} else {
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", "");
 	}
 
 	config_set_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecSplitFile", recording->enableFileSplit);

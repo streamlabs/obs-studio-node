@@ -19,13 +19,14 @@
 #include "osn-video-encoder.hpp"
 #include "osn-error.hpp"
 #include "shared.hpp"
+#include "osn-encoders.hpp"
 
 void osn::VideoEncoder::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("VideoEncoder");
 	cls->register_function(
 		std::make_shared<ipc::function>("Create", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String}, Create));
-	cls->register_function(std::make_shared<ipc::function>("GetTypes", std::vector<ipc::type>{}, GeTypes));
+	cls->register_function(std::make_shared<ipc::function>("GetTypes", std::vector<ipc::type>{}, GetTypes));
 	cls->register_function(std::make_shared<ipc::function>("GetName", std::vector<ipc::type>{ipc::type::UInt64}, GetName));
 	cls->register_function(std::make_shared<ipc::function>("SetName", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetName));
 	cls->register_function(std::make_shared<ipc::function>("GetType", std::vector<ipc::type>{ipc::type::UInt64}, GetType));
@@ -49,7 +50,15 @@ void osn::VideoEncoder::Create(void *data, const int64_t id, const std::vector<i
 		settingsJson = "{}";
 	obs_data_t *settings = obs_data_create_from_json(settingsJson.c_str());
 
-	obs_encoder_t *encoder = obs_video_encoder_create(encoderId.c_str(), name.c_str(), settings, nullptr);
+	//for simple need to get internal name
+	//TODO do we need to check low CPU here before we convert?
+	std::string convertedEncoderId = encoderId; 
+	const char *mode = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode"));
+	if (strcmp(mode, "Simple") == 0) {
+		convertedEncoderId = osn::EncoderUtils::getInternalEncoderFromSimple(encoderId.c_str());
+	}	
+
+	obs_encoder_t *encoder = obs_video_encoder_create(convertedEncoderId.c_str(), name.c_str(), settings, nullptr);
 	obs_data_release(settings);
 
 	if (!encoder) {
@@ -66,7 +75,7 @@ void osn::VideoEncoder::Create(void *data, const int64_t id, const std::vector<i
 	AUTO_DEBUG;
 }
 
-void osn::VideoEncoder::GeTypes(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+void osn::VideoEncoder::GetTypes(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	const char *typeId = nullptr;
