@@ -22,6 +22,7 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
+#include "osn-encoders.hpp"
 
 void osn::ISimpleStreaming::Register(ipc::server &srv)
 {
@@ -277,6 +278,7 @@ void osn::SimpleStreaming::UpdateEncoders()
 	int aBitrate = static_cast<int>(obs_data_get_int(audioEncSettings, "bitrate"));
 
 	std::string id = obs_encoder_get_id(videoEncoder);
+	//TODO why just AMD here?
 	if (id.compare(ADVANCED_ENCODER_AMD) == 0)
 		UpdateStreamingSettings_amd(videoEncSettings, vBitrate);
 
@@ -355,6 +357,10 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	if (!streaming->GetCanvas()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	//make sure the encoder is valid for the current service
+	
+	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(streaming->videoEncoder), streaming->simple)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
 	}
 
 	streaming->UpdateEncoders();
@@ -424,10 +430,11 @@ void osn::ISimpleStreaming::Stop(void *data, const int64_t id, const std::vector
 	AUTO_DEBUG;
 }
 
-obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
+obs_encoder_t *osn::ISimpleStreaming::CreateLegacyVideoEncoder()
 {
+	osn::EncoderUtils::convertOldJimNvencEncoder(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", "RecEncoder");
+
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
-	const char *encIdOBS = nullptr;
 
 	obs_data_t *videoEncData = obs_data_create();
 	obs_data_set_string(videoEncData, "rate_control", "CBR");
@@ -437,26 +444,24 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
 	const char *custom = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "x264Settings"));
 
 	const char *preset = nullptr;
-	const char *presetType = nullptr;
-	if (strcmp(encId, SIMPLE_ENCODER_QSV) == 0 || strcmp(encId, ADVANCED_ENCODER_QSV) == 0) {
-		presetType = "QSVPreset";
-		encIdOBS = ADVANCED_ENCODER_QSV;
-	} else if (strcmp(encId, SIMPLE_ENCODER_AMD) == 0 || strcmp(encId, ADVANCED_ENCODER_AMD) == 0) {
-		presetType = "AMDPreset";
-		encIdOBS = ADVANCED_ENCODER_AMD;
-	} else if (strcmp(encId, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encId, ADVANCED_ENCODER_NVENC) == 0) {
-		presetType = "NVENCPreset";
-		encIdOBS = ADVANCED_ENCODER_NVENC;
-	} else if (strcmp(encId, ENCODER_NVENC_H264_TEX) == 0 || strcmp(encId, ENCODER_JIM_NVENC) == 0 || strcmp(encId, ENCODER_JIM_AV1_NVENC) == 0 ||
-		   strcmp(encId, ENCODER_JIM_HEVC_NVENC) == 0) {
-		presetType = "NVENCPreset";
-		encIdOBS = ENCODER_NVENC_H264_TEX;
-	} else {
-		presetType = "Preset";
-		encIdOBS = ADVANCED_ENCODER_X264;
+
+	std::string presetType = osn::EncoderUtils::getEncoderPreset(encId);
+	//TODO do we need to check low CPU here before we convert?
+	std::string encIdOBS = osn::EncoderUtils::getInternalEncoderFromSimple(encId);
+
+	preset = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str()));
+
+	//TODO this conversion is from old API - is it needed? SetLegacySettings still used NVENCPreset instead of 2 but changed it - is this correct?
+	if (presetType == PRESET_NVENC) {
+		if (strlen(preset) == 0) {
+			const char *oldParamName = PRESET_NVENC_DEP;
+			const char *oldValue = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", oldParamName));
+			if (strlen(oldValue) != 0) {
+				preset = osn::EncoderUtils::convertNvencSimplePreset(oldValue);
+				blog(LOG_INFO, "NVENC preset converted from %s to %s", oldValue, preset);
+			}
+		}
 	}
-	if (presetType)
-		preset = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType));
 
 	if (advanced) {
 		obs_data_set_string(videoEncData, "preset", preset);
@@ -469,19 +474,21 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyVideoEncoderSettings()
 		obs_data_set_int(videoEncData, "bitrate", config_get_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate"));
 	}
 
-	if (strcmp(encId, APPLE_SOFTWARE_VIDEO_ENCODER) == 0 || strcmp(encId, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
+	if (osn::EncoderUtils::getEncoderFamily(encId) == FAMILY_APPLE) {
 		const char *profile = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "Profile"));
 		if (profile)
 			obs_data_set_string(videoEncData, "profile", profile);
 	}
 
-	obs_encoder_t *videoEncoder = obs_video_encoder_create(encIdOBS, "video-encoder", videoEncData, nullptr);
+	obs_encoder_t *videoEncoder = obs_video_encoder_create(encIdOBS.c_str(), "video-encoder", videoEncData, nullptr);
 	obs_data_release(videoEncData);
+
+	osn::VideoEncoder::Manager::GetInstance().allocate(videoEncoder);
 
 	return videoEncoder;
 }
 
-obs_encoder_t *osn::ISimpleStreaming::GetLegacyAudioEncoderSettings()
+obs_encoder_t *osn::ISimpleStreaming::CreateLegacyAudioEncoder()
 {
 	obs_data_t *audioEncData = obs_data_create();
 	obs_data_set_string(audioEncData, "rate_control", "CBR");
@@ -499,6 +506,8 @@ obs_encoder_t *osn::ISimpleStreaming::GetLegacyAudioEncoderSettings()
 	obs_encoder_t *audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "audio", audioEncData, 0, nullptr);
 	obs_data_release(audioEncData);
 
+	osn::AudioEncoder::Manager::GetInstance().allocate(audioEncoder);
+
 	return audioEncoder;
 }
 
@@ -506,12 +515,8 @@ void osn::ISimpleStreaming::GetLegacySettings(void *data, const int64_t id, cons
 {
 	osn::SimpleStreaming *streaming = new osn::SimpleStreaming();
 
-	streaming->videoEncoder = GetLegacyVideoEncoderSettings();
-
-	osn::VideoEncoder::Manager::GetInstance().allocate(streaming->videoEncoder);
-
-	streaming->audioEncoder = GetLegacyAudioEncoderSettings();
-	osn::AudioEncoder::Manager::GetInstance().allocate(streaming->audioEncoder);
+	streaming->videoEncoder = CreateLegacyVideoEncoder();
+	streaming->audioEncoder = CreateLegacyAudioEncoder();
 
 	streaming->useAdvanced = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "UseAdvanced");
 	streaming->enableTwitchVOD = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VodTrackEnabled");
@@ -537,7 +542,7 @@ void osn::ISimpleStreaming::GetLegacySettings(void *data, const int64_t id, cons
 
 void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder)
 {
-	const char *encId = nullptr;
+	//const char *encId = nullptr;
 	const char *encIdOBS = obs_encoder_get_id(encoder);
 
 	obs_data_t *settings = obs_encoder_get_settings(encoder);
@@ -547,27 +552,14 @@ void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder
 	const char *custom = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "x264Settings"));
 
 	const char *preset = nullptr;
-	const char *presetType = nullptr;
-	if (strcmp(encIdOBS, ADVANCED_ENCODER_QSV) == 0) {
-		presetType = "QSVPreset";
-		encId = SIMPLE_ENCODER_QSV;
-	} else if (strcmp(encIdOBS, ADVANCED_ENCODER_AMD) == 0) {
-		presetType = "AMDPreset";
-		encId = SIMPLE_ENCODER_AMD;
-	} else if (strcmp(encIdOBS, ADVANCED_ENCODER_NVENC) == 0) {
-		presetType = "NVENCPreset";
-		encId = SIMPLE_ENCODER_NVENC;
-	} else if (strcmp(encIdOBS, ENCODER_NVENC_H264_TEX) == 0) {
-		presetType = "NVENCPreset";
-		encId = ENCODER_NVENC_H264_TEX;
-	} else {
-		presetType = "Preset";
-		encId = ADVANCED_ENCODER_X264;
-	}
-	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", encId);
+
+	std::string presetType = osn::EncoderUtils::getEncoderPreset(encIdOBS);
+	std::string encId = osn::EncoderUtils::getSimpleEncoderFromInternal(encIdOBS);
+
+	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", encId.c_str());
 
 	preset = obs_data_get_string(settings, "preset");
-	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType, preset);
+	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str(), preset);
 
 	obs_data_release(settings);
 }

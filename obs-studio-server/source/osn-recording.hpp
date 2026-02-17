@@ -36,6 +36,7 @@ public:
 		splitTime = 15;
 		splitSize = 2048;
 		fileResetTimestamps = true;
+		simple = true;
 	}
 	virtual ~Recording();
 
@@ -46,6 +47,7 @@ public:
 	uint32_t splitTime;
 	uint32_t splitSize;
 	bool fileResetTimestamps;
+	bool simple;
 
 	void ConfigureRecFileSplitting();
 };
