@@ -91,7 +91,7 @@ describe(testName, () => {
         const stream = osn.SimpleStreamingFactory.create();
         stream.service = osn.ServiceFactory.legacySettings;
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         expect(() => {
@@ -127,7 +127,7 @@ describe(testName, () => {
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-2");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         expect(() => {
@@ -145,7 +145,7 @@ describe(testName, () => {
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
         stream.service = osn.ServiceFactory.legacySettings;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-3");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         expect(() => {
@@ -170,7 +170,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-4");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -261,7 +261,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-2");
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-5");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -282,7 +282,7 @@ describe(testName, () => {
         expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         stream.service.update({ key: obs.userStreamKey });
-        
+
         const videoEncoder = stream.videoEncoder;
         const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);

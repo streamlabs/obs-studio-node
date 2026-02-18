@@ -88,7 +88,7 @@ describe(testName, () => {
         stream.reconnect = osn.ReconnectFactory.create();
         stream.network = osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -186,7 +186,7 @@ describe(testName, () => {
         stream.network = osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.additionalVideo = secondContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-2");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
