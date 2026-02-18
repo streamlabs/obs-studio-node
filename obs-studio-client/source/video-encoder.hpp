@@ -25,6 +25,7 @@ class VideoEncoder : public Napi::ObjectWrap<osn::VideoEncoder> {
 public:
 	uint64_t uid;
 	bool encoderInitialized;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;

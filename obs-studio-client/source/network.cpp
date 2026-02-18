@@ -49,6 +49,7 @@ osn::Network::Network(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Ne
 	Napi::HandleScope scope(env);
 	size_t length = info.Length();
 	this->uid = UINT64_MAX;
+	this->connectionEpoch = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -56,6 +57,7 @@ osn::Network::Network(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Ne
 	}
 
 	this->uid = (uint64_t)info[0].ToNumber().Int64Value();
+	this->connectionEpoch = Controller::GetInstance().GetConnectionEpoch();
 }
 
 Napi::Value osn::Network::Create(const Napi::CallbackInfo &info)
@@ -76,12 +78,20 @@ Napi::Value osn::Network::Create(const Napi::CallbackInfo &info)
 
 void osn::Network::Finalize(Napi::Env env)
 {
-	auto conn = GetConnection(env);
-	if (!conn)
-		return;
-
 	if (this->uid == UINT64_MAX)
 		return;
+
+	// If OBS was restarted/disconnected, skip IPC cleanup for this stale wrapper.
+	if (this->connectionEpoch != Controller::GetInstance().GetConnectionEpoch()) {
+		this->uid = UINT64_MAX;
+		return;
+	}
+
+	auto conn = Controller::GetInstance().GetConnection();
+	if (!conn) {
+		this->uid = UINT64_MAX;
+		return;
+	}
 
 	conn->call_synchronous_helper("Network", "Destroy", {ipc::value(this->uid)});
 

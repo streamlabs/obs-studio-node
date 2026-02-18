@@ -46,6 +46,7 @@ osn::Reconnect::Reconnect(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn
 	Napi::HandleScope scope(env);
 	size_t length = info.Length();
 	this->uid = 0;
+	this->connectionEpoch = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -53,6 +54,7 @@ osn::Reconnect::Reconnect(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn
 	}
 
 	this->uid = (uint64_t)info[0].ToNumber().Int64Value();
+	this->connectionEpoch = Controller::GetInstance().GetConnectionEpoch();
 }
 
 Napi::Value osn::Reconnect::Create(const Napi::CallbackInfo &info)
@@ -73,11 +75,19 @@ Napi::Value osn::Reconnect::Create(const Napi::CallbackInfo &info)
 
 void osn::Reconnect::Finalize(Napi::Env env)
 {
-	auto conn = GetConnection(env);
-	if (!conn)
-		return;
-
 	if (this->uid != UINT64_MAX) {
+		// If OBS was restarted/disconnected, skip IPC cleanup for this stale wrapper.
+		if (this->connectionEpoch != Controller::GetInstance().GetConnectionEpoch()) {
+			this->uid = UINT64_MAX;
+			return;
+		}
+
+		auto conn = Controller::GetInstance().GetConnection();
+		if (!conn) {
+			this->uid = UINT64_MAX;
+			return;
+		}
+
 		conn->call_synchronous_helper("Reconnect", "Destroy", {ipc::value(this->uid)});
 		this->uid = UINT64_MAX;
 	}

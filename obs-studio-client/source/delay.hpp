@@ -23,6 +23,7 @@ namespace osn {
 class Delay : public Napi::ObjectWrap<osn::Delay> {
 public:
 	uint64_t uid;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;

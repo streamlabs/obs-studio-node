@@ -23,6 +23,7 @@ namespace osn {
 class Reconnect : public Napi::ObjectWrap<osn::Reconnect> {
 public:
 	uint64_t uid;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;

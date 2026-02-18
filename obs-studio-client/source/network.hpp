@@ -23,6 +23,7 @@ namespace osn {
 class Network : public Napi::ObjectWrap<osn::Network> {
 public:
 	uint64_t uid;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;

@@ -25,6 +25,7 @@ class AudioEncoder : public Napi::ObjectWrap<osn::AudioEncoder> {
 public:
 	uint64_t uid;
 	bool encoderInitialized;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;

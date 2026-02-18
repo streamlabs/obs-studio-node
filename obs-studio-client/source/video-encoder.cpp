@@ -55,6 +55,7 @@ osn::VideoEncoder::VideoEncoder(const Napi::CallbackInfo &info) : Napi::ObjectWr
 	size_t length = info.Length();
 	this->uid = UINT64_MAX;
 	this->encoderInitialized = false;
+	this->connectionEpoch = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -63,6 +64,7 @@ osn::VideoEncoder::VideoEncoder(const Napi::CallbackInfo &info) : Napi::ObjectWr
 
 	this->uid = (uint64_t)info[0].ToNumber().Int64Value();
 	this->encoderInitialized = true;
+	this->connectionEpoch = Controller::GetInstance().GetConnectionEpoch();
 }
 
 Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
@@ -99,15 +101,23 @@ void osn::VideoEncoder::Finalize(Napi::Env env)
 	if (!this->encoderInitialized)
 		return;
 
-	auto conn = GetConnection(env);
-	if (!conn)
+	// If OBS was restarted/disconnected, skip IPC cleanup for this stale wrapper.
+	if (this->connectionEpoch != Controller::GetInstance().GetConnectionEpoch()) {
+		this->encoderInitialized = false;
+		this->uid = UINT64_MAX;
 		return;
+	}
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
+	auto conn = Controller::GetInstance().GetConnection();
+	if (!conn) {
+		this->encoderInitialized = false;
+		this->uid = UINT64_MAX;
+		return;
+	}
+
+	conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
 	this->encoderInitialized = false;
 	this->uid = UINT64_MAX;
-	if (!ValidateResponse(env, response))
-		return;
 }
 
 Napi::Value osn::VideoEncoder::GetTypes(const Napi::CallbackInfo &info)
