@@ -133,6 +133,8 @@ void Init(Napi::Env env, Napi::Object exports);
 
 Napi::Value OBS_settings_getSettings(const Napi::CallbackInfo &info);
 void OBS_settings_saveSettings(const Napi::CallbackInfo &info);
+Napi::Value OBS_settings_isValidEncoder(const Napi::CallbackInfo &info);
+
 Napi::Value OBS_settings_getListCategories(const Napi::CallbackInfo &info);
 
 Napi::Value OBS_settings_getInputAudioDevices(const Napi::CallbackInfo &info);

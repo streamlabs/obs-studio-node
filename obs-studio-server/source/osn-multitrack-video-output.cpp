@@ -57,9 +57,6 @@ static void adjust_video_encoder_scaling(const obs_video_info &ovi, obs_encoder_
 	auto requested_width = encoder_config.width;
 	auto requested_height = encoder_config.height;
 
-	if (ovi.output_width == requested_width || ovi.output_height == requested_height)
-		return;
-
 	if (ovi.base_width < requested_width || ovi.base_height < requested_height) {
 		blog(LOG_WARNING, "Requested resolution exceeds canvas/available resolution for encoder %zu: %" PRIu32 "x%" PRIu32 " > %" PRIu32 "x%" PRIu32,
 		     encoder_index, requested_width, requested_height, ovi.base_width, ovi.base_height);
@@ -67,6 +64,9 @@ static void adjust_video_encoder_scaling(const obs_video_info &ovi, obs_encoder_
 
 	obs_encoder_set_scaled_size(video_encoder, requested_width, requested_height);
 	obs_encoder_set_gpu_scale_type(video_encoder, encoder_config.gpu_scale_type.value_or(OBS_SCALE_BICUBIC));
+	obs_encoder_set_preferred_video_format(video_encoder, encoder_config.format.value_or(VIDEO_FORMAT_NV12));
+	obs_encoder_set_preferred_color_space(video_encoder, encoder_config.colorspace.value_or(VIDEO_CS_709));
+	obs_encoder_set_preferred_range(video_encoder, encoder_config.range.value_or(VIDEO_RANGE_PARTIAL));
 }
 
 static uint32_t closest_divisor(const obs_video_info &ovi, const media_frames_per_second &target_fps)
@@ -85,14 +85,12 @@ static void adjust_encoder_frame_rate_divisor(const obs_video_info &ovi, obs_enc
 	}
 	media_frames_per_second requested_fps = *encoder_config.framerate;
 
-	if (ovi.fps_num == requested_fps.numerator && ovi.fps_den == requested_fps.denominator) {
+	if (ovi.fps_num == requested_fps.numerator && ovi.fps_den == requested_fps.denominator)
 		return;
-	}
 
 	auto divisor = closest_divisor(ovi, requested_fps);
-	if (divisor <= 1) {
+	if (divisor <= 1)
 		return;
-	}
 
 	blog(LOG_INFO, "Setting frame rate divisor to %u for encoder %zu", divisor, encoder_index);
 	obs_encoder_set_frame_rate_divisor(video_encoder, divisor);

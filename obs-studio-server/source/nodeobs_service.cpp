@@ -1550,7 +1550,7 @@ const char *get_simple_output_encoder(const char *encoder)
 		return ADVANCED_ENCODER_AMD_HEVC;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
 		return "av1_texture_amf";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) {
+	} else if ((strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) || (strcmp(encoder, ENCODER_NVENC_H264_TEX) == 0)) {
 		return EncoderAvailable(ENCODER_NVENC_H264_TEX) ? ENCODER_NVENC_H264_TEX : ADVANCED_ENCODER_NVENC;
 	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC) == 0) {
 		return EncoderAvailable(ENCODER_NVENC_HEVC_TEX) ? ENCODER_NVENC_HEVC_TEX : "ffmpeg_hevc_nvenc";
@@ -2767,6 +2767,8 @@ void OBS_service::OBS_service_connectOutputSignals(void *data, const int64_t id,
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "wrote"));
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "writing_error"));
 
+	virtualCamSignals.push_back(SignalInfo("virtual-camera", "activate"));
+	virtualCamSignals.push_back(SignalInfo("virtual-camera", "deactivate"));
 	virtualCamSignals.push_back(SignalInfo("virtual-camera", "start"));
 	virtualCamSignals.push_back(SignalInfo("virtual-camera", "stop"));
 
