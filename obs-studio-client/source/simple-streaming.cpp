@@ -35,7 +35,6 @@ Napi::Object osn::SimpleStreaming::Init(Napi::Env env, Napi::Object exports)
 		 StaticMethod("destroy", &osn::SimpleStreaming::Destroy),
 
 		 InstanceAccessor("videoEncoder", &osn::SimpleStreaming::GetVideoEncoder, &osn::SimpleStreaming::SetVideoEncoder),
-		 InstanceAccessor("audioEncoder", &osn::SimpleStreaming::GetAudioEncoder, &osn::SimpleStreaming::SetAudioEncoder),
 		 InstanceAccessor("service", &osn::SimpleStreaming::GetService, &osn::SimpleStreaming::SetService),
 		 InstanceAccessor("enforceServiceBitrate", &osn::SimpleStreaming::GetEnforceServiceBirate, &osn::SimpleStreaming::SetEnforceServiceBirate),
 		 InstanceAccessor("enableTwitchVOD", &osn::SimpleStreaming::GetEnableTwitchVOD, &osn::SimpleStreaming::SetEnableTwitchVOD),
@@ -79,6 +78,16 @@ osn::SimpleStreaming::SimpleStreaming(const Napi::CallbackInfo &info) : Napi::Ob
 	this->className = std::string("SimpleStreaming");
 }
 
+void osn::SimpleStreaming::Finalize(Napi::Env)
+{
+	ReleaseObjects();
+}
+
+void osn::SimpleStreaming::ReleaseObjects()
+{
+	osn::Streaming::ReleaseObjects();
+}
+
 Napi::Value osn::SimpleStreaming::Create(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -104,6 +113,8 @@ void osn::SimpleStreaming::Destroy(const Napi::CallbackInfo &info)
 
 	stream->stopWorker();
 	stream->cb.Reset();
+
+	stream->ReleaseObjects();
 
 	auto conn = GetConnection(info);
 	if (!conn)

@@ -24,6 +24,7 @@ namespace osn {
 class AudioEncoder : public Napi::ObjectWrap<osn::AudioEncoder> {
 public:
 	uint64_t uid;
+	bool encoderInitialized;
 
 public:
 	static Napi::FunctionReference constructor;
@@ -31,6 +32,8 @@ public:
 	AudioEncoder(const Napi::CallbackInfo &info);
 
 	static Napi::Value Create(const Napi::CallbackInfo &info);
+	void Finalize(Napi::Env env);
+	void Release(const Napi::CallbackInfo &info);
 
 	Napi::Value GetName(const Napi::CallbackInfo &info);
 	void SetName(const Napi::CallbackInfo &info, const Napi::Value &value);

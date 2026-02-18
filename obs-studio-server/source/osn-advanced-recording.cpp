@@ -440,15 +440,8 @@ void osn::IAdvancedRecording::SetLegacySettings(void *data, const int64_t id, co
 
 void osn::IAdvancedRecording::GetStreaming(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
-	}
-
-	uint64_t uid = osn::IAdvancedStreaming::Manager::GetInstance().find(recording->streaming);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -457,6 +450,13 @@ void osn::IAdvancedRecording::SetStreaming(void *data, const int64_t id, const s
 	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		recording->streaming = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	AdvancedStreaming *streaming = static_cast<AdvancedStreaming *>(osn::IAdvancedStreaming::Manager::GetInstance().find(args[1].value_union.ui64));

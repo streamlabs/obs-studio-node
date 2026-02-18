@@ -162,7 +162,7 @@ describe(testName, () => {
         }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.delay =
             osn.DelayFactory.create();
@@ -241,7 +241,9 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const videoEncoder = stream.videoEncoder;
         osn.AdvancedStreamingFactory.destroy(stream);
+        videoEncoder.release();
     });
 
     it('Stream with invalid stream key', async function() {
@@ -250,7 +252,7 @@ describe(testName, () => {
         }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-2');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.service.update({ key: 'invalid' });
         stream.delay =
@@ -283,6 +285,8 @@ describe(testName, () => {
 
         stream.service.update({ key: obs.userStreamKey });
 
+        const streamingEncoder = stream.videoEncoder;
         osn.AdvancedStreamingFactory.destroy(stream);
+        streamingEncoder.release();
     });
 });

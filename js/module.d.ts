@@ -756,8 +756,8 @@ export declare const enum ERecordingFormat {
     FLV = "flv",
     MOV = "mov",
     MKV = "mkv",
-    TS = "mpegts",
-    M3M8 = "m3m8"
+    MPEGTS = "ts",
+    HLS = "m3u8"
 }
 export declare const enum ERecordingQuality {
     Stream = 0,
@@ -776,19 +776,19 @@ export declare const enum EProcessPriority {
     BelowNormal = "BelowNormal",
     Idle = "Idle"
 }
-export interface IVideoEncoder extends IConfigurable {
+export interface IVideoEncoder extends IConfigurable, IReleasable {
     name: string;
     readonly type: EVideoEncoderType;
     readonly active: boolean;
     readonly id: string;
     readonly lastError: string;
 }
-export interface IAudioEncoder {
+export interface IAudioEncoder extends IReleasable {
     name: string;
     bitrate: number;
 }
 export interface IAudioEncoderFactory {
-    create(): IAudioEncoder;
+    create(id: string, name: string): IAudioEncoder;
 }
 export interface IVideoEncoderFactory {
     types(): string[];
@@ -934,7 +934,7 @@ export interface ISimpleReplayBufferFactory {
 export interface IAdvancedReplayBufferFactory {
     create(): IAdvancedReplayBuffer;
     destroy(stream: IAdvancedReplayBuffer): void;
-    legacySettings: IAdvancedReplayBufferFactory;
+    legacySettings: IAdvancedReplayBuffer;
 }
 export interface IDelay {
     enabled: boolean;

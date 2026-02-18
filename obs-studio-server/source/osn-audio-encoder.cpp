@@ -25,6 +25,9 @@ void osn::AudioEncoder::Register(ipc::server &srv)
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("AudioEncoder");
 	cls->register_function(
 		std::make_shared<ipc::function>("Create", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String}, Create));
+
+	cls->register_function(std::make_shared<ipc::function>("Release", std::vector<ipc::type>{ipc::type::UInt64}, Release));
+	cls->register_function(std::make_shared<ipc::function>("Finalize", std::vector<ipc::type>{ipc::type::UInt64}, Finalize));
 	cls->register_function(std::make_shared<ipc::function>("GetName", std::vector<ipc::type>{ipc::type::UInt64}, GetName));
 	cls->register_function(std::make_shared<ipc::function>("SetName", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetName));
 	cls->register_function(std::make_shared<ipc::function>("GetBitrate", std::vector<ipc::type>{ipc::type::UInt64}, GetBitrate));
@@ -35,7 +38,10 @@ void osn::AudioEncoder::Register(ipc::server &srv)
 
 void osn::AudioEncoder::Create(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	obs_encoder_t *audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "audio", nullptr, 0, nullptr);
+	std::string encoderId = args[0].value_str;
+	std::string name = args[1].value_str;
+
+	obs_encoder_t *audioEncoder = obs_audio_encoder_create(encoderId.c_str(), name.c_str(), nullptr, 0, nullptr);
 
 	if (!audioEncoder) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to create the audio encoder.");
@@ -48,6 +54,36 @@ void osn::AudioEncoder::Create(void *data, const int64_t id, const std::vector<i
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
+	AUTO_DEBUG;
+}
+
+void osn::AudioEncoder::Release(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	obs_encoder_t *encoder = osn::AudioEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
+	blog(LOG_INFO, "Release encoder %p, %d", encoder, args[0].value_union.ui64);
+	if (!encoder) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Release. Audio encoder reference is not valid.");
+	}
+
+	obs_encoder_release(encoder);
+	osn::AudioEncoder::Manager::GetInstance().free(encoder);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::AudioEncoder::Finalize(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	obs_encoder_t *encoder = osn::AudioEncoder::Manager::GetInstance().find(args[0].value_union.ui64);
+	blog(LOG_INFO, "Finalize encoder %p, %d", encoder, args[0].value_union.ui64);
+	if (!encoder) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Finalize. Audio encoder reference is not valid.");
+	}
+
+	obs_encoder_release(encoder);
+	osn::AudioEncoder::Manager::GetInstance().free(encoder);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

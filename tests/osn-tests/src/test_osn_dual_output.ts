@@ -123,7 +123,7 @@ describe(testName, () => {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.useStreamEncoders = false;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-1');
         recording.overwrite = false;
         recording.noSpace = false;
         recording.video = obs.defaultVideoContext;
@@ -135,7 +135,7 @@ describe(testName, () => {
         recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording2.format = ERecordingFormat.MP4;
         recording2.useStreamEncoders = false;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
         recording2.overwrite = false;
         recording2.noSpace = false;
         recording2.video = secondContext;
@@ -161,9 +161,13 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
+        const recordingEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
+        recordingEncoder.release();
 
+        const recording2Encoder = recording2.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording2);
+        recording2Encoder.release();
     });
 
     it('Start Dual Output with recording and scene items', async function() {
@@ -176,7 +180,7 @@ describe(testName, () => {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.useStreamEncoders = false;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-3');
         recording.overwrite = false;
         recording.noSpace = false;
         recording.video = obs.defaultVideoContext;
@@ -214,7 +218,7 @@ describe(testName, () => {
         recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording2.format = ERecordingFormat.MP4;
         recording2.useStreamEncoders = false;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-4');
         recording2.overwrite = false;
         recording2.noSpace = false;
         recording2.video = secondContext;
@@ -240,9 +244,13 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
+        const recordingEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
+        recordingEncoder.release();
 
+        const recording2Encoder = recording2.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording2);
+        recording2Encoder.release();
 
         osn.Global.setOutputSource(0, returnSource);
 
@@ -262,7 +270,7 @@ describe(testName, () => {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.useStreamEncoders = false;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-1');
+        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-5');
         recording.overwrite = false;
         recording.noSpace = false;
         recording.mixer = 1;
@@ -275,7 +283,7 @@ describe(testName, () => {
         recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording2.format = ERecordingFormat.MP4;
         recording2.useStreamEncoders = false;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
+        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-6');
         recording2.overwrite = false;
         recording2.noSpace = false;
         recording2.mixer = 2;
@@ -335,11 +343,16 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
+        const recordingEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
 
+        const recording2Encoder = recording2.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording2);
 
         osn.Global.setOutputSource(0, returnSource);
+
+        recordingEncoder.release();
+        recording2Encoder.release();
 
         sceneItem1.source.release();
         sceneItem1.remove();
@@ -360,8 +373,8 @@ describe(testName, () => {
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-1');
-        recording.audioEncoder = osn.AudioEncoderFactory.create();
+        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-7');
+        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-1");
         recording.audioEncoder.name = 'audio-encoder-test-recording-1';
         recording.audioEncoder.bitrate = 160;
         recording.overwrite = false;
@@ -375,8 +388,8 @@ describe(testName, () => {
         const recording2 = osn.SimpleRecordingFactory.create();
         recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording2.format = ERecordingFormat.MP4;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
-        recording2.audioEncoder = osn.AudioEncoderFactory.create();
+        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-8');
+        recording2.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-2");
         recording2.audioEncoder.name = 'audio-encoder-test-recording-2';
         recording2.audioEncoder.bitrate = 160;
         recording2.overwrite = false;
@@ -438,8 +451,12 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
+        const recordingEncoder = recording.videoEncoder;
+        const recordingAudioEncoder = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
 
+        const recording2Encoder = recording2.videoEncoder;
+        const recording2AudioEncoder = recording2.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording2);
 
         osn.Global.setOutputSource(0, returnSource);
@@ -451,6 +468,11 @@ describe(testName, () => {
         sceneItem2.remove();
 
         scene.release();
+
+        recordingEncoder.release();
+        recording2Encoder.release();
+        recordingAudioEncoder.release();
+        recording2AudioEncoder.release();
     });
 
     it('Start Dual Output with legacy streaming to two services', async function() {

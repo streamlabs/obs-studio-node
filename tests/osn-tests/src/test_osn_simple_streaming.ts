@@ -161,7 +161,7 @@ describe(testName, () => {
         }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.delay =
             osn.DelayFactory.create();
@@ -170,7 +170,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -238,7 +238,11 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const streamEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);
+        streamEncoder.release();
+        audioEncoder.release();
     });
 
     it('Stream with invalid stream key', async function() {
@@ -247,7 +251,7 @@ describe(testName, () => {
         }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-2');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.service.update({ key: 'invalid' });
         stream.delay =
@@ -257,7 +261,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-2");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -278,7 +282,11 @@ describe(testName, () => {
         expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         stream.service.update({ key: obs.userStreamKey });
-
+        
+        const videoEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);
+        videoEncoder.release();
+        audioEncoder.release();
     });
 });

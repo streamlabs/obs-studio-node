@@ -27,7 +27,8 @@ public:
 	static Napi::FunctionReference constructor;
 	static Napi::Object Init(Napi::Env env, Napi::Object exports);
 	SimpleStreaming(const Napi::CallbackInfo &info);
-
+	void Finalize(Napi::Env);
+	void ReleaseObjects();
 	static Napi::Value Create(const Napi::CallbackInfo &info);
 	static void Destroy(const Napi::CallbackInfo &info);
 
