@@ -126,8 +126,8 @@ void osn::IStreaming::SetVideoEncoder(void *data, const int64_t id, const std::v
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Encoder reference is not valid.");
 	}
 
-	//verify the encoder is compatible before setting it if the service has been set
-	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(streaming->videoEncoder), streaming->simple)) {
+	//verify the encoder is compatible before setting it
+	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(encoder), streaming->simple)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
 

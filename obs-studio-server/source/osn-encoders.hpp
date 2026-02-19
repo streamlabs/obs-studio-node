@@ -77,6 +77,7 @@
 #define APPLE_SOFTWARE_VIDEO_ENCODER "com.apple.videotoolbox.videoencoder.h264"
 #define APPLE_HARDWARE_VIDEO_ENCODER "com.apple.videotoolbox.videoencoder.h264.gva"
 #define APPLE_HARDWARE_VIDEO_ENCODER_M1 "com.apple.videotoolbox.videoencoder.ave.avc"
+#define APPLE_HARDWARE_VIDEO_ENCODER_HEVC "com.apple.videotoolbox.videoencoder.ave.hevc"
 
 #define SIMPLE_AUDIO_ENCODER_AAC "ffmpeg_aac"
 #define SIMPLE_AUDIO_ENCODER_OPUS "ffmpeg_opus"
@@ -169,9 +170,13 @@ static std::vector<EncoderSettings> videoEncoderOptions = {
 	// Apple VT H264 Hardware Encoder
 	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER, "", "", true, true, true,
 	 false, true, false, PRESET_APPLE, FAMILY_APPLE},
-	// Apple VT H264 Hardware Encoder
-	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_M1, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER_M1, "", "", true, true,
+	// Apple VT H264 Hardware Encoder - get_simple_output_encoder RETURNED M1 FOR SIMPLE_ENCODER_APPLE_H264 SO MAKE THAT THE SIMPLE NAME AND M1 INTERNAL NAME
+	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_M1, "Hardware (Apple, H.264)", SIMPLE_ENCODER_APPLE_H264,
+	 APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true,
 	 true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	// get_simple_output_encoder had Apple HEVC so add it here, never used with an advanced name but follow the pattern of M1 above
+	{"Apple VT HEVC Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "Hardware (Apple, HEVC)", SIMPLE_ENCODER_APPLE_HEVC,
+	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// AMD HW H.264
 	{"AMD HW H.264", ADVANCED_ENCODER_AMD, "Hardware (AMD, H.264)", SIMPLE_ENCODER_AMD, ADVANCED_ENCODER_AMD, "", true, true, true, false, true, false,
 	 "AMDPreset", FAMILY_AMD},
@@ -185,11 +190,6 @@ static std::vector<EncoderSettings> videoEncoderOptions = {
 	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", "", true, true, true, false, true, false, "Preset", FAMILY_FFMPEG},
 	// SVT-AV1
 	{"SVT-AV1", ENCODER_AV1_SVT_FFMPEG, "", "", "", "", true, true, true, false, true, false, "Preset", FAMILY_FFMPEG}};
-
-//} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_H264) == 0) {
-//	return APPLE_HARDWARE_VIDEO_ENCODER_M1;
-//} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC) == 0) {
-//	return "com.apple.videotoolbox.videoencoder.ave.hevc";
 
 // Codect/Container support check.
 // from OBS code UI\window-basic-settings.cpp

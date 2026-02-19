@@ -112,8 +112,8 @@ bool osn::EncoderUtils::isEncoderCompatibleStreaming(obs_service_t *service, con
 		if (curEncoder.compare(encoderToFind) == 0) {
 			if (isEncoderCompatible(encoderToFind, service, simpleMode, false, "", i)) {
 				validEncoder = true;
-				break;
 			}
+			break;
 		}
 	}
 
@@ -132,8 +132,8 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 		if (curEncoder.compare(encoderToFind) == 0) {
 			if (isEncoderCompatible(encoderToFind, NULL, simpleMode, true, "", i)) {
 				validEncoder = true;
-				break;
 			}
+			break;
 		}
 	}
 

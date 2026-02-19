@@ -226,7 +226,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
-	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_name(recording->videoEncoder), recording->fileFormat, false))
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, false))
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 
 	obs_output_set_video_encoder(recording->output, recording->videoEncoder);

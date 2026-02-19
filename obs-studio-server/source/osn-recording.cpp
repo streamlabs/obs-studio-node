@@ -58,7 +58,7 @@ void osn::IRecording::SetVideoEncoder(void *data, const int64_t id, const std::v
 	}
 
 	//verify the encoder is compatible before setting it
-	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_name(encoder), recording->fileFormat, recording->simple)) {
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(encoder), recording->format, recording->simple)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
 
