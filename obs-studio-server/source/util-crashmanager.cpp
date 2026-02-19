@@ -53,6 +53,8 @@
 #include "psapi.h"
 #elif defined(__APPLE__)
 #include <libproc.h>
+#include <signal.h>
+#include <unistd.h>
 #endif
 
 #include "nodeobs_api.h"
@@ -84,6 +86,10 @@ util::MetricsProvider metricsClient;
 LPTOP_LEVEL_EXCEPTION_FILTER crashpadInternalExceptionFilterMethod = nullptr;
 HANDLE memoryDumpEvent = INVALID_HANDLE_VALUE;
 std::filesystem::path memoryDumpFolder;
+#elif defined(__APPLE__)
+struct sigaction oldSegv = {};
+struct sigaction oldAbrt = {};
+struct sigaction oldBus = {};
 #endif
 
 std::string appState = "starting"; // "starting","idle","encoding","shutdown"
@@ -281,7 +287,7 @@ nlohmann::json RequestProcessList()
 
 	return result;
 #else
-	nlohmann::json result = nlohmann::json::array();
+	nlohmann::json result = nlohmann::json::object();
 
 	int max_pids = 1024;
 	std::vector<pid_t> pids(max_pids);
@@ -292,24 +298,32 @@ nlohmann::json RequestProcessList()
 		return result;
 	}
 
+	int skipped_processes_count = 0;
+	int unprocessed_processes_count = 0;
+	int total_processes_count = 0;
 	int count = num_pids / sizeof(pid_t);
 	for (int i = 0; i < count; ++i) {
-		if (pids[i] == 0)
+		if (pids[i] == 0) {
+			skipped_processes_count++;
 			continue;
+		}
 
 		struct proc_bsdinfo procInfo;
 		int ret = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &procInfo, sizeof(proc_bsdinfo));
-		if (ret <= 0)
+		if (ret <= 0) {
+			unprocessed_processes_count++;
 			continue; // Skip if information can't be retrieved
+		}
 
-		nlohmann::json procInfoJson;
-		procInfoJson["PID"] = pids[i];
-		procInfoJson["Name"] = std::string(procInfo.pbi_name);
-		procInfoJson["UID"] = procInfo.pbi_uid;
-		procInfoJson["GID"] = procInfo.pbi_gid;
-		result.push_back(procInfoJson);
+		std::ostringstream oss;
+		oss << procInfo.pbi_name << " UID " << procInfo.pbi_uid << " GID " << procInfo.pbi_gid;
+		result.push_back({std::to_string(pids[i]), oss.str()});
+		total_processes_count++;
 	}
 
+	std::ostringstream oss;
+	oss << "Total " << total_processes_count << " proc_pidinfo failed " << unprocessed_processes_count << " skipped " << skipped_processes_count;
+	result.push_back({std::to_string(0), oss.str()});
 	return result;
 
 #endif
@@ -487,6 +501,9 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 	if (!SetupCrashpad()) {
 		return false;
 	}
+#if defined(__APPLE__)
+	InstallSigActionHandler();
+#endif
 
 	// Handler for obs errors (mainly for bcrash() calls)
 	base_set_crash_handler(
@@ -1392,3 +1409,34 @@ void util::CrashManager::SaveToAppStateFile()
 	} catch (...) {
 	}
 }
+
+#if defined(__APPLE__)
+void util::CrashManager::SignalActionHandler(int sig, siginfo_t *signalInfo, void *)
+{
+	// Restore previous signal handler so it can handle our upcoming abort request
+	sigaction(SIGSEGV, &oldSegv, NULL);
+	sigaction(SIGABRT, &oldAbrt, NULL);
+	sigaction(SIGBUS, &oldBus, NULL);
+
+	std::ostringstream oss;
+	oss << "Fatal error sig: " << sig;
+	if (signalInfo) {
+		oss << " code: " << signalInfo->si_code;
+		oss << " addr: " << signalInfo->si_addr;
+	}
+
+	util::CrashManager::HandleCrash(oss.str());
+}
+
+void util::CrashManager::InstallSigActionHandler()
+{
+	struct sigaction sa = {};
+	sa.sa_sigaction = SignalActionHandler;
+	sa.sa_flags = SA_SIGINFO;
+	sigemptyset(&sa.sa_mask);
+
+	sigaction(SIGSEGV, &sa, &oldSegv);
+	sigaction(SIGABRT, &sa, &oldAbrt);
+	sigaction(SIGBUS, &sa, &oldBus);
+}
+#endif
