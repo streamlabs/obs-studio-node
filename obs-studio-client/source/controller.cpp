@@ -372,7 +372,9 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 	}
 
 	m_connection = cl;
-	// Bump epoch on successful connect to invalidate stale native wrappers.
+	// Note: this increment in the current implementation is not strictly required for the basic
+	//       stale-after-reconnect case, but it is a useful safe guard for a possible future expansion.
+	// Bump epoch on successful connect to invalidate stale native wrappers, if any.
 	m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
 	return m_connection;
 }

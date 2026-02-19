@@ -53,6 +53,8 @@ public:
 	void disconnect();
 
 	std::shared_ptr<ipc::client> GetConnection();
+
+	// Used to identify stale connections and properly implement Node.js finalizers
 	uint64_t GetConnectionEpoch() const;
 
 private:
