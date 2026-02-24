@@ -319,6 +319,7 @@ void osn::SimpleRecording::UpdateEncoders()
 		if (obs_get_multiple_rendering()) {
 			obs_encoder_t *videoEncDup = osn::IRecording::duplicate_encoder(videoEncoder);
 			videoEncoder = videoEncDup;
+			obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 		}
 		break;
 	}
