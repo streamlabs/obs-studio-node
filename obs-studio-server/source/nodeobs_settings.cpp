@@ -327,7 +327,6 @@ SubCategory OBS_settings::serializeSettingsData(const std::string &nameSubCatego
 				} else if (section.compare("SimpleOutput") == 0) {
 					if (param.name.compare(PRESET_NVENC) == 0) {
 						currentValue = config_get_string(config, "SimpleOutput", param.name.c_str());
-						blog(LOG_INFO, "MLH serializeSettingsData: currentValue %s", currentValue);
 						if (currentValue == NULL) {
 							const char *oldParamName = PRESET_NVENC_DEP;
 							const char *oldValue = config_get_string(config, "SimpleOutput", oldParamName);
@@ -1087,7 +1086,6 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			defaultPreset = "balanced";
 		}
 		else if (presetName == PRESET_NVENC) {
-			blog(LOG_INFO, "MLH: NvencPreset2: getting NVENC presets from OBS for encoder %s", encoder.c_str());
 			preset = createSettingEntry(PRESET_NVENC, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 
 			obs_properties_t *props = obs_get_encoder_properties(ADVANCED_ENCODER_NVENC);
@@ -1097,7 +1095,6 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			for (size_t i = 0; i < num; i++) {
 				const char *name = obs_property_list_item_name(p, i);
 				const char *val = obs_property_list_item_string(p, i);
-				blog(LOG_INFO, "MLH adding entry to NvencPreset2: name=%s, value=%s", name, val);
 				preset.push_back(std::make_pair(name, ipc::value(val)));
 			}
 
@@ -1821,7 +1818,6 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 		std::string encoder_name = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, false, encoderID);
 		if (!fileExist) {
-			blog(LOG_INFO, "MLH create encoder type %s", encoderID);
 			streamingEncoder = obs_video_encoder_create(encoderID, encoder_name.c_str(), nullptr, nullptr);
 			OBS_service::setStreamingEncoder(streamingEncoder, StreamServiceId::Main);
 
@@ -1834,7 +1830,6 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 			osn::EncoderUtils::updateNvencPresets(data, encoderID);
 
 			obs_data_apply(settings, data);
-			blog(LOG_INFO, "MLH create encoder type %s", encoderID);
 			streamingEncoder = obs_video_encoder_create(encoderID, encoder_name.c_str(), settings, nullptr);
 			OBS_service::setStreamingEncoder(streamingEncoder, StreamServiceId::Main);
 		}
@@ -1996,7 +1991,6 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 	memcpy(recEncoder.currentValue.data(), recEncoderCurrentValue, strlen(recEncoderCurrentValue));
 	recEncoder.sizeOfCurrentValue = strlen(recEncoderCurrentValue);
 
-		blog(LOG_INFO, "MLH get advanced RECORDING encoder option for current service");
 	std::vector<std::pair<std::string, ipc::value>> encoderValues3;
 
 	std::vector<std::pair<std::string, ipc::value>> Encoder;

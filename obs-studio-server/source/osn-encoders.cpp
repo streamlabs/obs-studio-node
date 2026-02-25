@@ -96,7 +96,6 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 		if (!containerSupportsCodec(container, codec))
 			return false;
 	}
-	blog(LOG_INFO, "MLH encoder compatible for simpleMode = %d with current settings: %s", simpleMode, encoderName.c_str());
 
 	return true;
 }
@@ -160,8 +159,6 @@ std::string osn::EncoderUtils::getInternalEncoderFromSimple(const char *encoder)
 		//if there is a backup, check if simple_internal_name is available, return backup if not
 		//else if no simple_internal_name, return simple_name
 		//else return simple_internal_name
-		//blog(LOG_INFO, "MLH ConvertSimpleEncoder - checking encoder %s internal %s backup %s", curEnc.simple_name.c_str(),
-		//     curEnc.simple_internal_name.c_str(), curEnc.backup.c_str());
 		if (encoder == curEnc.simple_name) {
 			if (!curEnc.backup.empty() && !isEncoderRegistered(curEnc.simple_internal_name))
 				encoderName = curEnc.backup;
@@ -187,8 +184,6 @@ std::string osn::EncoderUtils::getSimpleEncoderFromInternal(const char *encoder)
 	std::string encoderName = ADVANCED_ENCODER_X264;
 	bool found = false;
 
-	//blog(LOG_INFO, "MLH ConvertSimpleEncoder - converting simple encoder %s", encoder);
-
 	for (const auto curEnc : videoEncoderOptions) {
 		if (encoder == curEnc.simple_internal_name) {
 				encoderName = curEnc.simple_name;
@@ -207,11 +202,7 @@ std::string osn::EncoderUtils::getEncoderPreset(const char *encoder)
 	std::string preset = DEFAULT_PRESET;
 	bool found = false;
 
-	//blog(LOG_INFO, "MLH GetEncoderPreset for encoder %s", encoder);
-
 	for (const auto curEnc : videoEncoderOptions) {
-		//blog(LOG_INFO, "MLH GetEncoderPreset - checking encoder %s (advanced) %s (simple) preset %s", curEnc.advanced_name.c_str(),
-		//     curEnc.simple_name.c_str(), curEnc.simple_name.c_str(), curEnc.preset.c_str());
 		if ((encoder == curEnc.advanced_name) || (encoder == curEnc.simple_name)) {
 			preset = curEnc.preset;
 			found = true;
