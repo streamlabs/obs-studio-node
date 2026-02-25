@@ -57,8 +57,16 @@ void osn::IRecording::SetVideoEncoder(void *data, const int64_t id, const std::v
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Encoder reference is not valid.");
 	}
 
-	//verify the encoder is compatible before setting it
-	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(encoder), recording->format, recording->simple)) {
+	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+	const char *encID = obs_encoder_get_id(encoder);
+	if (recording->simple) {
+		const char *quality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
+		if (strcmp(quality, "Stream") == 0)
+			encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+		else
+			encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
+	}
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(encID, recording->format, recording->simple)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
 
@@ -146,10 +154,11 @@ obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t t
 
 	if (obs_encoder_get_type(src) == OBS_ENCODER_AUDIO) {
 		dst = obs_audio_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), trackIndex, nullptr);
-		//TODO added so it eventually gets released...is this correct? dont' even include osn-audio-encoder here
+		//this allows shutdown code in nodeobs_api to release the object
 		osn::AudioEncoder::Manager::GetInstance().allocate(dst);
 	} else if (obs_encoder_get_type(src) == OBS_ENCODER_VIDEO) {
 		dst = obs_video_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), nullptr);
+		//this allows shutdown code in nodeobs_api to release the object
 		osn::VideoEncoder::Manager::GetInstance().allocate(dst);
 	}
 

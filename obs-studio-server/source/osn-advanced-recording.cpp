@@ -186,7 +186,6 @@ bool osn::AdvancedRecording::UpdateEncoders()
 	if (!videoEncoder)
 		return false;
 
-	//TODO this is done in streaming->updateEncoders - put this in an else? unless canvas is different - comes from OutputSignals so check if that is diff for streaming/recording
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 	} else {
@@ -226,8 +225,12 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
-	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, false))
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, false)) {
+		//update config recording format = mkv because it supports all encoder types
+		config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
+	}
 
 	obs_output_set_video_encoder(recording->output, recording->videoEncoder);
 
@@ -252,7 +255,9 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
 
-	recording->StartOutput();
+	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
+
+	recording->startOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

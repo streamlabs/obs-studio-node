@@ -278,7 +278,6 @@ void osn::SimpleStreaming::UpdateEncoders()
 	int aBitrate = static_cast<int>(obs_data_get_int(audioEncSettings, "bitrate"));
 
 	std::string id = obs_encoder_get_id(videoEncoder);
-	//TODO why just AMD here?
 	if (id.compare(ADVANCED_ENCODER_AMD) == 0)
 		UpdateStreamingSettings_amd(videoEncSettings, vBitrate);
 
@@ -358,8 +357,9 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	if (!streaming->GetCanvas()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
 	
-	//make sure the encoder is valid for the current service
-	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(streaming->videoEncoder), streaming->simple)) {
+	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+	const char *encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, encID, streaming->simple)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
 	}
 
@@ -402,7 +402,9 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	obs_output_update(streaming->GetOutput(), settings);
 	obs_data_release(settings);
 
-	streaming->StartOutput();
+	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
+
+	streaming->startOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -436,6 +438,14 @@ obs_encoder_t *osn::ISimpleStreaming::CreateLegacyVideoEncoder()
 
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
 
+	//check for missing/bad encoder ID and reset to x264 if needed
+	if ((strlen(encId) == 0) || osn::EncoderUtils::isInvalidAppleEncoder(encId)) {
+		blog(LOG_WARNING, "Invalid or missing encoder ID in basic.ini, defaulting to x264.");
+		encId = SIMPLE_ENCODER_X264;
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", encId);
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+	}
+
 	obs_data_t *videoEncData = obs_data_create();
 	obs_data_set_string(videoEncData, "rate_control", "CBR");
 	obs_data_set_int(videoEncData, "bitrate", config_get_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate"));
@@ -446,12 +456,10 @@ obs_encoder_t *osn::ISimpleStreaming::CreateLegacyVideoEncoder()
 	const char *preset = nullptr;
 
 	std::string presetType = osn::EncoderUtils::getEncoderPreset(encId);
-	//TODO do we need to check low CPU here before we convert?
 	std::string encIdOBS = osn::EncoderUtils::getInternalEncoderFromSimple(encId);
 
 	preset = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str()));
 
-	//TODO this conversion is from old API - is it needed? SetLegacySettings still used NVENCPreset instead of 2 but changed it - is this correct?
 	if (presetType == PRESET_NVENC) {
 		if (strlen(preset) == 0) {
 			const char *oldParamName = PRESET_NVENC_DEP;
@@ -542,7 +550,6 @@ void osn::ISimpleStreaming::GetLegacySettings(void *data, const int64_t id, cons
 
 void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder)
 {
-	//const char *encId = nullptr;
 	const char *encIdOBS = obs_encoder_get_id(encoder);
 
 	obs_data_t *settings = obs_encoder_get_settings(encoder);
