@@ -78,8 +78,7 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 	if (videoEncoderOptions[checkIndex].check_availability && !isEncoderRegistered(encoderName))
 		return false;
 
-	if (!recording && videoEncoderOptions[checkIndex].check_availability_streaming &&
-	    !isCodecAvailableForService(encoderName.c_str(), service))
+	if (!recording && videoEncoderOptions[checkIndex].check_availability_streaming && !isCodecAvailableForService(encoderName.c_str(), service))
 		return false;
 
 	if (simpleMode) {
@@ -186,7 +185,7 @@ std::string osn::EncoderUtils::getSimpleEncoderFromInternal(const char *encoder)
 
 	for (const auto curEnc : videoEncoderOptions) {
 		if (encoder == curEnc.simple_internal_name) {
-				encoderName = curEnc.simple_name;
+			encoderName = curEnc.simple_name;
 			found = true;
 			break;
 		}
@@ -206,7 +205,7 @@ std::string osn::EncoderUtils::getEncoderPreset(const char *encoder)
 		if ((encoder == curEnc.advanced_name) || (encoder == curEnc.simple_name)) {
 			preset = curEnc.preset;
 			found = true;
-			break;	
+			break;
 		}
 	}
 
@@ -243,7 +242,7 @@ bool osn::EncoderUtils::isOldJimNvencEncoder(const std::string &encoderId)
 
 // This code should be removed when JIM_ encoders will be removed from OBS
 void osn::EncoderUtils::convertOldJimNvencEncoder(config_t *config, const std::string &configSection, const std::string &streamEncoderSetting,
-				      const std::string &recordingEncoderSetting)
+						  const std::string &recordingEncoderSetting)
 {
 	const std::string streamEncoder = utility::GetSafeString(config_get_string(config, configSection.c_str(), streamEncoderSetting.c_str()));
 	if (osn::EncoderUtils::isOldJimNvencEncoder(streamEncoder)) {

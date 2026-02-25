@@ -172,8 +172,7 @@ static std::vector<EncoderSettings> videoEncoderOptions = {
 	 false, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// Apple VT H264 Hardware Encoder - get_simple_output_encoder RETURNED M1 FOR SIMPLE_ENCODER_APPLE_H264 SO MAKE THAT THE SIMPLE NAME AND M1 INTERNAL NAME
 	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_M1, "Hardware (Apple, H.264)", SIMPLE_ENCODER_APPLE_H264,
-	 APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true,
-	 true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	 APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// get_simple_output_encoder had Apple HEVC so add it here, never used with an advanced name but follow the pattern of M1 above
 	{"Apple VT HEVC Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "Hardware (Apple, HEVC)", SIMPLE_ENCODER_APPLE_HEVC,
 	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},

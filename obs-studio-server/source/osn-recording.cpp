@@ -150,7 +150,7 @@ obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t t
 		osn::AudioEncoder::Manager::GetInstance().allocate(dst);
 	} else if (obs_encoder_get_type(src) == OBS_ENCODER_VIDEO) {
 		dst = obs_video_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), nullptr);
-		//TODO added so it eventually gets released...is this correct? 
+		//TODO added so it eventually gets released...is this correct?
 		osn::VideoEncoder::Manager::GetInstance().allocate(dst);
 	}
 

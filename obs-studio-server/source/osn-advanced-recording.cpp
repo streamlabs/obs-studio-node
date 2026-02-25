@@ -366,7 +366,7 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 		//}
 		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", newSettings, nullptr);
 		osn::VideoEncoder::Manager::GetInstance().allocate(recording->videoEncoder);
-	}else {
+	} else {
 		//TODO validate streaming encoder is valid for recording or wait until start? don't know if streaming is even set yet here and unsure how often this will be called so just check in SetVideoEncoder and Start
 		//if (recording->streaming) {
 		//	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->streaming->videoEncoder), recording->fileFormat, false)) {
