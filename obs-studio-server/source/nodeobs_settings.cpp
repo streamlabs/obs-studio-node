@@ -944,7 +944,6 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 	return true;
 }
 
-
 void OBS_settings::getAvailableAudioEncoders(std::vector<std::pair<std::string, ipc::value>> *encoders, bool simple, bool recording,
 					     const std::string &container)
 {
@@ -1084,8 +1083,7 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			preset.push_back({"Quality", ipc::value("quality")});
 			entries.push_back(preset);
 			defaultPreset = "balanced";
-		}
-		else if (presetName == PRESET_NVENC) {
+		} else if (presetName == PRESET_NVENC) {
 			preset = createSettingEntry(PRESET_NVENC, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 
 			obs_properties_t *props = obs_get_encoder_properties(ADVANCED_ENCODER_NVENC);
@@ -1102,8 +1100,7 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 
 			defaultPreset = "p5";
 			entries.push_back(preset);
-		}
-		else if (presetName == PRESET_AMD) {
+		} else if (presetName == PRESET_AMD) {
 			preset = createSettingEntry(PRESET_AMD, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 			preset.push_back({"Speed", ipc::value("speed")});
 			preset.push_back({"Balanced", ipc::value("balanced")});
@@ -1117,9 +1114,7 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 			preset.push_back({"main", ipc::value("main")});
 			preset.push_back({"high", ipc::value("high")});
 			entries.push_back(preset);
-		}
-		else if (presetName == DEFAULT_PRESET)
-			{
+		} else if (presetName == DEFAULT_PRESET) {
 			preset = createSettingEntry(DEFAULT_PRESET, "OBS_PROPERTY_LIST", "Encoder Preset (higher = less CPU)", "OBS_COMBO_FORMAT_STRING");
 			preset.push_back({"ultrafast", ipc::value("ultrafast")});
 			preset.push_back({"superfast", ipc::value("superfast")});
@@ -2789,9 +2784,9 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 	if (newEncoderType) {
 		//this is called immediately on encoder change so no other settings have been changed - start with defaults
 		encoderSettings = obs_encoder_defaults(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
-		
-		//this defaults to obs_x264 so create the correct encoder with default settings - getSettings called immediately after and will update it correctly but 
-		//do it right here just in case 
+
+		//this defaults to obs_x264 so create the correct encoder with default settings - getSettings called immediately after and will update it correctly but
+		//do it right here just in case
 		//OBS_service::createDefaultSimpleVideoRecordingEncoder();
 		const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
 		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, true, curEncoder);

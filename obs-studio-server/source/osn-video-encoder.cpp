@@ -52,11 +52,11 @@ void osn::VideoEncoder::Create(void *data, const int64_t id, const std::vector<i
 
 	//for simple need to get internal name
 	//TODO do we need to check low CPU here before we convert?
-	std::string convertedEncoderId = encoderId; 
+	std::string convertedEncoderId = encoderId;
 	const char *mode = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode"));
 	if (strcmp(mode, "Simple") == 0) {
 		convertedEncoderId = osn::EncoderUtils::getInternalEncoderFromSimple(encoderId.c_str());
-	}	
+	}
 
 	obs_encoder_t *encoder = obs_video_encoder_create(convertedEncoderId.c_str(), name.c_str(), settings, nullptr);
 	obs_data_release(settings);

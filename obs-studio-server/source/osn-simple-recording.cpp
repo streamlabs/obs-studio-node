@@ -633,7 +633,7 @@ void osn::ISimpleRecording::SetLegacySettings(void *data, const int64_t id, cons
 		std::string encId = osn::EncoderUtils::getSimpleEncoderFromInternal(encIdOBS);
 		if ((encId == SIMPLE_ENCODER_X264) == 0 && recording->lowCPU) {
 			encId = SIMPLE_ENCODER_X264_LOWCPU;
-		} 
+		}
 		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", encId.c_str());
 	} else {
 		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", "");
