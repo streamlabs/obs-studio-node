@@ -42,6 +42,8 @@
 #include <unordered_set>
 #include <unordered_map>
 
+bool isConfiguredStreamingEncoderValid(StreamServiceId serviceId);
+
 std::vector<const char *> tabStreamTypes;
 const char *currentServiceName;
 std::vector<SubCategory> currentAudioSettings;
@@ -993,33 +995,18 @@ static const char *translate_macvth264_encoder(std::string encoder)
 
 void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	const char *mode = NULL;
-	const char *curEncoder = NULL;
 	bool validEncoder = false;
-	bool simpleMode = false;
+	StreamServiceId serviceId = StreamServiceId::Main;
 	std::string serviceToCheck = args[0].value_str;
 
-	//get mode and configured encoder
-	mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
-	if (mode == NULL) {
-		mode = "Simple";
-	}
-	simpleMode = (strcmp(mode, "Simple") == 0);
+	if (serviceToCheck.compare("Both") == 0)
+		serviceId = StreamServiceId::Both;
+	else if (serviceToCheck.compare("Main") == 0)
+		serviceId = StreamServiceId::Main;
+	else if (serviceToCheck.compare("Second") == 0)
+		serviceId = StreamServiceId::Second;
 
-	if (!simpleMode) {
-		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
-	} else {
-		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamingEncoder");
-	}
-
-	if (serviceToCheck == "Both") {
-		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Main), curEncoder, simpleMode) &&
-			       osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Second), curEncoder, simpleMode);
-	} else if (serviceToCheck == "Stream") {
-		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Main), curEncoder, simpleMode);
-	} else if (serviceToCheck == "StreamSecond") {
-		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Second), curEncoder, simpleMode);
-	}
+	validEncoder = isConfiguredStreamingEncoderValid(serviceId);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(validEncoder));
@@ -2785,9 +2772,6 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 		//this is called immediately on encoder change so no other settings have been changed - start with defaults
 		encoderSettings = obs_encoder_defaults(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
 
-		//this defaults to obs_x264 so create the correct encoder with default settings - getSettings called immediately after and will update it correctly but
-		//do it right here just in case
-		//OBS_service::createDefaultSimpleVideoRecordingEncoder();
 		const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
 		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, true, curEncoder);
 		obs_encoder_t *recordingEncoder = obs_video_encoder_create(curEncoder, recEncoderName.c_str(), encoderSettings, nullptr);

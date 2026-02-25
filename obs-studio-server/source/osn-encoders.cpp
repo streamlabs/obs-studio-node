@@ -28,6 +28,59 @@ static bool containerSupportsCodec(const std::string &container, const std::stri
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
 
+const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEncoderOptions = {
+	// Software x264
+	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, "", true, true, false, false, true, false,
+	 DEFAULT_PRESET, FAMILY_OBS},
+	// Software x264 low CPU (only for recording)
+	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, "", true, false, false, false,
+	 true, false, DEFAULT_PRESET, FAMILY_OBS},
+	// QuickSync H.264 (v1, deprecated)
+	// This line left here for reference
+	// {"QuickSync H.264 (v1 deprecated)", ADVANCED_ENCODER_QSV, "(Deprecated v1) Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, ADVANCED_ENCODER_QSV, true, true, true, false, true, false},
+	// QuickSync H.264 (v2, new)
+	{"QuickSync H.264", ADVANCED_ENCODER_QSV_V2, "Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, ADVANCED_ENCODER_QSV_V2, "", true, true, true, false, true,
+	 false, PRESET_QSV, FAMILY_QSV},
+	// QuickSync AV1
+	{"QuickSync AV1", ADVANCED_ENCODER_QSV_AV1, "Hardware (QSV, AV1)", SIMPLE_ENCODER_QSV_AV1, ADVANCED_ENCODER_QSV_AV1, "", true, true, true, true, true,
+	 false, PRESET_QSV, FAMILY_QSV},
+	// QuickSync HEVC
+	{"QuickSync HEVC", ADVANCED_ENCODER_QSV_HEVC, "", "", "", "", true, true, true, false, true, false, PRESET_QSV, FAMILY_QSV},
+	// NVIDIA NVENC H.264
+	{"NVIDIA NVENC H.264", ADVANCED_ENCODER_NVENC, "NVIDIA NVENC H.264", SIMPLE_ENCODER_NVENC, ENCODER_NVENC_H264_TEX, ADVANCED_ENCODER_NVENC, true, true,
+	 true, false, true, true, PRESET_NVENC, FAMILY_NVENC},
+	// NVIDIA NVENC H.264 (new)
+	{"NVIDIA NVENC H.264 (new)", ENCODER_NVENC_H264_TEX, "NVIDIA NVENC H.264 (new)", ENCODER_NVENC_H264_TEX, "", "", true, true, true, false, true, false,
+	 PRESET_NVENC, FAMILY_NVENC},
+	// NVIDIA NVENC HEVC
+	{"NVIDIA NVENC HEVC", ENCODER_NVENC_HEVC_TEX, "Hardware (NVENC, HEVC)", SIMPLE_ENCODER_NVENC_HEVC, ENCODER_NVENC_HEVC_TEX, ADVANCED_ENCODER_NVENC_HEVC,
+	 true, true, true, true, true, false, DEFAULT_PRESET, FAMILY_NVENC_HEVC},
+	// NVIDIA NVENC AV1
+	{"NVIDIA NVENC AV1", ENCODER_NVENC_AV1_TEX, "NVIDIA NVENC AV1", ENCODER_NVENC_AV1_TEX, "", "", true, true, true, true, true, false, PRESET_NVENC,
+	 FAMILY_NVENC},
+	// Apple VT H264 Hardware Encoder
+	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER, "Hardware (Apple, H.264)", APPLE_HARDWARE_VIDEO_ENCODER, "", "", true, true, true,
+	 false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	// Apple VT H264 Hardware Encoder - get_simple_output_encoder RETURNED M1 FOR SIMPLE_ENCODER_APPLE_H264 SO MAKE THAT THE SIMPLE NAME AND M1 INTERNAL NAME
+	{"Apple VT H264 Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_M1, "Hardware (Apple, H.264)", SIMPLE_ENCODER_APPLE_H264,
+	 APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	// get_simple_output_encoder had Apple HEVC so add it here, never used with an advanced name but follow the pattern of M1 above
+	{"Apple VT HEVC Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "Hardware (Apple, HEVC)", SIMPLE_ENCODER_APPLE_HEVC,
+	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	// AMD HW H.264
+	{"AMD HW H.264", ADVANCED_ENCODER_AMD, "Hardware (AMD, H.264)", SIMPLE_ENCODER_AMD, ADVANCED_ENCODER_AMD, "", true, true, true, false, true, false,
+	 PRESET_AMD, FAMILY_AMD},
+	// AMD HW H.265 (HEVC)
+	{"AMD HW H.265 (HEVC)", ADVANCED_ENCODER_AMD_HEVC, "Hardware (AMD, HEVC)", SIMPLE_ENCODER_AMD_HEVC, ADVANCED_ENCODER_AMD_HEVC, "", true, true, true,
+	 true, true, false, PRESET_AMD, FAMILY_AMD},
+	// AMD HW AV1
+	{"AMD HW AV1", SIMPLE_ENCODER_AMD_AV1, "Hardware (AMD, AV1)", SIMPLE_ENCODER_AMD_AV1, ADVANCED_ENCODER_AMD_AV1, "", true, true, true, true, true, false,
+	 PRESET_AMD, FAMILY_AMD},
+	// AOM AV1
+	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", "", true, true, true, true, true, false, DEFAULT_PRESET, FAMILY_FFMPEG},
+	// SVT-AV1
+	{"SVT-AV1", ENCODER_AV1_SVT_FFMPEG, "", "", "", "", true, true, true, true, true, false, DEFAULT_PRESET, FAMILY_FFMPEG}};
+
 bool osn::EncoderUtils::isEncoderRegistered(const std::string &encoder)
 {
 	const char *val;
@@ -106,9 +159,13 @@ bool osn::EncoderUtils::isEncoderCompatibleStreaming(obs_service_t *service, con
 
 	//find the encoder in the set and then check compatibility
 	for (int i = 0; i < videoEncoderOptions.size(); i++) {
-		curEncoder = simpleMode ? videoEncoderOptions[i].getSimpleName() : videoEncoderOptions[i].advanced_name;
+		//simple mode: search by simple_name because that is what is in basic.ini
+		curEncoder = simpleMode ? videoEncoderOptions[i].simple_name : videoEncoderOptions[i].advanced_name;
 		if (curEncoder.compare(encoderToFind) == 0) {
-			if (isEncoderCompatible(encoderToFind, service, simpleMode, false, "", i)) {
+			//simple mode: found simple name, get internal name to check compatibility
+			if (simpleMode)
+				curEncoder = videoEncoderOptions[i].getSimpleName();
+			if (isEncoderCompatible(curEncoder, service, simpleMode, false, "", i)) {
 				validEncoder = true;
 			}
 			break;
@@ -126,9 +183,13 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 
 	//find the encoder in the set and then check compatibility
 	for (int i = 0; i < videoEncoderOptions.size(); i++) {
-		curEncoder = simpleMode ? videoEncoderOptions[i].getSimpleName() : videoEncoderOptions[i].advanced_name;
+		//search by simple_name to check settings because that is what is in basic.ini and because multiple encoders may have same internal_simple_name
+		curEncoder = simpleMode ? videoEncoderOptions[i].simple_name : videoEncoderOptions[i].advanced_name;
 		if (curEncoder.compare(encoderToFind) == 0) {
-			if (isEncoderCompatible(encoderToFind, NULL, simpleMode, true, "", i)) {
+			//simple mode: found simple name, get internal name to check compatibility
+			if (simpleMode)
+				curEncoder = videoEncoderOptions[i].getSimpleName();
+			if (isEncoderCompatible(curEncoder, NULL, simpleMode, true, container, i)) {
 				validEncoder = true;
 			}
 			break;
@@ -179,12 +240,12 @@ std::string osn::EncoderUtils::getInternalEncoderFromSimple(const char *encoder)
 
 std::string osn::EncoderUtils::getSimpleEncoderFromInternal(const char *encoder)
 {
-	//this defaults to advanced b/c that's how it's done in osn-simple-streaming where this is used....WHY
+	//this defaults to advanced b/c that's how it's done in osn-simple-streaming where this is used
 	std::string encoderName = ADVANCED_ENCODER_X264;
 	bool found = false;
 
 	for (const auto curEnc : videoEncoderOptions) {
-		if (encoder == curEnc.simple_internal_name) {
+		if ((encoder == curEnc.simple_internal_name) || (!curEnc.backup.empty() && encoder == curEnc.backup)) {
 			encoderName = curEnc.simple_name;
 			found = true;
 			break;

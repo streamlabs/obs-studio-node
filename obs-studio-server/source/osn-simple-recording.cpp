@@ -317,7 +317,6 @@ void osn::SimpleRecording::UpdateEncoders()
 		videoEncoder = streaming->videoEncoder;
 		audioEncoder = streaming->audioEncoder;
 		if (obs_get_multiple_rendering()) {
-			//TODO this doesn't register with the manager, should it?
 			videoEncoder = osn::IRecording::duplicate_encoder(videoEncoder);
 		}
 		break;
@@ -366,13 +365,21 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	} else {
 		recording->UpdateEncoders();
 
-		//TODO - does update not create an encoder if not using streaming and it doesn't exist? should it?
-
 		if (!recording->videoEncoder) {
 			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 		}
 
-		if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, true)) {
+		//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+		const char *encID = "";
+		const char *quality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
+		if (strcmp(quality, "Stream") == 0)
+			encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+		else
+			encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
+		if (!osn::EncoderUtils::isEncoderCompatibleRecording(encID, recording->format, true)) {
+			//update config recording format = mkv because it supports all encoder types
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 			PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 		}
 
@@ -410,6 +417,8 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
+
+	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
 	recording->startOutput();
 
@@ -467,15 +476,10 @@ obs_encoder_t *osn::ISimpleRecording::CreateLegacyVideoEncoder()
 	std::string simpleQuality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
 
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
-	//TODO do we need to check low CPU here before we convert?
 	std::string encIdOBS = osn::EncoderUtils::getInternalEncoderFromSimple(encId);
 
-	//don't create the encoder if using the streaming encoder
-	if (simpleQuality.compare("Stream") != 0) {
-		//TODO should there be a descriptive name? why aren't we using settings?
-		videoEncoder = obs_video_encoder_create(encIdOBS.c_str(), "video-encoder", nullptr, nullptr);
-		osn::VideoEncoder::Manager::GetInstance().allocate(videoEncoder);
-	}
+	videoEncoder = obs_video_encoder_create(encIdOBS.c_str(), "video-encoder", nullptr, nullptr);
+	osn::VideoEncoder::Manager::GetInstance().allocate(videoEncoder);
 
 	return videoEncoder;
 }
@@ -524,10 +528,6 @@ void osn::ISimpleRecording::GetLegacySettings(void *data, const int64_t id, cons
 
 	if (recording->quality != RecQuality::Stream) {
 		recording->videoEncoder = CreateLegacyVideoEncoder();
-		//TODO do we want to check here and fail and not return the settings? or wait until start? unsure how often this will be called so just check in SetVideoEncoder and Start
-		//if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_name(recording->videoEncoder), recording->fileFormat, true)) {
-		//	PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
-		//}
 	}
 
 	recording->audioEncoder = CreateLegacyAudioEncoder();
@@ -631,7 +631,7 @@ void osn::ISimpleRecording::SetLegacySettings(void *data, const int64_t id, cons
 	if (recording->quality != RecQuality::Stream && recording->videoEncoder) {
 		const char *encIdOBS = obs_encoder_get_id(recording->videoEncoder);
 		std::string encId = osn::EncoderUtils::getSimpleEncoderFromInternal(encIdOBS);
-		if ((encId == SIMPLE_ENCODER_X264) == 0 && recording->lowCPU) {
+		if (encId == SIMPLE_ENCODER_X264 && recording->lowCPU) {
 			encId = SIMPLE_ENCODER_X264_LOWCPU;
 		}
 		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", encId.c_str());

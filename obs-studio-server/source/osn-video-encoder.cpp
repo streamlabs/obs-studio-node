@@ -51,7 +51,6 @@ void osn::VideoEncoder::Create(void *data, const int64_t id, const std::vector<i
 	obs_data_t *settings = obs_data_create_from_json(settingsJson.c_str());
 
 	//for simple need to get internal name
-	//TODO do we need to check low CPU here before we convert?
 	std::string convertedEncoderId = encoderId;
 	const char *mode = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode"));
 	if (strcmp(mode, "Simple") == 0) {

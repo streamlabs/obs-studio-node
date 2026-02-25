@@ -21,6 +21,7 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
+#include "osn-encoders.hpp"
 
 void osn::ISimpleReplayBuffer::Register(ipc::server &srv)
 {
@@ -126,6 +127,20 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
+	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+	const char *encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
+	bool replayBufferUsesStream = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "replayBufferUseStreamOutput");
+	const char *quality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
+	//update to stream encoder if user selected to use stream encoder, or if using recording encoder and it uses stream
+	if (replayBufferUsesStream || (!replayBufferUsesStream && strcmp(quality, "Stream") == 0))
+		encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(encID, replayBuffer->recording->format, true)) {
+		//update config recording format = mkv because it supports all encoder types
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for replay buffer.");
+	}
+
 	obs_output_set_video_encoder(replayBuffer->output, videoEncoder);
 
 	if (!replayBuffer->path.size()) {
@@ -159,6 +174,8 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 	obs_data_set_int(settings, "max_size_mb", rbSize);
 	obs_output_update(replayBuffer->output, settings);
 	obs_data_release(settings);
+
+	blog(LOG_INFO, "Start Replay Buffer using %s encoder.", obs_encoder_get_id(videoEncoder));
 
 	replayBuffer->startOutput();
 
