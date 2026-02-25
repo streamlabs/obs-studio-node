@@ -128,7 +128,7 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 	for (int i = 0; i < videoEncoderOptions.size(); i++) {
 		curEncoder = simpleMode ? videoEncoderOptions[i].getSimpleName() : videoEncoderOptions[i].advanced_name;
 		if (curEncoder.compare(encoderToFind) == 0) {
-			if (isEncoderCompatible(encoderToFind, NULL, simpleMode, true, "", i)) {
+			if (isEncoderCompatible(encoderToFind, NULL, simpleMode, true, container, i)) {
 				validEncoder = true;
 			}
 			break;
