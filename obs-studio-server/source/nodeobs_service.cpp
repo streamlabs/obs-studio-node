@@ -2147,7 +2147,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 					presetType = PRESET_NVENC_DEP;
 					preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str());
 					if (preset != NULL) {
-						//convert the old preset to new 
+						//convert the old preset to new
 						const char *oldValue = preset;
 						preset = osn::EncoderUtils::convertNvencSimplePreset(oldValue);
 						blog(LOG_INFO, "NVENC preset converted from %s to %s", oldValue, preset);
