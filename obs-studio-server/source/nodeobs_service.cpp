@@ -2015,10 +2015,21 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 			//TODO do we need to check low CPU here before we convert?
 			encoderID = osn::EncoderUtils::getInternalEncoderFromSimple(encoder);
 
-			//TODO - do we need to handle PresetNvenc/2 here?
-
-			if (!presetType.empty())
+			if (!presetType.empty()) {
 				preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str());
+				//if this calls fails and preset type is NVENC, use legacy NVENC preset for backward compatibility 
+				if (preset == NULL && presetType == PRESET_NVENC) {
+					presetType = PRESET_NVENC_DEP;
+					preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str());
+					if (preset != NULL) {
+						//convert the old preset to new 
+						const char *oldValue = preset;
+						preset = osn::EncoderUtils::convertNvencSimplePreset(oldValue);
+						blog(LOG_INFO, "NVENC preset converted from %s to %s", oldValue, preset);
+					}
+				}
+			}
+
 
 			// Here and in other places we repeat the same pattern.
 			// Avoiding case when to an output there might not be any attached video encoder which can lead to crash.

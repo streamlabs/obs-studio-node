@@ -278,7 +278,6 @@ void osn::SimpleStreaming::UpdateEncoders()
 	int aBitrate = static_cast<int>(obs_data_get_int(audioEncSettings, "bitrate"));
 
 	std::string id = obs_encoder_get_id(videoEncoder);
-	//TODO why just AMD here?
 	if (id.compare(ADVANCED_ENCODER_AMD) == 0)
 		UpdateStreamingSettings_amd(videoEncSettings, vBitrate);
 
@@ -443,12 +442,10 @@ obs_encoder_t *osn::ISimpleStreaming::CreateLegacyVideoEncoder()
 	const char *preset = nullptr;
 
 	std::string presetType = osn::EncoderUtils::getEncoderPreset(encId);
-	//TODO do we need to check low CPU here before we convert?
 	std::string encIdOBS = osn::EncoderUtils::getInternalEncoderFromSimple(encId);
 
 	preset = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str()));
 
-	//TODO this conversion is from old API - is it needed? SetLegacySettings still used NVENCPreset instead of 2 but changed it - is this correct?
 	if (presetType == PRESET_NVENC) {
 		if (strlen(preset) == 0) {
 			const char *oldParamName = PRESET_NVENC_DEP;

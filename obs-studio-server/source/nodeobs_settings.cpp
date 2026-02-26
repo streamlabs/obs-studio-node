@@ -2785,9 +2785,6 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 		//this is called immediately on encoder change so no other settings have been changed - start with defaults
 		encoderSettings = obs_encoder_defaults(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
 
-		//this defaults to obs_x264 so create the correct encoder with default settings - getSettings called immediately after and will update it correctly but
-		//do it right here just in case
-		//OBS_service::createDefaultSimpleVideoRecordingEncoder();
 		const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
 		std::string recEncoderName = OBS_service::GetVideoEncoderName(StreamServiceId::Main, false, true, curEncoder);
 		obs_encoder_t *recordingEncoder = obs_video_encoder_create(curEncoder, recEncoderName.c_str(), encoderSettings, nullptr);
