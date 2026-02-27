@@ -150,11 +150,11 @@ obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t t
 
 	if (obs_encoder_get_type(src) == OBS_ENCODER_AUDIO) {
 		dst = obs_audio_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), trackIndex, nullptr);
-		//this allows shutdown code in nodeobs_api to release the object 
+		//this allows shutdown code in nodeobs_api to release the object
 		osn::AudioEncoder::Manager::GetInstance().allocate(dst);
 	} else if (obs_encoder_get_type(src) == OBS_ENCODER_VIDEO) {
 		dst = obs_video_encoder_create(obs_encoder_get_id(src), name.c_str(), obs_encoder_get_settings(src), nullptr);
-		//this allows shutdown code in nodeobs_api to release the object 
+		//this allows shutdown code in nodeobs_api to release the object
 		osn::VideoEncoder::Manager::GetInstance().allocate(dst);
 	}
 
