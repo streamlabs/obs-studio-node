@@ -365,7 +365,6 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 			osn::EncoderUtils::updateNvencPresets(existingVideoEncSettings, encId.c_str());
 			obs_data_apply(newSettings, existingVideoEncSettings);
 		}
-
 		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", newSettings, nullptr);
 		osn::VideoEncoder::Manager::GetInstance().allocate(recording->videoEncoder);
 	}
