@@ -828,7 +828,6 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 		encoderId = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
 	}
 
-	//TODO - does this cause issues because settings won't match?
 	if (encoderId == NULL || !osn::EncoderUtils::isEncoderRegistered(encoderId) || osn::EncoderUtils::isInvalidAppleEncoder(encoderId)) {
 		encoderId = ADVANCED_ENCODER_X264;
 	}
@@ -2012,7 +2011,6 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 
 		if (encoder != NULL) {
 			std::string presetType = osn::EncoderUtils::getEncoderPreset(encoder);
-			//TODO do we need to check low CPU here before we convert?
 			encoderID = osn::EncoderUtils::getInternalEncoderFromSimple(encoder);
 
 			if (!presetType.empty()) {

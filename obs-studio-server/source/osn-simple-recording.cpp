@@ -317,7 +317,6 @@ void osn::SimpleRecording::UpdateEncoders()
 		videoEncoder = streaming->videoEncoder;
 		audioEncoder = streaming->audioEncoder;
 		if (obs_get_multiple_rendering()) {
-			//TODO this doesn't register with the manager, should it?
 			videoEncoder = osn::IRecording::duplicate_encoder(videoEncoder);
 		}
 		break;
@@ -365,8 +364,6 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		pathProperty = "url";
 	} else {
 		recording->UpdateEncoders();
-
-		//TODO - does update not create an encoder if not using streaming and it doesn't exist? should it?
 
 		if (!recording->videoEncoder) {
 			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
@@ -467,15 +464,10 @@ obs_encoder_t *osn::ISimpleRecording::CreateLegacyVideoEncoder()
 	std::string simpleQuality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
 
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
-	//TODO do we need to check low CPU here before we convert?
 	std::string encIdOBS = osn::EncoderUtils::getInternalEncoderFromSimple(encId);
 
-	//don't create the encoder if using the streaming encoder
-	if (simpleQuality.compare("Stream") != 0) {
-		//TODO should there be a descriptive name? why aren't we using settings?
-		videoEncoder = obs_video_encoder_create(encIdOBS.c_str(), "video-encoder", nullptr, nullptr);
-		osn::VideoEncoder::Manager::GetInstance().allocate(videoEncoder);
-	}
+	videoEncoder = obs_video_encoder_create(encIdOBS.c_str(), "video-encoder", nullptr, nullptr);
+	osn::VideoEncoder::Manager::GetInstance().allocate(videoEncoder);
 
 	return videoEncoder;
 }
@@ -524,10 +516,6 @@ void osn::ISimpleRecording::GetLegacySettings(void *data, const int64_t id, cons
 
 	if (recording->quality != RecQuality::Stream) {
 		recording->videoEncoder = CreateLegacyVideoEncoder();
-		//TODO do we want to check here and fail and not return the settings? or wait until start? unsure how often this will be called so just check in SetVideoEncoder and Start
-		//if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_name(recording->videoEncoder), recording->fileFormat, true)) {
-		//	PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
-		//}
 	}
 
 	recording->audioEncoder = CreateLegacyAudioEncoder();

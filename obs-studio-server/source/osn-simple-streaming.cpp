@@ -432,6 +432,14 @@ obs_encoder_t *osn::ISimpleStreaming::CreateLegacyVideoEncoder()
 
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
 
+	//check for missing/bad encoder ID and reset to x264 if needed
+	if ((strlen(encId) == 0) || osn::EncoderUtils::isInvalidAppleEncoder(encId)) {
+		blog(LOG_WARNING, "Invalid or missing encoder ID in basic.ini, defaulting to x264.");
+		encId = SIMPLE_ENCODER_X264;
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", encId);
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+	}
+
 	obs_data_t *videoEncData = obs_data_create();
 	obs_data_set_string(videoEncData, "rate_control", "CBR");
 	obs_data_set_int(videoEncData, "bitrate", config_get_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate"));

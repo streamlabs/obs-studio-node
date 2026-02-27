@@ -28,7 +28,7 @@ static bool containerSupportsCodec(const std::string &container, const std::stri
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
 
-std::vector<osn::EncoderUtils::EncoderSettings> videoEncoderOptions = {
+const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEncoderOptions = {
 	// Software x264
 	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, "", true, true, false, false, true, false,
 	 DEFAULT_PRESET, FAMILY_OBS},
