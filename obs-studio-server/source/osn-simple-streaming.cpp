@@ -544,7 +544,6 @@ void osn::ISimpleStreaming::GetLegacySettings(void *data, const int64_t id, cons
 
 void osn::ISimpleStreaming::SetLegacyVideoEncoderSettings(obs_encoder_t *encoder)
 {
-	//const char *encId = nullptr;
 	const char *encIdOBS = obs_encoder_get_id(encoder);
 
 	obs_data_t *settings = obs_encoder_get_settings(encoder);
