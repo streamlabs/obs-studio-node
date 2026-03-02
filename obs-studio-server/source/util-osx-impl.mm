@@ -86,11 +86,11 @@ std::string UtilObjCInt::getDefaultVideoSavePath(void)
 
 void UtilObjCInt::runApplication(void)
 {
+	appRunning = true;
 	worker = new std::thread(&UtilObjCInt::wait_terminate, this);
 
 	@autoreleasepool {
 		NSApplication *app = [NSApplication sharedApplication];
-		appRunning = true;
 		[app run];
 	}
 }
