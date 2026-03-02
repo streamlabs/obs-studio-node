@@ -94,6 +94,10 @@ private:
 	static void HandleCrash(const std::string &crashInfo, bool callAbort = true) noexcept;
 	static void SaveBriefCrashInfoToFile();
 	static void UpdateBriefCrashInfo();
+#if defined(__APPLE__)
+	static void InstallSigActionHandler();
+	static void SignalActionHandler(int sig, siginfo_t *, void *);
+#endif
 };
 
 }; // namespace util
