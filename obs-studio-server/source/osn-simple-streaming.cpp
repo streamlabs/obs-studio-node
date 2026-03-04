@@ -398,6 +398,8 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	obs_output_update(streaming->output, settings);
 	obs_data_release(settings);
 
+	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
+
 	streaming->startOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));

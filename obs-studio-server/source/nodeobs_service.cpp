@@ -41,6 +41,8 @@
 #include "util-crashmanager.h"
 #include <optional>
 
+extern bool isConfiguredStreamingEncoderValid(StreamServiceId serviceId);
+
 std::string GetFormatExt(const std::string container);
 
 std::vector<obs_output_t *> streamingOutput = {nullptr, nullptr};
@@ -103,8 +105,6 @@ static std::optional<EnhancedBroadcastOutputObjects> enhancedBroadcastContext;
 
 OBS_service::OBS_service() {}
 OBS_service::~OBS_service() {}
-
-extern bool EncoderAvailable(const std::string &encoder);
 
 static void logVCamChanged(const VCamConfig &config, bool starting)
 {
@@ -1340,6 +1340,9 @@ bool OBS_service::startSingleTrackStreaming(StreamServiceId serviceId)
 
 	setupVodTrack(isSimpleMode);
 
+	blog(LOG_INFO, "Start Streaming for service %s using %s encoder.", serviceId == StreamServiceId::Main ? "Main" : "Second",
+	     obs_encoder_get_id(videoStreamingEncoder[serviceId]));
+
 	outdated_driver_error::instance()->set_active(true);
 	isStreaming[serviceId] = obs_output_start(streamingOutput[serviceId]);
 	outdated_driver_error::instance()->set_active(false);
@@ -1446,6 +1449,15 @@ bool OBS_service::startStreaming(StreamServiceId serviceId, bool dualStreamingMo
 		obs_output_release(streamingOutput[serviceId]);
 		streamingOutput[serviceId] = nullptr;
 	}
+
+	StreamServiceId checkServiceId = serviceId;
+	if (dualStreamingMode)
+		checkServiceId = StreamServiceId::Both;
+	if (!isConfiguredStreamingEncoderValid(checkServiceId)) {
+		blog(LOG_ERROR, "The selected Streaming Encoder is not compatible with the current service. Please update these settings.");
+		return false;
+	}
+
 
 	try {
 		if (isTwitchStream(serviceId) && (IsMultitrackVideoEnabled() || dualStreamingMode)) {
@@ -1559,6 +1571,9 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 
 	const char *quality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
 	const char *encoder = config_get_string(ConfigManager::getInstance().getBasic(), section, "RecEncoder");
+	std::string internalID = encoder; 
+	if (isSimpleMode)
+		internalID = osn::EncoderUtils::getInternalEncoderFromSimple(encoder);
 
 	videoEncoder = encoder;
 	videoQuality = quality;
@@ -1568,7 +1583,7 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 		lowCPUx264 = false;
 		if (strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU) == 0)
 			lowCPUx264 = true;
-		LoadRecordingPreset_Lossy((osn::EncoderUtils::getInternalEncoderFromSimple(encoder)).c_str());
+		LoadRecordingPreset_Lossy(internalID.c_str());
 		usingRecordingPreset = true;
 		updateVideoRecordingEncoderSettings();
 	} else {
@@ -1593,6 +1608,80 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 	} else {
 		obs_encoder_set_video_mix(videoRecordingEncoder, obs_video_mix_get(0, OBS_MAIN_VIDEO_RENDERING));
 	}
+}
+
+bool isConfiguredStreamingEncoderValid(StreamServiceId serviceId)
+{
+	const char *mode = NULL;
+	const char *curEncoder = NULL;
+	bool validEncoder = false;
+	bool simpleMode = false;
+
+	//get mode and configured encoder
+	mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+	if (mode == nullptr) {
+		mode = "Simple";
+	}
+	simpleMode = (strcmp(mode, "Simple") == 0);
+
+	if (!simpleMode) {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
+	} else {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
+	}
+
+	if (serviceId == StreamServiceId::Both) {
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Main), curEncoder, simpleMode) &&
+			       osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Second), curEncoder, simpleMode);
+	} else {
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(serviceId), curEncoder, simpleMode);
+	}
+
+	return validEncoder;
+}
+
+bool isConfiguredRecordingEncoderValid(bool checkReplayBuffer)
+{
+	const char *encoder = nullptr;
+	const std::string simpleQuality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
+	const std::string advancedRecEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
+	const std::string currentOutputMode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+	bool isSimpleMode = currentOutputMode.compare("Simple") == 0;
+	const char *section = isSimpleMode ? "SimpleOutput" : "AdvOut";
+	bool replayBufferUsesStream = config_get_bool(ConfigManager::getInstance().getBasic(), section, "replayBufferUseStreamOutput");
+	bool simpleUsesStream = false;
+	bool advancedUsesStream = false;
+
+	if (isSimpleMode && simpleQuality.compare("Lossless") == 0) {
+		//lossless recording doesn't use encoder/format settings
+		return true;
+	}
+
+	if (!IsMultitrackVideoEnabled()) {
+		simpleUsesStream = isSimpleMode && simpleQuality.compare("Stream") == 0;
+		advancedUsesStream = !isSimpleMode && (advancedRecEncoder.compare("") == 0 || advancedRecEncoder.compare("none") == 0);
+		//if checking replay buffer, check use stream OR use recording and recording uses stream
+		if (checkReplayBuffer) {
+			if (isSimpleMode)
+				simpleUsesStream |= replayBufferUsesStream;
+			else
+				advancedUsesStream |= replayBufferUsesStream;
+		}
+	}
+
+	//check encoder for recording compatibility with the configured recording format
+	char *field = "RecEncoder";
+	if (advancedUsesStream)
+		field = "Encoder";
+	else if (simpleUsesStream)
+		field = "StreamEncoder";
+	encoder = config_get_string(ConfigManager::getInstance().getBasic(), section, field);
+	std::string container = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), section, "RecFormat"));
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(encoder, container, isSimpleMode)) {
+		blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'.", encoder, container.c_str());
+		return false;
+	}
+	return true;
 }
 
 bool OBS_service::updateRecordingEncoders(bool isSimpleMode, StreamServiceId serviceId)
@@ -1651,6 +1740,29 @@ bool OBS_service::updateRecordingEncoders(bool isSimpleMode, StreamServiceId ser
 
 bool OBS_service::startRecording(void)
 {
+	//check encoder for recording compatibility with the configured recording format 
+	if (!isConfiguredRecordingEncoderValid(false)) {
+		//update config recording format = mkv because it supports all encoder types
+		const char *mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+		if (mode == nullptr) {
+			mode = "Simple";
+		}
+		if (strcmp(mode, "Simple") == 0) {
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		} else {
+			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		}
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+
+		//set failure info
+		SignalInfo signal = SignalInfo("recording", "stop");
+		signal.setErrorMessage("The selected Recording Encoder is not compatible with the selected Recording Format. Please update these settings.");
+		std::unique_lock<std::mutex> ulock(signalMutex);
+		signal.setCode(OBS_OUTPUT_ERROR);
+		outputSignal.push(signal);
+		return false;
+	}
+
 	if (recordingOutput)
 		obs_output_release(recordingOutput);
 
@@ -1687,6 +1799,9 @@ bool OBS_service::startRecording(void)
 			}
 		}
 	}
+
+	blog(LOG_INFO, "Start Recording using %s encoder.",
+	     useStreamEncoder ? obs_encoder_get_id(videoStreamingEncoder[0]) : obs_encoder_get_id(videoRecordingEncoder));
 
 	outdated_driver_error::instance()->set_active(true);
 	isRecording = obs_output_start(recordingOutput);
@@ -1832,6 +1947,31 @@ void OBS_service::updateReplayBufferOutput(bool isSimpleMode, bool useStreamEnco
 
 bool OBS_service::startReplayBuffer(void)
 {
+	//check encoder for recording compatibility with the configured recording format before starting recording
+	if (!isConfiguredRecordingEncoderValid(true)) {
+		//update config recording format = mkv because it supports all encoder types
+		const char *mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+		if (mode == nullptr) {
+			mode = "Simple";
+		}
+		if (strcmp(mode, "Simple") == 0) {
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		} else {
+			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		}
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+
+		SignalInfo signal = SignalInfo("replay-buffer", "stop");
+		isReplayBufferActive = false;
+		rpUsesRec = false;
+		rpUsesStream = false;
+		signal.setErrorMessage("The selected Replay Buffer settings are not compatible with the Recording Format. Please update these settings.");
+		std::unique_lock<std::mutex> ulock(signalMutex);
+		signal.setCode(OBS_OUTPUT_ERROR);
+		outputSignal.push(signal);
+		return false;
+	}
+
 	if (replayBufferOutput)
 		obs_output_release(replayBufferOutput);
 
@@ -1875,6 +2015,9 @@ bool OBS_service::startReplayBuffer(void)
 			}
 		}
 	}
+
+	blog(LOG_INFO, "Start Replay Buffer using %s encoder.",
+	     useStreamEncoder ? obs_encoder_get_id(videoStreamingEncoder[0]) : obs_encoder_get_id(videoRecordingEncoder));
 
 	outdated_driver_error::instance()->set_active(true);
 	bool result = obs_output_start(replayBufferOutput);
@@ -2279,6 +2422,8 @@ void OBS_service::LoadRecordingPreset_Lossless()
 
 	obs_output_set_mixers(recordingOutput, 1);
 	obs_output_update(recordingOutput, settings);
+
+	blog(LOG_INFO, "Created FFmpeg output for simple lossless recording.");
 
 	obs_data_release(settings);
 }

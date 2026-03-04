@@ -42,7 +42,8 @@ const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEn
 	{"QuickSync H.264", ADVANCED_ENCODER_QSV_V2, "Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, ADVANCED_ENCODER_QSV_V2, "", true, true, true, false, true,
 	 false, PRESET_QSV, FAMILY_QSV},
 	// QuickSync AV1
-	{"QuickSync AV1", ADVANCED_ENCODER_QSV_AV1, "Hardware (QSV, AV1)", SIMPLE_ENCODER_QSV_AV1, ADVANCED_ENCODER_QSV_AV1, "", true, true, true, false, true,
+	{"QuickSync AV1", ADVANCED_ENCODER_QSV_AV1, "Hardware (QSV, AV1)", SIMPLE_ENCODER_QSV_AV1, ADVANCED_ENCODER_QSV_AV1, "", true, true, true,
+	 true, true,
 	 false, PRESET_QSV, FAMILY_QSV},
 	// QuickSync HEVC
 	{"QuickSync HEVC", ADVANCED_ENCODER_QSV_HEVC, "", "", "", "", true, true, true, false, true, false, PRESET_QSV, FAMILY_QSV},
@@ -77,9 +78,9 @@ const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEn
 	{"AMD HW AV1", SIMPLE_ENCODER_AMD_AV1, "Hardware (AMD, AV1)", SIMPLE_ENCODER_AMD_AV1, ADVANCED_ENCODER_AMD_AV1, "", true, true, true, true, true, false,
 	 PRESET_AMD, FAMILY_AMD},
 	// AOM AV1
-	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", "", true, true, true, false, true, false, DEFAULT_PRESET, FAMILY_FFMPEG},
+	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", "", true, true, true, true, true, false, DEFAULT_PRESET, FAMILY_FFMPEG},
 	// SVT-AV1
-	{"SVT-AV1", ENCODER_AV1_SVT_FFMPEG, "", "", "", "", true, true, true, false, true, false, DEFAULT_PRESET, FAMILY_FFMPEG}};
+	{"SVT-AV1", ENCODER_AV1_SVT_FFMPEG, "", "", "", "", true, true, true, true, true, false, DEFAULT_PRESET, FAMILY_FFMPEG}};
 
 bool osn::EncoderUtils::isEncoderRegistered(const std::string &encoder)
 {
@@ -159,9 +160,13 @@ bool osn::EncoderUtils::isEncoderCompatibleStreaming(obs_service_t *service, con
 
 	//find the encoder in the set and then check compatibility
 	for (int i = 0; i < videoEncoderOptions.size(); i++) {
-		curEncoder = simpleMode ? videoEncoderOptions[i].getSimpleName() : videoEncoderOptions[i].advanced_name;
+		//simple mode: search by simple_name because that is what is in basic.ini
+		curEncoder = simpleMode ? videoEncoderOptions[i].simple_name : videoEncoderOptions[i].advanced_name;
 		if (curEncoder.compare(encoderToFind) == 0) {
-			if (isEncoderCompatible(encoderToFind, service, simpleMode, false, "", i)) {
+			//simple mode: found simple name, get internal name to check compatibility
+			if (simpleMode)
+				curEncoder = videoEncoderOptions[i].getSimpleName();
+			if (isEncoderCompatible(curEncoder, service, simpleMode, false, "", i)) {
 				validEncoder = true;
 			}
 			break;
@@ -179,8 +184,12 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 
 	//find the encoder in the set and then check compatibility
 	for (int i = 0; i < videoEncoderOptions.size(); i++) {
-		curEncoder = simpleMode ? videoEncoderOptions[i].getSimpleName() : videoEncoderOptions[i].advanced_name;
+		//search by simple_name to check settings because that is what is in basic.ini and because multiple encoders may have same internal_simple_name 
+		curEncoder = simpleMode ? videoEncoderOptions[i].simple_name : videoEncoderOptions[i].advanced_name;
 		if (curEncoder.compare(encoderToFind) == 0) {
+			//simple mode: found simple name, get internal name to check compatibility
+			if (simpleMode)
+				curEncoder = videoEncoderOptions[i].getSimpleName();
 			if (isEncoderCompatible(encoderToFind, NULL, simpleMode, true, container, i)) {
 				validEncoder = true;
 			}

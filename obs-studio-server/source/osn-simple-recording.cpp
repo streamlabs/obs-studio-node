@@ -370,6 +370,9 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		}
 
 		if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, true)) {
+			//update config recording format = mkv because it supports all encoder types
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 			PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 		}
 
@@ -407,6 +410,8 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
+
+	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
 	recording->startOutput();
 

@@ -21,6 +21,7 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
+#include "osn-encoders.hpp"
 
 void osn::ISimpleReplayBuffer::Register(ipc::server &srv)
 {
@@ -126,6 +127,13 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(videoEncoder), replayBuffer->recording->format, true)) {
+		//update config recording format = mkv because it supports all encoder types
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for replay buffer.");
+	}
+
 	obs_output_set_video_encoder(replayBuffer->output, videoEncoder);
 
 	if (!replayBuffer->path.size()) {
@@ -159,6 +167,8 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 	obs_data_set_int(settings, "max_size_mb", rbSize);
 	obs_output_update(replayBuffer->output, settings);
 	obs_data_release(settings);
+
+	blog(LOG_INFO, "Start Replay Buffer using %s encoder.", obs_encoder_get_id(videoEncoder));
 
 	replayBuffer->startOutput();
 
