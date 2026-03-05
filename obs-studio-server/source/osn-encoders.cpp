@@ -42,8 +42,7 @@ const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEn
 	{"QuickSync H.264", ADVANCED_ENCODER_QSV_V2, "Hardware (QSV, H.264)", SIMPLE_ENCODER_QSV, ADVANCED_ENCODER_QSV_V2, "", true, true, true, false, true,
 	 false, PRESET_QSV, FAMILY_QSV},
 	// QuickSync AV1
-	{"QuickSync AV1", ADVANCED_ENCODER_QSV_AV1, "Hardware (QSV, AV1)", SIMPLE_ENCODER_QSV_AV1, ADVANCED_ENCODER_QSV_AV1, "", true, true, true,
-	 true, true,
+	{"QuickSync AV1", ADVANCED_ENCODER_QSV_AV1, "Hardware (QSV, AV1)", SIMPLE_ENCODER_QSV_AV1, ADVANCED_ENCODER_QSV_AV1, "", true, true, true, true, true,
 	 false, PRESET_QSV, FAMILY_QSV},
 	// QuickSync HEVC
 	{"QuickSync HEVC", ADVANCED_ENCODER_QSV_HEVC, "", "", "", "", true, true, true, false, true, false, PRESET_QSV, FAMILY_QSV},
