@@ -3283,11 +3283,8 @@ bool OutputIsBusy(obs_output_t *output, bool includeReconnect = false)
 void WaitForAllOutputsToStop()
 {
 	// At the moment, we assume that all outputs stop eventually, so there is no deadline timeout.
-	while (OutputIsBusy(streamingOutput[StreamServiceId::Main], true) ||
-	       OutputIsBusy(streamingOutput[StreamServiceId::Second], true) ||
-		   OutputIsBusy(recordingOutput) ||
-	       OutputIsBusy(replayBufferOutput) ||
-		   OutputIsBusy(virtualCam.Get())) {
+	while (OutputIsBusy(streamingOutput[StreamServiceId::Main], true) || OutputIsBusy(streamingOutput[StreamServiceId::Second], true) ||
+	       OutputIsBusy(recordingOutput) || OutputIsBusy(replayBufferOutput) || OutputIsBusy(virtualCam.Get())) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(25));
 	}
 }
