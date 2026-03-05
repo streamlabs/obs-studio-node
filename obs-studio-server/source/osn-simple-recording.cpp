@@ -369,7 +369,14 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 		}
 
-		if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, true)) {
+		//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+		const char *encID = "";
+		const char *quality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
+		if (strcmp(quality, "Stream") == 0)
+			encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+		else
+			encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
+		if (!osn::EncoderUtils::isEncoderCompatibleRecording(encID, recording->format, true)) {
 			//update config recording format = mkv because it supports all encoder types
 			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
 			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);

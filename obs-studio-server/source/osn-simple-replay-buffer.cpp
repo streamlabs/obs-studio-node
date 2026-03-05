@@ -127,7 +127,14 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
-	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(videoEncoder), replayBuffer->recording->format, true)) {
+	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+	const char *encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder"));
+	bool replayBufferUsesStream = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "replayBufferUseStreamOutput");
+	const char *quality = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality"));
+	//update to stream encoder if user selected to use stream encoder, or if using recording encoder and it uses stream
+	if (replayBufferUsesStream || (!replayBufferUsesStream && strcmp(quality, "Stream") == 0))
+		encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(encID, replayBuffer->recording->format, true)) {
 		//update config recording format = mkv because it supports all encoder types
 		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
 		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);

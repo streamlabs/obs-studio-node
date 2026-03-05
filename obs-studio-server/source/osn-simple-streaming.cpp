@@ -354,8 +354,9 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid audio encoder.");
 	}
 
-	//make sure the encoder is valid for the current service
-	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(streaming->videoEncoder), streaming->simple)) {
+	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+	const char *encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, encID, streaming->simple)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
 	}
 
