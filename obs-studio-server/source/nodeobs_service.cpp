@@ -1458,7 +1458,6 @@ bool OBS_service::startStreaming(StreamServiceId serviceId, bool dualStreamingMo
 		return false;
 	}
 
-
 	try {
 		if (isTwitchStream(serviceId) && (IsMultitrackVideoEnabled() || dualStreamingMode)) {
 			return startMultiTrackStreaming(serviceId, dualStreamingMode);
@@ -1571,7 +1570,7 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 
 	const char *quality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
 	const char *encoder = config_get_string(ConfigManager::getInstance().getBasic(), section, "RecEncoder");
-	std::string internalID = encoder; 
+	std::string internalID = encoder;
 	if (isSimpleMode)
 		internalID = osn::EncoderUtils::getInternalEncoderFromSimple(encoder);
 
@@ -1740,7 +1739,7 @@ bool OBS_service::updateRecordingEncoders(bool isSimpleMode, StreamServiceId ser
 
 bool OBS_service::startRecording(void)
 {
-	//check encoder for recording compatibility with the configured recording format 
+	//check encoder for recording compatibility with the configured recording format
 	if (!isConfiguredRecordingEncoderValid(false)) {
 		//update config recording format = mkv because it supports all encoder types
 		const char *mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
