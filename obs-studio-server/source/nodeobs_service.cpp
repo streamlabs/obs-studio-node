@@ -1740,20 +1740,28 @@ void OBS_service::stopStreaming(bool forceStop, StreamServiceId serviceId)
 {
 	blog(LOG_INFO, "stopStreaming - forceStop: %d, serviceId: %d", forceStop, serviceId);
 
-	if (!obs_output_active(streamingOutput[serviceId]) && !obs_output_reconnecting(streamingOutput[serviceId])) {
-		blog(LOG_WARNING, "stopStreaming was ignored as stream not active or reconnecting");
+	obs_output_t *output = streamingOutput[serviceId];
+	if (!output) {
+		blog(LOG_WARNING, "stopStreaming - output is null");
+		isStreaming[serviceId] = false;
+		return;
+	}
+
+	if (!obs_output_active(output) && !obs_output_connecting(output) && !obs_output_reconnecting(output)) {
+		blog(LOG_INFO, "stopStreaming - stream is not active, skip stopping");
+		isStreaming[serviceId] = false;
 		return;
 	}
 
 	if (forceStop)
-		obs_output_force_stop(streamingOutput[serviceId]);
+		obs_output_force_stop(output);
 	else
-		obs_output_stop(streamingOutput[serviceId]);
+		obs_output_stop(output);
 
-	/* Unregister the BPM (Broadcast Performance Metrics) callback and destroy the allocated metrics data. */
+	// Unregister the BPM (Broadcast Performance Metrics) callback and destroy the allocated metrics data.
 	if (isTwitchStream(serviceId) && osn::IsMultitrackVideoEnabled()) {
-		obs_output_remove_packet_callback(streamingOutput[serviceId], bpm_inject, NULL);
-		bpm_destroy(streamingOutput[serviceId]);
+		obs_output_remove_packet_callback(output, bpm_inject, NULL);
+		bpm_destroy(output);
 	}
 
 	waitReleaseWorker();
@@ -3259,19 +3267,73 @@ void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, con
 	logVCamChanged(vcamConfig, false);
 }
 
+namespace {
+
+bool OutputIsBusy(obs_output_t *output, bool includeReconnect = false)
+{
+	if (!output)
+		return false;
+
+	if (obs_output_active(output) || obs_output_connecting(output))
+		return true;
+
+	return includeReconnect && obs_output_reconnecting(output);
+}
+
+void WaitForAllOutputsToStop()
+{
+	// At the moment, we assume that all outputs stop eventually, so there is no deadline timeout.
+	while (OutputIsBusy(streamingOutput[StreamServiceId::Main], true) ||
+	       OutputIsBusy(streamingOutput[StreamServiceId::Second], true) ||
+		   OutputIsBusy(recordingOutput) ||
+	       OutputIsBusy(replayBufferOutput) ||
+		   OutputIsBusy(virtualCam.Get())) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(25));
+	}
+}
+
+} // namespace
+
 void OBS_service::stopAllOutputs()
 {
-	if (isStreamingOutputActive(StreamServiceId::Main))
-		stopStreaming(true, StreamServiceId::Main);
+	waitReleaseWorker();
 
-	if (isStreamingOutputActive(StreamServiceId::Second))
-		stopStreaming(true, StreamServiceId::Second);
+	auto stopStreamForShutdown = [](StreamServiceId serviceId) {
+		obs_output_t *output = streamingOutput[serviceId];
+		if (!OutputIsBusy(output, true))
+			return;
 
-	if (replayBufferOutput && obs_output_active(replayBufferOutput))
-		stopReplayBuffer(true);
+		obs_output_stop(output);
 
-	if (recordingOutput && obs_output_active(recordingOutput))
-		stopRecording();
+		if (OBS_service::isTwitchStream(serviceId) && IsMultitrackVideoEnabled()) {
+			obs_output_remove_packet_callback(output, bpm_inject, NULL);
+			bpm_destroy(output);
+		}
+
+		isStreaming[serviceId] = false;
+	};
+
+	stopStreamForShutdown(StreamServiceId::Main);
+	stopStreamForShutdown(StreamServiceId::Second);
+
+	if (OutputIsBusy(replayBufferOutput))
+		obs_output_stop(replayBufferOutput);
+
+	if (OutputIsBusy(recordingOutput))
+		obs_output_stop(recordingOutput);
+
+	obs_output_t *virtualCamOutput = virtualCam.Get();
+	if (OutputIsBusy(virtualCamOutput))
+		obs_output_stop(virtualCamOutput);
+
+	WaitForAllOutputsToStop();
+
+	isStreaming[StreamServiceId::Main] = false;
+	isStreaming[StreamServiceId::Second] = false;
+	isRecording = false;
+	isReplayBufferActive = false;
+	rpUsesRec = false;
+	rpUsesStream = false;
 }
 
 static inline uint32_t setMixer(obs_source_t *source, const int mixerIdx, const bool checked)
