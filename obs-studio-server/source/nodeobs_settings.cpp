@@ -530,7 +530,7 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 	bool isCategoryEnabled = !OBS_service::isStreamingOutputActive(serviceId);
 
 	obs_service_t *currentService = OBS_service::getService(serviceId);
-	obs_data_t *settings = obs_service_get_settings(currentService);
+	OBSDataAutoRelease settings = obs_service_get_settings(currentService);
 
 	std::vector<SubCategory> streamSettings;
 	SubCategory service;
@@ -845,9 +845,10 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 						break;
 					}
 					newserviceTypeValue = value;
+
+					//first setting is always stream type (if it's sent at all) - get default settings to be filled in
 					settings = obs_service_defaults(newserviceTypeValue.c_str());
 					if (currentStreamType.compare(newserviceTypeValue) != 0) {
-
 						if (newserviceTypeValue.compare("rtmp_common") == 0) {
 							obs_data_set_string(settings, "streamType", "rtmp_common");
 							obs_data_set_string(settings, "service", "Twitch");
