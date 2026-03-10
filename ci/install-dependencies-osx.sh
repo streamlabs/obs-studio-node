@@ -1,11 +1,27 @@
-# Install system dependencies
+#!/bin/bash
+set -e
+
+# Remove preinstalled deprecated/disabled formulae and casks
+brew uninstall --ignore-dependencies openssl@1.1 2>/dev/null || true
+brew uninstall --cask session-manager-plugin 2>/dev/null || true
+
+# Remove unnecessary local taps (these cause warnings on GitHub runners)
+brew untap homebrew/core 2>/dev/null || true
+brew untap homebrew/cask 2>/dev/null || true
+
+# Clean up broken symlinks and outdated packages
+brew cleanup 2>/dev/null || true
+
+# Update Homebrew
 brew update
-brew doctor
-brew install cmake
-brew install python
-brew install node@18
-export PATH="/usr/local/opt/node@18/bin:$PATH"
-node -v
+
+# Only install cmake if not already present
+if ! command -v cmake &> /dev/null; then
+    brew install cmake
+fi
+
+# Verify cmake
+cmake --version
 
 # Install module dependencies
 yarn install
