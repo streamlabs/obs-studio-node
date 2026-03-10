@@ -1384,11 +1384,6 @@ export interface IVolmeterFactory {
  */
 export interface IVolmeter {
     /**
-     * The interval at which the volmeter will call the callback.
-     */
-    updateInterval: number;
-
-    /**
      * Destroy the volmeter object object
      */
     destroy(): void;

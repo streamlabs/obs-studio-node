@@ -81,6 +81,16 @@ describe(testName, () => {
         });
     });
 
+    it('Create Browser source and verify Chromium Embedded Framework (CEF) functionality', () => {
+        const input = osn.InputFactory.create(EOBSInputTypes.BrowserSource, 'input');
+
+        // Checking if input source was created correctly
+        expect(input).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.CreateInput, EOBSInputTypes.BrowserSource));
+        expect(input.id).to.equal(EOBSInputTypes.BrowserSource, GetErrorMessage(ETestErrorMsg.InputId, EOBSInputTypes.BrowserSource));
+        expect(input.name).to.equal('input', GetErrorMessage(ETestErrorMsg.InputName, EOBSInputTypes.BrowserSource));
+        input.release();
+    });
+
     it('Create all types of input with settings parameter', () => {
         // Create all input sources available with settings parameter
         obs.inputTypes.forEach(function(inputType) {
