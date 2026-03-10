@@ -2815,8 +2815,8 @@ void OBS_service::JSCallbackOutputSignal(void *data, calldata_t *params)
 		obs_output_t *output;
 
 		if (signal.getOutputType().compare("streaming") == 0) {
-			output = streamingOutput[0];
-			isStreaming[StreamServiceId::Main] = false;
+			output = streamingOutput[signal.getIndex()];
+			isStreaming[signal.getIndex()] = false;
 		} else if (signal.getOutputType().compare("recording") == 0) {
 			output = recordingOutput;
 			isRecording = false;
