@@ -372,6 +372,10 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 	}
 
 	m_connection = cl;
+	// Note: this increment in the current implementation is not strictly required for the basic
+	//       stale-after-reconnect case, but it is a useful safe guard for a possible future expansion.
+	// Bump epoch on successful connect to invalidate stale native wrappers, if any.
+	m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
 	return m_connection;
 }
 
@@ -382,6 +386,8 @@ void Controller::disconnect()
 		m_isServer = false;
 	}
 	m_connection = nullptr;
+	// Bump epoch on disconnect so finalizers skip IPC calls for old sessions.
+	m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
 }
 
 DWORD Controller::GetExitCode()
@@ -392,6 +398,11 @@ DWORD Controller::GetExitCode()
 std::shared_ptr<ipc::client> Controller::GetConnection()
 {
 	return m_connection;
+}
+
+uint64_t Controller::GetConnectionEpoch() const
+{
+	return m_connectionEpoch.load(std::memory_order_relaxed);
 }
 
 Napi::Value js_setServerPath(const Napi::CallbackInfo &info)

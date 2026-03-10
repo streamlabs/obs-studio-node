@@ -96,15 +96,8 @@ void osn::ISimpleStreaming::Destroy(void *data, const int64_t id, const std::vec
 
 void osn::ISimpleStreaming::GetAudioEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::ISimpleStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!streaming) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
-	}
-
-	uint64_t uid = osn::AudioEncoder::Manager::GetInstance().find(streaming->audioEncoder);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -113,6 +106,13 @@ void osn::ISimpleStreaming::SetAudioEncoder(void *data, const int64_t id, const 
 	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::ISimpleStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!streaming) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		streaming->audioEncoder = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_encoder_t *encoder = osn::AudioEncoder::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -218,8 +218,8 @@ static void SetupTwitchSoundtrackAudio(osn::SimpleStreaming *streaming)
 		obs_encoder_set_audio(streaming->streamArchive, obs_get_audio());
 	}
 
-	obs_output_set_audio_encoder(streaming->output, streaming->streamArchive, kSoundtrackArchiveEncoderIdx);
-	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->canvas, OBS_STREAMING_VIDEO_RENDERING));
+	obs_output_set_audio_encoder(streaming->GetOutput(), streaming->streamArchive, kSoundtrackArchiveEncoderIdx);
+	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
 	obs_data_t *settings = obs_data_create();
 
@@ -317,9 +317,9 @@ void osn::SimpleStreaming::UpdateEncoders()
 	obs_data_release(audioEncSettings);
 
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_STREAMING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
-		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
 }
 
@@ -338,10 +338,10 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	if (!type)
 		type = "rtmp_output";
 
-	if (!streaming->output || strcmp(obs_output_get_id(streaming->output), type) != 0)
-		streaming->createOutput(type, "stream");
+	if (!streaming->GetOutput() || strcmp(obs_output_get_id(streaming->GetOutput()), type) != 0)
+		streaming->CreateOutput(type, "stream");
 
-	if (!streaming->output) {
+	if (!streaming->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the streaming output.");
 	}
 
@@ -353,12 +353,16 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid audio encoder.");
 	}
 
+	if (!streaming->GetCanvas()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	}
+
 	streaming->UpdateEncoders();
 	obs_encoder_set_audio(streaming->audioEncoder, obs_get_audio());
-	obs_output_set_audio_encoder(streaming->output, streaming->audioEncoder, 0);
-	obs_encoder_set_video_mix(streaming->audioEncoder, obs_video_mix_get(streaming->canvas, OBS_STREAMING_VIDEO_RENDERING));
+	obs_output_set_audio_encoder(streaming->GetOutput(), streaming->audioEncoder, 0);
+	obs_encoder_set_video_mix(streaming->audioEncoder, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
-	obs_output_set_video_encoder(streaming->output, streaming->videoEncoder);
+	obs_output_set_video_encoder(streaming->GetOutput(), streaming->videoEncoder);
 
 	if (streaming->enableTwitchVOD) {
 		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
@@ -366,19 +370,19 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 			SetupTwitchSoundtrackAudio(streaming);
 	}
 
-	obs_output_set_service(streaming->output, streaming->service);
+	obs_output_set_service(streaming->GetOutput(), streaming->service);
 
 	if (!streaming->delay) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid delay.");
 	}
-	obs_output_set_delay(streaming->output, streaming->delay->enabled ? uint32_t(streaming->delay->delaySec) : 0,
+	obs_output_set_delay(streaming->GetOutput(), streaming->delay->enabled ? uint32_t(streaming->delay->delaySec) : 0,
 			     streaming->delay->preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
 
 	if (!streaming->reconnect) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid reconnect.");
 	}
 	uint32_t maxReties = streaming->reconnect->enabled ? streaming->reconnect->maxRetries : 0;
-	obs_output_set_reconnect_settings(streaming->output, maxReties, streaming->reconnect->retryDelay);
+	obs_output_set_reconnect_settings(streaming->GetOutput(), maxReties, streaming->reconnect->retryDelay);
 
 	if (!streaming->network) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid network.");
@@ -389,10 +393,10 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	obs_data_set_bool(settings, "dyn_bitrate", streaming->network->enableDynamicBitrate);
 	obs_data_set_bool(settings, "new_socket_loop_enabled", streaming->network->enableOptimizations);
 	obs_data_set_bool(settings, "low_latency_mode_enabled", streaming->network->enableLowLatency);
-	obs_output_update(streaming->output, settings);
+	obs_output_update(streaming->GetOutput(), settings);
 	obs_data_release(settings);
 
-	streaming->startOutput();
+	streaming->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -405,16 +409,16 @@ void osn::ISimpleStreaming::Stop(void *data, const int64_t id, const std::vector
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
 	}
 
-	if (!streaming->output) {
+	if (!streaming->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid streaming output.");
 	}
 
 	bool force = args[1].value_union.ui32;
 
 	if (force)
-		obs_output_force_stop(streaming->output);
+		obs_output_force_stop(streaming->GetOutput());
 	else
-		obs_output_stop(streaming->output);
+		obs_output_stop(streaming->GetOutput());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

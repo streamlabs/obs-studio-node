@@ -6,13 +6,17 @@ import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
-import { EFPSType } from '../osn';
+import * as inputSettings from '../util/input_settings';
+
+import path = require('path');
 
 const testName = 'osn-advanced-streaming';
 
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
+    const mediaPath = path.join(path.normalize(__dirname), '..', 'media');
+
     // Initialize OBS process
     before(async() => {
         logInfo(testName, 'Starting ' + testName + ' tests');
@@ -95,13 +99,70 @@ describe(testName, () => {
         osn.AdvancedStreamingFactory.destroy(stream);
     });
 
+    it('Stream with missing video encoder', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.AdvancedStreamingFactory.create();
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid video encoder');
+
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing service', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.AdvancedStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid service');
+
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing canvas', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.AdvancedStreamingFactory.create();
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid main canvas');
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
     it('Start streaming', async function() {
         if (obs.isDarwin()) {
             this.skip();
         }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.delay =
             osn.DelayFactory.create();
@@ -180,7 +241,9 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const videoEncoder = stream.videoEncoder;
         osn.AdvancedStreamingFactory.destroy(stream);
+        videoEncoder.release();
     });
 
     it('Stream with invalid stream key', async function() {
@@ -189,7 +252,7 @@ describe(testName, () => {
         }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-2');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.service.update({ key: 'invalid' });
         stream.delay =
@@ -218,10 +281,12 @@ describe(testName, () => {
             EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));                                                                     
+        expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
         stream.service.update({ key: obs.userStreamKey });
 
+        const streamingEncoder = stream.videoEncoder;
         osn.AdvancedStreamingFactory.destroy(stream);
+        streamingEncoder.release();
     });
 });

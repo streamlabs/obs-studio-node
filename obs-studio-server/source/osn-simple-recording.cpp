@@ -116,15 +116,8 @@ void osn::ISimpleRecording::SetQuality(void *data, const int64_t id, const std::
 
 void osn::ISimpleRecording::GetAudioEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	SimpleRecording *recording = static_cast<SimpleRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
-	}
-
-	uint64_t uid = osn::AudioEncoder::Manager::GetInstance().find(recording->audioEncoder);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -133,6 +126,13 @@ void osn::ISimpleRecording::SetAudioEncoder(void *data, const int64_t id, const 
 	SimpleRecording *recording = static_cast<SimpleRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		recording->audioEncoder = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_encoder_t *encoder = osn::AudioEncoder::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -153,8 +153,8 @@ static void LoadLosslessPreset(osn::Recording *recording)
 	obs_data_set_string(settings, "video_encoder", "utvideo");
 	obs_data_set_string(settings, "audio_encoder", "pcm_s16le");
 
-	obs_output_set_mixers(recording->output, 1);
-	obs_output_update(recording->output, settings);
+	obs_output_set_mixers(recording->GetOutput(), 1);
+	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
 }
 
@@ -293,9 +293,9 @@ static void UpdateRecordingSettings_crf(enum osn::RecQuality quality, osn::Simpl
 	if (!settings)
 		return;
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->canvas, OBS_STREAMING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
-		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->canvas, OBS_MAIN_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
 	obs_encoder_update(recording->videoEncoder, settings);
 	obs_data_release(settings);
@@ -319,6 +319,7 @@ void osn::SimpleRecording::UpdateEncoders()
 		if (obs_get_multiple_rendering()) {
 			obs_encoder_t *videoEncDup = osn::IRecording::duplicate_encoder(videoEncoder);
 			videoEncoder = videoEncDup;
+			obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 		}
 		break;
 	}
@@ -344,10 +345,10 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	}
 
 	const char *ffmpegMuxer = "ffmpeg_muxer";
-	if (!recording->output || strcmp(obs_output_get_id(recording->output), ffmpegMuxer) == 0)
-		recording->createOutput("ffmpeg_muxer", "recording");
+	if (!recording->GetOutput() || strcmp(obs_output_get_id(recording->GetOutput()), ffmpegMuxer) == 0)
+		recording->CreateOutput("ffmpeg_muxer", "recording");
 
-	if (!recording->output) {
+	if (!recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the recording output.");
 	}
 
@@ -355,7 +356,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	std::string pathProperty = "path";
 
 	if (recording->quality == RecQuality::Lossless) {
-		recording->createOutput("ffmpeg_output", "recording");
+		recording->CreateOutput("ffmpeg_output", "recording");
 		LoadLosslessPreset(recording);
 		format = "avi";
 		pathProperty = "url";
@@ -371,10 +372,10 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		}
 
 		obs_encoder_set_audio(recording->audioEncoder, obs_get_audio());
-		obs_output_set_audio_encoder(recording->output, recording->audioEncoder, 0);
-		obs_encoder_set_video_mix(recording->audioEncoder, obs_video_mix_get(recording->canvas, OBS_RECORDING_VIDEO_RENDERING));
+		obs_output_set_audio_encoder(recording->GetOutput(), recording->audioEncoder, 0);
+		obs_encoder_set_video_mix(recording->audioEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 
-		obs_output_set_video_encoder(recording->output, recording->videoEncoder);
+		obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 	}
 
 	if (!recording->path.size()) {
@@ -387,7 +388,8 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->canvas->base_width, recording->canvas->base_height);
+	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->GetCanvas()->base_width,
+					  recording->GetCanvas()->base_height);
 
 	if (!recording->overwrite)
 		FindBestFilename(path, recording->noSpace);
@@ -395,13 +397,13 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, pathProperty.c_str(), path.c_str());
 	obs_data_set_string(settings, "muxer_settings", recording->muxerSettings.c_str());
-	obs_output_update(recording->output, settings);
+	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
 
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
 
-	recording->startOutput();
+	recording->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -413,11 +415,11 @@ void osn::ISimpleRecording::Stop(void *data, const int64_t id, const std::vector
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
 	}
-	if (!recording->output) {
+	if (!recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording output.");
 	}
 
-	obs_output_stop(recording->output);
+	obs_output_stop(recording->GetOutput());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -551,15 +553,8 @@ void osn::ISimpleRecording::GetLegacySettings(void *data, const int64_t id, cons
 
 void osn::ISimpleRecording::GetStreaming(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	SimpleRecording *recording = static_cast<SimpleRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
-	}
-
-	uint64_t uid = osn::ISimpleStreaming::Manager::GetInstance().find(recording->streaming);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -568,6 +563,13 @@ void osn::ISimpleRecording::SetStreaming(void *data, const int64_t id, const std
 	SimpleRecording *recording = static_cast<SimpleRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		recording->streaming = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::ISimpleStreaming::Manager::GetInstance().find(args[1].value_union.ui64));

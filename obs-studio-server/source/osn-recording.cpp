@@ -26,20 +26,13 @@ extern char *osn_generate_formatted_filename(const char *extension, bool space, 
 
 osn::Recording::~Recording()
 {
-	deleteOutput();
+	DeleteOutput();
 }
 
 void osn::IRecording::GetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
-	}
-
-	uint64_t uid = osn::VideoEncoder::Manager::GetInstance().find(recording->videoEncoder);
-
+	blog(LOG_WARNING, "Function %s is deprecated", __func__);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
 }
 
@@ -48,6 +41,13 @@ void osn::IRecording::SetVideoEncoder(void *data, const int64_t id, const std::v
 	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
+	}
+
+	if (args[1].value_union.ui64 == UINT64_MAX) {
+		recording->videoEncoder = nullptr;
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
 	}
 
 	obs_encoder_t *encoder = osn::VideoEncoder::Manager::GetInstance().find(args[1].value_union.ui64);
@@ -68,22 +68,18 @@ void osn::IRecording::Query(void *data, const int64_t id, const std::vector<ipc:
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
 
-	std::unique_lock<std::mutex> ulock(recording->signalsMtx);
-	if (recording->signalsReceived.empty()) {
+	auto signalOpt = recording->PopReceivedSignal();
+	if (!signalOpt.has_value()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 		AUTO_DEBUG;
 		return;
 	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
-	auto signal = recording->signalsReceived.front();
 	rval.push_back(ipc::value("recording"));
-	rval.push_back(ipc::value(signal.signal));
-	rval.push_back(ipc::value(signal.code));
-	rval.push_back(ipc::value(signal.errorMessage));
-
-	recording->signalsReceived.pop();
+	rval.push_back(ipc::value(signalOpt.value().signal));
+	rval.push_back(ipc::value(signalOpt.value().code));
+	rval.push_back(ipc::value(signalOpt.value().errorMessage));
 
 	AUTO_DEBUG;
 }
@@ -153,13 +149,13 @@ obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t t
 void osn::IRecording::SplitFile(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!recording || !recording->output) {
+	if (!recording || !recording->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
 
 	calldata_t cd = {0};
 
-	proc_handler_t *ph = obs_output_get_proc_handler(recording->output);
+	proc_handler_t *ph = obs_output_get_proc_handler(recording->GetOutput());
 	proc_handler_call(ph, "split_file", &cd);
 	calldata_free(&cd);
 
@@ -310,6 +306,6 @@ void osn::Recording::ConfigureRecFileSplitting()
 
 	obs_data_set_bool(settings, "reset_timestamps", fileResetTimestamps);
 
-	obs_output_update(output, settings);
+	obs_output_update(this->GetOutput(), settings);
 	obs_data_release(settings);
 }

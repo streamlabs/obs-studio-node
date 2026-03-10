@@ -61,6 +61,8 @@
 #include "osn-simple-replay-buffer.hpp"
 #include "osn-advanced-replay-buffer.hpp"
 #include "osn-file-output.hpp"
+#include "osn-enhanced-broadcasting-simple-streaming.hpp"
+#include "osn-enhanced-broadcasting-advanced-streaming.hpp"
 
 #include "util-crashmanager.h"
 #include "shared.hpp"
@@ -273,6 +275,8 @@ int main(int argc, char *argv[])
 	osn::ISimpleReplayBuffer::Register(myServer);
 	osn::IAdvancedReplayBuffer::Register(myServer);
 	osn::IFileOutput::Register(myServer);
+	osn::IEnhancedBroadcastingSimpleStreaming::Register(myServer);
+	osn::IEnhancedBroadcastingAdvancedStreaming::Register(myServer);
 
 	OBS_API::CreateCrashHandlerExitPipe();
 

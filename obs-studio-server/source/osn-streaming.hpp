@@ -22,15 +22,18 @@
 #include "osn-delay.hpp"
 #include "osn-reconnect.hpp"
 #include "osn-network.hpp"
-#include "osn-output-signals.hpp"
+#include "osn-output.hpp"
 #include "osn-video-encoder.hpp"
+#include "osn-multitrack-video.hpp"
 
 #include "nodeobs_configManager.hpp"
 
+#include <optional>
+
 namespace osn {
-class Streaming : public OutputSignals {
+class Streaming : public Output {
 public:
-	Streaming()
+	Streaming() : Output({"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"})
 	{
 		videoEncoder = nullptr;
 		streamArchive = nullptr;
@@ -40,7 +43,6 @@ public:
 		twitchVODSupported = false;
 		oldMixer_desktopSource1 = 0;
 		oldMixer_desktopSource2 = 0;
-		signals = {"start", "stop", "starting", "stopping", "activate", "deactivate", "reconnect", "reconnect_success"};
 		delay = new Delay();
 		reconnect = new Reconnect();
 		network = new Network();
@@ -48,6 +50,8 @@ public:
 		lastBytesSentTime = 0;
 	}
 	virtual ~Streaming();
+
+	void DeleteOutput() override;
 
 public:
 	obs_encoder_t *videoEncoder;

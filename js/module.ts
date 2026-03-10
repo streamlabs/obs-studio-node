@@ -392,6 +392,8 @@ export const VideoEncoderFactory: IVideoEncoderFactory = obs.VideoEncoder;
 export const ServiceFactory: IServiceFactory = obs.Service;
 export const SimpleStreamingFactory: ISimpleStreamingFactory = obs.SimpleStreaming;
 export const AdvancedStreamingFactory: IAdvancedStreamingFactory = obs.AdvancedStreaming;
+export const EnhancedBroadcastingAdvancedStreamingFactory: IEnhancedBroadcastingAdvancedStreamingFactory = obs.EnhancedBroadcastingAdvancedStreaming;
+export const EnhancedBroadcastingSimpleStreamingFactory: IEnhancedBroadcastingSimpleStreamingFactory = obs.EnhancedBroadcastingSimpleStreaming;
 export const DelayFactory: IDelayFactory = obs.Delay;
 export const ReconnectFactory: IReconnectFactory = obs.Reconnect;
 export const NetworkFactory: INetworkFactory = obs.Network;
@@ -581,12 +583,12 @@ export interface IGlobal {
     readonly version: number;
 
     /**
-     * Percentage of CPU being used 
+     * Percentage of CPU being used
      */
     readonly cpuPercentage: number;
 
     /**
-     * Current FPS 
+     * Current FPS
      */
     readonly currentFrameRate: number;
 
@@ -601,7 +603,7 @@ export interface IGlobal {
     readonly diskSpaceAvailable: number;
 
     /**
-     * Current memory usage 
+     * Current memory usage
      */
     readonly memoryUsage: number;
 }
@@ -1657,8 +1659,8 @@ export const enum ERecordingFormat {
     FLV = 'flv',
     MOV = 'mov',
     MKV = 'mkv',
-    TS = 'mpegts',
-    M3M8 = 'm3m8'
+    MPEGTS = 'ts',
+    HLS = 'm3u8'
 }
 
 export const enum ERecordingQuality {
@@ -1681,7 +1683,7 @@ export const enum EProcessPriority {
     Idle = 'Idle'
 }
 
-export interface IVideoEncoder extends IConfigurable {
+export interface IVideoEncoder extends IConfigurable, IReleasable {
     name: string,
     readonly type: EVideoEncoderType,
     readonly active: boolean,
@@ -1689,13 +1691,13 @@ export interface IVideoEncoder extends IConfigurable {
     readonly lastError: string
 }
 
-export interface IAudioEncoder {
+export interface IAudioEncoder extends IReleasable {
     name: string,
     bitrate: number
 }
 
 export interface IAudioEncoderFactory {
-    create(): IAudioEncoder
+    create(id: string, name: string): IAudioEncoder
 }
 
 export interface IVideoEncoderFactory {
@@ -1705,7 +1707,8 @@ export interface IVideoEncoderFactory {
 }
 
 export interface IStreaming {
-    videoEncoder: IVideoEncoder,
+    // Video encoder value is ignored only in the Enhanced Broadcasting mode, otherwise it should be set
+    videoEncoder?: IVideoEncoder,
     service: IService,
     enforceServiceBitrate: boolean,
     enableTwitchVOD: boolean,
@@ -1714,7 +1717,7 @@ export interface IStreaming {
     network: INetwork,
     video: IVideo,
     signalHandler: (signal: EOutputSignal) => void,
-    start(): void,
+    start(): void, // throws
     stop(force?: boolean): void,
     droppedFrames: number;
     totalFrames: number;
@@ -1753,6 +1756,30 @@ export interface IAdvancedStreamingFactory {
     create(): IAdvancedStreaming;
     destroy(stream: IAdvancedStreaming): void;
     legacySettings: IAdvancedStreaming;
+}
+
+export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
+    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
+    // This value should be initialized before the stream start.
+    additionalVideo?: IVideo,
+}
+
+export interface IEnhancedBroadcastingAdvancedStreamingFactory {
+    create(): IEnhancedBroadcastingAdvancedStreaming;
+    destroy(stream: IEnhancedBroadcastingAdvancedStreaming): void;
+    legacySettings: IEnhancedBroadcastingAdvancedStreaming;
+}
+
+export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
+    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
+    // This value should be initialized before the stream start.
+    additionalVideo?: IVideo,
+}
+
+export interface IEnhancedBroadcastingSimpleStreamingFactory {
+    create(): IEnhancedBroadcastingSimpleStreaming;
+    destroy(stream: IEnhancedBroadcastingSimpleStreaming): void;
+    legacySettings: IEnhancedBroadcastingSimpleStreaming;
 }
 
 export interface IFileOutput {
@@ -1838,7 +1865,7 @@ export interface ISimpleReplayBufferFactory {
 export interface IAdvancedReplayBufferFactory {
     create(): IAdvancedReplayBuffer;
     destroy(stream: IAdvancedReplayBuffer): void;
-    legacySettings: IAdvancedReplayBufferFactory;
+    legacySettings: IAdvancedReplayBuffer;
 }
 
 export interface IDelay {

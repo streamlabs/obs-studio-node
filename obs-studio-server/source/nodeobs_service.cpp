@@ -28,9 +28,7 @@
 #include <osn-video.hpp>
 #include "osn-vcam.hpp"
 
-#include "osn-multitrack-video-configuration.hpp"
-#include "osn-audio-bitrate.hpp"
-#include "osn-multitrack-video-output.hpp"
+#include "osn-multitrack-video.hpp"
 
 #ifdef __APPLE__
 #include <sys/types.h>
@@ -92,13 +90,7 @@ std::mutex signalMutex;
 std::queue<SignalInfo> outputSignal;
 std::thread releaseWorker;
 
-struct EnhancedBroadcastOutputObjects {
-	OBSOutputAutoRelease obsOutput;
-	std::shared_ptr<obs_encoder_group_t> videoEncoderGroup;
-	std::vector<OBSEncoderAutoRelease> audioEncoders;
-	OBSServiceAutoRelease multitrackVideoService;
-};
-static std::optional<EnhancedBroadcastOutputObjects> enhancedBroadcastContext;
+static std::optional<osn::EnhancedBroadcastOutputObjects> enhancedBroadcastContext;
 
 OBS_service::OBS_service() {}
 OBS_service::~OBS_service() {}
@@ -1266,18 +1258,6 @@ const char *OBS_service::getStreamOutputType(const obs_service_t *service)
 	return nullptr;
 }
 
-static int GetAudioBitrate()
-{
-	const char *audio_encoder_id = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamAudioEncoder");
-
-	const int bitrate = (int)config_get_uint(ConfigManager::getInstance().getBasic(), "SimpleOutput", "ABitrate");
-
-	if (audio_encoder_id && strcmp(audio_encoder_id, "opus") == 0)
-		return osn::FindClosestAvailableSimpleOpusBitrate(bitrate);
-
-	return osn::FindClosestAvailableSimpleAACBitrate(bitrate);
-}
-
 static inline bool ServiceSupportsVodTrack(const char *service)
 {
 	static const char *vodTrackServices[] = {"Twitch"};
@@ -1305,11 +1285,6 @@ static bool IsVodTrackEnabled(obs_service_t *service)
 		return enableForCustomServer ? enable : false;
 	else
 		return vodTrackEnabledAdv && ServiceSupportsVodTrack(name);
-}
-
-static bool IsMultitrackVideoEnabled()
-{
-	return config_get_bool(ConfigManager::getInstance().getBasic(), "EnhancedBroadcasting", "EnableMultitrackVideo");
 }
 
 bool OBS_service::startSingleTrackStreaming(StreamServiceId serviceId)
@@ -1398,13 +1373,23 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId, bool dualS
 
 	auto vod_track_mixer = IsVodTrackEnabled(services[serviceId]) ? std::optional{vodTrackIndex} : std::nullopt;
 
-	auto go_live_post = osn::constructGoLivePost(serviceId, dualStreamingMode, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
+	std::vector<obs_video_info *> canvases;
+	canvases.push_back(videoInfo[serviceId]);
+	if (dualStreamingMode) {
+		if (serviceId == StreamServiceId::Main) {
+			canvases.push_back(videoInfo[StreamServiceId::Second]);
+		} else if (serviceId == StreamServiceId::Second) {
+			canvases.push_back(videoInfo[StreamServiceId::Main]);
+		}
+	}
+
+	auto go_live_post = osn::constructGoLivePost(canvases, key, std::nullopt, std::nullopt, vod_track_mixer.has_value());
 	std::optional<osn::Config> go_live_config = osn::DownloadGoLiveConfig(auto_config_url, go_live_post);
 	if (!go_live_config.has_value()) {
 		throw std::runtime_error("startStreaming - go live config is empty");
 	}
 
-	const auto audio_bitrate = GetAudioBitrate();
+	const auto audio_bitrate = osn::GetMultitrackAudioBitrate();
 	const auto audio_encoder_id = osn::GetSimpleAACEncoderForBitrate(audio_bitrate);
 
 	std::vector<OBSEncoderAutoRelease> audio_encoders;
@@ -1429,7 +1414,7 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId, bool dualS
 
 	isStreaming[serviceId] = obs_output_start(output);
 
-	enhancedBroadcastContext.emplace(EnhancedBroadcastOutputObjects{
+	enhancedBroadcastContext.emplace(osn::EnhancedBroadcastOutputObjects{
 		std::move(output),
 		video_encoder_group,
 		std::move(audio_encoders),
@@ -1447,7 +1432,7 @@ bool OBS_service::startStreaming(StreamServiceId serviceId, bool dualStreamingMo
 	}
 
 	try {
-		if (isTwitchStream(serviceId) && (IsMultitrackVideoEnabled() || dualStreamingMode)) {
+		if (isTwitchStream(serviceId) && (osn::IsMultitrackVideoEnabled() || dualStreamingMode)) {
 			return startMultiTrackStreaming(serviceId, dualStreamingMode);
 		}
 
@@ -1634,7 +1619,7 @@ bool OBS_service::updateRecordingEncoders(bool isSimpleMode, StreamServiceId ser
 
 	bool simpleUsesStream = false;
 	bool advancedUsesStream = false;
-	if (!IsMultitrackVideoEnabled()) {
+	if (!osn::IsMultitrackVideoEnabled()) {
 		simpleUsesStream = isSimpleMode && simpleQuality.compare("Stream") == 0;
 		advancedUsesStream = !isSimpleMode && (advancedQuality.compare("") == 0 || advancedQuality.compare("none") == 0);
 	}
@@ -1766,7 +1751,7 @@ void OBS_service::stopStreaming(bool forceStop, StreamServiceId serviceId)
 		obs_output_stop(streamingOutput[serviceId]);
 
 	/* Unregister the BPM (Broadcast Performance Metrics) callback and destroy the allocated metrics data. */
-	if (isTwitchStream(serviceId) && IsMultitrackVideoEnabled()) {
+	if (isTwitchStream(serviceId) && osn::IsMultitrackVideoEnabled()) {
 		obs_output_remove_packet_callback(streamingOutput[serviceId], bpm_inject, NULL);
 		bpm_destroy(streamingOutput[serviceId]);
 	}

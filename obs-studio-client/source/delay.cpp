@@ -46,6 +46,7 @@ osn::Delay::Delay(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Delay>
 	Napi::HandleScope scope(env);
 	size_t length = info.Length();
 	this->uid = 0;
+	this->connectionEpoch = 0;
 
 	if (length <= 0 || !info[0].IsNumber()) {
 		Napi::TypeError::New(env, "Number expected").ThrowAsJavaScriptException();
@@ -53,6 +54,7 @@ osn::Delay::Delay(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Delay>
 	}
 
 	this->uid = (uint64_t)info[0].ToNumber().Int64Value();
+	this->connectionEpoch = Controller::GetInstance().GetConnectionEpoch();
 }
 
 Napi::Value osn::Delay::Create(const Napi::CallbackInfo &info)
@@ -69,6 +71,28 @@ Napi::Value osn::Delay::Create(const Napi::CallbackInfo &info)
 	auto instance = osn::Delay::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
 	return instance;
+}
+
+void osn::Delay::Finalize(Napi::Env env)
+{
+	if (this->uid == UINT64_MAX)
+		return;
+
+	// If OBS was restarted/disconnected, skip IPC cleanup for this stale wrapper.
+	if (this->connectionEpoch != Controller::GetInstance().GetConnectionEpoch()) {
+		this->uid = UINT64_MAX;
+		return;
+	}
+
+	auto conn = Controller::GetInstance().GetConnection();
+	if (!conn) {
+		this->uid = UINT64_MAX;
+		return;
+	}
+
+	conn->call_synchronous_helper("Delay", "Destroy", {ipc::value(this->uid)});
+
+	this->uid = UINT64_MAX;
 }
 
 Napi::Value osn::Delay::GetEnabled(const Napi::CallbackInfo &info)

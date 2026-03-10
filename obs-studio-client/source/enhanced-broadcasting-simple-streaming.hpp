@@ -17,46 +17,23 @@
 ******************************************************************************/
 
 #pragma once
-#include <obs.h>
-#include <mutex>
-#include <queue>
-#include <vector>
+#include <napi.h>
+#include "simple-streaming.hpp"
 
 namespace osn {
-struct signalInfo {
-	std::string signal;
-	int code;
-	std::string errorMessage;
-};
-
-class OutputSignals {
+class EnhancedBroadcastingSimpleStreaming : public Napi::ObjectWrap<osn::EnhancedBroadcastingSimpleStreaming>, public osn::SimpleStreamingBase {
 public:
-	OutputSignals()
-	{
-		output = nullptr;
-		canvas = nullptr;
-	}
-	virtual ~OutputSignals() {}
+	static Napi::FunctionReference constructor;
+	static Napi::Object Init(Napi::Env env, Napi::Object exports);
+	EnhancedBroadcastingSimpleStreaming(const Napi::CallbackInfo &info);
 
-public:
-	std::mutex signalsMtx;
-	std::queue<signalInfo> signalsReceived;
-	std::vector<std::string> signals;
-	obs_output_t *output;
-	obs_video_info *canvas;
+	static Napi::Value Create(const Napi::CallbackInfo &info);
+	static void Destroy(const Napi::CallbackInfo &info);
 
-	void ConnectSignals();
+	Napi::Value GetAdditionalCanvas(const Napi::CallbackInfo &info);
+	void SetAdditionalCanvas(const Napi::CallbackInfo &info, const Napi::Value &value);
 
-public:
-	std::condition_variable cvStop;
-	std::mutex mtxOutputStop;
-	void createOutput(const std::string &type, const std::string &name);
-	void deleteOutput();
-	void startOutput();
-};
-
-struct cbData {
-	std::string signal;
-	OutputSignals *outputClass;
+	static Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
+	static void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
 };
 }

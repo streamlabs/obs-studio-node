@@ -60,6 +60,7 @@ public:
 	static void Register(ipc::server &);
 
 	static void Create(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void Destroy(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetBindIP(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetBindIP(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetNetworkInterfaces(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

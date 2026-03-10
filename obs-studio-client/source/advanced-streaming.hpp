@@ -18,30 +18,22 @@
 
 #pragma once
 #include <napi.h>
-#include "streaming.hpp"
+#include "advanced-streaming-base.hpp"
 
 namespace osn {
-class AdvancedStreaming : public Napi::ObjectWrap<osn::AdvancedStreaming>, public osn::Streaming {
+
+class AdvancedStreaming : public Napi::ObjectWrap<osn::AdvancedStreaming>, public osn::AdvancedStreamingBase {
 public:
 	static Napi::FunctionReference constructor;
 	static Napi::Object Init(Napi::Env env, Napi::Object exports);
 	AdvancedStreaming(const Napi::CallbackInfo &info);
-
+	void Finalize(Napi::Env);
+	void ReleaseObjects();
 	static Napi::Value Create(const Napi::CallbackInfo &info);
 	static void Destroy(const Napi::CallbackInfo &info);
-
-	Napi::Value GetAudioTrack(const Napi::CallbackInfo &info);
-	void SetAudioTrack(const Napi::CallbackInfo &info, const Napi::Value &value);
-	Napi::Value GetTwitchTrack(const Napi::CallbackInfo &info);
-	void SetTwitchTrack(const Napi::CallbackInfo &info, const Napi::Value &value);
-	Napi::Value GetRescaling(const Napi::CallbackInfo &info);
-	void SetRescaling(const Napi::CallbackInfo &info, const Napi::Value &value);
-	Napi::Value GetOutputWidth(const Napi::CallbackInfo &info);
-	void SetOutputWidth(const Napi::CallbackInfo &info, const Napi::Value &value);
-	Napi::Value GetOutputHeight(const Napi::CallbackInfo &info);
-	void SetOutputHeight(const Napi::CallbackInfo &info, const Napi::Value &value);
 
 	static Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
 	static void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
 };
+
 }

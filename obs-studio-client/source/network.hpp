@@ -23,6 +23,7 @@ namespace osn {
 class Network : public Napi::ObjectWrap<osn::Network> {
 public:
 	uint64_t uid;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;
@@ -30,7 +31,7 @@ public:
 	Network(const Napi::CallbackInfo &info);
 
 	static Napi::Value Create(const Napi::CallbackInfo &info);
-
+	void Finalize(Napi::Env env);
 	Napi::Value GetBindIP(const Napi::CallbackInfo &info);
 	void SetBindIP(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetNetworkInterfaces(const Napi::CallbackInfo &info);

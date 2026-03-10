@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #pragma once
+#include <atomic>
 #include <memory>
 #include <map>
 #include <string>
@@ -53,8 +54,14 @@ public:
 
 	std::shared_ptr<ipc::client> GetConnection();
 
+	// Used to identify stale connections and properly implement Node.js finalizers
+	uint64_t GetConnectionEpoch() const;
+
 private:
 	bool m_isServer = false;
 	std::shared_ptr<ipc::client> m_connection;
 	ipc::ProcessInfo procId;
+	// Monotonic "epoch" for the IPC connection lifecycle. Helps to detect stale wrappers
+	// after disconnect/reconnect so finalizers can safely no-op.
+	std::atomic<uint64_t> m_connectionEpoch{0};
 };

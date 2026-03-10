@@ -5,13 +5,16 @@ import { logInfo, logEmptyLine } from '../util/logger';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
-import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
+import { EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
+
+import path = require('path');
 
 const testName = 'osn-simple-streaming';
 
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
+    const mediaPath = path.join(path.normalize(__dirname), '..', 'media');
 
     // Initialize OBS process
     before(async() => {
@@ -81,13 +84,84 @@ describe(testName, () => {
         osn.SimpleStreamingFactory.destroy(stream);
     });
 
+    it('Stream with missing video encoder', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-1");
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid video encoder');
+
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing audio encoder', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid audio encoder');
+
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing service', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.video = obs.defaultVideoContext;
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-2");
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid service');
+
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Stream with missing canvas', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const stream = osn.SimpleStreamingFactory.create();
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-3");
+        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        expect(() => {
+            stream.start();
+        }).throw('Invalid main canvas');
+
+        osn.SimpleStreamingFactory.destroy(stream);
+    });
+
     it('Start streaming', async function() {
         if (obs.isDarwin()) {
             this.skip();
         }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.delay =
             osn.DelayFactory.create();
@@ -96,7 +170,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-4");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -164,7 +238,11 @@ describe(testName, () => {
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
+        const streamEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);
+        streamEncoder.release();
+        audioEncoder.release();
     });
 
     it('Stream with invalid stream key', async function() {
@@ -173,7 +251,7 @@ describe(testName, () => {
         }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-2');
         stream.service = osn.ServiceFactory.legacySettings;
         stream.service.update({ key: 'invalid' });
         stream.delay =
@@ -183,7 +261,7 @@ describe(testName, () => {
         stream.network =
             osn.NetworkFactory.create();
         stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create();
+        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-5");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
         stream.start();
@@ -205,6 +283,10 @@ describe(testName, () => {
 
         stream.service.update({ key: obs.userStreamKey });
 
+        const videoEncoder = stream.videoEncoder;
+        const audioEncoder = stream.audioEncoder;
         osn.SimpleStreamingFactory.destroy(stream);
+        videoEncoder.release();
+        audioEncoder.release();
     });
 });

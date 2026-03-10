@@ -25,6 +25,7 @@ void osn::IDelay::Register(ipc::server &srv)
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("Delay");
 
 	cls->register_function(std::make_shared<ipc::function>("Create", std::vector<ipc::type>{}, Create));
+	cls->register_function(std::make_shared<ipc::function>("Destroy", std::vector<ipc::type>{}, Destroy));
 
 	cls->register_function(std::make_shared<ipc::function>("GetEnabled", std::vector<ipc::type>{ipc::type::UInt64}, GetEnabled));
 	cls->register_function(std::make_shared<ipc::function>("SetEnabled", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetEnabled));
@@ -46,6 +47,20 @@ void osn::IDelay::Create(void *data, const int64_t id, const std::vector<ipc::va
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
+	AUTO_DEBUG;
+}
+
+void osn::IDelay::Destroy(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	uint64_t uid = args[0].value_union.ui64;
+	Delay *delay = osn::IDelay::Manager::GetInstance().find(uid);
+	if (!delay) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Delay reference is not valid.");
+	}
+
+	osn::IDelay::Manager::GetInstance().free(uid);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

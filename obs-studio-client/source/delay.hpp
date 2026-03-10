@@ -23,6 +23,7 @@ namespace osn {
 class Delay : public Napi::ObjectWrap<osn::Delay> {
 public:
 	uint64_t uid;
+	uint64_t connectionEpoch;
 
 public:
 	static Napi::FunctionReference constructor;
@@ -30,7 +31,7 @@ public:
 	Delay(const Napi::CallbackInfo &info);
 
 	static Napi::Value Create(const Napi::CallbackInfo &info);
-
+	void Finalize(Napi::Env env);
 	Napi::Value GetEnabled(const Napi::CallbackInfo &info);
 	void SetEnabled(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetDelaySec(const Napi::CallbackInfo &info);

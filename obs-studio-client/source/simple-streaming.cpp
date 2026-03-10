@@ -35,7 +35,6 @@ Napi::Object osn::SimpleStreaming::Init(Napi::Env env, Napi::Object exports)
 		 StaticMethod("destroy", &osn::SimpleStreaming::Destroy),
 
 		 InstanceAccessor("videoEncoder", &osn::SimpleStreaming::GetVideoEncoder, &osn::SimpleStreaming::SetVideoEncoder),
-		 InstanceAccessor("audioEncoder", &osn::SimpleStreaming::GetAudioEncoder, &osn::SimpleStreaming::SetAudioEncoder),
 		 InstanceAccessor("service", &osn::SimpleStreaming::GetService, &osn::SimpleStreaming::SetService),
 		 InstanceAccessor("enforceServiceBitrate", &osn::SimpleStreaming::GetEnforceServiceBirate, &osn::SimpleStreaming::SetEnforceServiceBirate),
 		 InstanceAccessor("enableTwitchVOD", &osn::SimpleStreaming::GetEnableTwitchVOD, &osn::SimpleStreaming::SetEnableTwitchVOD),
@@ -79,6 +78,16 @@ osn::SimpleStreaming::SimpleStreaming(const Napi::CallbackInfo &info) : Napi::Ob
 	this->className = std::string("SimpleStreaming");
 }
 
+void osn::SimpleStreaming::Finalize(Napi::Env)
+{
+	ReleaseObjects();
+}
+
+void osn::SimpleStreaming::ReleaseObjects()
+{
+	osn::Streaming::ReleaseObjects();
+}
+
 Napi::Value osn::SimpleStreaming::Create(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -105,6 +114,8 @@ void osn::SimpleStreaming::Destroy(const Napi::CallbackInfo &info)
 	stream->stopWorker();
 	stream->cb.Reset();
 
+	stream->ReleaseObjects();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
@@ -113,83 +124,6 @@ void osn::SimpleStreaming::Destroy(const Napi::CallbackInfo &info)
 
 	if (!ValidateResponse(info, response))
 		return;
-}
-
-Napi::Value osn::SimpleStreaming::GetAudioEncoder(const Napi::CallbackInfo &info)
-{
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "GetAudioEncoder", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	auto instance = osn::AudioEncoder::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
-	return instance;
-}
-
-Napi::Value osn::SimpleStreaming::GetUseAdvanced(const Napi::CallbackInfo &info)
-{
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "GetUseAdvanced", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
-}
-
-void osn::SimpleStreaming::SetUseAdvanced(const Napi::CallbackInfo &info, const Napi::Value &value)
-{
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
-	conn->call_synchronous_helper("SimpleStreaming", "SetUseAdvanced", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
-}
-
-Napi::Value osn::SimpleStreaming::GetCustomEncSettings(const Napi::CallbackInfo &info)
-{
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "GetCustomEncSettings", {ipc::value(this->uid)});
-
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	return Napi::String::New(info.Env(), response[1].value_str.c_str());
-}
-
-void osn::SimpleStreaming::SetCustomEncSettings(const Napi::CallbackInfo &info, const Napi::Value &value)
-{
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
-	conn->call_synchronous_helper("SimpleStreaming", "SetCustomEncSettings", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
-}
-
-void osn::SimpleStreaming::SetAudioEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
-{
-	osn::AudioEncoder *encoder = Napi::ObjectWrap<osn::AudioEncoder>::Unwrap(value.ToObject());
-
-	if (!encoder) {
-		Napi::TypeError::New(info.Env(), "Invalid encoder argument").ThrowAsJavaScriptException();
-		return;
-	}
-
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
-	conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
 }
 
 Napi::Value osn::SimpleStreaming::GetLegacySettings(const Napi::CallbackInfo &info)
