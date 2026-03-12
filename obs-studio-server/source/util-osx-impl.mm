@@ -87,7 +87,6 @@ std::string UtilObjCInt::getDefaultVideoSavePath(void)
 
 void UtilObjCInt::runApplication(void)
 {
-	appRunning = true;
 	// Wait for OBS_API_initAPI to be invoked
 	while (!hasInitApi() && isRunning()) {
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
