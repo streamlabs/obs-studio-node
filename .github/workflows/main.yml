@@ -49,7 +49,7 @@ jobs:
       OS_TAG: "osx"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Get the version
@@ -57,7 +57,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
         shell: bash
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20.x'
       - name: Install dependencies
@@ -115,7 +115,7 @@ jobs:
       OS_TAG: "osx"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Get the version
@@ -123,7 +123,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
         shell: bash
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20.x'
       - name: Install dependencies
@@ -224,7 +224,7 @@ jobs:
       OS_TAG: "osx"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Download build artifacts
@@ -252,10 +252,8 @@ jobs:
     env:
       OS_TAG: "win64"
     steps:
-      - name: 'Add msbuild to PATH'
-        uses: microsoft/setup-msbuild@v1
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Get the version
@@ -301,7 +299,7 @@ jobs:
       OS_TAG: "win64"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Download build artifacts
@@ -376,7 +374,7 @@ jobs:
       OS_TAG: "win64"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
           repository: stream-labs/symsrv-scripts
