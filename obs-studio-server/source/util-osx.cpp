@@ -49,6 +49,11 @@ void UtilInt::stopApplication(void)
 	_impl->stopApplication();
 }
 
+bool UtilInt::isRunning(void)
+{
+	return _impl->isRunning();
+}
+
 unsigned long long UtilInt::getTotalPhysicalMemory(void)
 {
 	return _impl->getTotalPhysicalMemory();
@@ -82,4 +87,24 @@ std::string UtilInt::getComputerName(void)
 int UtilInt::getPhysicalCores(void)
 {
 	return _impl->getPhysicalCores();
+}
+
+std::string UtilInt::getCpuName(void)
+{
+	return _impl->getCpuName();
+}
+
+void UtilInt::nextState(void)
+{
+	_impl->nextState();
+}
+
+bool UtilInt::hasInitApi(void)
+{
+	return _impl->hasInitApi();
+}
+
+bool UtilInt::hasInitCef(void)
+{
+	return _impl->hasInitCef();
 }

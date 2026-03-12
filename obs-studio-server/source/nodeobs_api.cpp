@@ -972,6 +972,18 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	SetPrivilegeForGPUPriority();
 #endif
 
+	// This code initializes the graphics susbsystem and hardware acceleration features
+	obs_video_info *ovi = obs_create_video_info();
+	const auto resetResult = obs_reset_video(ovi);
+	if (resetResult != OBS_VIDEO_SUCCESS) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::CriticalError));
+		rval.push_back(ipc::value(resetResult));
+	}
+	obs_remove_video_info(ovi);
+	if (resetResult != OBS_VIDEO_SUCCESS) {
+		return;
+	}
+
 	osn::Source::initialize_global_signals();
 
 	cpuUsageInfo = os_cpu_usage_info_start();
@@ -1032,17 +1044,18 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 
 	util::CrashManager::setAppState("idle");
 
-	blog(LOG_INFO, "---------------------------------");
-	obs_log_loaded_modules();
-	blog(LOG_INFO, "---------------------------------");
-	logEncoders();
-	blog(LOG_INFO, "---------------------------------");
-
 	// We are returning a video result here because the frontend needs to know if we sucessfully
 	// initialized the Dx11 API
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(OBS_VIDEO_SUCCESS));
 
+#if defined(__APPLE__)
+	// Block until CEF has been initialized by the main thread.
+	g_util_osx->nextState();
+	while (!g_util_osx->hasInitCef()) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+#endif
 	AUTO_DEBUG;
 }
 
