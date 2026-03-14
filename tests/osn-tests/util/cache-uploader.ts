@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as aws from 'aws-sdk';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import * as archiver from 'archiver';
 import { logInfo } from '../util/logger';
 
@@ -39,23 +40,25 @@ export class CacheUploader {
                 const file = fs.createReadStream(cacheFile);
                 const keyname = this.dateStr + '-' + this.testName + '-test-cache-' + this.releaseName + '.zip';
         
-                aws.config.region = 'us-west-2';
-        
                 // This is a restricted cache upload account
-                aws.config.credentials = new aws.Credentials({
-                    accessKeyId: process.env.OSN_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.OSN_SECRET_ACCESS_KEY,
+                const s3 = new S3Client({
+                    region: 'us-west-2',
+                    credentials: {
+                        accessKeyId: process.env.OSN_ACCESS_KEY_ID,
+                        secretAccessKey: process.env.OSN_SECRET_ACCESS_KEY,
+                    },
                 });
-        
-                const upload = new aws.S3.ManagedUpload({
-                params: {
-                    Bucket: 'obs-studio-node-tests-cache',
-                    Key: keyname,
-                    Body: file,
-                },
+
+                const upload = new Upload({
+                    client: s3,
+                    params: {
+                        Bucket: 'obs-studio-node-tests-cache',
+                        Key: keyname,
+                        Body: file,
+                    },
                 });
-        
-                upload.promise().then(() => {
+
+                upload.done().then(() => {
                     logInfo(this.testName, 'Finished uploading cache');
                     logInfo(this.testName, keyname);
                     resolve(keyname);
