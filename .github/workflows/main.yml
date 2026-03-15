@@ -262,8 +262,8 @@ jobs:
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         shell: pwsh
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Install Yarn 4
+        run: npm install -g yarn@4.9.1
       - name: Install dependencies
         run: |
           yarn install --immutable --immutable-cache --check-cache
@@ -315,8 +315,8 @@ jobs:
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: pwsh
-      - name: Enable Corepack
-        run: corepack enable
+      - name: Install Yarn 4
+        run: npm install -g yarn@4.9.1
       - name: Install dependencies
         run: |
           yarn install --immutable --immutable-cache --check-cache
