@@ -3,7 +3,9 @@ build/
 logs/
 node_modules/
 distribute/
-yarn-error.log 
+yarn.lock
+yarn-error.log
+.yarn/
 test-results.xml
 
 # Binaries

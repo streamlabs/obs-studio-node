@@ -262,11 +262,9 @@ jobs:
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
         shell: pwsh
-      - name: Install Yarn 4
-        run: npm install -g yarn@4.9.1
       - name: Install dependencies
         run: |
-          yarn install --immutable --immutable-cache --check-cache
+          yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: Configure obs-studio-node
         run: ./ci/configure-osn.cmd
@@ -315,11 +313,9 @@ jobs:
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: pwsh
-      - name: Install Yarn 4
-        run: npm install -g yarn@4.9.1
       - name: Install dependencies
         run: |
-          yarn install --immutable --immutable-cache --check-cache
+          yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: 'Run tests'
         timeout-minutes: 20
