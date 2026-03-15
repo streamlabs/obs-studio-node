@@ -29,11 +29,11 @@ export class CacheUploader {
             const archive = archiver('zip', { zlib: { level: 9 } });
 
             if (!("OSN_ACCESS_KEY_ID" in process.env)) {
-                reject('Failed to upload cache. The environment variable OSN_ACCESS_KEY_ID does not exist');
+                return reject('Failed to upload cache. The environment variable OSN_ACCESS_KEY_ID does not exist');
             }
 
             if (!("OSN_SECRET_ACCESS_KEY" in process.env)) {
-                reject('Failed to upload cache. The environment variable OSN_SECRET_ACCESS_KEY does not exist');
+                return reject('Failed to upload cache. The environment variable OSN_SECRET_ACCESS_KEY does not exist');
             }
 
             output.on('close', () => {
@@ -62,7 +62,7 @@ export class CacheUploader {
                     logInfo(this.testName, 'Finished uploading cache');
                     logInfo(this.testName, keyname);
                     resolve(keyname);
-                });
+                }).catch((err) => reject(err));
             });
 
             // Modify the stream key in service.json in a reversible way when uploading user caches
