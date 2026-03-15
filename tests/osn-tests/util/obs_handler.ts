@@ -3,6 +3,7 @@ import { logInfo, logWarning } from '../util/logger';
 import { UserPoolHandler } from './user_pool_handler';
 import { CacheUploader } from '../util/cache-uploader'
 import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../util/obs_enums'
+import { v4 as uuidv4 } from 'uuid';
 const WaitQueue = require('wait-queue');
 
 // Interfaces
@@ -61,13 +62,12 @@ export type TConfigEvent = 'starting_step' | 'progress' | 'stopping_step' | 'err
 // OBSHandler class
 export class OBSHandler {
     private path = require('path');
-    private uuid = require('uuid/v4');
 
     // Variables for obs initialization
     private workingDirectory: string = this.path.normalize(osn.wd);
     private language: string = 'en-US';
     private obsPath: string = this.path.join(this.path.normalize(__dirname), '..', 'osnData/slobs-client');
-    private pipeName: string = 'osn-tests-pipe-'.concat(this.uuid());
+    private pipeName: string = 'osn-tests-pipe-'.concat(uuidv4());
     private version: string = '0.00.00-preview.0';
     private crashServer: string = '';
 
