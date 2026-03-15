@@ -593,6 +593,7 @@ describe(testName, () => {
 
     it('Set enabled and get it for all filter types', () => {
         obs.filterTypes.forEach(function(filterType) {
+            logInfo(testName, 'Testing filter type: ' + filterType);
             // Creating filter
             const filter = osn.FilterFactory.create(filterType, 'filter');
 

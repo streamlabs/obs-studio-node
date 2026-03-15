@@ -42,7 +42,7 @@ export class CacheUploader {
         
                 // This is a restricted cache upload account
                 const s3 = new S3Client({
-                    region: 'us-west-2',
+                    region: 'us-east-2',
                     credentials: {
                         accessKeyId: process.env.OSN_ACCESS_KEY_ID,
                         secretAccessKey: process.env.OSN_SECRET_ACCESS_KEY,
