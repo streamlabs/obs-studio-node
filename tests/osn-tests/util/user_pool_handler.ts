@@ -16,7 +16,7 @@ interface ITestUser {
     apiToken: string;
     widgetToken: string;
     streamKey: string;
-    platforms: any;
+    platforms: Record<string, { streamKey: string }>;
 }
 
 export class UserPoolHandler {
