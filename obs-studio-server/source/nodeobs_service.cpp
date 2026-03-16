@@ -3302,7 +3302,7 @@ void OBS_service::stopAllOutputs()
 
 		obs_output_stop(output);
 
-		if (OBS_service::isTwitchStream(serviceId) && IsMultitrackVideoEnabled()) {
+		if (OBS_service::isTwitchStream(serviceId) && osn::IsMultitrackVideoEnabled()) {
 			obs_output_remove_packet_callback(output, bpm_inject, NULL);
 			bpm_destroy(output);
 		}
