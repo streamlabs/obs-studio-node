@@ -583,6 +583,12 @@ describe(testName, () => {
                 expect(input.id).to.equal(inputType, GetErrorMessage(ETestErrorMsg.InputId, inputType));
                 expect(input.name).to.equal('input', GetErrorMessage(ETestErrorMsg.InputName, inputType));
 
+                // game_capture needs capture_audio enabled so OBS_SOURCE_AUDIO stays set
+                if (inputType === 'game_capture') {
+                    input.update({ capture_audio: true });
+                    input.save();
+                }
+
                 audioFilters.forEach(function(filterType) {
                     const filter = osn.FilterFactory.create(filterType, filterType);
 
