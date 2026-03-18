@@ -423,7 +423,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 
 	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
-	recording->startOutput();
+	recording->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

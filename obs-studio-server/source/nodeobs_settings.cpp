@@ -1884,6 +1884,19 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 	const char *recFormatCurrentValue = config_get_string(config, "AdvOut", "RecFormat");
 	if (recFormatCurrentValue == NULL)
 		recFormatCurrentValue = "";
+		
+	//check format compatibility with encoder
+	const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
+	if (strcmp(curEncoder, "none") == 0) {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
+	}
+	std::string container = recFormatCurrentValue;
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(curEncoder, container, false)) {
+		blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'. Resetting format to 'mkv'.", curEncoder,
+		     container.c_str());
+		config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		recFormatCurrentValue = "mkv";
+	}
 
 	recFormat.currentValue.resize(strlen(recFormatCurrentValue));
 	memcpy(recFormat.currentValue.data(), recFormatCurrentValue, strlen(recFormatCurrentValue));
@@ -2497,6 +2510,19 @@ std::vector<SubCategory> OBS_settings::getOutputSettings(CategoryTypes &type)
 void OBS_settings::saveSimpleOutputSettings(std::vector<SubCategory> settings)
 {
 	saveGenericSettings(settings, "SimpleOutput", ConfigManager::getInstance().getBasic());
+
+	//check format compatibility with encoder
+	const char *curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder");
+	const char *recQuality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
+	if (strcmp(recQuality, "Stream") == 0) {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
+	}
+	std::string container = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat"));
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(curEncoder, container, true)) {
+		blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'. Resetting format to 'mkv'.", curEncoder,
+		     container.c_str());
+		config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+	}
 }
 
 void OBS_settings::saveAdvancedOutputStreamingSettings(std::vector<SubCategory> settings)
@@ -3597,6 +3623,7 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings, std::string section, config_t *config)
 {
 	SubCategory sc;
+	//bool encoderOrFormatChanged = false;
 
 	for (int i = 0; i < genericSettings.size(); i++) {
 		sc = genericSettings.at(i);
@@ -3693,6 +3720,10 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 						config_set_string(config, "AdvVideo", name.c_str(), value.c_str());
 						video_range_type colorRange = osn::Video::ColoRangeFromStr(value);
 						osn::Video::Manager::GetInstance().for_each([colorRange](obs_video_info *ovi) { ovi->range = colorRange; });
+					//} else if (name.compare("RecEncoder") == 0 || name.compare("RecFormat") == 0 || name.compare("StreamEncoder") == 0 ||
+					//	   name.compare("replayBufferUseStreamOutput") == 0) {
+					//	encoderOrFormatChanged = true;
+					//	config_set_string(config, section.c_str(), name.c_str(), value.c_str());
 					} else {
 						config_set_string(config, section.c_str(), name.c_str(), value.c_str());
 					}
@@ -3702,6 +3733,19 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 			}
 		}
 	}
+
+	//if (encoderOrFormatChanged) {
+		////validate recording format and encoder
+		//if (recEncoder.length() == 0)
+		//	recEncoder = config_get_string(config, section.c_str(), "RecEncoder");
+		//if (recFormat.length() == 0)
+		//	recFormat = config_get_string(config, section.c_str(), "RecFormat");
+		//if (!osn::EncoderUtils::isEncoderCompatibleRecording(recEncoder.c_str(), recFormat, true)) {
+		//	blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'. Resetting format to 'mkv'.",
+		//	     recEncoder.c_str(), recFormat.c_str());
+		//	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		//}
+	//}
 	config_save_safe(config, "tmp", nullptr);
 }
 

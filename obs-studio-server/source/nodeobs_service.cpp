@@ -1641,7 +1641,7 @@ bool isConfiguredRecordingEncoderValid(bool checkReplayBuffer)
 		return true;
 	}
 
-	if (!IsMultitrackVideoEnabled()) {
+	if (!osn::IsMultitrackVideoEnabled()) {
 		simpleUsesStream = isSimpleMode && simpleQuality.compare("Stream") == 0;
 		advancedUsesStream = !isSimpleMode && (advancedRecEncoder.compare("") == 0 || advancedRecEncoder.compare("none") == 0);
 		//if checking replay buffer, check use stream OR use recording and recording uses stream
@@ -1737,6 +1737,7 @@ bool OBS_service::startRecording(void)
 			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
 		}
 		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		blog(LOG_INFO, "Recording format was updated to 'mkv' to ensure compatibility with the selected encoder.");
 
 		//set failure info
 		SignalInfo signal = SignalInfo("recording", "stop");
@@ -1944,6 +1945,7 @@ bool OBS_service::startReplayBuffer(void)
 			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
 		}
 		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		blog(LOG_INFO, "Recording format was updated to 'mkv' to ensure compatibility with the selected encoder.");
 
 		SignalInfo signal = SignalInfo("replay-buffer", "stop");
 		isReplayBufferActive = false;

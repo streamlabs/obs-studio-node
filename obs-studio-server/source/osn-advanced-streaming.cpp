@@ -438,7 +438,7 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
 
-	streaming->startOutput();
+	streaming->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

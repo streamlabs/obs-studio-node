@@ -351,8 +351,6 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-file-output.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-advanced-replay-buffer.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-advanced-replay-buffer.hpp"
-    "${PROJECT_SOURCE_DIR}/source/osn-output-signals.cpp"
-    "${PROJECT_SOURCE_DIR}/source/osn-output-signals.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-encoders.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-encoders.hpp"
 

@@ -141,7 +141,7 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for replay buffer.");
 	}
 
-	obs_output_set_video_encoder(replayBuffer->output, videoEncoder);
+	obs_output_set_video_encoder(replayBuffer->GetOutput(), videoEncoder);
 
 	if (!replayBuffer->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
@@ -177,7 +177,7 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 
 	blog(LOG_INFO, "Start Replay Buffer using %s encoder.", obs_encoder_get_id(videoEncoder));
 
-	replayBuffer->startOutput();
+	replayBuffer->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

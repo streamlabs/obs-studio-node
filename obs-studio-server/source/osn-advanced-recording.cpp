@@ -232,7 +232,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
 
-	obs_output_set_video_encoder(recording->output, recording->videoEncoder);
+	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 
 	std::string path = recording->path;
 
@@ -257,7 +257,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 
 	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
-	recording->startOutput();
+	recording->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

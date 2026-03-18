@@ -356,7 +356,8 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	if (!streaming->GetCanvas()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
-	
+	}
+
 	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
 	const char *encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
 	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, encID, streaming->simple)) {
@@ -404,7 +405,7 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
 
-	streaming->startOutput();
+	streaming->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
