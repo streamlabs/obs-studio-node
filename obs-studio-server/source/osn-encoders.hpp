@@ -144,8 +144,8 @@ extern const std::vector<EncoderSettings> videoEncoderOptions;
 static const std::unordered_map<std::string, std::unordered_set<std::string>> codecsForContainers = {
 	// Technically our muxer supports HEVC and AV1 as well, but nothing else does
 	{"flv", {"h264", "aac"}},
-	{"mpegts", {"h264", "hevc", "aac", "opus"}},
-	{"hls", {"h264", "hevc", "aac"}}, // Also using MPEG-TS, but no Opus support
+	{"ts", {"h264", "hevc", "aac", "opus"}},
+	{"m3u8", {"h264", "hevc", "aac"}}, // Also using MPEG-TS, but no Opus support
 	{"mov", {"h264", "hevc", "prores", "aac", "alac", "pcm_s16le", "pcm_s24le", "pcm_f32le"}},
 	{"mp4", {"h264", "hevc", "av1", "aac", "opus", "alac", "flac"}},
 	{"fragmented_mov", {"h264", "hevc", "prores", "aac", "alac", "pcm_s16le", "pcm_s24le", "pcm_f32le"}},

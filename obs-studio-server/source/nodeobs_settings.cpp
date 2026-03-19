@@ -1146,7 +1146,7 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 	recFormat.push_back({"flv", ipc::value("flv")});
 	recFormat.push_back({"mov", ipc::value("mov")});
 	recFormat.push_back({"mkv", ipc::value("mkv")});
-	recFormat.push_back({"mpegts", ipc::value("mpegts")});
+	recFormat.push_back({"mpegts", ipc::value("ts")});
 	entries.push_back(recFormat);
 
 	//Rec Encoder
@@ -1894,8 +1894,8 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 	recFormatValues.push_back(std::make_pair("flv", "flv"));
 	recFormatValues.push_back(std::make_pair("mov", "mov"));
 	recFormatValues.push_back(std::make_pair("mkv", "mkv"));
-	recFormatValues.push_back(std::make_pair("mpegts", "mpegts"));
-	recFormatValues.push_back(std::make_pair("hls", "hls"));
+	recFormatValues.push_back(std::make_pair("mpegts", "ts"));
+	recFormatValues.push_back(std::make_pair("hls", "m3u8"));
 
 	uint32_t indexDataRecFormat = 0;
 

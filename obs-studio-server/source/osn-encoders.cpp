@@ -233,7 +233,7 @@ std::string osn::EncoderUtils::getInternalEncoderFromSimple(const char *encoder)
 		}
 	}
 	if (!found)
-		blog(LOG_WARNING, "GetAdvancedEncoderFromSimple - encoder %s is not found, returning default encoder.", encoder);
+		blog(LOG_WARNING, "getInternalEncoderFromSimple - encoder %s is not found, returning default encoder.", encoder);
 
 	return encoderName;
 }
@@ -379,7 +379,6 @@ static bool containerSupportsCodec(const std::string &container, const std::stri
 	auto iter = osn::EncoderUtils::codecsForContainers.find(container);
 	if (iter == osn::EncoderUtils::codecsForContainers.end())
 		return false;
-
 	auto codecs = iter->second;
 	// Assume everything is supported
 	if (codecs.empty())

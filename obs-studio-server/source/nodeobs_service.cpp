@@ -1439,7 +1439,7 @@ bool OBS_service::startStreaming(StreamServiceId serviceId, bool dualStreamingMo
 	if (dualStreamingMode)
 		checkServiceId = StreamServiceId::Both;
 	if (!isConfiguredStreamingEncoderValid(checkServiceId)) {
-		blog(LOG_ERROR, "The selected Streaming Encoder is not compatible with the current service. Please update these settings.");
+		blog(LOG_ERROR, "The selected streaming encoder is not compatible with the current service. Please update these settings.");
 		return false;
 	}
 
@@ -1741,7 +1741,7 @@ bool OBS_service::startRecording(void)
 
 		//set failure info
 		SignalInfo signal = SignalInfo("recording", "stop");
-		signal.setErrorMessage("The selected Recording Encoder is not compatible with the selected Recording Format. Please update these settings.");
+		signal.setErrorMessage("The selected recording encoder is not compatible with the selected recording format. Please update these settings.");
 		std::unique_lock<std::mutex> ulock(signalMutex);
 		signal.setCode(OBS_OUTPUT_ERROR);
 		outputSignal.push(signal);
@@ -1951,7 +1951,7 @@ bool OBS_service::startReplayBuffer(void)
 		isReplayBufferActive = false;
 		rpUsesRec = false;
 		rpUsesStream = false;
-		signal.setErrorMessage("The selected Replay Buffer settings are not compatible with the Recording Format. Please update these settings.");
+		signal.setErrorMessage("The selected Replay Buffer settings are not compatible with the recording format. Please update these settings.");
 		std::unique_lock<std::mutex> ulock(signalMutex);
 		signal.setCode(OBS_OUTPUT_ERROR);
 		outputSignal.push(signal);
