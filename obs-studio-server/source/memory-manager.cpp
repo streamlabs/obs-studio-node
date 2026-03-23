@@ -371,30 +371,25 @@ void MemoryManager::unregisterSource(obs_source_t *source)
 
 void MemoryManager::shutdownAllSources()
 {
-	std::unique_lock ulock(manager_mutex);
-
-	std::vector<std::string> sourceKeys;
-	for (const auto &pair : sources) {
-		sourceKeys.push_back(pair.first);
+	std::vector<std::pair<std::string, std::shared_ptr<source_info>>> sources_to_shutdown;
+	{
+		std::unique_lock ulock(manager_mutex);
+		for (auto &pair : sources) {
+			sources_to_shutdown.emplace_back(pair.first, std::move(pair.second));
+		}
+		sources.clear();
 	}
 
-	for (auto &source_key : sourceKeys) {
-		blog(LOG_INFO, "MemoryManager: shutdownAllSources: source %s", source_key.c_str());
-		auto it = sources.find(source_key);
-		if (it == sources.end()) {
-			continue;
-		}
+	for (const auto &[key, value] : sources_to_shutdown) {
+		blog(LOG_INFO, "MemoryManager: shutdownAllSources: source %s", key.c_str());
 
-		auto moved_ptr = std::move(it->second);
-		sources.erase(source_key);
-
-		for (auto &worker : moved_ptr->workers) {
+		for (auto &worker : value->workers) {
 			if (worker.joinable())
 				worker.join();
 		}
 
-		moved_ptr->mtx.lock();
-		removeCachedMemory(*moved_ptr, false, source_key);
-		moved_ptr->mtx.unlock();
+		std::scoped_lock lock(manager_mutex, value->mtx);
+		removeCachedMemory(*value, false, key);
+		obs_source_release(value->source);
 	}
 }
