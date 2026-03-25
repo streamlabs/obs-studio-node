@@ -2640,6 +2640,10 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 	std::string section = "AdvOut";
 	bool resetAudioTracks = false;
 
+	bool recEncoderChanged = false;
+	bool streamEncoderChanged = false;
+	bool recFormatChanged = false;
+
 	obs_encoder_t *encoder = OBS_service::getRecordingEncoder();
 	obs_data_t *encoderSettings = obs_encoder_get_settings(encoder);
 
@@ -2653,7 +2657,6 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 			indexEncoderSettings--;
 	}
 
-	bool newEncoderType = false;
 	std::string currentFormat;
 
 	Parameter param;
@@ -2740,22 +2743,21 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 			} else {
 				std::string value(param.currentValue.data(), param.currentValue.size());
 				if (i < indexEncoderSettings) {
+					const char *currentValue = utility::GetSafeString(
+						config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), name.c_str()));
 					if (name.compare("RecEncoder") == 0) {
-						const char *currentEncoder =
-							config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), name.c_str());
-
-						if (currentEncoder != NULL)
-							newEncoderType = value.compare(currentEncoder) != 0;
-					}
-					if (name.compare("RecFormat") == 0) {
+						recEncoderChanged = value.compare(currentValue) != 0;
+					} else if (name.compare("RecFormat") == 0) {
 						currentFormat = value;
-					}
-					if (name.compare("RecAEncoder") == 0) {
-						const char *currentEncoder =
-							config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), name.c_str());
-						if (currentEncoder == NULL || value.compare(currentEncoder) != 0) {
+						recFormatChanged = value.compare(currentValue) != 0;
+					} else if (name.compare("RecAEncoder") == 0) {
+						if (value.compare(currentValue) != 0) {
 							resetAudioTracks = true;
 						}
+					} else if (name.compare("Encoder") == 0) {
+						streamEncoderChanged = value.compare(currentValue) != 0;
+					} else if (name.compare("RecFormat") == 0) {
+						recFormatChanged = value.compare(currentValue) != 0;
 					}
 					config_set_string(ConfigManager::getInstance().getBasic(), section.c_str(), name.c_str(), value.c_str());
 				} else {
@@ -2767,9 +2769,49 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 		}
 	}
 
+	//validate recording encoder if those settings changed - keep the changed value and update anything incompatible with it
+	//rec encoder changed: update format
+	//rec format changed: default to rec encoder x264 (this also switches from using stream to rec encoder if it was using stream)
+	//don't know if stream encoder changed, but if using stream and it's incompatible, update format to mkv so still use stream encoder
+	std::string curEncoder = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
+	std::string container = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecFormat"));
+	bool useStream = curEncoder.empty() || curEncoder.compare("none") == 0;
+
+	//if set to use stream check that value
+	if (useStream) {
+		curEncoder = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "Encoder"));
+	}
+
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(curEncoder.c_str(), container, false)) {
+		//settings are saved every time a single setting is changed so we don't need to check if more than one setting changed
+		if (useStream && !recEncoderChanged && !recFormatChanged) {
+			blog(LOG_ERROR,
+			     "The selected streaming encoder '%s' is not compatible with the recording format '%s'. Update recording format to 'mkv'.",
+			     curEncoder.c_str(), container.c_str());
+			config_set_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecFormat", "mkv");
+		}
+		if (recEncoderChanged) {
+			blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'. Update recording format to 'mkv'.",
+			     curEncoder.c_str(), container.c_str());
+			config_set_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecFormat", "mkv");
+		}
+		if (recFormatChanged) {
+			config_set_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder", ADVANCED_ENCODER_X264);
+			if (useStream) {
+				blog(LOG_ERROR,
+				     "The selected recording format '%s' is not compatible with the streaming encoder '%s'. Use recording encoder instead (setting to 'obs_x264').",
+				     container.c_str(), curEncoder.c_str());
+			} else {
+				blog(LOG_ERROR,
+				     "The selected recording format '%s' is not compatible with the recording encoder '%s'. Update recording encoder to 'obs_x264'.",
+				     container.c_str(), curEncoder.c_str());
+			}
+		}
+	}
+
 	int ret = config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 
-	if (newEncoderType) {
+	if (recEncoderChanged) {
 		//this is called immediately on encoder change so no other settings have been changed - start with defaults
 		encoderSettings = obs_encoder_defaults(config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecEncoder"));
 
@@ -3597,6 +3639,10 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings, std::string section, config_t *config)
 {
 	SubCategory sc;
+	bool recEncoderChanged = false;
+	bool streamEncoderChanged = false;
+	bool recFormatChanged = false;
+	bool recQualityChanged = false;
 
 	for (int i = 0; i < genericSettings.size(); i++) {
 		sc = genericSettings.at(i);
@@ -3644,6 +3690,7 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 					config_set_double(config, section.c_str(), name.c_str(), *value);
 				} else if (subType.compare("OBS_COMBO_FORMAT_STRING") == 0) {
 					std::string value(param.currentValue.data(), param.currentValue.size());
+					const char *currentValue = utility::GetSafeString(config_get_string(config, section.c_str(), name.c_str()));
 
 					if (name.compare("MonitoringDeviceName") == 0) {
 						std::string monDevName;
@@ -3693,12 +3740,75 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 						config_set_string(config, "AdvVideo", name.c_str(), value.c_str());
 						video_range_type colorRange = osn::Video::ColoRangeFromStr(value);
 						osn::Video::Manager::GetInstance().for_each([colorRange](obs_video_info *ovi) { ovi->range = colorRange; });
+					} else if (name.compare("RecEncoder") == 0) {
+						recEncoderChanged = value.compare(currentValue) != 0;
+						config_set_string(config, section.c_str(), name.c_str(), value.c_str());
+					} else if (name.compare("StreamEncoder") == 0) {
+						streamEncoderChanged = value.compare(currentValue) != 0;
+						config_set_string(config, section.c_str(), name.c_str(), value.c_str());
+					} else if (name.compare("RecQuality") == 0) {
+						recQualityChanged = value.compare(currentValue) != 0;
+						config_set_string(config, section.c_str(), name.c_str(), value.c_str());
+					} else if (name.compare("RecFormat") == 0) {
+						recFormatChanged = value.compare(currentValue) != 0;
+						config_set_string(config, section.c_str(), name.c_str(), value.c_str());
 					} else {
 						config_set_string(config, section.c_str(), name.c_str(), value.c_str());
 					}
 				}
 			} else {
 				std::cout << "type not found ! " << type.c_str() << std::endl;
+			}
+		}
+	}
+
+	//validate recording encoder if those settings changed - keep the changed value and update anything incompatible with it
+	//rec encoder changed: update format
+	//rec quality changed: if set to stream and stream isn't compatible, update format, otherwise do nothing (quality only applies to know if using stream or not)
+	//stream encoder changed: if quality = stream, update format (only care if this changed if quality = stream)
+	//rec format changed: if using stream encoder, update to not use it (changedquality to 'Small;) otherwise default to rec encoder x264
+	std::string curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder");
+	std::string container = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat");
+	std::string quality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
+	bool useStream = quality.compare("Stream") == 0;
+
+	//if set to use stream check that value
+	if (useStream) {
+		curEncoder = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+	}
+
+	//if incompatible reset recording encoder to x264, if it was set to use stream and that wasn't compatible update quality to xxx to use recording encoder
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(curEncoder.c_str(), container, true)) {
+		//settings are saved every time a single setting is changed so we don't need to check if more than one setting changed
+		if (recEncoderChanged || (streamEncoderChanged && useStream)) {
+			blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'. Update recording format to 'mkv'.",
+			     curEncoder.c_str(), container.c_str());
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		}
+		if (recFormatChanged) {
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", SIMPLE_ENCODER_X264);
+			if (useStream) {
+				blog(LOG_ERROR,
+				     "The selected recording format '%s' is not compatible with the streaming encoder '%s'. Use recording encoder instead (setting to 'x264').",
+				     container.c_str(), curEncoder.c_str());
+				config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality", "Small");
+			} else {
+				blog(LOG_ERROR,
+				     "The selected recording format '%s' is not compatible with the recording encoder '%s'. Update recording encoder to 'x264'.",
+				     container.c_str(), curEncoder.c_str());
+			}
+		}
+		if (recQualityChanged) {
+			if (useStream) {
+				blog(LOG_ERROR,
+				     "The selected streaming encoder '%s' is not compatible with the recording format '%s'. Update recording format to 'mkv'.",
+				     curEncoder.c_str(), container.c_str());
+				config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+			} else {
+				blog(LOG_ERROR,
+				     "The selected recording encoder '%s' is not compatible with the recording format '%s'. Update recording encoder to 'x264'.",
+				     curEncoder.c_str(), container.c_str());
+				config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", SIMPLE_ENCODER_X264);
 			}
 		}
 	}
