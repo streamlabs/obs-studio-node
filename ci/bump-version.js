@@ -1,14 +1,12 @@
-const sh = require('shelljs');
-const colors = require('colors/safe');
 const fs = require('fs');
 const path = require('path');
 
 function log_info(msg) {
-    sh.echo(colors.magenta(msg));
+    console.log(msg);
 }
-  
+
 function log_error(msg) {
-    sh.echo(colors.red(`ERROR: ${msg}`));
+    console.error(`ERROR: ${msg}`);
 }
 
 const newVersion = process.argv[2];
@@ -29,5 +27,5 @@ try {
     fs.writeFileSync(file, JSON.stringify(root, null, 2));
 } catch (error) {
     log_error(error);
-    sh.exit(1);
+    process.exit(1);
 }
