@@ -1866,14 +1866,20 @@ void OBS_API::destroyOBS_API(void)
 				obs_source_release(source);
 		}
 
-		// In rare cases (bugs?), some sources may not be released yet.
-		// Remove the 'destruction' callback. Otherwise, it will try to
-		// access data released by |obs_shutdown| which leads to crashes.
+		// Wait for destroy work queued by the explicit source releases above so the
+		// manager only contains sources that are still hanging around unexpectedly.
 		obs_wait_for_destroy_queue();
+
+		// Detach node-side destroy/remove callbacks from the remaining leaked
+		// sources, then drop the memory manager refs they still hold.
 		blog(LOG_WARNING, "OBS_API::destroyOBS_API - obs_wait_for_destroy_queue has finished, osn::Source::Manager::GetInstance() size is %d",
 		     osn::Source::Manager::GetInstance().size());
 		osn::Source::Manager::GetInstance().for_each([&sources](obs_source_t *source) { osn::Source::detach_source_signals(source); });
 		MemoryManager::GetInstance().shutdownAllSources();
+
+		// Releasing the memory manager refs can enqueue/complete more deferred
+		// libobs destruction. Wait for that before obs_shutdown().
+		obs_wait_for_destroy_queue();
 
 #ifdef WIN32
 		// Directly blame the frontend since it didn't release all objects and that could cause
