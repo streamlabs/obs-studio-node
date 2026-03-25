@@ -56,8 +56,10 @@ void system_info(Capabilities &capabilities)
 	// Apple Silicon- there's only going to be gpu
 	Gpu gpu;
 	gpu.model = capabilities.cpu.name.value_or("Unknown");
-	gpu.vendor_id = 0x106b; // Always Apple
-	gpu.device_id = 0;      // Always 0 for Apple Silicon
+	gpu.vendor_id = 0x106b;         // Always Apple
+	gpu.device_id = 0;              // Always 0 for Apple Silicon
+	gpu.dedicated_video_memory = 0; // There really isn't dedicated video mem on Apple
+	gpu.shared_system_memory = [[NSProcessInfo processInfo] physicalMemory];
 
 	std::vector<Gpu> gpus;
 	gpus.push_back(std::move(gpu));
