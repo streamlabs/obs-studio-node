@@ -49,7 +49,7 @@ jobs:
       OS_TAG: "osx"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Get the version
@@ -57,7 +57,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
         shell: bash
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20.x'
       - name: Install dependencies
@@ -115,7 +115,7 @@ jobs:
       OS_TAG: "osx"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Get the version
@@ -123,7 +123,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
         shell: bash
       - name: Install Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20.x'
       - name: Install dependencies
@@ -151,7 +151,7 @@ jobs:
   package-and-deploy-macos:
     name: 'Package and Deploy macOS'
     needs: run-tests-macos
-    if: ${{ needs.run-tests-macos.result == 'success' }}
+    if: ${{ needs.run-tests-macos.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ${{ matrix.image }}
     strategy:
       matrix:
@@ -224,7 +224,7 @@ jobs:
       OS_TAG: "osx"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Download build artifacts
@@ -252,10 +252,8 @@ jobs:
     env:
       OS_TAG: "win64"
     steps:
-      - name: 'Add msbuild to PATH'
-        uses: microsoft/setup-msbuild@v1
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Get the version
@@ -266,7 +264,7 @@ jobs:
         shell: pwsh
       - name: Install dependencies
         run: |
-          yarn install --immutable --immutable-cache --check-cache
+          yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: Configure obs-studio-node
         run: ./ci/configure-osn.cmd
@@ -301,7 +299,7 @@ jobs:
       OS_TAG: "win64"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: 'recursive'
       - name: Download build artifacts
@@ -317,7 +315,7 @@ jobs:
         shell: pwsh
       - name: Install dependencies
         run: |
-          yarn install --immutable --immutable-cache --check-cache
+          yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: 'Run tests'
         timeout-minutes: 20
@@ -333,7 +331,7 @@ jobs:
   package-and-deploy-win64:
     name: 'Package and Deploy Windows'
     needs: run-tests-win64
-    if: ${{ needs.run-tests-win64.result == 'success' }}
+    if: ${{ needs.run-tests-win64.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
     runs-on: windows-2022
     env:
       OS_TAG: "win64"
@@ -376,7 +374,7 @@ jobs:
       OS_TAG: "win64"
     steps:
       - name: 'Checkout'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 2
           repository: stream-labs/symsrv-scripts

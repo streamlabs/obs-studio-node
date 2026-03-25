@@ -3,6 +3,7 @@ import { logInfo, logWarning } from '../util/logger';
 import { UserPoolHandler } from './user_pool_handler';
 import { CacheUploader } from '../util/cache-uploader'
 import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../util/obs_enums'
+import { v4 as uuidv4 } from 'uuid';
 const WaitQueue = require('wait-queue');
 
 // Interfaces
@@ -61,13 +62,12 @@ export type TConfigEvent = 'starting_step' | 'progress' | 'stopping_step' | 'err
 // OBSHandler class
 export class OBSHandler {
     private path = require('path');
-    private uuid = require('uuid/v4');
 
     // Variables for obs initialization
     private workingDirectory: string = this.path.normalize(osn.wd);
     private language: string = 'en-US';
     private obsPath: string = this.path.join(this.path.normalize(__dirname), '..', 'osnData/slobs-client');
-    private pipeName: string = 'osn-tests-pipe-'.concat(this.uuid());
+    private pipeName: string = 'osn-tests-pipe-'.concat(uuidv4());
     private version: string = '0.00.00-preview.0';
     private crashServer: string = '';
 
@@ -106,13 +106,13 @@ export class OBSHandler {
     }
 
     startup() {
-        let initResult: any;
+        let initResult: number;
         logInfo(this.osnTestName, 'Initializing OBS');
 
         try {
             const exitCode = osn.NodeObs.IPC.host(this.pipeName);
-            if (exitCode != osn.EVideoCodes.Success) {
-                if (exitCode == osn.EIPCError.OTHER_ERROR) {
+            if (exitCode !== osn.EVideoCodes.Success) {
+                if (exitCode === osn.EIPCError.OTHER_ERROR) {
                     throw Error('OBS IPC host failed: missing executable or some other error.');
                 }
                 throw Error(`OBS IPC host failed with code ${exitCode}. See osn.EIPCError for more details.`);
@@ -123,7 +123,7 @@ export class OBSHandler {
             throw Error('Exception when initializing OBS process: ' + e);
         }
 
-        if (initResult != osn.EVideoCodes.Success) {
+        if (initResult !== osn.EVideoCodes.Success) {
             throw Error('OBS process initialization failed with code ' + initResult);
         }
 
@@ -169,7 +169,7 @@ export class OBSHandler {
         this.setStreamKey(this.userStreamKey);
 
         let savedStreamKey = this.getStreamKey();
-        if (savedStreamKey == this.userStreamKey) {
+        if (savedStreamKey === this.userStreamKey) {
             logInfo(this.osnTestName, 'Stream key saved successfully');
         } else {
             throw Error('Failed to save stream key');
@@ -219,7 +219,7 @@ export class OBSHandler {
         });
 
         // Saving updated settings container
-        if (value != oldValue) {
+        if (value !== oldValue) {
             osn.NodeObs.OBS_settings_saveSettings(category, settings);
         }
     }
@@ -270,7 +270,7 @@ export class OBSHandler {
 
     startAutoconfig() {
         osn.NodeObs.InitializeAutoConfig((progressInfo: IConfigProgress) => {
-            if (progressInfo.event == 'stopping_step' || progressInfo.event == 'done' || progressInfo.event == 'error') {
+            if (progressInfo.event === 'stopping_step' || progressInfo.event === 'done' || progressInfo.event === 'error') {
                 this.progress.push(progressInfo);
             }
         },
@@ -330,11 +330,11 @@ export class OBSHandler {
     }
 
     setSourceMessageListener() {
-        osn.NodeObs.RegisterSourceCallback((message: any) => {
+        osn.NodeObs.RegisterSourceCallback((message: unknown) => {
             console.log('Source callback received' + JSON.stringify(message));
         });
 
-        osn.NodeObs.RegisterSourceMessageCallback((message: any) => {
+        osn.NodeObs.RegisterSourceMessageCallback((message: unknown) => {
             console.log('Source message callback received' + JSON.stringify(message));
         });
     }

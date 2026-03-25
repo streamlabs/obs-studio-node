@@ -1,7 +1,6 @@
 import { sleep } from './general';
 import { logInfo, logWarning } from './logger';
 
-const request = require('request');
 
 type TPlatform = 'twitch' | 'youtube' | 'mixer' | 'facebook';
 
@@ -17,7 +16,7 @@ interface ITestUser {
     apiToken: string;
     widgetToken: string;
     streamKey: string;
-    platforms: any;
+    platforms: Record<string, { streamKey: string }>;
 }
 
 export class UserPoolHandler {
@@ -30,25 +29,16 @@ export class UserPoolHandler {
     }
 
     private async requestUser(): Promise<any> {
-        return new Promise((resolve, reject) => {
-            request({
-                url: this.userPoolUrl + 'reserve' + '/twitch',
-                headers: {Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}`}},
-                (err: any, res: any, body: any) => {
-                    if (err || res.statusCode !== 200) {
-                        logWarning(this.osnTestName, 'Request user got status ' + res.statusCode);
-                        logWarning(this.osnTestName, 'Error mesage \'' + err + '\'');
-                        reject(`Unable to request user ${err || body}`);
-                    }
-
-                    if (body == undefined) {
-                        reject(`Body is undefined or with wrong format ${body}`);
-                    }
-
-                    resolve(JSON.parse(body));
-                }
-            );
+        const res = await fetch(this.userPoolUrl + 'reserve/twitch', {
+            headers: { Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}` },
         });
+
+        if (!res.ok) {
+            logWarning(this.osnTestName, 'Request user got status ' + res.status);
+            throw new Error(`Unable to request user, status ${res.status}`);
+        }
+
+        return res.json();
     }
 
     async getStreamKey(): Promise<string> {
@@ -78,21 +68,14 @@ export class UserPoolHandler {
     }
 
     async releaseUser() {
-        return new Promise((resolve, reject) => {
-            request({
-                url: this.userPoolUrl + `release/${this.user.type}/${this.user.email}`,
-                headers: {Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}`}
-            }, (err: any, res: any, body: any) => {
-                if (err || res.statusCode !== 200) {
-                    reject(`Unable to release user ${err || body}`);
-                }
-
-                if (body == undefined) {
-                    reject(`Body is undefined or with wrong format ${body}`);
-                }
-
-                resolve(JSON.parse(body));
-            });
+        const res = await fetch(this.userPoolUrl + `release/${this.user.type}/${this.user.email}`, {
+            headers: { Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}` },
         });
+
+        if (!res.ok) {
+            throw new Error(`Unable to release user, status ${res.status}`);
+        }
+
+        return res.json();
     }
 }

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as aws from 'aws-sdk';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import * as archiver from 'archiver';
 import { logInfo } from '../util/logger';
 
@@ -28,38 +29,40 @@ export class CacheUploader {
             const archive = archiver('zip', { zlib: { level: 9 } });
 
             if (!("OSN_ACCESS_KEY_ID" in process.env)) {
-                reject('Failed to upload cache. The environment variable OSN_ACCESS_KEY_ID does not exist');
+                return reject('Failed to upload cache. The environment variable OSN_ACCESS_KEY_ID does not exist');
             }
 
             if (!("OSN_SECRET_ACCESS_KEY" in process.env)) {
-                reject('Failed to upload cache. The environment variable OSN_SECRET_ACCESS_KEY does not exist');
+                return reject('Failed to upload cache. The environment variable OSN_SECRET_ACCESS_KEY does not exist');
             }
 
             output.on('close', () => {
                 const file = fs.createReadStream(cacheFile);
                 const keyname = this.dateStr + '-' + this.testName + '-test-cache-' + this.releaseName + '.zip';
         
-                aws.config.region = 'us-west-2';
-        
                 // This is a restricted cache upload account
-                aws.config.credentials = new aws.Credentials({
-                    accessKeyId: process.env.OSN_ACCESS_KEY_ID,
-                    secretAccessKey: process.env.OSN_SECRET_ACCESS_KEY,
+                const s3 = new S3Client({
+                    region: 'us-east-2',
+                    credentials: {
+                        accessKeyId: process.env.OSN_ACCESS_KEY_ID,
+                        secretAccessKey: process.env.OSN_SECRET_ACCESS_KEY,
+                    },
                 });
-        
-                const upload = new aws.S3.ManagedUpload({
-                params: {
-                    Bucket: 'obs-studio-node-tests-cache',
-                    Key: keyname,
-                    Body: file,
-                },
+
+                const upload = new Upload({
+                    client: s3,
+                    params: {
+                        Bucket: 'obs-studio-node-tests-cache',
+                        Key: keyname,
+                        Body: file,
+                    },
                 });
-        
-                upload.promise().then(() => {
+
+                upload.done().then(() => {
                     logInfo(this.testName, 'Finished uploading cache');
                     logInfo(this.testName, keyname);
                     resolve(keyname);
-                });
+                }).catch((err) => reject(err));
             });
 
             // Modify the stream key in service.json in a reversible way when uploading user caches

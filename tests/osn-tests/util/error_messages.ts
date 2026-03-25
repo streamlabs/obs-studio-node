@@ -203,16 +203,16 @@ export const enum ETestErrorMsg {
 }
 
 export function GetErrorMessage(message: string, value1?: string, value2?: string, value3?: string): string {
-    let replacements: any;
+    let replacements: Record<string, string>;
 
-    if (typeof value1 != 'undefined' &&
-        typeof value2 != 'undefined' &&
-        typeof value3 != 'undefined') {
+    if (typeof value1 !== 'undefined' &&
+        typeof value2 !== 'undefined' &&
+        typeof value3 !== 'undefined') {
         replacements = {"%VALUE1%": value1, "%VALUE2%": value2, "%VALUE3%": value3}
-    } else if (typeof value1 != 'undefined' &&
-               typeof value2 != 'undefined') {
+    } else if (typeof value1 !== 'undefined' &&
+               typeof value2 !== 'undefined') {
         replacements = {"%VALUE1%": value1, "%VALUE2%": value2}
-    } else if (typeof value1 != 'undefined') {
+    } else if (typeof value1 !== 'undefined') {
         replacements = {"%VALUE1%": value1}
     } else {
         return message;

@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import { ITimeSpec } from '../osn';
 
 // OBS types
@@ -73,8 +75,6 @@ export function getCppErrorMsg(errorStack: any): string {
 }
 
 export function deleteConfigFiles(): void {
-    const fs = require('fs');
-    const path = require('path');
     const configFolderPath = path.join(path.normalize(__dirname), '..', 'osnData/slobs-client');
     if (fs.existsSync(configFolderPath)) {
         let currentFile: string;
