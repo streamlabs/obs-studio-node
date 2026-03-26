@@ -36,6 +36,8 @@
 #endif
 
 #include "util-crashmanager.h"
+#include "util-metricsprovider.h"
+#include <exception>
 #include <optional>
 
 std::string GetFormatExt(const std::string container);
@@ -1740,20 +1742,28 @@ void OBS_service::stopStreaming(bool forceStop, StreamServiceId serviceId)
 {
 	blog(LOG_INFO, "stopStreaming - forceStop: %d, serviceId: %d", forceStop, serviceId);
 
-	if (!obs_output_active(streamingOutput[serviceId]) && !obs_output_reconnecting(streamingOutput[serviceId])) {
-		blog(LOG_WARNING, "stopStreaming was ignored as stream not active or reconnecting");
+	obs_output_t *output = streamingOutput[serviceId];
+	if (!output) {
+		blog(LOG_WARNING, "stopStreaming - output is null");
+		isStreaming[serviceId] = false;
+		return;
+	}
+
+	if (!obs_output_active(output) && !obs_output_connecting(output) && !obs_output_reconnecting(output)) {
+		blog(LOG_INFO, "stopStreaming - stream is not active, skip stopping");
+		isStreaming[serviceId] = false;
 		return;
 	}
 
 	if (forceStop)
-		obs_output_force_stop(streamingOutput[serviceId]);
+		obs_output_force_stop(output);
 	else
-		obs_output_stop(streamingOutput[serviceId]);
+		obs_output_stop(output);
 
-	/* Unregister the BPM (Broadcast Performance Metrics) callback and destroy the allocated metrics data. */
+	// Unregister the BPM (Broadcast Performance Metrics) callback and destroy the allocated metrics data.
 	if (isTwitchStream(serviceId) && osn::IsMultitrackVideoEnabled()) {
-		obs_output_remove_packet_callback(streamingOutput[serviceId], bpm_inject, NULL);
-		bpm_destroy(streamingOutput[serviceId]);
+		obs_output_remove_packet_callback(output, bpm_inject, NULL);
+		bpm_destroy(output);
 	}
 
 	waitReleaseWorker();
@@ -3259,19 +3269,137 @@ void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, con
 	logVCamChanged(vcamConfig, false);
 }
 
+namespace {
+
+const char *GetOutputBusyState(obs_output_t *output, bool includeReconnect = false)
+{
+	if (!output)
+		return nullptr;
+
+	if (obs_output_active(output))
+		return "active";
+
+	if (obs_output_connecting(output))
+		return "connecting";
+
+	if (includeReconnect && obs_output_reconnecting(output))
+		return "reconnecting";
+
+	return nullptr;
+}
+
+bool OutputIsBusy(obs_output_t *output, bool includeReconnect = false)
+{
+	return GetOutputBusyState(output, includeReconnect) != nullptr;
+}
+
+void AppendBusyOutputDescription(std::string &description, const std::string &label, obs_output_t *output, bool includeReconnect = false)
+{
+	const char *outputState = GetOutputBusyState(output, includeReconnect);
+	if (!outputState)
+		return;
+
+	if (!description.empty())
+		description += ", ";
+
+	description += label;
+
+	const char *outputName = obs_output_get_name(output);
+	if (outputName && *outputName) {
+		description += "='";
+		description += outputName;
+		description += "'";
+	}
+
+	description += " (";
+	description += outputState;
+	description += ")";
+}
+
+std::string DescribeBusyOutputs()
+{
+	std::string description;
+
+	AppendBusyOutputDescription(description, "stream-main", streamingOutput[StreamServiceId::Main], true);
+	AppendBusyOutputDescription(description, "stream-second", streamingOutput[StreamServiceId::Second], true);
+	AppendBusyOutputDescription(description, "recording", recordingOutput);
+	AppendBusyOutputDescription(description, "replay-buffer", replayBufferOutput);
+	AppendBusyOutputDescription(description, "virtual-cam", virtualCam.Get());
+
+	if (description.empty())
+		description = "unknown";
+
+	return description;
+}
+
+constexpr auto SHUTDOWN_OUTPUTS_STOPT_IMEOUT = std::chrono::seconds(10);
+constexpr auto SHUTDOWN_OUTPUTS_STOP_POLL_INTERVAL = std::chrono::milliseconds(25);
+
+void WaitForAllOutputsToStop()
+{
+	const auto deadline = std::chrono::steady_clock::now() + SHUTDOWN_OUTPUTS_STOPT_IMEOUT;
+
+	while (OutputIsBusy(streamingOutput[StreamServiceId::Main], true) || OutputIsBusy(streamingOutput[StreamServiceId::Second], true) ||
+	       OutputIsBusy(recordingOutput) || OutputIsBusy(replayBufferOutput) || OutputIsBusy(virtualCam.Get())) {
+		if (std::chrono::steady_clock::now() >= deadline) {
+			const std::string busyOutputs = DescribeBusyOutputs();
+			const std::string crashMessage = "Timed out waiting for outputs to stop during shutdown: " + busyOutputs;
+
+			blog(LOG_ERROR, "%s", crashMessage.c_str());
+			util::CrashManager::AddWarning(crashMessage);
+#ifdef WIN32
+			util::CrashManager::GetMetricsProvider()->BlameServer();
+#endif
+
+			std::terminate();
+		}
+
+		std::this_thread::sleep_for(SHUTDOWN_OUTPUTS_STOP_POLL_INTERVAL);
+	}
+}
+
+} // namespace
+
 void OBS_service::stopAllOutputs()
 {
-	if (isStreamingOutputActive(StreamServiceId::Main))
-		stopStreaming(true, StreamServiceId::Main);
+	waitReleaseWorker();
 
-	if (isStreamingOutputActive(StreamServiceId::Second))
-		stopStreaming(true, StreamServiceId::Second);
+	auto stopStreamForShutdown = [](StreamServiceId serviceId) {
+		obs_output_t *output = streamingOutput[serviceId];
+		if (!OutputIsBusy(output, true))
+			return;
 
-	if (replayBufferOutput && obs_output_active(replayBufferOutput))
-		stopReplayBuffer(true);
+		obs_output_stop(output);
 
-	if (recordingOutput && obs_output_active(recordingOutput))
-		stopRecording();
+		if (OBS_service::isTwitchStream(serviceId) && osn::IsMultitrackVideoEnabled()) {
+			obs_output_remove_packet_callback(output, bpm_inject, NULL);
+			bpm_destroy(output);
+		}
+
+		isStreaming[serviceId] = false;
+	};
+
+	stopStreamForShutdown(StreamServiceId::Main);
+	stopStreamForShutdown(StreamServiceId::Second);
+
+	if (OutputIsBusy(replayBufferOutput))
+		obs_output_stop(replayBufferOutput);
+
+	if (OutputIsBusy(recordingOutput))
+		obs_output_stop(recordingOutput);
+
+	obs_output_t *virtualCamOutput = virtualCam.Get();
+	if (OutputIsBusy(virtualCamOutput))
+		obs_output_stop(virtualCamOutput);
+
+	WaitForAllOutputsToStop();
+
+	isStreaming[StreamServiceId::Main] = false;
+	isStreaming[StreamServiceId::Second] = false;
+	isRecording = false;
+	isReplayBufferActive = false;
+	rpUsesRec = false;
+	rpUsesStream = false;
 }
 
 static inline uint32_t setMixer(obs_source_t *source, const int mixerIdx, const bool checked)
