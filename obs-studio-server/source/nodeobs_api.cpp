@@ -1020,7 +1020,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 
 	OBS_service::createVideoStreamingEncoder(StreamServiceId::Main);
 	OBS_service::createVideoStreamingEncoder(StreamServiceId::Second);
-	OBS_service::createVideoRecordingEncoder();
+	OBS_service::createDefaultSimpleVideoRecordingEncoder();
 
 	OBS_service::resetAudioContext();
 

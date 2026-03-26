@@ -59,8 +59,8 @@ public:
 	static void Start(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void Stop(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
-	static obs_encoder_t *GetLegacyVideoEncoderSettings();
-	static obs_encoder_t *GetLegacyAudioEncoderSettings();
+	static obs_encoder_t *CreateLegacyVideoEncoder();
+	static obs_encoder_t *CreateLegacyAudioEncoder();
 	static void SetLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetLegacyVideoEncoderSettings(obs_encoder_t *encoder);
 	static void SetLegacyAudioEncoderSettings(obs_encoder_t *encoder);

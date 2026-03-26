@@ -21,6 +21,7 @@
 #include "shared.hpp"
 #include "osn-audio-track.hpp"
 #include "osn-file-output.hpp"
+#include <osn-encoders.hpp>
 
 void osn::IAdvancedRecording::Register(ipc::server &srv)
 {
@@ -224,6 +225,13 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid video encoder.");
 	}
 
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(obs_encoder_get_id(recording->videoEncoder), recording->format, false)) {
+		//update config recording format = mkv because it supports all encoder types
+		config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
+	}
+
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 
 	std::string path = recording->path;
@@ -246,6 +254,8 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
+
+	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
 	recording->StartOutput();
 
@@ -347,8 +357,15 @@ void osn::IAdvancedRecording::GetLegacySettings(void *data, const int64_t id, co
 	recording->useStreamEncoders = encId.compare("") == 0 || encId.compare("none") == 0;
 
 	if (!recording->useStreamEncoders) {
-		obs_data_t *videoEncSettings = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getRecord().c_str(), "bak");
-		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", videoEncSettings, nullptr);
+		obs_data_t *existingVideoEncSettings = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getRecord().c_str(), "bak");
+		obs_data_t *newSettings = obs_encoder_defaults(encId.c_str());
+
+		//old API gets defaults, reads recordEncoder.json if exists, converts if it does, then creates - need to handle null settings from missing config file
+		if (existingVideoEncSettings != nullptr) {
+			osn::EncoderUtils::updateNvencPresets(existingVideoEncSettings, encId.c_str());
+			obs_data_apply(newSettings, existingVideoEncSettings);
+		}
+		recording->videoEncoder = obs_video_encoder_create(encId.c_str(), "video-encoder", newSettings, nullptr);
 		osn::VideoEncoder::Manager::GetInstance().allocate(recording->videoEncoder);
 	}
 

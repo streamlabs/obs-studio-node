@@ -26,6 +26,7 @@
 #include <util/platform.h>
 #include "shared.hpp"
 #include "nodeobs_service.h"
+#include "osn-encoders.hpp"
 
 void ConfigManager::setAppdataPath(const std::string &path)
 {

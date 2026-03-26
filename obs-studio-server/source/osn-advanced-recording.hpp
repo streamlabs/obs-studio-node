@@ -34,6 +34,7 @@ public:
 		outputHeight = 720;
 		useStreamEncoders = true;
 		streaming = nullptr;
+		simple = false;
 	}
 	~AdvancedRecording() {}
 

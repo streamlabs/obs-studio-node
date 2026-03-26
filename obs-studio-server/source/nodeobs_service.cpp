@@ -27,6 +27,7 @@
 #include "utility.hpp"
 #include <osn-video.hpp>
 #include "osn-vcam.hpp"
+#include "osn-encoders.hpp"
 
 #include "osn-multitrack-video.hpp"
 
@@ -39,6 +40,8 @@
 #include "util-metricsprovider.h"
 #include <exception>
 #include <optional>
+
+extern bool isConfiguredStreamingEncoderValid(StreamServiceId serviceId);
 
 std::string GetFormatExt(const std::string container);
 
@@ -96,8 +99,6 @@ static std::optional<osn::EnhancedBroadcastOutputObjects> enhancedBroadcastConte
 
 OBS_service::OBS_service() {}
 OBS_service::~OBS_service() {}
-
-extern bool EncoderAvailable(const std::string &encoder);
 
 static void logVCamChanged(const VCamConfig &config, bool starting)
 {
@@ -821,7 +822,7 @@ bool OBS_service::createVideoStreamingEncoder(StreamServiceId serviceId)
 		encoderId = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
 	}
 
-	if (encoderId == NULL || !EncoderAvailable(encoderId) || isInvalidEncoder(encoderId)) {
+	if (encoderId == NULL || !osn::EncoderUtils::isEncoderRegistered(encoderId) || osn::EncoderUtils::isInvalidAppleEncoder(encoderId)) {
 		encoderId = ADVANCED_ENCODER_X264;
 	}
 
@@ -1023,7 +1024,7 @@ static void remove_reserved_file_characters(std::string &s)
 	replace(s.begin(), s.end(), '<', '_');
 }
 
-bool OBS_service::createVideoRecordingEncoder()
+bool OBS_service::createDefaultSimpleVideoRecordingEncoder()
 {
 	std::string encoderName = GetVideoEncoderName(StreamServiceId::Main, true, true, ADVANCED_ENCODER_X264);
 	obs_encoder_t *newRecordingEncoder = obs_video_encoder_create(ADVANCED_ENCODER_X264, encoderName.c_str(), nullptr, nullptr);
@@ -1316,6 +1317,9 @@ bool OBS_service::startSingleTrackStreaming(StreamServiceId serviceId)
 
 	setupVodTrack(isSimpleMode);
 
+	blog(LOG_INFO, "Start Streaming for service %s using %s encoder.", serviceId == StreamServiceId::Main ? "Main" : "Second",
+	     obs_encoder_get_id(videoStreamingEncoder[serviceId]));
+
 	outdated_driver_error::instance()->set_active(true);
 	isStreaming[serviceId] = obs_output_start(streamingOutput[serviceId]);
 	outdated_driver_error::instance()->set_active(false);
@@ -1433,6 +1437,14 @@ bool OBS_service::startStreaming(StreamServiceId serviceId, bool dualStreamingMo
 		streamingOutput[serviceId] = nullptr;
 	}
 
+	StreamServiceId checkServiceId = serviceId;
+	if (dualStreamingMode)
+		checkServiceId = StreamServiceId::Both;
+	if (!isConfiguredStreamingEncoderValid(checkServiceId)) {
+		blog(LOG_ERROR, "The selected streaming encoder is not compatible with the current service. Please update these settings.");
+		return false;
+	}
+
 	try {
 		if (isTwitchStream(serviceId) && (osn::IsMultitrackVideoEnabled() || dualStreamingMode)) {
 			return startMultiTrackStreaming(serviceId, dualStreamingMode);
@@ -1536,46 +1548,18 @@ void OBS_service::LoadRecordingPreset_Lossy(const char *encoderId)
 		throw "Failed to create video recording encoder (simple output)";
 }
 
-const char *get_simple_output_encoder(const char *encoder)
-{
-	if (strcmp(encoder, SIMPLE_ENCODER_X264) == 0) {
-		return ADVANCED_ENCODER_X264;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU) == 0) {
-		return ADVANCED_ENCODER_X264;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_QSV) == 0) {
-		return "obs_qsv11_v2";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_QSV_AV1) == 0) {
-		return "obs_qsv11_av1";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD) == 0) {
-		return ADVANCED_ENCODER_AMD;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_HEVC) == 0) {
-		return ADVANCED_ENCODER_AMD_HEVC;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_AMD_AV1) == 0) {
-		return "av1_texture_amf";
-	} else if ((strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0) || (strcmp(encoder, ENCODER_NVENC_H264_TEX) == 0)) {
-		return EncoderAvailable(ENCODER_NVENC_H264_TEX) ? ENCODER_NVENC_H264_TEX : ADVANCED_ENCODER_NVENC;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_HEVC) == 0) {
-		return EncoderAvailable(ENCODER_NVENC_HEVC_TEX) ? ENCODER_NVENC_HEVC_TEX : "ffmpeg_hevc_nvenc";
-	} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC_AV1) == 0) {
-		return ENCODER_NVENC_AV1_TEX;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_H264) == 0) {
-		return APPLE_HARDWARE_VIDEO_ENCODER_M1;
-	} else if (strcmp(encoder, SIMPLE_ENCODER_APPLE_HEVC) == 0) {
-		return "com.apple.videotoolbox.videoencoder.ave.hevc";
-	}
-
-	blog(LOG_WARNING, "get_simple_output_encoder - encoder %s is not found, creating a default one", encoder);
-
-	return ADVANCED_ENCODER_X264;
-}
-
 void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 {
 	if (isRecording && rpUsesRec)
 		return;
 
+	const char *section = isSimpleMode ? "SimpleOutput" : "AdvOut";
+
 	const char *quality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
-	const char *encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder");
+	const char *encoder = config_get_string(ConfigManager::getInstance().getBasic(), section, "RecEncoder");
+	std::string internalID = encoder;
+	if (isSimpleMode)
+		internalID = osn::EncoderUtils::getInternalEncoderFromSimple(encoder);
 
 	videoEncoder = encoder;
 	videoQuality = quality;
@@ -1585,12 +1569,11 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 		lowCPUx264 = false;
 		if (strcmp(encoder, SIMPLE_ENCODER_X264_LOWCPU) == 0)
 			lowCPUx264 = true;
-		LoadRecordingPreset_Lossy(get_simple_output_encoder(encoder));
+		LoadRecordingPreset_Lossy(internalID.c_str());
 		usingRecordingPreset = true;
 		updateVideoRecordingEncoderSettings();
 	} else {
-		const char *recordingEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
-		if (recordingEncoder && strcmp(recordingEncoder, ENCODER_NVENC_H264_TEX) != 0) {
+		if (encoder && strcmp(encoder, ENCODER_NVENC_H264_TEX) != 0) {
 			unsigned int cx = 0;
 			unsigned int cy = 0;
 
@@ -1611,6 +1594,80 @@ void OBS_service::updateVideoRecordingEncoder(bool isSimpleMode)
 	} else {
 		obs_encoder_set_video_mix(videoRecordingEncoder, obs_video_mix_get(0, OBS_MAIN_VIDEO_RENDERING));
 	}
+}
+
+bool isConfiguredStreamingEncoderValid(StreamServiceId serviceId)
+{
+	const char *mode = NULL;
+	const char *curEncoder = NULL;
+	bool validEncoder = false;
+	bool simpleMode = false;
+
+	//get mode and configured encoder
+	mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+	if (mode == nullptr) {
+		mode = "Simple";
+	}
+	simpleMode = (strcmp(mode, "Simple") == 0);
+
+	if (!simpleMode) {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
+	} else {
+		curEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
+	}
+
+	if (serviceId == StreamServiceId::Both) {
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Main), curEncoder, simpleMode) &&
+			       osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(StreamServiceId::Second), curEncoder, simpleMode);
+	} else {
+		validEncoder = osn::EncoderUtils::isEncoderCompatibleStreaming(OBS_service::getService(serviceId), curEncoder, simpleMode);
+	}
+
+	return validEncoder;
+}
+
+bool isConfiguredRecordingEncoderValid(bool checkReplayBuffer)
+{
+	const char *encoder = nullptr;
+	const std::string simpleQuality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
+	const std::string advancedRecEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecEncoder");
+	const std::string currentOutputMode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+	bool isSimpleMode = currentOutputMode.compare("Simple") == 0;
+	const char *section = isSimpleMode ? "SimpleOutput" : "AdvOut";
+	bool replayBufferUsesStream = config_get_bool(ConfigManager::getInstance().getBasic(), section, "replayBufferUseStreamOutput");
+	bool simpleUsesStream = false;
+	bool advancedUsesStream = false;
+
+	if (isSimpleMode && simpleQuality.compare("Lossless") == 0) {
+		//lossless recording doesn't use encoder/format settings
+		return true;
+	}
+
+	if (!osn::IsMultitrackVideoEnabled()) {
+		simpleUsesStream = isSimpleMode && simpleQuality.compare("Stream") == 0;
+		advancedUsesStream = !isSimpleMode && (advancedRecEncoder.compare("") == 0 || advancedRecEncoder.compare("none") == 0);
+		//if checking replay buffer, check use stream OR use recording and recording uses stream
+		if (checkReplayBuffer) {
+			if (isSimpleMode)
+				simpleUsesStream |= replayBufferUsesStream;
+			else
+				advancedUsesStream |= replayBufferUsesStream;
+		}
+	}
+
+	//check encoder for recording compatibility with the configured recording format
+	char *field = "RecEncoder";
+	if (advancedUsesStream)
+		field = "Encoder";
+	else if (simpleUsesStream)
+		field = "StreamEncoder";
+	encoder = config_get_string(ConfigManager::getInstance().getBasic(), section, field);
+	std::string container = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), section, "RecFormat"));
+	if (!osn::EncoderUtils::isEncoderCompatibleRecording(encoder, container, isSimpleMode)) {
+		blog(LOG_ERROR, "The selected encoder '%s' is not compatible with the recording format '%s'.", encoder, container.c_str());
+		return false;
+	}
+	return true;
 }
 
 bool OBS_service::updateRecordingEncoders(bool isSimpleMode, StreamServiceId serviceId)
@@ -1669,6 +1726,30 @@ bool OBS_service::updateRecordingEncoders(bool isSimpleMode, StreamServiceId ser
 
 bool OBS_service::startRecording(void)
 {
+	//check encoder for recording compatibility with the configured recording format
+	if (!isConfiguredRecordingEncoderValid(false)) {
+		//update config recording format = mkv because it supports all encoder types
+		const char *mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+		if (mode == nullptr) {
+			mode = "Simple";
+		}
+		if (strcmp(mode, "Simple") == 0) {
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		} else {
+			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		}
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		blog(LOG_INFO, "Recording format was updated to 'mkv' to ensure compatibility with the selected encoder.");
+
+		//set failure info
+		SignalInfo signal = SignalInfo("recording", "stop");
+		signal.setErrorMessage("The selected recording encoder is not compatible with the selected recording format. Please update these settings.");
+		std::unique_lock<std::mutex> ulock(signalMutex);
+		signal.setCode(OBS_OUTPUT_ERROR);
+		outputSignal.push(signal);
+		return false;
+	}
+
 	if (recordingOutput)
 		obs_output_release(recordingOutput);
 
@@ -1705,6 +1786,9 @@ bool OBS_service::startRecording(void)
 			}
 		}
 	}
+
+	blog(LOG_INFO, "Start Recording using %s encoder.",
+	     useStreamEncoder ? obs_encoder_get_id(videoStreamingEncoder[0]) : obs_encoder_get_id(videoRecordingEncoder));
 
 	outdated_driver_error::instance()->set_active(true);
 	isRecording = obs_output_start(recordingOutput);
@@ -1858,6 +1942,32 @@ void OBS_service::updateReplayBufferOutput(bool isSimpleMode, bool useStreamEnco
 
 bool OBS_service::startReplayBuffer(void)
 {
+	//check encoder for recording compatibility with the configured recording format before starting recording
+	if (!isConfiguredRecordingEncoderValid(true)) {
+		//update config recording format = mkv because it supports all encoder types
+		const char *mode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
+		if (mode == nullptr) {
+			mode = "Simple";
+		}
+		if (strcmp(mode, "Simple") == 0) {
+			config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecFormat", "mkv");
+		} else {
+			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFormat", "mkv");
+		}
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		blog(LOG_INFO, "Recording format was updated to 'mkv' to ensure compatibility with the selected encoder.");
+
+		SignalInfo signal = SignalInfo("replay-buffer", "stop");
+		isReplayBufferActive = false;
+		rpUsesRec = false;
+		rpUsesStream = false;
+		signal.setErrorMessage("The selected Replay Buffer settings are not compatible with the recording format. Please update these settings.");
+		std::unique_lock<std::mutex> ulock(signalMutex);
+		signal.setCode(OBS_OUTPUT_ERROR);
+		outputSignal.push(signal);
+		return false;
+	}
+
 	if (replayBufferOutput)
 		obs_output_release(replayBufferOutput);
 
@@ -1901,6 +2011,9 @@ bool OBS_service::startReplayBuffer(void)
 			}
 		}
 	}
+
+	blog(LOG_INFO, "Start Replay Buffer using %s encoder.",
+	     useStreamEncoder ? obs_encoder_get_id(videoStreamingEncoder[0]) : obs_encoder_get_id(videoRecordingEncoder));
 
 	outdated_driver_error::instance()->set_active(true);
 	bool result = obs_output_start(replayBufferOutput);
@@ -2031,39 +2144,33 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		bool enforceBitrate = config_get_bool(ConfigManager::getInstance().getBasic(), "SimpleOutput", "EnforceBitrate");
 		const char *custom = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "x264Settings");
 		const char *encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
-		const char *encoderID = nullptr;
-		const char *presetType = nullptr;
+		std::string encoderID = "";
+		std::string presetType = "";
 		const char *preset = nullptr;
 
 		if (encoder != NULL) {
-			if (strcmp(encoder, SIMPLE_ENCODER_QSV) == 0 || strcmp(encoder, ADVANCED_ENCODER_QSV) == 0) {
-				presetType = "QSVPreset";
-				encoderID = ADVANCED_ENCODER_QSV;
-			} else if (strcmp(encoder, SIMPLE_ENCODER_AMD) == 0 || strcmp(encoder, ADVANCED_ENCODER_AMD) == 0) {
-				presetType = "AMDPreset";
-				UpdateStreamingSettings_amd(h264Settings, videoBitrate);
-				encoderID = ADVANCED_ENCODER_AMD;
-			} else if (strcmp(encoder, SIMPLE_ENCODER_NVENC) == 0 || strcmp(encoder, ADVANCED_ENCODER_NVENC) == 0) {
-				presetType = "NVENCPreset";
-				encoderID = ADVANCED_ENCODER_NVENC;
-			} else if (strcmp(encoder, ENCODER_NVENC_H264_TEX) == 0) {
-				presetType = "NVENCPreset";
-				encoderID = ENCODER_NVENC_H264_TEX;
-			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
-				encoderID = APPLE_HARDWARE_VIDEO_ENCODER;
-			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
-				encoderID = APPLE_HARDWARE_VIDEO_ENCODER_M1;
-			} else {
-				presetType = "Preset";
-				encoderID = ADVANCED_ENCODER_X264;
+			std::string presetType = osn::EncoderUtils::getEncoderPreset(encoder);
+			encoderID = osn::EncoderUtils::getInternalEncoderFromSimple(encoder);
+
+			if (!presetType.empty()) {
+				preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str());
+				//if this calls fails and preset type is NVENC, use legacy NVENC preset for backward compatibility
+				if (preset == NULL && presetType == PRESET_NVENC) {
+					presetType = PRESET_NVENC_DEP;
+					preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType.c_str());
+					if (preset != NULL) {
+						//convert the old preset to new
+						const char *oldValue = preset;
+						preset = osn::EncoderUtils::convertNvencSimplePreset(oldValue);
+						blog(LOG_INFO, "NVENC preset converted from %s to %s", oldValue, preset);
+					}
+				}
 			}
-			if (presetType)
-				preset = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", presetType);
 
 			// Here and in other places we repeat the same pattern.
 			// Avoiding case when to an output there might not be any attached video encoder which can lead to crash.
-			std::string encoder_name = GetVideoEncoderName(serviceId, true, false, encoderID);
-			obs_encoder_t *streamingEncoder = obs_video_encoder_create(encoderID, encoder_name.c_str(), nullptr, nullptr);
+			std::string encoder_name = GetVideoEncoderName(serviceId, true, false, encoderID.c_str());
+			obs_encoder_t *streamingEncoder = obs_video_encoder_create(encoderID.c_str(), encoder_name.c_str(), nullptr, nullptr);
 			setStreamingEncoder(streamingEncoder, serviceId);
 		}
 
@@ -2104,8 +2211,7 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 			obs_encoder_set_preferred_video_format(videoStreamingEncoder[serviceId], VIDEO_FORMAT_NV12);
 		}
 
-		if (strcmp(encoder, APPLE_SOFTWARE_VIDEO_ENCODER) == 0 || strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0 ||
-		    strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
+		if (osn::EncoderUtils::getEncoderFamily(encoderID.c_str()) == FAMILY_APPLE) {
 			const char *profile = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "Profile");
 			if (profile)
 				obs_data_set_string(h264Settings, "profile", profile);
@@ -2312,6 +2418,8 @@ void OBS_service::LoadRecordingPreset_Lossless()
 
 	obs_output_set_mixers(recordingOutput, 1);
 	obs_output_update(recordingOutput, settings);
+
+	blog(LOG_INFO, "Created FFmpeg output for simple lossless recording.");
 
 	obs_data_release(settings);
 }
@@ -2570,29 +2678,22 @@ void OBS_service::updateVideoRecordingEncoderSettings()
 {
 	bool ultra_hq = (videoQuality == "HQ");
 	int crf = CalcCRF(ultra_hq ? 16 : 23);
+	std::string encFamily = osn::EncoderUtils::getEncoderFamily(videoEncoder.c_str());
 
-	if (videoEncoder.compare(SIMPLE_ENCODER_X264) == 0 || videoEncoder.compare(ADVANCED_ENCODER_X264) == 0 ||
-	    videoEncoder.compare(SIMPLE_ENCODER_X264_LOWCPU) == 0) {
+	if (encFamily == FAMILY_OBS)
 		UpdateRecordingSettings_x264_crf(crf);
-
-	} else if (videoEncoder.compare(SIMPLE_ENCODER_QSV) == 0 || videoEncoder.compare(ADVANCED_ENCODER_QSV) == 0) {
-		UpdateRecordingSettings_qsv11(crf);
-
-	} else if (videoEncoder.compare(SIMPLE_ENCODER_AMD) == 0 || videoEncoder.compare(SIMPLE_ENCODER_AMD_HEVC) == 0 ||
-		   videoEncoder.compare(ADVANCED_ENCODER_AMD) == 0) {
-		UpdateRecordingSettings_amd_cqp(crf);
-
-	} else if (videoEncoder.compare(SIMPLE_ENCODER_NVENC) == 0 || videoEncoder.compare(ADVANCED_ENCODER_NVENC) == 0) {
+	else if (encFamily == FAMILY_NVENC)
 		UpdateRecordingSettings_nvenc(crf);
-	} else if (videoEncoder.compare(ENCODER_NVENC_H264_TEX) == 0) {
-		UpdateRecordingSettings_nvenc(crf);
-	} else if (videoEncoder.compare(SIMPLE_ENCODER_NVENC_HEVC) == 0) {
+	else if (encFamily == FAMILY_NVENC_HEVC)
 		UpdateRecordingSettings_nvenc_hevc(crf);
-	} else if (videoEncoder.compare(APPLE_SOFTWARE_VIDEO_ENCODER) == 0 || videoEncoder.compare(APPLE_HARDWARE_VIDEO_ENCODER) == 0 ||
-		   videoEncoder.compare(APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
-		/* These are magic numbers. 0 - 100, more is better. */
+	else if (encFamily == FAMILY_QSV)
+		UpdateRecordingSettings_qsv11(crf);
+	else if (encFamily == FAMILY_AMD)
+		UpdateRecordingSettings_amd_cqp(crf);
+	else if (encFamily == FAMILY_APPLE)
 		UpdateRecordingSettings_apple(ultra_hq ? 70 : 50);
-	}
+	else
+		blog(LOG_WARNING, "Unable to update settings with unknown encoder family.");
 }
 
 obs_encoder_t *OBS_service::getStreamingEncoder(StreamServiceId serviceId)
@@ -3464,17 +3565,6 @@ void OBS_service::setupVodTrack(bool isSimpleMode)
 		}
 	}
 }
-
-bool OBS_service::isInvalidEncoder(const char *encoderID)
-{
-#if defined(__APPLE__)
-	// disable this encoder; not functioning properly
-	return strcmp(encoderID, APPLE_SOFTWARE_VIDEO_ENCODER) == 0;
-#else
-	return false;
-#endif
-}
-
 std::string GetFormatExt(const std::string container)
 {
 	std::string ext = container;

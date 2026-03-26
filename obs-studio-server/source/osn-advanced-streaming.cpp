@@ -23,6 +23,7 @@
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
+#include "osn-encoders.hpp"
 
 void osn::IAdvancedStreaming::Register(ipc::server &srv)
 {
@@ -223,15 +224,6 @@ void osn::IAdvancedStreaming::SetOutputHeight(void *data, const int64_t id, cons
 	AUTO_DEBUG;
 }
 
-static obs_encoder_t *createAudioEncoder(uint32_t bitrate)
-{
-	obs_encoder_t *audioEncoder = nullptr;
-
-	audioEncoder = obs_audio_encoder_create(GetAACEncoderForBitrate(bitrate), "audio", nullptr, 0, nullptr);
-
-	return audioEncoder;
-}
-
 static bool setAudioEncoder(osn::AdvancedStreaming *streaming)
 {
 	osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTracks[streaming->audioTrack - 1];
@@ -394,6 +386,15 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the streaming output.");
 	}
 
+	if (!streaming->videoEncoder) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the video encoder.");
+	}
+
+	//make sure the encoder is valid for the current service
+	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, obs_encoder_get_id(streaming->videoEncoder), streaming->simple)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
+	}
+
 	if (!setAudioEncoder(streaming)) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the audio encoder.");
 	}
@@ -435,6 +436,8 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 	obs_output_update(streaming->GetOutput(), settings);
 	obs_data_release(settings);
 
+	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
+
 	streaming->StartOutput();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -468,8 +471,24 @@ void osn::IAdvancedStreaming::GetLegacySettings(void *data, const int64_t id, co
 {
 	osn::AdvancedStreaming *streaming = new osn::AdvancedStreaming();
 	const char *encId = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder"));
-	obs_data_t *videoEncSettings = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getStream().c_str(), "bak");
-	streaming->videoEncoder = obs_video_encoder_create(encId, "video-encoder", videoEncSettings, nullptr);
+
+	//from old API - check for missing/bad encoder ID and reset to x264 if needed
+	if ((strlen(encId) == 0) || osn::EncoderUtils::isInvalidAppleEncoder(encId)) {
+		blog(LOG_WARNING, "Invalid or missing encoder ID in basic.ini, defaulting to x264.");
+		encId = ADVANCED_ENCODER_X264;
+		config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder", encId);
+		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+	}
+
+	obs_data_t *existingVideoEncSettings = obs_data_create_from_json_file_safe(ConfigManager::getInstance().getStream().c_str(), "bak");
+	obs_data_t *newSettings = obs_encoder_defaults(encId);
+
+	//old API gets defaults, reads streamEncoder.json if exists, converts if it does, then creates - need to handle null settings from missing config file
+	if (existingVideoEncSettings != nullptr) {
+		osn::EncoderUtils::updateNvencPresets(existingVideoEncSettings, encId);
+		obs_data_apply(newSettings, existingVideoEncSettings);
+	}
+	streaming->videoEncoder = obs_video_encoder_create(encId, "video-encoder", newSettings, nullptr);
 	osn::VideoEncoder::Manager::GetInstance().allocate(streaming->videoEncoder);
 
 	streaming->audioTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex") - 1);
