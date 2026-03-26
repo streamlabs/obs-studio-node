@@ -3347,7 +3347,9 @@ void WaitForAllOutputsToStop()
 
 			blog(LOG_ERROR, "%s", crashMessage.c_str());
 			util::CrashManager::AddWarning(crashMessage);
+#ifdef WIN32
 			util::CrashManager::GetMetricsProvider()->BlameServer();
+#endif
 
 			std::terminate();
 		}
