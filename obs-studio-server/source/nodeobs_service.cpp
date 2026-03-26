@@ -36,6 +36,7 @@
 #endif
 
 #include "util-crashmanager.h"
+#include "util-metricsprovider.h"
 #include <exception>
 #include <optional>
 
