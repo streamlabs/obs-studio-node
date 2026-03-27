@@ -210,7 +210,10 @@ void osn::Input::FromName(void *data, const int64_t id, const std::vector<ipc::v
 {
 	obs_source_t *source = obs_get_source_by_name(args[0].value_str.c_str());
 	if (!source) {
-		PRETTY_ERROR_RETURN(ErrorCode::NotFound, "Named input could not be found.");
+		std::string missing_name(args[0].value_str);
+		std::stringstream ss;
+		ss << "Named input (" << missing_name << ") could not be found.";
+		PRETTY_ERROR_RETURN(ErrorCode::NotFound, ss.str().c_str());
 	}
 
 	uint64_t uid = osn::Source::Manager::GetInstance().find(source);
