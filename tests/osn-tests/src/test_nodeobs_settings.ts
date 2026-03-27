@@ -121,6 +121,8 @@ describe(testName, function() {
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
         obs.setSetting(EOBSSettingsCategories.Output, 'RecQuality', 'Stream');
         obs.setSetting(EOBSSettingsCategories.Output, 'RecRB', true);
+        // Use correct SIMPLE_ENCODER_X264 value based on OS since obs_x264 is used for macOS while x264 is used for Windows
+        const streamEncoder = (obs.os === 'win32' ? 'x264' : 'obs_x264');
 
         // Getting simple output settings container with same as stream and replay buffer settings
         let sameAsStreamRBuffOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
@@ -138,7 +140,7 @@ describe(testName, function() {
                         break;
                     }
                     case 'StreamEncoder': {
-                        parameter.currentValue = 'x264';
+                        parameter.currentValue = streamEncoder;
                         break;
                     }
                     case 'ABitrate': {
@@ -201,7 +203,7 @@ describe(testName, function() {
                         break;
                     }
                     case 'StreamEncoder': {
-                        expect(parameter.currentValue).to.equal('x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        expect(parameter.currentValue).to.equal(streamEncoder, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                         break;
                     }
                     case 'ABitrate': {
@@ -256,7 +258,7 @@ describe(testName, function() {
                         break;
                     }
                     case 'StreamEncoder': {
-                        expect(parameter.currentValue).to.equal('x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        expect(parameter.currentValue).to.equal(streamEncoder, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                         break;
                     }
                     case 'ABitrate': {
@@ -277,7 +279,7 @@ describe(testName, function() {
                         break;
                     }
                     case 'RecEncoder': {
-                        expect(parameter.currentValue).to.equal('x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        expect(parameter.currentValue).to.equal(streamEncoder, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                         break;
                     }
                 }
@@ -311,7 +313,7 @@ describe(testName, function() {
                         break;
                     }
                     case 'StreamEncoder': {
-                        expect(parameter.currentValue).to.equal('x264', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        expect(parameter.currentValue).to.equal(streamEncoder, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                         break;
                     }
                     case 'ABitrate': {
