@@ -2776,6 +2776,7 @@ void OBS_service::OBS_service_connectOutputSignals(void *data, const int64_t id,
 	connectOutputSignals(StreamServiceId::Second);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
 }
 
 void OBS_service::Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -2906,6 +2907,7 @@ void OBS_service::OBS_service_processReplayBufferHotkey(void *data, const int64_
 		nullptr);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
 }
 
 void OBS_service::OBS_service_getLastReplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -2927,6 +2929,7 @@ void OBS_service::OBS_service_getLastReplay(void *data, const int64_t id, const 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(path));
 	calldata_free(&cd);
+	AUTO_DEBUG;
 }
 
 void OBS_service::OBS_service_getLastRecording(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -2948,6 +2951,7 @@ void OBS_service::OBS_service_getLastRecording(void *data, const int64_t id, con
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(path));
 	calldata_free(&cd);
+	AUTO_DEBUG;
 }
 
 void OBS_service::OBS_service_splitFile(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -2962,6 +2966,7 @@ void OBS_service::OBS_service_splitFile(void *data, const int64_t id, const std:
 	proc_handler_call(ph, "split_file", &cd);
 	calldata_free(&cd);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
 }
 
 bool OBS_service::useRecordingPreset()
@@ -3171,15 +3176,18 @@ void OBS_service::OBS_service_createVirtualCam(void *data, const int64_t id, con
 	vcamEnabled = (obs_get_output_flags(VIRTUAL_CAM_ID) & OBS_OUTPUT_VIDEO) != 0;
 	connectOutputSignals(StreamServiceId::Main);
 #endif
+	AUTO_DEBUG;
 }
 
 void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (virtualCamActive) {
+		AUTO_DEBUG;
 		return;
 	}
 
 	StartVirtualCam(rval);
+	AUTO_DEBUG;
 }
 
 void OBS_service::StopVirtualCam()
@@ -3200,6 +3208,7 @@ void OBS_service::StopVirtualCam()
 void OBS_service::OBS_service_stopVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (!virtualCamActive) {
+		AUTO_DEBUG;
 		return;
 	}
 
@@ -3209,6 +3218,7 @@ void OBS_service::OBS_service_stopVirtualCam(void *data, const int64_t id, const
 	DestroyVirtualCamView();
 
 	DeactivateSources();
+	AUTO_DEBUG;
 }
 
 void OBS_service::DeactivateSources()
@@ -3242,6 +3252,7 @@ void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, con
 	}
 
 	if (!virtualCamActive) {
+		AUTO_DEBUG;
 		return;
 	}
 
@@ -3257,6 +3268,7 @@ void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, con
 	}
 
 	logVCamChanged(vcamConfig, false);
+	AUTO_DEBUG;
 }
 
 void OBS_service::stopAllOutputs()

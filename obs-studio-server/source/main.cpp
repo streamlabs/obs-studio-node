@@ -163,6 +163,7 @@ static void Shutdown(void *data, const int64_t id, const std::vector<ipc::value>
 	g_util_osx->stopApplication();
 #endif
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
 	return;
 }
 } // namespace System

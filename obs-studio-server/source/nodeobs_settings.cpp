@@ -1250,6 +1250,7 @@ void OBS_settings::OBS_settings_isValidEncoder(void *data, const int64_t id, con
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(validEncoder));
+	AUTO_DEBUG;
 }
 
 void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSettings, config_t *config, bool isCategoryEnabled)
