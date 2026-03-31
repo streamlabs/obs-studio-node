@@ -205,6 +205,7 @@ void osn::Global::GetCPUPercentage(void *data, const int64_t id, const std::vect
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(cpuPercentage));
+	AUTO_DEBUG;
 }
 
 void osn::Global::GetCurrentFrameRate(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

@@ -166,4 +166,5 @@ void osn::IReplayBuffer::Save(void *data, const int64_t id, const std::vector<ip
 		nullptr);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
 }

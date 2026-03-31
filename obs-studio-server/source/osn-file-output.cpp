@@ -241,6 +241,7 @@ void osn::IFileOutput::GetLastFile(void *data, const int64_t id, const std::vect
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(path));
 	calldata_free(&cd);
+	AUTO_DEBUG;
 }
 
 osn::IFileOutput::Manager &osn::IFileOutput::Manager::GetInstance()

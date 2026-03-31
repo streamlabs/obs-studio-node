@@ -68,6 +68,7 @@ void osn::IAudioTrack::GetAudioTracks(void *data, const int64_t id, const std::v
 		}
 		rval.push_back(ipc::value(uid));
 	}
+	AUTO_DEBUG;
 }
 
 void osn::IAudioTrack::GetAudioBitrates(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -77,6 +78,7 @@ void osn::IAudioTrack::GetAudioBitrates(void *data, const int64_t id, const std:
 	rval.push_back(ipc::value((uint32_t)bitrates.size()));
 	for (const auto &bitrate : bitrates)
 		rval.push_back(ipc::value((uint32_t)bitrate.first));
+	AUTO_DEBUG;
 }
 
 void osn::IAudioTrack::GetAtIndex(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

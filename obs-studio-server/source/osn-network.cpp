@@ -107,6 +107,7 @@ void osn::INetwork::GetNetworkInterfaces(void *data, const int64_t id, const std
 		rval.push_back(ipc::value(obs_property_list_item_name(p, i)));
 		rval.push_back(ipc::value(obs_property_list_item_string(p, i)));
 	}
+	AUTO_DEBUG;
 }
 
 void osn::INetwork::GetEnableDynamicBitrate(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

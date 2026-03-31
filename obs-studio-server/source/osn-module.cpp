@@ -172,9 +172,15 @@ void osn::Module::GetDataPath(void *data, const int64_t id, const std::vector<ip
 	AUTO_DEBUG;
 }
 
-void osn::Module::GetFilePath(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {}
+void osn::Module::GetFilePath(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	AUTO_DEBUG;
+}
 
-void osn::Module::GetConfigFilePath(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval) {}
+void osn::Module::GetConfigFilePath(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	AUTO_DEBUG;
+}
 
 osn::Module::Manager &osn::Module::Manager::GetInstance()
 {
