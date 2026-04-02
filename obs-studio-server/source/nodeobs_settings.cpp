@@ -820,6 +820,9 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 	std::string currentServiceName = obs_data_get_string(obs_service_get_settings(currentService), "service");
 	std::string newServiceValue;
 
+	//get existing key to compare with new key later - if service is changed we will clear the key since keys don't carry over between services
+	const char *currentKey = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
+
 	SubCategory sc;
 	bool serviceChanged = false;
 	bool serviceSettingsInvalid = false;
@@ -926,6 +929,14 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 		if (!serverFound && defaultServer.compare("") != 0) {
 			// Server not found, we set the default server
 			obs_data_set_string(settings, "server", defaultServer.c_str());
+			obs_service_update(newService, settings);
+		}
+
+		//if service changed but key didn't we also need to clear out the key since services don't share keys
+		const char *newKey = obs_data_get_string(settings, "key");
+		if (currentKey != nullptr && newKey != nullptr && strcmp(currentKey, newKey) == 0) {
+			blog(LOG_INFO, "MLH clearing stream key since service was changed and key wasn't");
+			obs_data_set_string(settings, "key", "");
 			obs_service_update(newService, settings);
 		}
 	}
