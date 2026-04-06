@@ -24,7 +24,7 @@ env:
   SLGenerator: Visual Studio 17 2022
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 31.1.2sl9
+  LibOBSVersion: 31.1.2sl10-rno6
   PACKAGE_NAME: osn
 
 jobs:
