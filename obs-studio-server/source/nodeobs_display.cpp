@@ -1425,9 +1425,10 @@ void OBS::Display::DisplayCallback(void *displayPtr, uint32_t cx, uint32_t cy)
 	gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
 	gs_eparam_t *solid_color = gs_effect_get_param_by_name(solid, "color");
 	gs_technique_t *solid_tech = gs_effect_get_technique(solid, "Solid");
+	obs_core_video_mix_t *renderMix = dp->m_canvas ? obs_video_mix_get(dp->m_canvas, dp->m_renderingMode) : nullptr;
 
-	if (dp->m_canvas)
-		obs_set_video_rendering_canvas(dp->m_canvas);
+	obs_set_video_render_context(renderMix);
+	obs_set_video_rendering_mode(dp->m_renderingMode);
 
 	dp->UpdatePreviewArea();
 
@@ -1512,12 +1513,6 @@ void OBS::Display::DisplayCallback(void *displayPtr, uint32_t cx, uint32_t cy)
 
 	// Source Rendering
 	if (dp->m_source) {
-		/* If the source is a transition it means this display
-		 * is for Studio Mode and that the scene it contains is a
-		 * duplicate of the current scene, apply selective recording
-		 * layer rendering if it is enabled */
-		if (obs_get_multiple_rendering() && obs_source_get_type(dp->m_source) == OBS_SOURCE_TYPE_TRANSITION)
-			obs_set_video_rendering_mode(dp->m_renderingMode);
 		obs_source_video_render(dp->m_source);
 	} else {
 		obs_render_texture(dp->m_canvas, dp->m_renderingMode);
