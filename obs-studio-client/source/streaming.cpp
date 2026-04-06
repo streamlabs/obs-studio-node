@@ -325,6 +325,29 @@ void osn::Streaming::SetSignalHandler(const Napi::CallbackInfo &info, const Napi
 	this->cb.SuppressDestruct();
 }
 
+Napi::Value osn::Streaming::GetAvailableEncoders(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetAvailableEncoders", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	Napi::Array arr = Napi::Array::New(info.Env());
+	uint32_t idx = 0;
+	for (size_t i = 1; i + 1 < response.size(); i += 2) {
+		Napi::Object obj = Napi::Object::New(info.Env());
+		obj.Set("title", Napi::String::New(info.Env(), response[i].value_str));
+		obj.Set("name", Napi::String::New(info.Env(), response[i + 1].value_str));
+		arr.Set(idx++, obj);
+	}
+
+	return arr;
+}
+
 void osn::Streaming::Start(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

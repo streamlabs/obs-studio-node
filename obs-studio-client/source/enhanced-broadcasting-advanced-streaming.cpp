@@ -68,6 +68,7 @@ Napi::Object osn::EnhancedBroadcastingAdvancedStreaming::Init(Napi::Env env, Nap
 
 		 InstanceMethod("start", &osn::EnhancedBroadcastingAdvancedStreaming::Start),
 		 InstanceMethod("stop", &osn::EnhancedBroadcastingAdvancedStreaming::Stop),
+		 InstanceMethod("getAvailableEncoders", &osn::EnhancedBroadcastingAdvancedStreaming::GetAvailableEncoders),
 
 		 StaticAccessor("legacySettings", &osn::EnhancedBroadcastingAdvancedStreaming::GetLegacySettings,
 				&osn::EnhancedBroadcastingAdvancedStreaming::SetLegacySettings)});

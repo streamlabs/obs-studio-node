@@ -65,6 +65,8 @@ void osn::IAdvancedRecording::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetFileResetTimestamps", std::vector<ipc::type>{ipc::type::UInt64}, GetFileResetTimestamps));
 	cls->register_function(std::make_shared<ipc::function>("SetFileResetTimestamps", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32},
 							       SetFileResetTimestamps));
+	cls->register_function(
+		std::make_shared<ipc::function>("GetAvailableEncoders", std::vector<ipc::type>{ipc::type::UInt64}, GetAvailableEncoders));
 
 	srv.register_collection(cls);
 }
@@ -484,5 +486,17 @@ void osn::IAdvancedRecording::SetStreaming(void *data, const int64_t id, const s
 	recording->streaming = streaming;
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::IAdvancedRecording::GetAvailableEncoders(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Advanced recording reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	osn::EncoderUtils::getAvailableEncoders(rval, nullptr, false, true, recording->format);
 	AUTO_DEBUG;
 }
