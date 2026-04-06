@@ -48,6 +48,7 @@ protected:
 	Napi::Value GetFileResetTimestamps(const Napi::CallbackInfo &info);
 	void SetFileResetTimestamps(const Napi::CallbackInfo &info, const Napi::Value &value);
 
+	Napi::Value GetAvailableEncoders(const Napi::CallbackInfo &info);
 	void Start(const Napi::CallbackInfo &info);
 	void Stop(const Napi::CallbackInfo &info);
 	void SplitFile(const Napi::CallbackInfo &info);

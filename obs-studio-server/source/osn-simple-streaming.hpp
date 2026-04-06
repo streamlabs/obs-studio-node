@@ -64,5 +64,6 @@ public:
 	static void SetLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetLegacyVideoEncoderSettings(obs_encoder_t *encoder);
 	static void SetLegacyAudioEncoderSettings(obs_encoder_t *encoder);
+	static void GetAvailableEncoders(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 };
 }
