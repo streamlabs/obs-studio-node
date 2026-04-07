@@ -1712,6 +1712,7 @@ export interface IStreaming {
     network: INetwork,
     video: IVideo,
     signalHandler: (signal: EOutputSignal) => void,
+    getAvailableEncoders(): IEncoderOption[],
     start(): void, // throws
     stop(force?: boolean): void,
     droppedFrames: number;
@@ -1725,6 +1726,11 @@ export interface EOutputSignal {
     signal: string,
     code: number,
     error: string
+}
+
+export interface IEncoderOption {
+    title: string,
+    name: string
 }
 
 export interface ISimpleStreaming extends IStreaming {
@@ -1796,6 +1802,7 @@ export interface IRecording extends IFileOutput {
     splitSize: number,
     fileResetTimestamps: boolean,
     signalHandler: (signal: EOutputSignal) => void,
+    getAvailableEncoders(): IEncoderOption[],
     start(): void,
     stop(force?: boolean): void,
     splitFile(): void
