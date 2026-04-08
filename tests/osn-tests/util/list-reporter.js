@@ -1,3 +1,5 @@
+var fs = require('fs');
+var path = require('path');
 var mocha = require('mocha');
 
 function ListReporter(runner) {
@@ -5,6 +7,8 @@ function ListReporter(runner) {
     var passes = 0;
     var failures = 0;
     var failedTestCases = [];
+    var flakyTestCases = [];
+    var flakyReportPath = process.env.OSN_FLAKY_TESTS_FILE || 'flaky-tests.json';
     var testLine = "";
 
     runner.on('start', function() {
@@ -13,6 +17,20 @@ function ListReporter(runner) {
 
     runner.on('pass', function(test) {
         passes++;
+
+        if (typeof test.currentRetry === 'function' && test.currentRetry() > 0) {
+            flakyTestCases.push({
+                suite: test.parent.title,
+                title: test.title,
+                fullTitle: typeof test.fullTitle === 'function'
+                    ? test.fullTitle()
+                    : test.parent.title + ' ' + test.title,
+                file: test.file || '',
+                duration: test.duration,
+                attempts: test.currentRetry() + 1
+            });
+        }
+
         console.log('%s: [TEST CASE] %s [PASS] %dms', test.parent.title, test.title, test.duration);
     });
 
@@ -46,6 +64,13 @@ function ListReporter(runner) {
             });
             
             console.log('');
+        }
+
+        try {
+            fs.mkdirSync(path.dirname(flakyReportPath), { recursive: true });
+            fs.writeFileSync(flakyReportPath, JSON.stringify(flakyTestCases, null, 2));
+        } catch (err) {
+            console.log('Unable to write flaky test report: %s', err.message);
         }
     });
 }

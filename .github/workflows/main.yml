@@ -1,6 +1,7 @@
 name: 'CI Multiplatform Build'
 permissions:
   contents: read
+  checks: write
 
 on:
   push:
@@ -139,14 +140,25 @@ jobs:
           mkdir -p "${{env.SLBUILDDIRECTORY}}"
           tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: 'Run tests'
+        id: run_tests
         timeout-minutes: 30
-        run: 'yarn run test'
+        run: 'yarn run test:ci'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
+          OSN_FLAKY_TESTS_FILE: ${{ github.workspace }}/flaky-tests.json
+      - name: Publish flaky test check
+        if: ${{ always() }}
+        continue-on-error: true
+        run: node ci/publish-flaky-check.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FLAKY_REPORT_PATH: ${{ github.workspace }}/flaky-tests.json
+          FLAKY_CHECK_NAME: Flaky tests / macOS ${{ matrix.Architecture }}
+          TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
 
   package-and-deploy-macos:
     name: 'Package and Deploy macOS'
@@ -318,15 +330,26 @@ jobs:
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: 'Run tests'
+        id: run_tests
         timeout-minutes: 20
         continue-on-error: false
-        run: 'yarn run test'
+        run: 'yarn run test:ci'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: release
+          OSN_FLAKY_TESTS_FILE: ${{ github.workspace }}/flaky-tests.json
+      - name: Publish flaky test check
+        if: ${{ always() }}
+        continue-on-error: true
+        run: node ci/publish-flaky-check.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FLAKY_REPORT_PATH: ${{ github.workspace }}/flaky-tests.json
+          FLAKY_CHECK_NAME: Flaky tests / Windows
+          TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
 
   package-and-deploy-win64:
     name: 'Package and Deploy Windows'
