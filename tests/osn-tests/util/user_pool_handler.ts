@@ -20,7 +20,7 @@ interface ITestUser {
 }
 
 export class UserPoolHandler {
-    private static excludedUsers: Map<string, number> = new Map();
+    private static excludedUsers: Set<string> = new Set();
     private user: ITestUser | null = null;
     private userPoolUrl: string = 'https://slobs-users-pool.herokuapp.com/';
     private osnTestName: string;
@@ -29,33 +29,12 @@ export class UserPoolHandler {
         this.osnTestName = testName;
     }
 
-    private getExcludedUserCooldownMs(): number {
-        const configuredValue = Number(process.env.OSN_TEST_USER_POOL_COOLDOWN_MS);
-        return Number.isFinite(configuredValue) && configuredValue > 0
-            ? configuredValue
-            : 30 * 60 * 1000;
-    }
-
-    private pruneExcludedUsers() {
-        const now = Date.now();
-
-        UserPoolHandler.excludedUsers.forEach((excludedUntil, email) => {
-            if (excludedUntil <= now) {
-                UserPoolHandler.excludedUsers.delete(email);
-            }
-        });
-    }
-
     private isUserExcluded(email: string): boolean {
-        this.pruneExcludedUsers();
-
-        const excludedUntil = UserPoolHandler.excludedUsers.get(email);
-        return typeof excludedUntil === 'number' && excludedUntil > Date.now();
+        return UserPoolHandler.excludedUsers.has(email);
     }
 
     private excludeUser(email: string, reason: string) {
-        const excludedUntil = Date.now() + this.getExcludedUserCooldownMs();
-        UserPoolHandler.excludedUsers.set(email, excludedUntil);
+        UserPoolHandler.excludedUsers.add(email);
         logWarning(this.osnTestName, `Marking user ${email} as unhealthy: ${reason}`);
     }
 
