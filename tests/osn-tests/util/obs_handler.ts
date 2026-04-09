@@ -3,6 +3,7 @@ import { logInfo, logWarning } from '../util/logger';
 import { UserPoolHandler } from './user_pool_handler';
 import { CacheUploader } from '../util/cache-uploader'
 import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../util/obs_enums'
+import { sleep } from './general';
 import { v4 as uuidv4 } from 'uuid';
 const WaitQueue = require('wait-queue');
 
@@ -180,6 +181,134 @@ export class OBSHandler {
         if (this.hasUserFromPool) {
             await this.userPoolHandler.releaseUser();
             this.hasUserFromPool = false;
+        }
+    }
+
+    private clearOutputSignals() {
+        this.signals = new WaitQueue();
+    }
+
+    private getFailedTestMessage(test?: Mocha.Test): string {
+        if (!test || !test.err) {
+            return '';
+        }
+
+        if (typeof test.err.message === 'string' && test.err.message.length > 0) {
+            return test.err.message;
+        }
+
+        return String(test.err);
+    }
+
+    private getTestLabel(test?: Mocha.Test): string {
+        if (!test) {
+            return 'unknown test';
+        }
+
+        if (typeof test.fullTitle === 'function') {
+            const fullTitle = test.fullTitle();
+            if (fullTitle.length > 0) {
+                return fullTitle;
+            }
+        }
+
+        return test.title || 'unknown test';
+    }
+
+    private hasRetriesRemaining(test?: Mocha.Test): boolean {
+        const runnable = test as any;
+
+        if (!runnable || typeof runnable.currentRetry !== 'function' || typeof runnable.retries !== 'function') {
+            return false;
+        }
+
+        return runnable.currentRetry() < runnable.retries();
+    }
+
+    private parseOutputErrorCode(message: string): osn.EOutputCode | null {
+        const codeMatch = message.match(/Error code:\s*(-?\d+)/i);
+        if (!codeMatch) {
+            return null;
+        }
+
+        const parsedCode = Number(codeMatch[1]);
+        return Number.isFinite(parsedCode)
+            ? parsedCode as osn.EOutputCode
+            : null;
+    }
+
+    private getRetryableUserReplacementReason(test?: Mocha.Test): string | null {
+        if (!test || test.state !== 'failed' || !this.hasUserFromPool || !this.userPoolHandler) {
+            return null;
+        }
+
+        if (!this.hasRetriesRemaining(test)) {
+            return null;
+        }
+
+        const message = this.getFailedTestMessage(test);
+        if (!message) {
+            return null;
+        }
+
+        const outputErrorCode = this.parseOutputErrorCode(message);
+        if (outputErrorCode === osn.EOutputCode.ConnectFailed
+            || outputErrorCode === osn.EOutputCode.InvalidStream
+            || outputErrorCode === osn.EOutputCode.Disconnected) {
+            return `received streaming output error ${outputErrorCode}`;
+        }
+
+        const normalizedMessage = message.toLowerCase();
+        const retryableTimeouts = [
+            'streaming starting signal timeout',
+            'streaming activate signal timeout',
+            'streaming start signal timeout',
+        ];
+
+        if (retryableTimeouts.some(timeoutMessage => normalizedMessage.includes(timeoutMessage))) {
+            return message;
+        }
+
+        return null;
+    }
+
+    private async cleanupOutputsForRetry() {
+        this.clearOutputSignals();
+
+        try {
+            osn.NodeObs.OBS_service_stopReplayBuffer(false);
+        } catch (e) {}
+
+        try {
+            osn.NodeObs.OBS_service_stopRecording();
+        } catch (e) {}
+
+        try {
+            osn.NodeObs.OBS_service_stopStreaming(false);
+        } catch (e) {}
+
+        await sleep(1000);
+        this.clearOutputSignals();
+    }
+
+    async prepareRetryUserIfNeeded(test?: Mocha.Test): Promise<void> {
+        const replacementReason = this.getRetryableUserReplacementReason(test);
+        if (!replacementReason) {
+            return;
+        }
+
+        const testLabel = this.getTestLabel(test);
+        logWarning(this.osnTestName, `Replacing user pool account before retrying "${testLabel}": ${replacementReason}`);
+
+        try {
+            await this.cleanupOutputsForRetry();
+            this.userPoolHandler.markCurrentUserUnhealthy(`retrying "${testLabel}" after ${replacementReason}`);
+            await this.releaseUser();
+            await this.reserveUser();
+            this.clearOutputSignals();
+            logInfo(this.osnTestName, `Prepared fresh stream credentials for retrying "${testLabel}"`);
+        } catch (e) {
+            logWarning(this.osnTestName, `Unable to replace user pool account before retrying "${testLabel}": ${e}`);
         }
     }
 

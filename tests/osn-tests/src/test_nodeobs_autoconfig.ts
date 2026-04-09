@@ -45,10 +45,12 @@ describe(testName, function() {
         logEmptyLine();
     });
 
-    afterEach(function() {
+    afterEach(async function() {
         if (this.currentTest.state == 'failed') {
             hasTestFailed = true;
         }
+
+        await obs.prepareRetryUserIfNeeded(this.currentTest);
     });
 
     it('Run autoconfig', async function() {

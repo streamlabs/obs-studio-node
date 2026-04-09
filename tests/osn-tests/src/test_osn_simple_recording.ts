@@ -46,10 +46,12 @@ describe(testName, () => {
         logEmptyLine();
     });
 
-    afterEach(function() {
+    afterEach(async function() {
         if (this.currentTest.state == 'failed') {
             hasTestFailed = true;
         }
+
+        await obs.prepareRetryUserIfNeeded(this.currentTest);
     });
 
     it('Create simple recording', async () => {

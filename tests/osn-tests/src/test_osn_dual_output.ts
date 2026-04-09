@@ -97,13 +97,15 @@ describe(testName, () => {
         osn.Global.setOutputSource(0, scene);
     });
 
-    afterEach(function () {
+    afterEach(async function () {
         const scene = osn.SceneFactory.fromName(newSceneName);
         scene.release();
 
         if (this.currentTest.state == 'failed') {
             hasTestFailed = true;
         }
+
+        await obs.prepareRetryUserIfNeeded(this.currentTest);
     });
 
     async function handleStreamSignals(expectedType: EOBSOutputType, expectedSignal: EOBSOutputSignal, errorMessage: string): Promise<void> {

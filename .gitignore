@@ -8,6 +8,9 @@ yarn-error.log
 .yarn/
 test-results.xml
 
+# Tests result for CI
+flaky-tests.json
+
 # Binaries
 *.dll
 *.lib
