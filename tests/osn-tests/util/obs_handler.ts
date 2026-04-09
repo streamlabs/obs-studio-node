@@ -6,6 +6,7 @@ import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../uti
 import { sleep } from './general';
 import { v4 as uuidv4 } from 'uuid';
 const WaitQueue = require('wait-queue');
+const retryContext = require('./retry_context.ts');
 
 // Interfaces
 export interface IPerformanceState {
@@ -40,6 +41,10 @@ export interface IConfigProgress {
 export interface IVec2 {
     x: number;
     y: number;
+}
+
+interface IRetryFailure {
+    message?: string;
 }
 
 export interface ICrop {
@@ -188,16 +193,12 @@ export class OBSHandler {
         this.signals = new WaitQueue();
     }
 
-    private getFailedTestMessage(test?: Mocha.Test): string {
-        if (!test || !test.err) {
+    private getRetryFailureMessage(retryFailure?: IRetryFailure | null): string {
+        if (!retryFailure || typeof retryFailure.message !== 'string') {
             return '';
         }
 
-        if (typeof test.err.message === 'string' && test.err.message.length > 0) {
-            return test.err.message;
-        }
-
-        return String(test.err);
+        return retryFailure.message;
     }
 
     private getTestLabel(test?: Mocha.Test): string {
@@ -225,6 +226,15 @@ export class OBSHandler {
         return runnable.currentRetry() < runnable.retries();
     }
 
+    private getPendingRetryFailure(test?: Mocha.Test): IRetryFailure | null {
+        if (!test || !this.hasRetriesRemaining(test)) {
+            return null;
+        }
+
+        const retryFailure = retryContext.getRetryFailure(test);
+        return retryFailure || null;
+    }
+
     private parseOutputErrorCode(message: string): osn.EOutputCode | null {
         const codeMatch = message.match(/Error code:\s*(-?\d+)/i);
         if (!codeMatch) {
@@ -237,16 +247,12 @@ export class OBSHandler {
             : null;
     }
 
-    private getRetryableUserReplacementReason(test?: Mocha.Test): string | null {
-        if (!test || test.state !== 'failed' || !this.hasUserFromPool || !this.userPoolHandler) {
+    private shouldRotateUserForRetry(retryFailure: IRetryFailure): string | null {
+        if (!this.hasUserFromPool || !this.userPoolHandler) {
             return null;
         }
 
-        if (!this.hasRetriesRemaining(test)) {
-            return null;
-        }
-
-        const message = this.getFailedTestMessage(test);
+        const message = this.getRetryFailureMessage(retryFailure);
         if (!message) {
             return null;
         }
@@ -291,24 +297,51 @@ export class OBSHandler {
         this.clearOutputSignals();
     }
 
+    private restoreKnownGoodStreamKey() {
+        if (!this.userStreamKey) {
+            return;
+        }
+
+        logInfo(this.osnTestName, 'Restoring stream key before retry');
+        this.setStreamKey(this.userStreamKey);
+
+        if (this.getStreamKey() !== this.userStreamKey) {
+            throw new Error('Failed to restore stream key before retry');
+        }
+
+        logInfo(this.osnTestName, 'Stream key restored before retry');
+    }
+
     async prepareRetryUserIfNeeded(test?: Mocha.Test): Promise<void> {
-        const replacementReason = this.getRetryableUserReplacementReason(test);
-        if (!replacementReason) {
+        const retryFailure = this.getPendingRetryFailure(test);
+        if (!retryFailure) {
             return;
         }
 
         const testLabel = this.getTestLabel(test);
-        logWarning(this.osnTestName, `Replacing user pool account before retrying "${testLabel}": ${replacementReason}`);
+        const failureMessage = this.getRetryFailureMessage(retryFailure);
+        const replacementReason = this.shouldRotateUserForRetry(retryFailure);
 
         try {
+            logWarning(this.osnTestName, `Preparing retry for "${testLabel}" after: ${failureMessage}`);
             await this.cleanupOutputsForRetry();
-            this.userPoolHandler.markCurrentUserUnhealthy(`retrying "${testLabel}" after ${replacementReason}`);
-            await this.releaseUser();
-            await this.reserveUser();
+
+            if (replacementReason) {
+                logWarning(this.osnTestName, `Replacing user pool account before retrying "${testLabel}": ${replacementReason}`);
+                this.userPoolHandler.markCurrentUserUnhealthy(`retrying "${testLabel}" after ${replacementReason}`);
+                await this.releaseUser();
+                await this.reserveUser();
+                logInfo(this.osnTestName, `Prepared fresh stream credentials for retrying "${testLabel}"`);
+            } else {
+                this.restoreKnownGoodStreamKey();
+                logInfo(this.osnTestName, `Prepared clean OBS state for retrying "${testLabel}"`);
+            }
+
             this.clearOutputSignals();
-            logInfo(this.osnTestName, `Prepared fresh stream credentials for retrying "${testLabel}"`);
         } catch (e) {
-            logWarning(this.osnTestName, `Unable to replace user pool account before retrying "${testLabel}": ${e}`);
+            logWarning(this.osnTestName, `Unable to prepare retry for "${testLabel}": ${e}`);
+        } finally {
+            retryContext.clearRetryFailure(test);
         }
     }
 
@@ -385,16 +418,44 @@ export class OBSHandler {
         });
     }
 
-    getNextSignalInfo(output: string, signal: string): Promise<IOBSOutputSignalInfo> {
-        return new Promise((resolve, reject) => {
-            this.signals.shift().then(
-                function (signalInfo) {
-                    resolve(signalInfo)
-                }
+    private isTerminalErrorSignal(signalInfo: IOBSOutputSignalInfo, output: string): boolean {
+        return signalInfo.type === output
+            && ((signalInfo.signal === EOBSOutputSignal.Stop && signalInfo.code !== osn.EOutputCode.Success)
+                || signalInfo.signal === EOBSOutputSignal.WriteError);
+    }
+
+    private formatSignalInfo(signalInfo: IOBSOutputSignalInfo): string {
+        return `${signalInfo.type}/${signalInfo.signal} (code=${signalInfo.code}, error=${signalInfo.error || 'none'})`;
+    }
+
+    async getNextSignalInfo(output: string, signal: string): Promise<IOBSOutputSignalInfo> {
+        const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout';
+        const deadline = Date.now() + 30000;
+
+        while (Date.now() < deadline) {
+            const remainingMs = deadline - Date.now();
+            const signalInfo = await Promise.race([
+                this.signals.shift(),
+                new Promise<IOBSOutputSignalInfo>((resolve, reject) => {
+                    setTimeout(() => reject(new Error(timeoutMessage)), remainingMs);
+                }),
+            ]);
+
+            if (signalInfo.type === output && signalInfo.signal === signal) {
+                return signalInfo;
+            }
+
+            if (this.isTerminalErrorSignal(signalInfo, output)) {
+                return signalInfo;
+            }
+
+            logWarning(
+                this.osnTestName,
+                `Skipping unexpected output signal while waiting for ${output}/${signal}: ${this.formatSignalInfo(signalInfo)}`,
             );
-            setTimeout(() => reject(new Error(output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout')), 30000);
         }
-        );
+
+        throw new Error(timeoutMessage);
     }
 
     startAutoconfig() {

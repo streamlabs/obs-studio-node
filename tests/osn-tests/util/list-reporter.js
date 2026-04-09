@@ -1,6 +1,7 @@
 var fs = require('fs');
 var path = require('path');
 var mocha = require('mocha');
+var retryContext = require('./retry_context.ts');
 
 function ListReporter(runner) {
     mocha.reporters.Base.call(this, runner);
@@ -48,6 +49,7 @@ function ListReporter(runner) {
 
     runner.on('retry', function(test, err) {
         retries++;
+        retryContext.setRetryFailure(test, err);
 
         var currentRetry = getRetryCount(test);
         var maxRetries = getMaxRetries(test);
@@ -67,6 +69,7 @@ function ListReporter(runner) {
 
     runner.on('pass', function(test) {
         passes++;
+        retryContext.clearRetryFailure(test);
 
         if (getRetryCount(test) > 0) {
             flakyTestCases.push({
@@ -86,6 +89,7 @@ function ListReporter(runner) {
 
     runner.on('fail', function(test, err) {
         failures++;
+        retryContext.clearRetryFailure(test);
 
         // Getting test line with the expect check that failed
         testLine = getTestLineFromError(err);

@@ -268,27 +268,28 @@ describe(testName, () => {
         osn.AudioTrackFactory.setAtIndex(track1, 1);
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
-        stream.start();
-
-        let signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        stream.service.update({ key: obs.userStreamKey });
-
         const streamingEncoder = stream.videoEncoder;
-        osn.AdvancedStreamingFactory.destroy(stream);
-        streamingEncoder.release();
+        try {
+            stream.start();
+
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
+        } finally {
+            stream.service.update({ key: obs.userStreamKey });
+            osn.AdvancedStreamingFactory.destroy(stream);
+            streamingEncoder.release();
+        }
     });
 });
