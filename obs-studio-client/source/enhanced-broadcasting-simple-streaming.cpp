@@ -98,7 +98,7 @@ Napi::Value osn::EnhancedBroadcastingSimpleStreaming::Create(const Napi::Callbac
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "Create", {});
+	auto response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -123,7 +123,7 @@ void osn::EnhancedBroadcastingSimpleStreaming::Destroy(const Napi::CallbackInfo 
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "Destroy", {ipc::value(stream->uid)});
+	auto response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "Destroy", {ipc::value(stream->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -135,7 +135,7 @@ Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetAdditionalCanvas(const 
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetAdditionalVideoCanvas", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetAdditionalVideoCanvas", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -158,7 +158,8 @@ void osn::EnhancedBroadcastingSimpleStreaming::SetAdditionalCanvas(const Napi::C
 	if (!conn)
 		return;
 
-	conn->call(className, "SetAdditionalVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	auto response = conn->call_synchronous_helper(className, "SetAdditionalVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings(const Napi::CallbackInfo &info)
@@ -167,7 +168,7 @@ Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings(const Na
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -191,7 +192,7 @@ void osn::EnhancedBroadcastingSimpleStreaming::SetLegacySettings(const Napi::Cal
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "SetLegacySettings", {streaming->uid});
+	auto response = conn->call_synchronous_helper("EnhancedBroadcastingSimpleStreaming", "SetLegacySettings", {streaming->uid});
 
 	if (!ValidateResponse(info, response))
 		return;

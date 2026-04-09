@@ -96,7 +96,7 @@ Napi::Value osn::AdvancedStreaming::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "Create", {});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -122,7 +122,7 @@ void osn::AdvancedStreaming::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "Destroy", {ipc::value(stream->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "Destroy", {ipc::value(stream->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -134,7 +134,7 @@ Napi::Value osn::AdvancedStreaming::GetLegacySettings(const Napi::CallbackInfo &
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -157,7 +157,7 @@ void osn::AdvancedStreaming::SetLegacySettings(const Napi::CallbackInfo &info, c
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "SetLegacySettings", {streaming->uid});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "SetLegacySettings", {streaming->uid});
 
 	if (!ValidateResponse(info, response))
 		return;

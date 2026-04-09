@@ -66,7 +66,7 @@ Napi::Value osn::Network::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Network", "Create", {});
+	auto response = conn->call_synchronous_helper("Network", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -93,7 +93,8 @@ void osn::Network::Finalize(Napi::Env env)
 		return;
 	}
 
-	conn->call_synchronous_helper("Network", "Destroy", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Network", "Destroy", {ipc::value(this->uid)});
+	ValidateResponse(env, response);
 
 	this->uid = UINT64_MAX;
 }
@@ -104,7 +105,7 @@ Napi::Value osn::Network::GetBindIP(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Network", "GetBindIP", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Network", "GetBindIP", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -118,7 +119,8 @@ void osn::Network::SetBindIP(const Napi::CallbackInfo &info, const Napi::Value &
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Network", "SetBindIP", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper("Network", "SetBindIP", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Network::GetNetworkInterfaces(const Napi::CallbackInfo &info)
@@ -127,7 +129,7 @@ Napi::Value osn::Network::GetNetworkInterfaces(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Network", "GetNetworkInterfaces", {ipc::value()});
+	auto response = conn->call_synchronous_helper("Network", "GetNetworkInterfaces", {ipc::value()});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -147,7 +149,7 @@ Napi::Value osn::Network::GetEnableDynamicBitrate(const Napi::CallbackInfo &info
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Network", "GetEnableDynamicBitrate", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Network", "GetEnableDynamicBitrate", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -161,7 +163,8 @@ void osn::Network::SetEnableDynamicBitrate(const Napi::CallbackInfo &info, const
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Network", "SetEnableDynamicBitrate", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("Network", "SetEnableDynamicBitrate", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Network::GetEnableOptimizations(const Napi::CallbackInfo &info)
@@ -170,7 +173,7 @@ Napi::Value osn::Network::GetEnableOptimizations(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Network", "GetEnableOptimizations", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Network", "GetEnableOptimizations", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -184,7 +187,8 @@ void osn::Network::SetEnableOptimizations(const Napi::CallbackInfo &info, const 
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Network", "SetEnableOptimizations", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("Network", "SetEnableOptimizations", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Network::GetEnableLowLatency(const Napi::CallbackInfo &info)
@@ -193,7 +197,7 @@ Napi::Value osn::Network::GetEnableLowLatency(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Network", "GetEnableLowLatency", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Network", "GetEnableLowLatency", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -207,5 +211,6 @@ void osn::Network::SetEnableLowLatency(const Napi::CallbackInfo &info, const Nap
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Network", "SetEnableLowLatency", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("Network", "SetEnableLowLatency", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }

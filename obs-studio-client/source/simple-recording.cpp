@@ -108,7 +108,7 @@ Napi::Value osn::SimpleRecording::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "Create", {});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -134,7 +134,7 @@ void osn::SimpleRecording::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "Destroy", {ipc::value(recording->uid)});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "Destroy", {ipc::value(recording->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -146,7 +146,7 @@ Napi::Value osn::SimpleRecording::GetQuality(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "GetQuality", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "GetQuality", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -160,7 +160,8 @@ void osn::SimpleRecording::SetQuality(const Napi::CallbackInfo &info, const Napi
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("SimpleRecording", "SetQuality", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "SetQuality", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SimpleRecording::GetAudioEncoder(const Napi::CallbackInfo &info)
@@ -170,14 +171,16 @@ Napi::Value osn::SimpleRecording::GetAudioEncoder(const Napi::CallbackInfo &info
 
 void osn::SimpleRecording::SetAudioEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!audioEncoderRef.IsEmpty())
-			audioEncoderRef.Reset();
-		conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -192,10 +195,9 @@ void osn::SimpleRecording::SetAudioEncoder(const Napi::CallbackInfo &info, const
 		return;
 	}
 
-	conn->call(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
-
-	if (!audioEncoderRef.IsEmpty())
-		audioEncoderRef.Reset();
+	auto response = conn->call_synchronous_helper(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	audioEncoderRef = Napi::Persistent(obj);
 }
@@ -206,7 +208,7 @@ Napi::Value osn::SimpleRecording::GetLowCPU(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "GetLowCPU", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "GetLowCPU", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -220,7 +222,8 @@ void osn::SimpleRecording::SetLowCPU(const Napi::CallbackInfo &info, const Napi:
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("SimpleRecording", "SetLowCPU", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "SetLowCPU", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SimpleRecording::GetLegacySettings(const Napi::CallbackInfo &info)
@@ -229,7 +232,7 @@ Napi::Value osn::SimpleRecording::GetLegacySettings(const Napi::CallbackInfo &in
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -252,7 +255,7 @@ void osn::SimpleRecording::SetLegacySettings(const Napi::CallbackInfo &info, con
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleRecording", "SetLegacySettings", {recording->uid});
+	auto response = conn->call_synchronous_helper("SimpleRecording", "SetLegacySettings", {recording->uid});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -265,14 +268,16 @@ Napi::Value osn::SimpleRecording::GetStreaming(const Napi::CallbackInfo &info)
 
 void osn::SimpleRecording::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!streamingRef.IsEmpty())
-			streamingRef.Reset();
-		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -287,10 +292,9 @@ void osn::SimpleRecording::SetStreaming(const Napi::CallbackInfo &info, const Na
 		return;
 	}
 
-	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
-
-	if (!streamingRef.IsEmpty())
-		streamingRef.Reset();
+	auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	streamingRef = Napi::Persistent(obj);
 }

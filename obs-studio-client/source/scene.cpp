@@ -105,7 +105,7 @@ Napi::Value osn::Scene::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Scene", "Create", std::vector<ipc::value>{ipc::value(name)});
+	auto response = conn->call_synchronous_helper("Scene", "Create", std::vector<ipc::value>{ipc::value(name)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -136,7 +136,7 @@ Napi::Value osn::Scene::CreatePrivate(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Scene", "CreatePrivate", std::vector<ipc::value>{ipc::value(name)});
+	auto response = conn->call_synchronous_helper("Scene", "CreatePrivate", std::vector<ipc::value>{ipc::value(name)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -169,7 +169,7 @@ Napi::Value osn::Scene::FromName(const Napi::CallbackInfo &info)
 		if (!conn)
 			return info.Env().Undefined();
 
-		std::vector<ipc::value> response = conn->call_synchronous_helper("Scene", "FromName", {ipc::value(name)});
+		auto response = conn->call_synchronous_helper("Scene", "FromName", {ipc::value(name)});
 
 		if (!ValidateResponse(info, response))
 			return info.Env().Undefined();
@@ -190,7 +190,8 @@ Napi::Value osn::Scene::Release(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Scene", "Release", std::vector<ipc::value>{ipc::value(this->sourceId)});
+	auto response = conn->call_synchronous_helper("Scene", "Release", std::vector<ipc::value>{ipc::value(this->sourceId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -200,7 +201,8 @@ Napi::Value osn::Scene::Remove(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Scene", "Remove", std::vector<ipc::value>{ipc::value(this->sourceId)});
+	auto response = conn->call_synchronous_helper("Scene", "Remove", std::vector<ipc::value>{ipc::value(this->sourceId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -220,8 +222,8 @@ Napi::Value osn::Scene::Duplicate(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(
-		"Scene", "Duplicate", std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(name), ipc::value(duplicate_type)});
+	auto response = conn->call_synchronous_helper("Scene", "Duplicate",
+						      std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(name), ipc::value(duplicate_type)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -284,7 +286,7 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Scene", info.Length() >= 2 ? "AddSourceWithTransform" : "AddSource", params);
+	auto response = conn->call_synchronous_helper("Scene", info.Length() >= 2 ? "AddSourceWithTransform" : "AddSource", params);
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -417,7 +419,7 @@ Napi::Value osn::Scene::MoveItem(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response =
+	auto response =
 		conn->call_synchronous_helper("Scene", "MoveItem", std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(from), ipc::value(to)});
 
 	if (!ValidateResponse(info, response))
@@ -455,8 +457,7 @@ Napi::Value osn::Scene::OrderItems(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response =
-		conn->call_synchronous_helper("Scene", "OrderItems", std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(order_char)});
+	auto response = conn->call_synchronous_helper("Scene", "OrderItems", std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(order_char)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -483,8 +484,7 @@ Napi::Value osn::Scene::GetItemAtIndex(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response =
-		conn->call_synchronous_helper("Scene", "GetItem", std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(index)});
+	auto response = conn->call_synchronous_helper("Scene", "GetItem", std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(index)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -523,7 +523,7 @@ Napi::Value osn::Scene::GetItems(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Scene", "GetItems", std::vector<ipc::value>{ipc::value(this->sourceId)});
+	auto response = conn->call_synchronous_helper("Scene", "GetItems", std::vector<ipc::value>{ipc::value(this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -557,8 +557,8 @@ Napi::Value osn::Scene::GetItemsInRange(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Scene", "GetItemsInRange",
-									 std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(from), ipc::value(to)});
+	auto response = conn->call_synchronous_helper("Scene", "GetItemsInRange",
+						      std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(from), ipc::value(to)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

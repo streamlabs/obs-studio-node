@@ -100,7 +100,7 @@ Napi::Value osn::AdvancedRecording::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "Create", {});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -126,7 +126,7 @@ void osn::AdvancedRecording::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "Destroy", {ipc::value(recording->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "Destroy", {ipc::value(recording->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -138,7 +138,7 @@ Napi::Value osn::AdvancedRecording::GetMixer(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "GetMixer", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "GetMixer", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -152,7 +152,8 @@ void osn::AdvancedRecording::SetMixer(const Napi::CallbackInfo &info, const Napi
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedRecording", "SetMixer", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "SetMixer", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedRecording::GetRescaling(const Napi::CallbackInfo &info)
@@ -161,7 +162,7 @@ Napi::Value osn::AdvancedRecording::GetRescaling(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "GetRescaling", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "GetRescaling", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -175,7 +176,8 @@ void osn::AdvancedRecording::SetRescaling(const Napi::CallbackInfo &info, const 
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedRecording", "SetRescaling", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "SetRescaling", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedRecording::GetOutputWidth(const Napi::CallbackInfo &info)
@@ -184,7 +186,7 @@ Napi::Value osn::AdvancedRecording::GetOutputWidth(const Napi::CallbackInfo &inf
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "GetOutputWidth", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "GetOutputWidth", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -198,7 +200,9 @@ void osn::AdvancedRecording::SetOutputWidth(const Napi::CallbackInfo &info, cons
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedRecording", "SetOutputWidth", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedRecording", "SetOutputWidth", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedRecording::GetOutputHeight(const Napi::CallbackInfo &info)
@@ -207,7 +211,7 @@ Napi::Value osn::AdvancedRecording::GetOutputHeight(const Napi::CallbackInfo &in
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "GetOutputHeight", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "GetOutputHeight", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -221,7 +225,9 @@ void osn::AdvancedRecording::SetOutputHeight(const Napi::CallbackInfo &info, con
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedRecording", "SetOutputHeight", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedRecording", "SetOutputHeight", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedRecording::GetUseStreamEncoders(const Napi::CallbackInfo &info)
@@ -230,7 +236,7 @@ Napi::Value osn::AdvancedRecording::GetUseStreamEncoders(const Napi::CallbackInf
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "GetUseStreamEncoders", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "GetUseStreamEncoders", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -244,7 +250,9 @@ void osn::AdvancedRecording::SetUseStreamEncoders(const Napi::CallbackInfo &info
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedRecording", "SetUseStreamEncoders", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedRecording", "SetUseStreamEncoders", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedRecording::GetLegacySettings(const Napi::CallbackInfo &info)
@@ -253,7 +261,7 @@ Napi::Value osn::AdvancedRecording::GetLegacySettings(const Napi::CallbackInfo &
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -276,7 +284,7 @@ void osn::AdvancedRecording::SetLegacySettings(const Napi::CallbackInfo &info, c
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedRecording", "SetLegacySettings", {recording->uid});
+	auto response = conn->call_synchronous_helper("AdvancedRecording", "SetLegacySettings", {recording->uid});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -289,14 +297,16 @@ Napi::Value osn::AdvancedRecording::GetStreaming(const Napi::CallbackInfo &info)
 
 void osn::AdvancedRecording::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!streamingRef.IsEmpty())
-			streamingRef.Reset();
-		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -311,10 +321,9 @@ void osn::AdvancedRecording::SetStreaming(const Napi::CallbackInfo &info, const 
 		return;
 	}
 
-	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
-
-	if (!streamingRef.IsEmpty())
-		streamingRef.Reset();
+	auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	streamingRef = Napi::Persistent(obj);
 }

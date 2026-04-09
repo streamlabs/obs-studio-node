@@ -95,7 +95,7 @@ Napi::Value osn::SceneItem::GetSource(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetSource", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetSource", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -112,7 +112,7 @@ Napi::Value osn::SceneItem::GetScene(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetScene", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetScene", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -159,7 +159,7 @@ Napi::Value osn::SceneItem::IsVisible(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "IsVisible", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "IsVisible", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -185,7 +185,9 @@ void osn::SceneItem::SetVisible(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetVisible", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(visible)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetVisible", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(visible)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->isVisible = visible;
 }
@@ -204,7 +206,7 @@ Napi::Value osn::SceneItem::IsSelected(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "IsSelected", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "IsSelected", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -232,7 +234,9 @@ void osn::SceneItem::SetSelected(const Napi::CallbackInfo &info, const Napi::Val
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetSelected", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(selected)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetSelected", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(selected)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->selectedChanged = true;
 	sid->cached = true;
@@ -250,7 +254,7 @@ Napi::Value osn::SceneItem::IsStreamVisible(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "IsStreamVisible", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "IsStreamVisible", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -280,7 +284,10 @@ void osn::SceneItem::SetStreamVisible(const Napi::CallbackInfo &info, const Napi
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetStreamVisible", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(streamVisible)});
+	auto response =
+		conn->call_synchronous_helper("SceneItem", "SetStreamVisible", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(streamVisible)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->streamVisibleChanged = true;
 	sid->isStreamVisible = streamVisible;
@@ -300,7 +307,7 @@ Napi::Value osn::SceneItem::IsRecordingVisible(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "IsRecordingVisible", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "IsRecordingVisible", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -328,7 +335,10 @@ void osn::SceneItem::SetRecordingVisible(const Napi::CallbackInfo &info, const N
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetRecordingVisible", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(recordingVisible)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetRecordingVisible",
+						      std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(recordingVisible)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (sid) {
 		sid->recordingVisibleChanged = true;
@@ -353,7 +363,7 @@ Napi::Value osn::SceneItem::GetPosition(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetPosition", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetPosition", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -388,7 +398,10 @@ void osn::SceneItem::SetPosition(const Napi::CallbackInfo &info, const Napi::Val
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetPosition", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(x), ipc::value(y)});
+	auto response =
+		conn->call_synchronous_helper("SceneItem", "SetPosition", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(x), ipc::value(y)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->posX = x;
 	sid->posY = y;
@@ -400,7 +413,7 @@ Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetCanvas", {ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetCanvas", {ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -423,7 +436,8 @@ void osn::SceneItem::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetCanvas", {ipc::value(this->itemId), ipc::value(canvas->canvasId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetCanvas", {ipc::value(this->itemId), ipc::value(canvas->canvasId)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetRotation(const Napi::CallbackInfo &info)
@@ -439,7 +453,7 @@ Napi::Value osn::SceneItem::GetRotation(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetRotation", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetRotation", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -466,7 +480,9 @@ void osn::SceneItem::SetRotation(const Napi::CallbackInfo &info, const Napi::Val
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetRotation", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(vector)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetRotation", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(vector)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->rotation = vector;
 }
@@ -488,7 +504,7 @@ Napi::Value osn::SceneItem::GetScale(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetScale", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetScale", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -523,7 +539,9 @@ void osn::SceneItem::SetScale(const Napi::CallbackInfo &info, const Napi::Value 
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetScale", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(x), ipc::value(y)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetScale", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(x), ipc::value(y)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->scaleX = x;
 	sid->scaleY = y;
@@ -542,7 +560,7 @@ Napi::Value osn::SceneItem::GetScaleFilter(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetScaleFilter", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetScaleFilter", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -569,7 +587,9 @@ void osn::SceneItem::SetScaleFilter(const Napi::CallbackInfo &info, const Napi::
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetScaleFilter", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(filter)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetScaleFilter", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(filter)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->scaleFilter = filter;
 	sid->scaleFilterChanged = false;
@@ -581,7 +601,7 @@ Napi::Value osn::SceneItem::GetAlignment(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetAlignment", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetAlignment", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -599,7 +619,8 @@ void osn::SceneItem::SetAlignment(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetAlignment", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(flag)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetAlignment", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(flag)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetBounds(const Napi::CallbackInfo &info)
@@ -608,7 +629,7 @@ Napi::Value osn::SceneItem::GetBounds(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetBounds", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetBounds", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -631,7 +652,9 @@ void osn::SceneItem::SetBounds(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetBounds", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(x), ipc::value(y)});
+	auto response =
+		conn->call_synchronous_helper("SceneItem", "SetBounds", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(x), ipc::value(y)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetBoundsAlignment(const Napi::CallbackInfo &info)
@@ -640,7 +663,7 @@ Napi::Value osn::SceneItem::GetBoundsAlignment(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetBoundsAlignment", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetBoundsAlignment", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -657,7 +680,9 @@ void osn::SceneItem::SetBoundsAlignment(const Napi::CallbackInfo &info, const Na
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetBoundsAlignment", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(visible)});
+	auto response =
+		conn->call_synchronous_helper("SceneItem", "SetBoundsAlignment", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(visible)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetBoundsType(const Napi::CallbackInfo &info)
@@ -666,7 +691,7 @@ Napi::Value osn::SceneItem::GetBoundsType(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetBoundsType", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetBoundsType", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -683,7 +708,8 @@ void osn::SceneItem::SetBoundsType(const Napi::CallbackInfo &info, const Napi::V
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetBoundsType", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(boundsType)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetBoundsType", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(boundsType)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetCrop(const Napi::CallbackInfo &info)
@@ -705,7 +731,7 @@ Napi::Value osn::SceneItem::GetCrop(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetCrop", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetCrop", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -749,8 +775,11 @@ void osn::SceneItem::SetCrop(const Napi::CallbackInfo &info, const Napi::Value &
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetCrop",
-		   std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(left), ipc::value(top), ipc::value(right), ipc::value(bottom)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetCrop",
+						      std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(left), ipc::value(top), ipc::value(right),
+									      ipc::value(bottom)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->cropLeft = left;
 	sid->cropTop = top;
@@ -764,7 +793,7 @@ Napi::Value osn::SceneItem::GetTransformInfo(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetTransformInfo", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetTransformInfo", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -824,7 +853,8 @@ void osn::SceneItem::SetTransformInfo(const Napi::CallbackInfo &info, const Napi
 		bounds.Get("x").ToNumber().FloatValue(),
 		bounds.Get("y").ToNumber().FloatValue(),
 	};
-	const auto b = conn->call("SceneItem", "SetTransformInfo", std::move(params));
+	auto response = conn->call_synchronous_helper("SceneItem", "SetTransformInfo", std::move(params));
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetId(const Napi::CallbackInfo &info)
@@ -838,7 +868,7 @@ Napi::Value osn::SceneItem::GetId(const Napi::CallbackInfo &info)
 		if (!conn)
 			return info.Env().Undefined();
 
-		std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetId", std::vector<ipc::value>{ipc::value(this->itemId)});
+		auto response = conn->call_synchronous_helper("SceneItem", "GetId", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 		if (!ValidateResponse(info, response))
 			return info.Env().Undefined();
@@ -855,7 +885,8 @@ Napi::Value osn::SceneItem::MoveUp(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "MoveUp", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "MoveUp", std::vector<ipc::value>{ipc::value(this->itemId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -865,7 +896,8 @@ Napi::Value osn::SceneItem::MoveDown(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "MoveDown", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "MoveDown", std::vector<ipc::value>{ipc::value(this->itemId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -875,7 +907,8 @@ Napi::Value osn::SceneItem::MoveTop(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "MoveTop", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "MoveTop", std::vector<ipc::value>{ipc::value(this->itemId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -885,7 +918,8 @@ Napi::Value osn::SceneItem::MoveBottom(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "MoveBottom", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "MoveBottom", std::vector<ipc::value>{ipc::value(this->itemId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -897,7 +931,8 @@ Napi::Value osn::SceneItem::Move(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "Move", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(position)});
+	auto response = conn->call_synchronous_helper("SceneItem", "Move", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(position)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -907,7 +942,8 @@ Napi::Value osn::SceneItem::DeferUpdateBegin(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "DeferUpdateBegin", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "DeferUpdateBegin", std::vector<ipc::value>{ipc::value(this->itemId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -917,7 +953,8 @@ Napi::Value osn::SceneItem::DeferUpdateEnd(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("SceneItem", "DeferUpdateEnd", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "DeferUpdateEnd", std::vector<ipc::value>{ipc::value(this->itemId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -934,7 +971,7 @@ Napi::Value osn::SceneItem::GetBlendingMethod(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetBlendingMethod", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetBlendingMethod", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -960,7 +997,9 @@ void osn::SceneItem::SetBlendingMethod(const Napi::CallbackInfo &info, const Nap
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetBlendingMethod", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(method)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetBlendingMethod", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(method)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->blendingMethod = method;
 	sid->blendingMethodChanged = false;
@@ -979,7 +1018,7 @@ Napi::Value osn::SceneItem::GetBlendingMode(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SceneItem", "GetBlendingMode", std::vector<ipc::value>{ipc::value(this->itemId)});
+	auto response = conn->call_synchronous_helper("SceneItem", "GetBlendingMode", std::vector<ipc::value>{ipc::value(this->itemId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -1005,7 +1044,9 @@ void osn::SceneItem::SetBlendingMode(const Napi::CallbackInfo &info, const Napi:
 	if (!conn)
 		return;
 
-	conn->call("SceneItem", "SetBlendingMode", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(mode)});
+	auto response = conn->call_synchronous_helper("SceneItem", "SetBlendingMode", std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(mode)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	sid->blendingMode = mode;
 	sid->blendingModeChanged = false;

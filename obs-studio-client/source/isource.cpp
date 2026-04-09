@@ -41,7 +41,8 @@ void osn::ISource::Remove(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return;
 
-	conn->call("Source", "Remove", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "Remove", {ipc::value(id)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ISource::IsConfigurable(const Napi::CallbackInfo &info, uint64_t id)
@@ -54,7 +55,7 @@ Napi::Value osn::ISource::IsConfigurable(const Napi::CallbackInfo &info, uint64_
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "IsConfigurable", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "IsConfigurable", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -81,7 +82,7 @@ Napi::Value osn::ISource::GetProperties(const Napi::CallbackInfo &info, uint64_t
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetProperties", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetProperties", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -111,7 +112,7 @@ Napi::Value osn::ISource::GetSlowUncachedSettings(const Napi::CallbackInfo &info
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetSettings", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetSettings", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -146,7 +147,7 @@ Napi::Value osn::ISource::GetSettings(const Napi::CallbackInfo &info, uint64_t i
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetSettings", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetSettings", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -195,7 +196,7 @@ void osn::ISource::Update(const Napi::CallbackInfo &info, uint64_t id)
 		if (!conn)
 			return;
 
-		std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "Update", {ipc::value(id), ipc::value(jsondata)});
+		auto response = conn->call_synchronous_helper("Source", "Update", {ipc::value(id), ipc::value(jsondata)});
 
 		if (!ValidateResponse(info, response))
 			return;
@@ -221,7 +222,7 @@ void osn::ISource::SendMessage(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "SendMessage", {ipc::value(id), ipc::value(jsondata)});
+	auto response = conn->call_synchronous_helper("Source", "SendMessage", {ipc::value(id), ipc::value(jsondata)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -233,7 +234,8 @@ void osn::ISource::Load(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return;
 
-	conn->call("Source", "Load", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "Load", {ipc::value(id)});
+	ValidateResponse(info, response);
 }
 
 void osn::ISource::Save(const Napi::CallbackInfo &info, uint64_t id)
@@ -242,7 +244,8 @@ void osn::ISource::Save(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return;
 
-	conn->call("Source", "Save", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "Save", {ipc::value(id)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ISource::GetType(const Napi::CallbackInfo &info, uint64_t id)
@@ -255,7 +258,7 @@ Napi::Value osn::ISource::GetType(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetType", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetType", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -281,7 +284,7 @@ Napi::Value osn::ISource::GetName(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetName", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetName", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -304,7 +307,8 @@ void osn::ISource::SetName(const Napi::CallbackInfo &info, const Napi::Value &va
 	if (!conn)
 		return;
 
-	conn->call("Source", "SetName", {ipc::value(id), ipc::value(name)});
+	auto response = conn->call_synchronous_helper("Source", "SetName", {ipc::value(id), ipc::value(name)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ISource::GetOutputFlags(const Napi::CallbackInfo &info, uint64_t id)
@@ -317,7 +321,7 @@ Napi::Value osn::ISource::GetOutputFlags(const Napi::CallbackInfo &info, uint64_
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetOutputFlags", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetOutputFlags", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -335,7 +339,7 @@ Napi::Value osn::ISource::GetFlags(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetFlags", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetFlags", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -355,7 +359,8 @@ void osn::ISource::SetFlags(const Napi::CallbackInfo &info, const Napi::Value &v
 	if (!conn)
 		return;
 
-	conn->call("Source", "SetFlags", {ipc::value(id), ipc::value(flags)});
+	auto response = conn->call_synchronous_helper("Source", "SetFlags", {ipc::value(id), ipc::value(flags)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ISource::GetStatus(const Napi::CallbackInfo &info, uint64_t id)
@@ -368,7 +373,7 @@ Napi::Value osn::ISource::GetStatus(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetStatus", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetStatus", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -393,7 +398,7 @@ Napi::Value osn::ISource::GetId(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetId", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetId", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -422,7 +427,7 @@ Napi::Value osn::ISource::GetMuted(const Napi::CallbackInfo &info, uint64_t id)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetMuted", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetMuted", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -447,7 +452,9 @@ void osn::ISource::SetMuted(const Napi::CallbackInfo &info, const Napi::Value &v
 	if (!conn)
 		return;
 
-	conn->call("Source", "SetMuted", {ipc::value(id), ipc::value(muted)});
+	auto response = conn->call_synchronous_helper("Source", "SetMuted", {ipc::value(id), ipc::value(muted)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	SourceDataInfo *sdi = CacheManager<SourceDataInfo *>::getInstance().Retrieve(id);
 	if (sdi)
@@ -467,8 +474,7 @@ Napi::Object osn::ISource::CallHandler(const Napi::CallbackInfo &info, uint64_t 
 		return result;
 	}
 
-	std::vector<ipc::value> response =
-		conn->call_synchronous_helper("Source", "CallHandler", {ipc::value(id), ipc::value(fuction_name), ipc::value(fuction_input)});
+	auto response = conn->call_synchronous_helper("Source", "CallHandler", {ipc::value(id), ipc::value(fuction_name), ipc::value(fuction_input)});
 
 	if (!ValidateResponse(info, response)) {
 		Napi::TypeError::New(info.Env(), "Invalid IPC Response").ThrowAsJavaScriptException();
@@ -489,7 +495,7 @@ Napi::Value osn::ISource::GetEnabled(const Napi::CallbackInfo &info, uint64_t id
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Source", "GetEnabled", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Source", "GetEnabled", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -509,7 +515,8 @@ void osn::ISource::SetEnabled(const Napi::CallbackInfo &info, const Napi::Value 
 	if (!conn)
 		return;
 
-	conn->call("Source", "SetEnabled", {ipc::value(id), ipc::value(enabled)});
+	auto response = conn->call_synchronous_helper("Source", "SetEnabled", {ipc::value(id), ipc::value(enabled)});
+	ValidateResponse(info, response);
 }
 
 void osn::ISource::SendMouseClick(const Napi::CallbackInfo &info, uint64_t id)

@@ -95,7 +95,7 @@ Napi::Value osn::AdvancedReplayBuffer::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedReplayBuffer", "Create", {});
+	auto response = conn->call_synchronous_helper("AdvancedReplayBuffer", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -120,7 +120,7 @@ void osn::AdvancedReplayBuffer::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedReplayBuffer", "Destroy", {ipc::value(replayBuffer->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedReplayBuffer", "Destroy", {ipc::value(replayBuffer->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -132,7 +132,7 @@ Napi::Value osn::AdvancedReplayBuffer::GetMixer(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetMixer", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetMixer", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -146,7 +146,8 @@ void osn::AdvancedReplayBuffer::SetMixer(const Napi::CallbackInfo &info, const N
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetMixer", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper(className, "SetMixer", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedReplayBuffer::GetLegacySettings(const Napi::CallbackInfo &info)
@@ -155,7 +156,7 @@ Napi::Value osn::AdvancedReplayBuffer::GetLegacySettings(const Napi::CallbackInf
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedReplayBuffer", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("AdvancedReplayBuffer", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -178,7 +179,7 @@ void osn::AdvancedReplayBuffer::SetLegacySettings(const Napi::CallbackInfo &info
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedReplayBuffer", "SetLegacySettings", {replayBuffer->uid});
+	auto response = conn->call_synchronous_helper("AdvancedReplayBuffer", "SetLegacySettings", {replayBuffer->uid});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -195,14 +196,16 @@ Napi::Value osn::AdvancedReplayBuffer::GetStreaming(const Napi::CallbackInfo &in
 
 void osn::AdvancedReplayBuffer::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!parentOutputRef.IsEmpty())
-			parentOutputRef.Reset();
-		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		usesStream = false;
 		return;
 	}
@@ -218,11 +221,11 @@ void osn::AdvancedReplayBuffer::SetStreaming(const Napi::CallbackInfo &info, con
 		return;
 	}
 
-	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
-	usesStream = true;
-	if (!parentOutputRef.IsEmpty())
-		parentOutputRef.Reset();
+	auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
+	usesStream = true;
 	parentOutputRef = Napi::Persistent(obj);
 }
 
@@ -237,15 +240,17 @@ Napi::Value osn::AdvancedReplayBuffer::GetRecording(const Napi::CallbackInfo &in
 
 void osn::AdvancedReplayBuffer::SetRecording(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!parentOutputRef.IsEmpty())
-			parentOutputRef.Reset();
-		conn->call(className, "SetRecording", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
-		usesStream = false;
+		auto response = conn->call_synchronous_helper(className, "SetRecording", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
+		usesStream = true;
 		return;
 	}
 
@@ -259,9 +264,10 @@ void osn::AdvancedReplayBuffer::SetRecording(const Napi::CallbackInfo &info, con
 		return;
 	}
 
-	conn->call(className, "SetRecording", {ipc::value(this->uid), ipc::value(recording->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetRecording", {ipc::value(this->uid), ipc::value(recording->uid)});
+	if (!ValidateResponse(info, response))
+		return;
+
 	usesStream = false;
-	if (!parentOutputRef.IsEmpty())
-		parentOutputRef.Reset();
 	parentOutputRef = Napi::Persistent(obj);
 }

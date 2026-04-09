@@ -94,7 +94,7 @@ Napi::Value osn::SimpleReplayBuffer::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleReplayBuffer", "Create", {});
+	auto response = conn->call_synchronous_helper("SimpleReplayBuffer", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -119,7 +119,7 @@ void osn::SimpleReplayBuffer::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleReplayBuffer", "Destroy", {ipc::value(replayBuffer->uid)});
+	auto response = conn->call_synchronous_helper("SimpleReplayBuffer", "Destroy", {ipc::value(replayBuffer->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -131,7 +131,7 @@ Napi::Value osn::SimpleReplayBuffer::GetLegacySettings(const Napi::CallbackInfo 
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleReplayBuffer", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("SimpleReplayBuffer", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -154,7 +154,7 @@ void osn::SimpleReplayBuffer::SetLegacySettings(const Napi::CallbackInfo &info, 
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleReplayBuffer", "SetLegacySettings", {replayBuffer->uid});
+	auto response = conn->call_synchronous_helper("SimpleReplayBuffer", "SetLegacySettings", {replayBuffer->uid});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -171,14 +171,16 @@ Napi::Value osn::SimpleReplayBuffer::GetStreaming(const Napi::CallbackInfo &info
 
 void osn::SimpleReplayBuffer::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!parentOutputRef.IsEmpty())
-			parentOutputRef.Reset();
-		conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		usesStream = false;
 		return;
 	}
@@ -194,11 +196,11 @@ void osn::SimpleReplayBuffer::SetStreaming(const Napi::CallbackInfo &info, const
 		return;
 	}
 
-	conn->call(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
-	usesStream = true;
-	if (!parentOutputRef.IsEmpty())
-		parentOutputRef.Reset();
+	auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
+	usesStream = true;
 	parentOutputRef = Napi::Persistent(obj);
 }
 
@@ -213,15 +215,17 @@ Napi::Value osn::SimpleReplayBuffer::GetRecording(const Napi::CallbackInfo &info
 
 void osn::SimpleReplayBuffer::SetRecording(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!parentOutputRef.IsEmpty())
+		parentOutputRef.Reset();
+
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		if (!parentOutputRef.IsEmpty())
-			parentOutputRef.Reset();
-		conn->call(className, "SetRecording", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
-		usesStream = false;
+		auto response = conn->call_synchronous_helper(className, "SetRecording", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
+		usesStream = true;
 		return;
 	}
 
@@ -235,9 +239,10 @@ void osn::SimpleReplayBuffer::SetRecording(const Napi::CallbackInfo &info, const
 		return;
 	}
 
-	conn->call(className, "SetRecording", {ipc::value(this->uid), ipc::value(recording->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetRecording", {ipc::value(this->uid), ipc::value(recording->uid)});
+	if (!ValidateResponse(info, response))
+		return;
+
 	usesStream = false;
-	if (!parentOutputRef.IsEmpty())
-		parentOutputRef.Reset();
 	parentOutputRef = Napi::Persistent(obj);
 }

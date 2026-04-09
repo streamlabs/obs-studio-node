@@ -73,7 +73,7 @@ Napi::Value osn::Global::getOutputSource(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetOutputSource", {ipc::value(channel)});
+	auto response = conn->call_synchronous_helper("Global", "GetOutputSource", {ipc::value(channel)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -106,7 +106,8 @@ Napi::Value osn::Global::setOutputSource(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Global", "SetOutputSource", {ipc::value(channel), ipc::value(input ? input->sourceId : UINT64_MAX)});
+	auto response = conn->call_synchronous_helper("Global", "SetOutputSource", {ipc::value(channel), ipc::value(input ? input->sourceId : UINT64_MAX)});
+	ValidateResponse(info, response);
 
 	return info.Env().Undefined();
 }
@@ -122,7 +123,8 @@ Napi::Value osn::Global::addSceneToBackstage(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Global", "AddSceneToBackstage", {ipc::value(input ? input->sourceId : UINT64_MAX)});
+	auto response = conn->call_synchronous_helper("Global", "AddSceneToBackstage", {ipc::value(input ? input->sourceId : UINT64_MAX)});
+	ValidateResponse(info, response);
 
 	return info.Env().Undefined();
 }
@@ -138,7 +140,8 @@ Napi::Value osn::Global::removeSceneFromBackstage(const Napi::CallbackInfo &info
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Global", "RemoveSceneFromBackstage", {ipc::value(input ? input->sourceId : UINT64_MAX)});
+	auto response = conn->call_synchronous_helper("Global", "RemoveSceneFromBackstage", {ipc::value(input ? input->sourceId : UINT64_MAX)});
+	ValidateResponse(info, response);
 
 	return info.Env().Undefined();
 }
@@ -151,7 +154,7 @@ Napi::Value osn::Global::getOutputFlagsFromId(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetOutputFlagsFromId", {ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Global", "GetOutputFlagsFromId", {ipc::value(id)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -165,7 +168,7 @@ Napi::Value osn::Global::GetLaggedFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetLaggedFrames", {});
+	auto response = conn->call_synchronous_helper("Global", "GetLaggedFrames", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -179,7 +182,7 @@ Napi::Value osn::Global::GetTotalFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetTotalFrames", {});
+	auto response = conn->call_synchronous_helper("Global", "GetTotalFrames", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -193,7 +196,7 @@ Napi::Value osn::Global::getLocale(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetLocale", {});
+	auto response = conn->call_synchronous_helper("Global", "GetLocale", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -216,7 +219,7 @@ Napi::Value osn::Global::getMultipleRendering(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetMultipleRendering", {});
+	auto response = conn->call_synchronous_helper("Global", "GetMultipleRendering", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -239,7 +242,7 @@ Napi::Value osn::Global::GetCPUPercentage(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetCPUPercentage", {});
+	auto response = conn->call_synchronous_helper("Global", "GetCPUPercentage", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -253,7 +256,7 @@ Napi::Value osn::Global::GetCurrentFrameRate(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetCurrentFrameRate", {});
+	auto response = conn->call_synchronous_helper("Global", "GetCurrentFrameRate", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -267,7 +270,7 @@ Napi::Value osn::Global::GetAverageTimeToRenderFrame(const Napi::CallbackInfo &i
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetAverageTimeToRenderFrame", {});
+	auto response = conn->call_synchronous_helper("Global", "GetAverageTimeToRenderFrame", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -281,7 +284,7 @@ Napi::Value osn::Global::GetDiskSpaceAvailable(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetDiskSpaceAvailable", {});
+	auto response = conn->call_synchronous_helper("Global", "GetDiskSpaceAvailable", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -295,7 +298,7 @@ Napi::Value osn::Global::GetMemoryUsage(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Global", "GetMemoryUsage", {});
+	auto response = conn->call_synchronous_helper("Global", "GetMemoryUsage", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
