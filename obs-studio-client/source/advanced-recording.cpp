@@ -54,6 +54,7 @@ Napi::Object osn::AdvancedRecording::Init(Napi::Env env, Napi::Object exports)
 		 InstanceMethod("start", &osn::AdvancedRecording::Start),
 		 InstanceMethod("stop", &osn::AdvancedRecording::Stop),
 		 InstanceMethod("splitFile", &osn::AdvancedRecording::SplitFile),
+		 InstanceMethod("getAvailableEncoders", &osn::AdvancedRecording::GetAvailableEncoders),
 
 		 StaticAccessor("legacySettings", &osn::AdvancedRecording::GetLegacySettings, &osn::AdvancedRecording::SetLegacySettings),
 		 InstanceMethod("lastFile", &osn::AdvancedRecording::GetLastFile),

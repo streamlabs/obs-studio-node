@@ -65,6 +65,7 @@ void osn::ISimpleStreaming::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetTotalFrames", std::vector<ipc::type>{ipc::type::UInt64}, GetTotalFrames));
 	cls->register_function(std::make_shared<ipc::function>("GetKBitsPerSec", std::vector<ipc::type>{ipc::type::UInt64}, GetKBitsPerSec));
 	cls->register_function(std::make_shared<ipc::function>("GetDataOutput", std::vector<ipc::type>{ipc::type::UInt64}, GetDataOutput));
+	cls->register_function(std::make_shared<ipc::function>("GetAvailableEncoders", std::vector<ipc::type>{ipc::type::UInt64}, GetAvailableEncoders));
 
 	srv.register_collection(cls);
 }
@@ -605,5 +606,17 @@ void osn::ISimpleStreaming::SetLegacySettings(void *data, const int64_t id, cons
 	config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::ISimpleStreaming::GetAvailableEncoders(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::IStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	osn::EncoderUtils::getAvailableEncoders(rval, streaming->service, true, false, "");
 	AUTO_DEBUG;
 }

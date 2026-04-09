@@ -58,6 +58,7 @@ Napi::Object osn::SimpleRecording::Init(Napi::Env env, Napi::Object exports)
 			InstanceMethod("start", &osn::SimpleRecording::Start),
 			InstanceMethod("stop", &osn::SimpleRecording::Stop),
 			InstanceMethod("splitFile", &osn::SimpleRecording::SplitFile),
+			InstanceMethod("getAvailableEncoders", &osn::SimpleRecording::GetAvailableEncoders),
 
 			StaticAccessor("legacySettings", &osn::SimpleRecording::GetLegacySettings, &osn::SimpleRecording::SetLegacySettings),
 			InstanceMethod("lastFile", &osn::SimpleRecording::GetLastFile),

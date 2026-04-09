@@ -53,6 +53,7 @@ Napi::Object osn::SimpleStreaming::Init(Napi::Env env, Napi::Object exports)
 
 		 InstanceMethod("start", &osn::SimpleStreaming::Start),
 		 InstanceMethod("stop", &osn::SimpleStreaming::Stop),
+		 InstanceMethod("getAvailableEncoders", &osn::SimpleStreaming::GetAvailableEncoders),
 
 		 StaticAccessor("legacySettings", &osn::SimpleStreaming::GetLegacySettings, &osn::SimpleStreaming::SetLegacySettings)});
 

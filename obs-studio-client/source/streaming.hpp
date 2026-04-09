@@ -61,6 +61,7 @@ protected:
 	Napi::Value GetKBitsPerSec(const Napi::CallbackInfo &info);
 	Napi::Value GetDataOutput(const Napi::CallbackInfo &info);
 
+	Napi::Value GetAvailableEncoders(const Napi::CallbackInfo &info);
 	void Start(const Napi::CallbackInfo &info);
 	void Stop(const Napi::CallbackInfo &info);
 };

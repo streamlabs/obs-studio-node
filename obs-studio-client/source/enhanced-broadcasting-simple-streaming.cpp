@@ -65,6 +65,7 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 
 		 InstanceMethod("start", &osn::EnhancedBroadcastingSimpleStreaming::Start),
 		 InstanceMethod("stop", &osn::EnhancedBroadcastingSimpleStreaming::Stop),
+		 InstanceMethod("getAvailableEncoders", &osn::EnhancedBroadcastingSimpleStreaming::GetAvailableEncoders),
 
 		 StaticAccessor("legacySettings", &osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings,
 				&osn::EnhancedBroadcastingSimpleStreaming::SetLegacySettings)});

@@ -199,6 +199,23 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 	return validEncoder;
 }
 
+void osn::EncoderUtils::getAvailableEncoders(std::vector<ipc::value> &rval, obs_service_t *service, bool simpleMode, bool recording,
+					     const std::string &container)
+{
+	for (int i = 0; i < videoEncoderOptions.size(); i++) {
+		const auto &opt = videoEncoderOptions[i];
+		const std::string &title = simpleMode ? opt.simple_title : opt.advanced_title;
+		const std::string &name = simpleMode ? opt.simple_name : opt.advanced_name;
+		if (title.empty() || name.empty())
+			continue;
+		std::string encoderName = simpleMode ? opt.getSimpleName() : opt.advanced_name;
+		if (isEncoderCompatible(encoderName, service, simpleMode, recording, container, i)) {
+			rval.push_back(ipc::value(title));
+			rval.push_back(ipc::value(name));
+		}
+	}
+}
+
 bool osn::EncoderUtils::isInvalidAppleEncoder(const char *encoderID)
 {
 #if defined(__APPLE__)

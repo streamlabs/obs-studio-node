@@ -24,6 +24,7 @@
 #include <unordered_set>
 #include "obs.h"
 #include "nodeobs_configManager.hpp"
+#include <ipc-server.hpp>
 
 //obs-x264 plugin
 #ifdef WIN32
@@ -116,6 +117,7 @@ bool isEncoderCompatible(std::string encoderName, obs_service_t *service, bool s
 bool isEncoderCompatibleStreaming(obs_service_t *service, const char *encoderToFind, bool simpleMode);
 bool isEncoderCompatibleRecording(const char *encoderToFind, const std::string &container, bool simpleMode);
 bool updateNvencPresets(obs_data_t *data, const char *encoderId);
+void getAvailableEncoders(std::vector<ipc::value> &rval, obs_service_t *service, bool simpleMode, bool recording, const std::string &container);
 const char *convertNvencSimplePreset(const char *old_preset);
 
 class EncoderSettings {
