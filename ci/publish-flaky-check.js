@@ -35,7 +35,9 @@ function summarizeFlakyTests(flakyTests, maxItems) {
 function buildCheckOutput(flakyTests, testStepConclusion) {
   if (testStepConclusion === 'failure') {
     const summaryParts = [
-      'The primary test step failed. See the job logs for the failing assertion details.'
+      'The primary test step failed. See the job logs for the failing assertion details.',
+      '',
+      'This flaky check is informational only.'
     ];
 
     if (flakyTests.length > 0) {
@@ -45,7 +47,7 @@ function buildCheckOutput(flakyTests, testStepConclusion) {
     }
 
     return {
-      conclusion: 'failure',
+      conclusion: 'neutral', // This is done intentionally to not clutter the failed jobs list.
       title: 'Test job failed',
       summary: summaryParts.join('\n')
     };
