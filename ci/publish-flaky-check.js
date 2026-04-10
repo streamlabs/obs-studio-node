@@ -135,11 +135,15 @@ async function main() {
   const checkName = process.env.FLAKY_CHECK_NAME;
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
+  // pull_request workflows run against a synthetic merge commit; using the PR head
+  // SHA keeps the custom check navigable from the PR Checks tab.
   const sha = process.env.FLAKY_CHECK_SHA || process.env.GITHUB_SHA;
   const apiUrl = process.env.GITHUB_API_URL || DEFAULT_API_URL;
   const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
   const runId = process.env.GITHUB_RUN_ID;
   const testStepConclusion = process.env.TEST_STEP_CONCLUSION || 'success';
+  // The reporter publishes bounded flaky metadata through GITHUB_OUTPUT so this
+  // step does not need to read raw test artifacts before calling the Checks API.
   const flakyCount = parseFlakyCount(process.env.FLAKY_TEST_COUNT);
   const flakySummary = normalizeSummary(process.env.FLAKY_TEST_SUMMARY);
 

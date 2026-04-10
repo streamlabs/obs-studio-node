@@ -257,6 +257,9 @@ export class OBSHandler {
             return null;
         }
 
+        // Only rotate the pooled account when the failure suggests a bad remote
+        // session or throttled credentials; most flaky cases can reuse the user
+        // once OBS state has been cleaned up.
         const outputErrorCode = this.parseOutputErrorCode(message);
         if (outputErrorCode === osn.EOutputCode.ConnectFailed
             || outputErrorCode === osn.EOutputCode.InvalidStream
@@ -279,6 +282,8 @@ export class OBSHandler {
     }
 
     private async cleanupOutputsForRetry() {
+        // The next attempt reuses the same OBS process, so clear both the active
+        // outputs and any queued signals that would otherwise bleed into the retry.
         this.clearOutputSignals();
 
         try {
@@ -313,6 +318,8 @@ export class OBSHandler {
     }
 
     async prepareRetryUserIfNeeded(test?: Mocha.Test): Promise<void> {
+        // Tests call this from afterEach so we can recover before Mocha starts the
+        // next attempt. The retry_context store tells us why the previous attempt failed.
         const retryFailure = this.getPendingRetryFailure(test);
         if (!retryFailure) {
             return;

@@ -5,6 +5,8 @@ var retryContext = require('./retry_context.ts');
 
 var DEFAULT_MAX_SUMMARY_ITEMS = 20;
 var DEFAULT_MAX_TEXT_LENGTH = 200;
+// Prefer workspace-relative paths so the GitHub check summary is readable and
+// stable across CI runners, while still falling back to the original path locally.
 var REPORTER_WORKSPACE_ROOT = process.env.GITHUB_WORKSPACE || path.resolve(__dirname, '..', '..', '..');
 
 function ListReporter(runner) {
@@ -100,6 +102,8 @@ function ListReporter(runner) {
             return;
         }
 
+        // Use the multiline Actions output format because the flaky summary is
+        // rendered as markdown and can legitimately contain newlines.
         var delimiter = '__OSN_FLAKY_' + name.toUpperCase() + '_' + Date.now() + '_' + Math.random().toString(16).slice(2);
         fs.appendFileSync(
             githubOutputPath,
@@ -143,6 +147,8 @@ function ListReporter(runner) {
         passes++;
         retryContext.clearRetryFailure(test);
 
+        // A test only becomes "flaky" once it eventually passes after retrying.
+        // Recording it here avoids listing intermediate failed attempts as flakes.
         if (getRetryCount(test) > 0) {
             flakyTestCases.push({
                 suite: test.parent.title,

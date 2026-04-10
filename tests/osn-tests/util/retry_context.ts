@@ -15,6 +15,8 @@ function getTestKey(test: any): string {
         return '';
     }
 
+    // Retry preparation runs after Mocha has already emitted the retry event, so
+    // we key the failure by a stable test identity instead of keeping the object.
     if (typeof test.retriedTest === 'function') {
         const retriedTest = test.retriedTest();
         if (retriedTest && retriedTest.id) {
