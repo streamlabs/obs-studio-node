@@ -149,15 +149,15 @@ jobs:
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
-          OSN_FLAKY_TESTS_FILE: ${{ github.workspace }}/flaky-tests.json
       - name: Publish flaky test check
         if: ${{ always() }}
         continue-on-error: true
         run: node ci/publish-flaky-check.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FLAKY_REPORT_PATH: ${{ github.workspace }}/flaky-tests.json
           FLAKY_CHECK_NAME: Flaky tests / macOS ${{ matrix.Architecture }}
+          FLAKY_TEST_COUNT: ${{ steps.run_tests.outputs.osn_flaky_count }}
+          FLAKY_TEST_SUMMARY: ${{ steps.run_tests.outputs.osn_flaky_summary }}
           TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
 
   package-and-deploy-macos:
@@ -340,15 +340,15 @@ jobs:
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: release
-          OSN_FLAKY_TESTS_FILE: ${{ github.workspace }}/flaky-tests.json
       - name: Publish flaky test check
         if: ${{ always() }}
         continue-on-error: true
         run: node ci/publish-flaky-check.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FLAKY_REPORT_PATH: ${{ github.workspace }}/flaky-tests.json
           FLAKY_CHECK_NAME: Flaky tests / Windows
+          FLAKY_TEST_COUNT: ${{ steps.run_tests.outputs.osn_flaky_count }}
+          FLAKY_TEST_SUMMARY: ${{ steps.run_tests.outputs.osn_flaky_summary }}
           TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
 
   package-and-deploy-win64:

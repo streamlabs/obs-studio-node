@@ -3,6 +3,9 @@ var path = require('path');
 var mocha = require('mocha');
 var retryContext = require('./retry_context.ts');
 
+var DEFAULT_MAX_SUMMARY_ITEMS = 20;
+var DEFAULT_MAX_TEXT_LENGTH = 200;
+
 function ListReporter(runner) {
     mocha.reporters.Base.call(this, runner);
     var passes = 0;
@@ -10,7 +13,6 @@ function ListReporter(runner) {
     var retries = 0;
     var failedTestCases = [];
     var flakyTestCases = [];
-    var flakyReportPath = process.env.OSN_FLAKY_TESTS_FILE || 'flaky-tests.json';
     var testLine = "";
 
     function getRetryCount(test) {
@@ -41,6 +43,58 @@ function ListReporter(runner) {
         }
 
         return "";
+    }
+
+    function normalizeOutputText(value, maxLength) {
+        if (typeof value !== 'string') {
+            return '';
+        }
+
+        var normalized = value.replace(/[\r\n\t]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (normalized.length <= maxLength) {
+            return normalized;
+        }
+
+        return normalized.substr(0, maxLength - 3) + '...';
+    }
+
+    function summarizeFlakyTests(flakyTests, maxItems) {
+        var visibleTests = flakyTests.slice(0, maxItems);
+        var summaryLines = visibleTests.map(function(testCase) {
+            var fullTitle = normalizeOutputText(testCase.fullTitle, DEFAULT_MAX_TEXT_LENGTH);
+            var fileLabel = testCase.file
+                ? ' [' + normalizeOutputText(testCase.file, DEFAULT_MAX_TEXT_LENGTH) + ']'
+                : '';
+
+            return '- ' + fullTitle + ' (' + testCase.attempts + ' attempts)' + fileLabel;
+        });
+
+        if (flakyTests.length > visibleTests.length) {
+            summaryLines.push('- ...and ' + (flakyTests.length - visibleTests.length) + ' more');
+        }
+
+        return summaryLines.join('\n');
+    }
+
+    function appendStepOutput(name, value) {
+        var githubOutputPath = process.env.GITHUB_OUTPUT;
+        if (!githubOutputPath) {
+            return;
+        }
+
+        var delimiter = '__OSN_FLAKY_' + name.toUpperCase() + '_' + Date.now() + '_' + Math.random().toString(16).slice(2);
+        fs.appendFileSync(
+            githubOutputPath,
+            name + '<<' + delimiter + '\n' + value + '\n' + delimiter + '\n'
+        );
+    }
+
+    function publishFlakyOutputs(flakyTests) {
+        appendStepOutput('osn_flaky_count', String(flakyTests.length));
+        appendStepOutput(
+            'osn_flaky_summary',
+            summarizeFlakyTests(flakyTests, DEFAULT_MAX_SUMMARY_ITEMS)
+        );
     }
 
     runner.on('start', function() {
@@ -116,7 +170,7 @@ function ListReporter(runner) {
             failedTestCases.forEach(testCase => {
                 console.log('  - %s', testCase);
             });
-            
+
             console.log('');
         }
 
@@ -136,10 +190,9 @@ function ListReporter(runner) {
         }
 
         try {
-            fs.mkdirSync(path.dirname(flakyReportPath), { recursive: true });
-            fs.writeFileSync(flakyReportPath, JSON.stringify(flakyTestCases, null, 2));
+            publishFlakyOutputs(flakyTestCases);
         } catch (err) {
-            console.log('Unable to write flaky test report: %s', err.message);
+            console.error('Unable to publish flaky test metadata: %s', err.message);
         }
     });
 }

@@ -1,38 +1,29 @@
-const fs = require('fs');
-const path = require('path');
 const https = require('https');
 
 const DEFAULT_API_URL = 'https://api.github.com';
-const DEFAULT_MAX_SUMMARY_ITEMS = 20;
 
-function readFlakyTests(reportPath) {
-  if (!reportPath || !fs.existsSync(reportPath)) {
-    return [];
+function parseFlakyCount(rawCount) {
+  if (!rawCount) {
+    return 0;
   }
 
-  const rawReport = fs.readFileSync(reportPath, 'utf8');
-  if (!rawReport.trim()) {
-    return [];
+  const parsedCount = Number.parseInt(rawCount, 10);
+  if (!Number.isFinite(parsedCount) || parsedCount < 0) {
+    return 0;
   }
 
-  return JSON.parse(rawReport);
+  return parsedCount;
 }
 
-function summarizeFlakyTests(flakyTests, maxItems) {
-  const visibleTests = flakyTests.slice(0, maxItems);
-  const summaryLines = visibleTests.map(test => {
-    const fileLabel = test.file ? ` [${test.file}]` : '';
-    return `- ${test.fullTitle} (${test.attempts} attempts)${fileLabel}`;
-  });
-
-  if (flakyTests.length > visibleTests.length) {
-    summaryLines.push(`- ...and ${flakyTests.length - visibleTests.length} more`);
+function normalizeSummary(rawSummary) {
+  if (typeof rawSummary !== 'string') {
+    return '';
   }
 
-  return summaryLines.join('\n');
+  return rawSummary.trim();
 }
 
-function buildCheckOutput(flakyTests, testStepConclusion) {
+function buildCheckOutput(flakyCount, flakySummary, testStepConclusion) {
   if (testStepConclusion === 'failure') {
     const summaryParts = [
       'The primary test step failed. See the job logs for the failing assertion details.',
@@ -40,10 +31,15 @@ function buildCheckOutput(flakyTests, testStepConclusion) {
       'This flaky check is informational only.'
     ];
 
-    if (flakyTests.length > 0) {
+    if (flakyCount > 0) {
       summaryParts.push('');
-      summaryParts.push('These tests did pass after retrying before the job failed:');
-      summaryParts.push(summarizeFlakyTests(flakyTests, DEFAULT_MAX_SUMMARY_ITEMS));
+      summaryParts.push(
+        `Detected ${flakyCount} test(s) that passed after retrying before the job failed:`
+      );
+
+      if (flakySummary) {
+        summaryParts.push(flakySummary);
+      }
     }
 
     return {
@@ -53,7 +49,7 @@ function buildCheckOutput(flakyTests, testStepConclusion) {
     };
   }
 
-  if (flakyTests.length === 0) {
+  if (flakyCount === 0) {
     return {
       conclusion: 'success',
       title: 'No flaky tests detected',
@@ -63,11 +59,11 @@ function buildCheckOutput(flakyTests, testStepConclusion) {
 
   return {
     conclusion: 'neutral',
-    title: `${flakyTests.length} test(s) passed after retry`,
+    title: `${flakyCount} test(s) passed after retry`,
     summary: [
       'The primary test job succeeded, but these tests only passed after retrying:',
       '',
-      summarizeFlakyTests(flakyTests, DEFAULT_MAX_SUMMARY_ITEMS)
+      flakySummary || `Detected ${flakyCount} flaky test(s).`
     ].join('\n')
   };
 }
@@ -136,7 +132,6 @@ function createCheckRun({
 }
 
 async function main() {
-  const reportPath = process.env.FLAKY_REPORT_PATH;
   const checkName = process.env.FLAKY_CHECK_NAME;
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
@@ -145,6 +140,8 @@ async function main() {
   const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
   const runId = process.env.GITHUB_RUN_ID;
   const testStepConclusion = process.env.TEST_STEP_CONCLUSION || 'success';
+  const flakyCount = parseFlakyCount(process.env.FLAKY_TEST_COUNT);
+  const flakySummary = normalizeSummary(process.env.FLAKY_TEST_SUMMARY);
 
   if (!token) {
     throw new Error('GITHUB_TOKEN is required to publish the flaky test check.');
@@ -154,8 +151,7 @@ async function main() {
     throw new Error('GITHUB_REPOSITORY, GITHUB_SHA, and FLAKY_CHECK_NAME are required.');
   }
 
-  const flakyTests = readFlakyTests(reportPath);
-  const output = buildCheckOutput(flakyTests, testStepConclusion);
+  const output = buildCheckOutput(flakyCount, flakySummary, testStepConclusion);
   const detailsUrl = runId
     ? `${serverUrl}/${repository}/actions/runs/${runId}`
     : undefined;
@@ -172,7 +168,7 @@ async function main() {
 
   console.log(
     `Published "${checkName}" with conclusion "${output.conclusion}"` +
-      ` from ${flakyTests.length} flaky test(s).`
+      ` from ${flakyCount} flaky test(s).`
   );
 }
 
