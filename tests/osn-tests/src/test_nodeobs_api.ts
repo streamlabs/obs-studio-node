@@ -9,23 +9,6 @@ import { showHideInputHotkeys, slideshowHotkeys, ffmpeg_sourceHotkeys,
 
 const testName = 'nodeobs_api';
 
-function failOnceInCi(context: any, label: string) {
-    const isCi = process.env.GITHUB_ACTIONS === 'true' || process.env.CI === 'true';
-    if (!isCi) {
-        return;
-    }
-
-    const test = context && (context.test || context.currentTest);
-    const retryCount = test && typeof test.currentRetry === 'function'
-        ? test.currentRetry()
-        : 0;
-
-    // Intentionally fail the first CI attempt so retry reporting can be tested.
-    if (retryCount === 0) {
-        throw new Error(`Intentional flaky failure for CI validation: ${label}`);
-    }
-}
-
 describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
@@ -59,8 +42,6 @@ describe(testName, function() {
     });
 
     it('Get performance statistics', function() {
-        failOnceInCi(this, 'Get performance statistics');
-
         let stats: IPerformanceState;
 
         // Getting performance statistics
@@ -174,8 +155,6 @@ describe(testName, function() {
     });
 
     it('Get and set the browser source acceleration', function() {
-        failOnceInCi(this, 'Get and set the browser source acceleration');
-
         expect(osn.NodeObs.GetBrowserAcceleration()).
             to.equal(true, 'Invalid browser source acceleration default value');
         osn.NodeObs.SetBrowserAcceleration(false);
@@ -184,8 +163,6 @@ describe(testName, function() {
     });
 
     it('Get and set media file caching', function() {
-        failOnceInCi(this, 'Get and set media file caching');
-
         expect(osn.NodeObs.GetMediaFileCaching()).
             to.equal(true, 'Invalid media file caching default value');
         osn.NodeObs.SetMediaFileCaching(false);
