@@ -204,6 +204,8 @@ void osn::VideoEncoder::Update(void *data, const int64_t id, const std::vector<i
 	obs_data_t *settings = obs_data_create_from_json(args[1].value_str.c_str());
 	obs_encoder_update(encoder, settings);
 	obs_data_release(settings);
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 
