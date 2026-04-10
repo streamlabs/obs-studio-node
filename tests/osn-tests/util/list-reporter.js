@@ -5,7 +5,6 @@ var retryContext = require('./retry_context.ts');
 
 var DEFAULT_MAX_SUMMARY_ITEMS = 20;
 var DEFAULT_MAX_TEXT_LENGTH = 200;
-var INTENTIONAL_FLAKY_FAILURE_PREFIX = 'Intentional flaky failure for CI validation:';
 var REPORTER_WORKSPACE_ROOT = process.env.GITHUB_WORKSPACE || path.resolve(__dirname, '..', '..', '..');
 
 function ListReporter(runner) {
@@ -77,14 +76,6 @@ function ListReporter(runner) {
         return normalizedPath.split(path.sep).join('/');
     }
 
-    function isIntentionalCiValidationFailure(err) {
-        return Boolean(
-            err &&
-            typeof err.message === 'string' &&
-            err.message.indexOf(INTENTIONAL_FLAKY_FAILURE_PREFIX) === 0
-        );
-    }
-
     function summarizeFlakyTests(flakyTests, maxItems) {
         var visibleTests = flakyTests.slice(0, maxItems);
         var summaryLines = visibleTests.map(function(testCase) {
@@ -150,10 +141,9 @@ function ListReporter(runner) {
 
     runner.on('pass', function(test) {
         passes++;
-        var retryFailure = retryContext.getRetryFailure(test);
         retryContext.clearRetryFailure(test);
 
-        if (getRetryCount(test) > 0 && !isIntentionalCiValidationFailure(retryFailure)) {
+        if (getRetryCount(test) > 0) {
             flakyTestCases.push({
                 suite: test.parent.title,
                 title: test.title,
