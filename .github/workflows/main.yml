@@ -156,6 +156,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FLAKY_CHECK_NAME: Flaky tests / macOS ${{ matrix.Architecture }}
+          FLAKY_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FLAKY_TEST_COUNT: ${{ steps.run_tests.outputs.osn_flaky_count }}
           FLAKY_TEST_SUMMARY: ${{ steps.run_tests.outputs.osn_flaky_summary }}
           TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
@@ -347,6 +348,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FLAKY_CHECK_NAME: Flaky tests / Windows
+          FLAKY_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FLAKY_TEST_COUNT: ${{ steps.run_tests.outputs.osn_flaky_count }}
           FLAKY_TEST_SUMMARY: ${{ steps.run_tests.outputs.osn_flaky_summary }}
           TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}

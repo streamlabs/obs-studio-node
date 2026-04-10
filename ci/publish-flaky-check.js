@@ -135,7 +135,7 @@ async function main() {
   const checkName = process.env.FLAKY_CHECK_NAME;
   const token = process.env.GITHUB_TOKEN;
   const repository = process.env.GITHUB_REPOSITORY;
-  const sha = process.env.GITHUB_SHA;
+  const sha = process.env.FLAKY_CHECK_SHA || process.env.GITHUB_SHA;
   const apiUrl = process.env.GITHUB_API_URL || DEFAULT_API_URL;
   const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
   const runId = process.env.GITHUB_RUN_ID;
@@ -148,7 +148,7 @@ async function main() {
   }
 
   if (!repository || !sha || !checkName) {
-    throw new Error('GITHUB_REPOSITORY, GITHUB_SHA, and FLAKY_CHECK_NAME are required.');
+    throw new Error('GITHUB_REPOSITORY, FLAKY_CHECK_SHA or GITHUB_SHA, and FLAKY_CHECK_NAME are required.');
   }
 
   const output = buildCheckOutput(flakyCount, flakySummary, testStepConclusion);
