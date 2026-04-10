@@ -6,6 +6,7 @@ var retryContext = require('./retry_context.ts');
 var DEFAULT_MAX_SUMMARY_ITEMS = 20;
 var DEFAULT_MAX_TEXT_LENGTH = 200;
 var INTENTIONAL_FLAKY_FAILURE_PREFIX = 'Intentional flaky failure for CI validation:';
+var REPORTER_WORKSPACE_ROOT = process.env.GITHUB_WORKSPACE || path.resolve(__dirname, '..', '..', '..');
 
 function ListReporter(runner) {
     mocha.reporters.Base.call(this, runner);
@@ -64,7 +65,11 @@ function ListReporter(runner) {
             return '';
         }
 
-        var relativePath = path.relative(process.cwd(), filePath);
+        if (!path.isAbsolute(filePath)) {
+            return filePath.split(path.sep).join('/');
+        }
+
+        var relativePath = path.relative(REPORTER_WORKSPACE_ROOT, filePath);
         var normalizedPath = relativePath && !relativePath.startsWith('..')
             ? relativePath
             : filePath;
