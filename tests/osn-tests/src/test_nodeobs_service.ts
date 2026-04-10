@@ -46,11 +46,7 @@ describe(testName, function() {
     });
 
     afterEach(async function() {
-        if (this.currentTest.state == 'failed') {
-            hasTestFailed = true;
-        }
-
-        await obs.prepareRetryUserIfNeeded(this.currentTest);
+        hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
     it('Simple mode - Start and stop streaming', async function() {

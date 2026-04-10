@@ -189,6 +189,14 @@ export class OBSHandler {
         }
     }
 
+    async finalizeRetryableTest(context: Mocha.Context): Promise<boolean> {
+        const currentTest = context.currentTest;
+        const hasFailed = currentTest?.state === 'failed';
+
+        await this.prepareRetryUserIfNeeded(currentTest);
+        return hasFailed;
+    }
+
     private clearOutputSignals() {
         this.signals = new WaitQueue();
     }
@@ -262,7 +270,6 @@ export class OBSHandler {
         // once OBS state has been cleaned up.
         const outputErrorCode = this.parseOutputErrorCode(message);
         if (outputErrorCode === osn.EOutputCode.ConnectFailed
-            || outputErrorCode === osn.EOutputCode.InvalidStream
             || outputErrorCode === osn.EOutputCode.Disconnected) {
             return `received streaming output error ${outputErrorCode}`;
         }

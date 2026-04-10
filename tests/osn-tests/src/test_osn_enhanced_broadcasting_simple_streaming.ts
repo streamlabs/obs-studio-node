@@ -66,11 +66,7 @@ describe(testName, () => {
     });
 
     afterEach(async function() {
-        if (this.currentTest.state == 'failed') {
-            hasTestFailed = true;
-        }
-
-        await obs.prepareRetryUserIfNeeded(this.currentTest);
+        hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
     it('Enhanced Broadcasting Simple Streaming Single Canvas', async function() {
