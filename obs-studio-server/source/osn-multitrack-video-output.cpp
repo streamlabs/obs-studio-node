@@ -65,7 +65,7 @@ static void adjust_video_encoder_scaling(const obs_video_info &ovi, obs_encoder_
 	obs_encoder_set_scaled_size(video_encoder, requested_width, requested_height);
 	obs_encoder_set_gpu_scale_type(video_encoder, encoder_config.gpu_scale_type.value_or(OBS_SCALE_BICUBIC));
 	obs_encoder_set_preferred_video_format(video_encoder, encoder_config.format.value_or(VIDEO_FORMAT_NV12));
-	obs_encoder_set_preferred_color_space(video_encoder, encoder_config.colorspace.value_or(VIDEO_CS_DEFAULT));
+	obs_encoder_set_preferred_color_space(video_encoder, encoder_config.colorspace.value_or(VIDEO_CS_709));
 	obs_encoder_set_preferred_range(video_encoder, encoder_config.range.value_or(VIDEO_RANGE_PARTIAL));
 }
 
@@ -209,8 +209,6 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 
 		if (obs_get_multiple_rendering()) {
 			obs_encoder_set_video_mix(encoder, obs_video_mix_get(ovi, OBS_STREAMING_VIDEO_RENDERING));
-		} else {
-			obs_encoder_set_video_mix(encoder, obs_video_mix_get(ovi, OBS_MAIN_VIDEO_RENDERING));
 		}
 
 		if (!obs_encoder_set_group(encoder, encoder_group.get())) {
