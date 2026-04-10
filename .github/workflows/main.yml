@@ -140,6 +140,8 @@ jobs:
           mkdir -p "${{env.SLBUILDDIRECTORY}}"
           tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: 'Run tests'
+        # `id` is essential for enabling steps context.
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
         id: run_tests
         timeout-minutes: 30
         run: 'yarn run test:ci'
@@ -334,6 +336,8 @@ jobs:
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: 'Run tests'
+        # `id` is essential for enabling steps context.
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
         id: run_tests
         timeout-minutes: 20
         continue-on-error: false

@@ -1,5 +1,9 @@
+// Stores the failure from Mocha's retry event so afterEach-based retry
+// preparation can inspect why the previous attempt failed.
 function getStore(): Map<string, Error> {
     const globalWithRetryStore = global as typeof global & {
+        // Use a loudly namespaced global slot to avoid colliding with other
+        // helpers while keeping the store alive across Mocha retry callbacks.
         __OSN_RETRY_FAILURES__?: Map<string, Error>;
     };
 

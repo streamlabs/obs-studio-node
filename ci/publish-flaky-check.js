@@ -1,3 +1,6 @@
+// Publishes a dedicated GitHub check-run that summarizes tests which only
+// passed after retrying, so flaky passes are visible on the PR without
+// changing the outcome of the main test job.
 const https = require('https');
 
 const DEFAULT_API_URL = 'https://api.github.com';
