@@ -5,6 +5,7 @@ var retryContext = require('./retry_context.ts');
 
 var DEFAULT_MAX_SUMMARY_ITEMS = 20;
 var DEFAULT_MAX_TEXT_LENGTH = 200;
+var INTENTIONAL_FLAKY_FAILURE_PREFIX = 'Intentional flaky failure for CI validation:';
 
 function ListReporter(runner) {
     mocha.reporters.Base.call(this, runner);
@@ -56,6 +57,27 @@ function ListReporter(runner) {
         }
 
         return normalized.substr(0, maxLength - 3) + '...';
+    }
+
+    function normalizeTestFilePath(filePath) {
+        if (typeof filePath !== 'string' || !filePath.trim()) {
+            return '';
+        }
+
+        var relativePath = path.relative(process.cwd(), filePath);
+        var normalizedPath = relativePath && !relativePath.startsWith('..')
+            ? relativePath
+            : filePath;
+
+        return normalizedPath.split(path.sep).join('/');
+    }
+
+    function isIntentionalCiValidationFailure(err) {
+        return Boolean(
+            err &&
+            typeof err.message === 'string' &&
+            err.message.indexOf(INTENTIONAL_FLAKY_FAILURE_PREFIX) === 0
+        );
     }
 
     function summarizeFlakyTests(flakyTests, maxItems) {
@@ -123,16 +145,17 @@ function ListReporter(runner) {
 
     runner.on('pass', function(test) {
         passes++;
+        var retryFailure = retryContext.getRetryFailure(test);
         retryContext.clearRetryFailure(test);
 
-        if (getRetryCount(test) > 0) {
+        if (getRetryCount(test) > 0 && !isIntentionalCiValidationFailure(retryFailure)) {
             flakyTestCases.push({
                 suite: test.parent.title,
                 title: test.title,
                 fullTitle: typeof test.fullTitle === 'function'
                     ? test.fullTitle()
                     : test.parent.title + ' ' + test.title,
-                file: test.file || '',
+                file: normalizeTestFilePath(test.file || ''),
                 duration: test.duration,
                 attempts: getRetryCount(test) + 1
             });
