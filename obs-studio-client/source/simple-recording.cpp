@@ -171,14 +171,13 @@ Napi::Value osn::SimpleRecording::GetAudioEncoder(const Napi::CallbackInfo &info
 
 void osn::SimpleRecording::SetAudioEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!audioEncoderRef.IsEmpty())
-		audioEncoderRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!audioEncoderRef.IsEmpty())
+			audioEncoderRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -199,6 +198,8 @@ void osn::SimpleRecording::SetAudioEncoder(const Napi::CallbackInfo &info, const
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
 	audioEncoderRef = Napi::Persistent(obj);
 }
 
@@ -268,14 +269,13 @@ Napi::Value osn::SimpleRecording::GetStreaming(const Napi::CallbackInfo &info)
 
 void osn::SimpleRecording::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!streamingRef.IsEmpty())
-		streamingRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!streamingRef.IsEmpty())
+			streamingRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -296,5 +296,7 @@ void osn::SimpleRecording::SetStreaming(const Napi::CallbackInfo &info, const Na
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
 	streamingRef = Napi::Persistent(obj);
 }

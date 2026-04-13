@@ -297,14 +297,13 @@ Napi::Value osn::AdvancedRecording::GetStreaming(const Napi::CallbackInfo &info)
 
 void osn::AdvancedRecording::SetStreaming(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!streamingRef.IsEmpty())
-		streamingRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!streamingRef.IsEmpty())
+			streamingRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -325,5 +324,7 @@ void osn::AdvancedRecording::SetStreaming(const Napi::CallbackInfo &info, const 
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!streamingRef.IsEmpty())
+		streamingRef.Reset();
 	streamingRef = Napi::Persistent(obj);
 }

@@ -76,14 +76,13 @@ void osn::SimpleStreamingBase::SetCustomEncSettings(const Napi::CallbackInfo &in
 
 void osn::SimpleStreamingBase::SetAudioEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!audioEncoderRef.IsEmpty())
-		audioEncoderRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!audioEncoderRef.IsEmpty())
+			audioEncoderRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetAudioEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -104,5 +103,7 @@ void osn::SimpleStreamingBase::SetAudioEncoder(const Napi::CallbackInfo &info, c
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!audioEncoderRef.IsEmpty())
+		audioEncoderRef.Reset();
 	audioEncoderRef = Napi::Persistent(obj);
 }

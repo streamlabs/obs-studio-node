@@ -53,15 +53,15 @@ Napi::Value osn::Streaming::GetService(const Napi::CallbackInfo &info)
 
 void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!serviceRef.IsEmpty())
-		serviceRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
-		conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		if (!serviceRef.IsEmpty())
+			serviceRef.Reset();
+		auto response = conn->call_synchronous_helper(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -79,6 +79,8 @@ void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!serviceRef.IsEmpty())
+		serviceRef.Reset();
 	serviceRef = Napi::Persistent(obj);
 }
 
@@ -122,14 +124,13 @@ Napi::Value osn::Streaming::GetVideoEncoder(const Napi::CallbackInfo &info)
 
 void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!videoEncoderRef.IsEmpty())
-		videoEncoderRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!videoEncoderRef.IsEmpty())
+			videoEncoderRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -150,6 +151,8 @@ void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
 	videoEncoderRef = Napi::Persistent(obj);
 }
 
@@ -208,14 +211,13 @@ Napi::Value osn::Streaming::GetDelay(const Napi::CallbackInfo &info)
 
 void osn::Streaming::SetDelay(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!delayRef.IsEmpty())
-		delayRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!delayRef.IsEmpty())
+			delayRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetDelay", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -235,6 +237,8 @@ void osn::Streaming::SetDelay(const Napi::CallbackInfo &info, const Napi::Value 
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!delayRef.IsEmpty())
+		delayRef.Reset();
 	delayRef = Napi::Persistent(obj);
 }
 
@@ -245,14 +249,13 @@ Napi::Value osn::Streaming::GetReconnect(const Napi::CallbackInfo &info)
 
 void osn::Streaming::SetReconnect(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!reconnectRef.IsEmpty())
-		reconnectRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!reconnectRef.IsEmpty())
+			reconnectRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetReconnect", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -272,6 +275,8 @@ void osn::Streaming::SetReconnect(const Napi::CallbackInfo &info, const Napi::Va
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!reconnectRef.IsEmpty())
+		reconnectRef.Reset();
 	reconnectRef = Napi::Persistent(obj);
 }
 
@@ -282,14 +287,13 @@ Napi::Value osn::Streaming::GetNetwork(const Napi::CallbackInfo &info)
 
 void osn::Streaming::SetNetwork(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!networkRef.IsEmpty())
-		networkRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!networkRef.IsEmpty())
+			networkRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetNetwork", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -309,6 +313,8 @@ void osn::Streaming::SetNetwork(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!networkRef.IsEmpty())
+		networkRef.Reset();
 	networkRef = Napi::Persistent(obj);
 }
 

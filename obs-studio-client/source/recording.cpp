@@ -27,14 +27,13 @@ Napi::Value osn::Recording::GetVideoEncoder(const Napi::CallbackInfo &info)
 
 void osn::Recording::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
-	if (!videoEncoderRef.IsEmpty())
-		videoEncoderRef.Reset();
-
 	auto conn = GetConnection(info);
 	if (!conn)
 		return;
 
 	if (value.IsNull() || value.IsUndefined()) {
+		if (!videoEncoderRef.IsEmpty())
+			videoEncoderRef.Reset();
 		auto response = conn->call_synchronous_helper(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
 		ValidateResponse(info, response);
 		return;
@@ -55,6 +54,8 @@ void osn::Recording::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 	if (!ValidateResponse(info, response))
 		return;
 
+	if (!videoEncoderRef.IsEmpty())
+		videoEncoderRef.Reset();
 	videoEncoderRef = Napi::Persistent(obj);
 }
 
