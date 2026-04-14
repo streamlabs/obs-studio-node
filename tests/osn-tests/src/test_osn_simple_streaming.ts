@@ -46,10 +46,8 @@ describe(testName, () => {
         logEmptyLine();
     });
 
-    afterEach(function() {
-        if (this.currentTest.state == 'failed') {
-            hasTestFailed = true;
-        }
+    afterEach(async function() {
+        hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
     it('Create simple streaming', async () => {
@@ -264,29 +262,30 @@ describe(testName, () => {
         stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-5");
         stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
-        stream.start();
-
-        let signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        stream.service.update({ key: obs.userStreamKey });
-
         const videoEncoder = stream.videoEncoder;
         const audioEncoder = stream.audioEncoder;
-        osn.SimpleStreamingFactory.destroy(stream);
-        videoEncoder.release();
-        audioEncoder.release();
+        try {
+            stream.start();
+
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
+        } finally {
+            stream.service.update({ key: obs.userStreamKey });
+            osn.SimpleStreamingFactory.destroy(stream);
+            videoEncoder.release();
+            audioEncoder.release();
+        }
     });
 });

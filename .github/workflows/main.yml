@@ -1,6 +1,7 @@
 name: 'CI Multiplatform Build'
 permissions:
   contents: read
+  checks: write
 
 on:
   push:
@@ -139,14 +140,31 @@ jobs:
           mkdir -p "${{env.SLBUILDDIRECTORY}}"
           tar -xvzf build-artifacts.tar.gz -C "${{env.SLBUILDDIRECTORY}}"
       - name: 'Run tests'
+        # `id` is essential for enabling steps context.
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
+        id: run_tests
         timeout-minutes: 30
-        run: 'yarn run test'
+        run: 'yarn run test:ci'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
+      # Run even after test failures so the PR still gets the flaky summary.
+      - name: Publish flaky test check
+        if: ${{ always() }}
+        continue-on-error: true
+        run: node ci/publish-flaky-check.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FLAKY_CHECK_NAME: Flaky tests / macOS ${{ matrix.Architecture }}
+          # GITHUB_SHA points at the temporary merge commit for pull_request jobs.
+          # Use the PR head SHA so the custom check opens from the PR Checks UI.
+          FLAKY_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FLAKY_TEST_COUNT: ${{ steps.run_tests.outputs.osn_flaky_count }}
+          FLAKY_TEST_SUMMARY: ${{ steps.run_tests.outputs.osn_flaky_summary }}
+          TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
 
   package-and-deploy-macos:
     name: 'Package and Deploy macOS'
@@ -318,15 +336,32 @@ jobs:
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: 'Run tests'
+        # `id` is essential for enabling steps context.
+        # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
+        id: run_tests
         timeout-minutes: 20
         continue-on-error: false
-        run: 'yarn run test'
+        run: 'yarn run test:ci'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: release
+      # Run even after test failures so the PR still gets the flaky summary.
+      - name: Publish flaky test check
+        if: ${{ always() }}
+        continue-on-error: true
+        run: node ci/publish-flaky-check.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FLAKY_CHECK_NAME: Flaky tests / Windows
+          # GITHUB_SHA points at the temporary merge commit for pull_request jobs.
+          # Use the PR head SHA so the custom check opens from the PR Checks UI.
+          FLAKY_CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          FLAKY_TEST_COUNT: ${{ steps.run_tests.outputs.osn_flaky_count }}
+          FLAKY_TEST_SUMMARY: ${{ steps.run_tests.outputs.osn_flaky_summary }}
+          TEST_STEP_CONCLUSION: ${{ steps.run_tests.conclusion }}
 
   package-and-deploy-win64:
     name: 'Package and Deploy Windows'

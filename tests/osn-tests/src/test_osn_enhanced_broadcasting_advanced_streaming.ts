@@ -64,10 +64,8 @@ describe(testName, () => {
         logEmptyLine();
     });
 
-    afterEach(function() {
-        if (this.currentTest.state == 'failed') {
-            hasTestFailed = true;
-        }
+    afterEach(async function() {
+        hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
     // TODO: more tests:

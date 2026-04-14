@@ -20,7 +20,8 @@ interface ITestUser {
 }
 
 export class UserPoolHandler {
-    private user: ITestUser;
+    private static excludedUsers: Set<string> = new Set();
+    private user: ITestUser | null = null;
     private userPoolUrl: string = 'https://slobs-users-pool.herokuapp.com/';
     private osnTestName: string;
 
@@ -28,7 +29,16 @@ export class UserPoolHandler {
         this.osnTestName = testName;
     }
 
-    private async requestUser(): Promise<any> {
+    private isUserExcluded(email: string): boolean {
+        return UserPoolHandler.excludedUsers.has(email);
+    }
+
+    private excludeUser(email: string, reason: string) {
+        UserPoolHandler.excludedUsers.add(email);
+        logWarning(this.osnTestName, `Marking user ${email} as unhealthy: ${reason}`);
+    }
+
+    private async requestUser(): Promise<ITestUser> {
         const res = await fetch(this.userPoolUrl + 'reserve/twitch', {
             headers: { Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}` },
         });
@@ -36,6 +46,18 @@ export class UserPoolHandler {
         if (!res.ok) {
             logWarning(this.osnTestName, 'Request user got status ' + res.status);
             throw new Error(`Unable to request user, status ${res.status}`);
+        }
+
+        return await res.json() as ITestUser;
+    }
+
+    private async releaseReservedUser(user: ITestUser): Promise<unknown> {
+        const res = await fetch(this.userPoolUrl + `release/${user.type}/${user.email}`, {
+            headers: { Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}` },
+        });
+
+        if (!res.ok) {
+            throw new Error(`Unable to release user, status ${res.status}`);
         }
 
         return res.json();
@@ -48,10 +70,29 @@ export class UserPoolHandler {
         while(attempt <= totalAttempts) {
             try {
                 logInfo(this.osnTestName, 'Requesting user from pool ('+ attempt + '/' + totalAttempts + ')');
-                this.user = await this.requestUser();
+                const reservedUser = await this.requestUser();
+
+                if (this.isUserExcluded(reservedUser.email)) {
+                    logWarning(this.osnTestName, `Discarding excluded user ${reservedUser.email} from pool response`);
+
+                    try {
+                        await this.releaseReservedUser(reservedUser);
+                    } catch (releaseError) {
+                        logWarning(this.osnTestName, `Unable to release excluded user ${reservedUser.email}: ${releaseError}`);
+                    }
+
+                    if (attempt < totalAttempts) {
+                        await sleep(2000);
+                    }
+
+                    attempt++;
+                    continue;
+                }
+
+                this.user = reservedUser;
                 break;
             } catch(e) {
-                if (attempt) {
+                if (attempt < totalAttempts) {
                     await sleep(20000);
                 }
             }
@@ -60,22 +101,30 @@ export class UserPoolHandler {
         }
 
         if (!this.user) {
-            throw 'Unable to get user from pool.';
+            throw new Error('Unable to get user from pool.');
         }
 
         logInfo(this.osnTestName, 'Got user ' + this.user.email);
         return this.user.platforms.twitch.streamKey;
     }
 
-    async releaseUser() {
-        const res = await fetch(this.userPoolUrl + `release/${this.user.type}/${this.user.email}`, {
-            headers: { Authorization: `Bearer: ${process.env.SLOBS_TEST_USER_POOL_TOKEN}` },
-        });
-
-        if (!res.ok) {
-            throw new Error(`Unable to release user, status ${res.status}`);
+    markCurrentUserUnhealthy(reason: string) {
+        if (!this.user) {
+            return;
         }
 
-        return res.json();
+        this.excludeUser(this.user.email, reason);
+    }
+
+    async releaseUser(): Promise<unknown> {
+        if (!this.user) {
+            return null;
+        }
+
+        try {
+            return await this.releaseReservedUser(this.user);
+        } finally {
+            this.user = null;
+        }
     }
 }

@@ -3,8 +3,10 @@ import { logInfo, logWarning } from '../util/logger';
 import { UserPoolHandler } from './user_pool_handler';
 import { CacheUploader } from '../util/cache-uploader'
 import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../util/obs_enums'
+import { sleep } from './general';
 import { v4 as uuidv4 } from 'uuid';
 const WaitQueue = require('wait-queue');
+const retryContext = require('./retry_context.ts');
 
 // Interfaces
 export interface IPerformanceState {
@@ -39,6 +41,10 @@ export interface IConfigProgress {
 export interface IVec2 {
     x: number;
     y: number;
+}
+
+interface IRetryFailure {
+    message?: string;
 }
 
 export interface ICrop {
@@ -183,6 +189,176 @@ export class OBSHandler {
         }
     }
 
+    async finalizeRetryableTest(context: Mocha.Context): Promise<boolean> {
+        const currentTest = context.currentTest;
+        const hasFailed = currentTest?.state === 'failed';
+
+        await this.prepareRetryUserIfNeeded(currentTest);
+        return hasFailed;
+    }
+
+    private clearOutputSignals() {
+        this.signals = new WaitQueue();
+    }
+
+    private getRetryFailureMessage(retryFailure?: IRetryFailure | null): string {
+        if (!retryFailure || typeof retryFailure.message !== 'string') {
+            return '';
+        }
+
+        return retryFailure.message;
+    }
+
+    private getTestLabel(test?: Mocha.Test): string {
+        if (!test) {
+            return 'unknown test';
+        }
+
+        if (typeof test.fullTitle === 'function') {
+            const fullTitle = test.fullTitle();
+            if (fullTitle.length > 0) {
+                return fullTitle;
+            }
+        }
+
+        return test.title || 'unknown test';
+    }
+
+    private hasRetriesRemaining(test?: Mocha.Test): boolean {
+        const runnable = test as any;
+
+        if (!runnable || typeof runnable.currentRetry !== 'function' || typeof runnable.retries !== 'function') {
+            return false;
+        }
+
+        return runnable.currentRetry() < runnable.retries();
+    }
+
+    private getPendingRetryFailure(test?: Mocha.Test): IRetryFailure | null {
+        if (!test || !this.hasRetriesRemaining(test)) {
+            return null;
+        }
+
+        const retryFailure = retryContext.getRetryFailure(test);
+        return retryFailure || null;
+    }
+
+    private parseOutputErrorCode(message: string): osn.EOutputCode | null {
+        const codeMatch = message.match(/Error code:\s*(-?\d+)/i);
+        if (!codeMatch) {
+            return null;
+        }
+
+        const parsedCode = Number(codeMatch[1]);
+        return Number.isFinite(parsedCode)
+            ? parsedCode as osn.EOutputCode
+            : null;
+    }
+
+    private shouldRotateUserForRetry(retryFailure: IRetryFailure): string | null {
+        if (!this.hasUserFromPool || !this.userPoolHandler) {
+            return null;
+        }
+
+        const message = this.getRetryFailureMessage(retryFailure);
+        if (!message) {
+            return null;
+        }
+
+        // Only rotate the pooled account when the failure suggests a bad remote
+        // session or throttled credentials; most flaky cases can reuse the user
+        // once OBS state has been cleaned up.
+        const outputErrorCode = this.parseOutputErrorCode(message);
+        if (outputErrorCode === osn.EOutputCode.ConnectFailed
+            || outputErrorCode === osn.EOutputCode.Disconnected) {
+            return `received streaming output error ${outputErrorCode}`;
+        }
+
+        const normalizedMessage = message.toLowerCase();
+        const retryableTimeouts = [
+            'streaming starting signal timeout',
+            'streaming activate signal timeout',
+            'streaming start signal timeout',
+        ];
+
+        if (retryableTimeouts.some(timeoutMessage => normalizedMessage.includes(timeoutMessage))) {
+            return message;
+        }
+
+        return null;
+    }
+
+    private async cleanupOutputsForRetry() {
+        // The next attempt reuses the same OBS process, so clear both the active
+        // outputs and any queued signals that would otherwise bleed into the retry.
+        this.clearOutputSignals();
+
+        try {
+            osn.NodeObs.OBS_service_stopReplayBuffer(false);
+        } catch (e) {}
+
+        try {
+            osn.NodeObs.OBS_service_stopRecording();
+        } catch (e) {}
+
+        try {
+            osn.NodeObs.OBS_service_stopStreaming(false);
+        } catch (e) {}
+
+        await sleep(1000);
+        this.clearOutputSignals();
+    }
+
+    private restoreKnownGoodStreamKey() {
+        if (!this.userStreamKey) {
+            return;
+        }
+
+        logInfo(this.osnTestName, 'Restoring stream key before retry');
+        this.setStreamKey(this.userStreamKey);
+
+        if (this.getStreamKey() !== this.userStreamKey) {
+            throw new Error('Failed to restore stream key before retry');
+        }
+
+        logInfo(this.osnTestName, 'Stream key restored before retry');
+    }
+
+    async prepareRetryUserIfNeeded(test?: Mocha.Test): Promise<void> {
+        // Tests call this from afterEach so we can recover before Mocha starts the
+        // next attempt. The retry_context store tells us why the previous attempt failed.
+        const retryFailure = this.getPendingRetryFailure(test);
+        if (!retryFailure) {
+            return;
+        }
+
+        const testLabel = this.getTestLabel(test);
+        const failureMessage = this.getRetryFailureMessage(retryFailure);
+        const replacementReason = this.shouldRotateUserForRetry(retryFailure);
+
+        try {
+            logWarning(this.osnTestName, `Preparing retry for "${testLabel}" after: ${failureMessage}`);
+            await this.cleanupOutputsForRetry();
+
+            if (replacementReason) {
+                logWarning(this.osnTestName, `Replacing user pool account before retrying "${testLabel}": ${replacementReason}`);
+                this.userPoolHandler.markCurrentUserUnhealthy(`retrying "${testLabel}" after ${replacementReason}`);
+                await this.releaseUser();
+                await this.reserveUser();
+                logInfo(this.osnTestName, `Prepared fresh stream credentials for retrying "${testLabel}"`);
+            } else {
+                this.restoreKnownGoodStreamKey();
+                logInfo(this.osnTestName, `Prepared clean OBS state for retrying "${testLabel}"`);
+            }
+
+            this.clearOutputSignals();
+        } catch (e) {
+            logWarning(this.osnTestName, `Unable to prepare retry for "${testLabel}": ${e}`);
+        } finally {
+            retryContext.clearRetryFailure(test);
+        }
+    }
+
     async uploadTestCache() {
         try {
             await this.cacheUploader.uploadCache();
@@ -256,16 +432,44 @@ export class OBSHandler {
         });
     }
 
-    getNextSignalInfo(output: string, signal: string): Promise<IOBSOutputSignalInfo> {
-        return new Promise((resolve, reject) => {
-            this.signals.shift().then(
-                function (signalInfo) {
-                    resolve(signalInfo)
-                }
+    private isTerminalErrorSignal(signalInfo: IOBSOutputSignalInfo, output: string): boolean {
+        return signalInfo.type === output
+            && ((signalInfo.signal === EOBSOutputSignal.Stop && signalInfo.code !== osn.EOutputCode.Success)
+                || signalInfo.signal === EOBSOutputSignal.WriteError);
+    }
+
+    private formatSignalInfo(signalInfo: IOBSOutputSignalInfo): string {
+        return `${signalInfo.type}/${signalInfo.signal} (code=${signalInfo.code}, error=${signalInfo.error || 'none'})`;
+    }
+
+    async getNextSignalInfo(output: string, signal: string): Promise<IOBSOutputSignalInfo> {
+        const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout';
+        const deadline = Date.now() + 30000;
+
+        while (Date.now() < deadline) {
+            const remainingMs = deadline - Date.now();
+            const signalInfo = await Promise.race([
+                this.signals.shift(),
+                new Promise<IOBSOutputSignalInfo>((resolve, reject) => {
+                    setTimeout(() => reject(new Error(timeoutMessage)), remainingMs);
+                }),
+            ]);
+
+            if (signalInfo.type === output && signalInfo.signal === signal) {
+                return signalInfo;
+            }
+
+            if (this.isTerminalErrorSignal(signalInfo, output)) {
+                return signalInfo;
+            }
+
+            logWarning(
+                this.osnTestName,
+                `Skipping unexpected output signal while waiting for ${output}/${signal}: ${this.formatSignalInfo(signalInfo)}`,
             );
-            setTimeout(() => reject(new Error(output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout')), 30000);
         }
-        );
+
+        throw new Error(timeoutMessage);
     }
 
     startAutoconfig() {

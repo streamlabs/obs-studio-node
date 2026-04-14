@@ -45,10 +45,8 @@ describe(testName, function() {
         logEmptyLine();
     });
 
-    afterEach(function() {
-        if (this.currentTest.state == 'failed') {
-            hasTestFailed = true;
-        }
+    afterEach(async function() {
+        hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
     it('Simple mode - Start and stop streaming', async function() {
@@ -986,20 +984,22 @@ describe(testName, function() {
         
         let signalInfo: IOBSOutputSignalInfo;
 
-        obs.setStreamKey('invalid');
+        try {
+            obs.setStreamKey('invalid');
 
-        osn.NodeObs.OBS_service_startStreaming();
+            osn.NodeObs.OBS_service_startStreaming();
 
-        signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
-        expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
+            expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
-        signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
-        expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        obs.setStreamKey(obs.userStreamKey);
+            signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
+            expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.code).to.equal(-3, GetErrorMessage(ETestErrorMsg.StreamOutput));
+        } finally {
+            obs.setStreamKey(obs.userStreamKey);
+        }
     });
 
     it('Reset video context', function() {
