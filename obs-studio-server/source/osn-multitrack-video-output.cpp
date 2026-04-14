@@ -172,7 +172,8 @@ static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t
 	return video_encoder;
 }
 
-static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<obs_encoder_group_t> &video_encoder_group, obs_output_t *output)
+static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<obs_encoder_group_t> &video_encoder_group, obs_output_t *output,
+				  const std::vector<obs_video_info *> &canvases)
 {
 	DStr video_encoder_name_buffer;
 	if (go_live_config.encoder_configurations.empty()) {
@@ -186,18 +187,17 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 		return false;
 	}
 
-	const auto max_canvas_idx = obs_get_video_info_count() - 1;
-
 	for (size_t i = 0; i < go_live_config.encoder_configurations.size(); i++) {
 		auto &config = go_live_config.encoder_configurations[i];
-		if (config.canvas_index > max_canvas_idx) {
-			blog(LOG_ERROR, "create_video_encoders - got unexpected large canvas index - i: %d", config.canvas_index);
+		if (config.canvas_index >= canvases.size()) {
+			blog(LOG_ERROR, "create_video_encoders - canvas_index %d out of range (canvases.size()=%zu) - encoder: %zu", config.canvas_index,
+			     canvases.size(), i);
 			return false;
 		}
 
-		obs_video_info *ovi = obs_get_video_info_by_index2(config.canvas_index);
+		obs_video_info *ovi = canvases[config.canvas_index];
 		if (!ovi) {
-			blog(LOG_ERROR, "create_video_encoders - failed to get canvas video info by index - i: %d", config.canvas_index);
+			blog(LOG_ERROR, "create_video_encoders - null canvas at index %d - encoder: %zu", config.canvas_index, i);
 			return false;
 		}
 
@@ -321,12 +321,12 @@ static OBSOutputAutoRelease create_output()
 
 OBSOutputAutoRelease SetupOBSOutput(const std::string &multitrack_video_name, const Config &go_live_config, std::vector<OBSEncoderAutoRelease> &audio_encoders,
 				    std::shared_ptr<obs_encoder_group_t> &video_encoder_group, const char *audio_encoder_id, size_t main_audio_mixer,
-				    std::optional<size_t> vod_track_mixer)
+				    std::optional<size_t> vod_track_mixer, const std::vector<obs_video_info *> &canvases)
 {
 
 	auto output = create_output();
 
-	if (!create_video_encoders(go_live_config, video_encoder_group, output))
+	if (!create_video_encoders(go_live_config, video_encoder_group, output, canvases))
 		return nullptr;
 
 	std::vector<speaker_layout> requested_speaker_layouts;
