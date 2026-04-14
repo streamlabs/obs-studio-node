@@ -1400,8 +1400,8 @@ bool OBS_service::startMultiTrackStreaming(StreamServiceId serviceId, bool dualS
 
 	std::vector<OBSEncoderAutoRelease> audio_encoders;
 	std::shared_ptr<obs_encoder_group_t> video_encoder_group;
-	auto output =
-		osn::SetupOBSOutput("Enhanced Broadcasting", go_live_config.value(), audio_encoders, video_encoder_group, audio_encoder_id, 0, vod_track_mixer);
+	auto output = osn::SetupOBSOutput("Enhanced Broadcasting", go_live_config.value(), audio_encoders, video_encoder_group, audio_encoder_id, 0,
+					  vod_track_mixer, canvases);
 	if (!output) {
 		throw std::runtime_error("startStreaming - failed to create multitrack output");
 	}
