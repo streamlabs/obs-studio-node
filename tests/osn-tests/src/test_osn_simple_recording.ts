@@ -104,9 +104,6 @@ describe(testName, () => {
     });
 
     it('Start simple recording - Stream', async function () {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -241,9 +238,6 @@ describe(testName, () => {
     });
 
     it('Start simple recording - HighQuality', async function () {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -317,10 +311,6 @@ describe(testName, () => {
     });
 
     it('Start simple recording - mpegts', async function () {
-      if (obs.isDarwin()) {
-        this.skip();
-      }
-
       const formats: ERecordingFormat[] = [
         ERecordingFormat.MP4,
         ERecordingFormat.MOV,
@@ -453,9 +443,6 @@ describe(testName, () => {
     });
 
     it('Start simple recording - HigherQuality', async function () {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
@@ -529,9 +516,6 @@ describe(testName, () => {
     });
 
     it('Start simple recording - Lossless', async function () {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const recording = osn.SimpleRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
