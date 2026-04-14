@@ -196,6 +196,7 @@ public:
 	static void setReplayBufferOutput(obs_output_t *output);
 	static obs_output_t *getVirtualWebcamOutput(void);
 	static void setVirtualWebcamOutput(obs_output_t *output);
+	static void clearOutputObjectsForShutdown(void);
 	static void waitReleaseWorker(void);
 
 	// Update settings

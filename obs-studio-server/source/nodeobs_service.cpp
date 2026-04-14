@@ -2054,10 +2054,10 @@ void OBS_service::stopReplayBuffer(bool forceStop)
 
 obs_service_t *OBS_service::getService(StreamServiceId serviceId)
 {
-	if (serviceId <= services.size() && obs_service_get_type(services[serviceId]))
-		return services[serviceId];
-	else
+	if (serviceId >= services.size())
 		return nullptr;
+
+	return services[serviceId];
 }
 
 void OBS_service::setService(obs_service_t *newService, StreamServiceId serviceId)
@@ -2793,6 +2793,19 @@ obs_output_t *OBS_service::getVirtualWebcamOutput(void)
 void OBS_service::setVirtualWebcamOutput(obs_output_t *output)
 {
 	virtualCam = output;
+}
+
+void OBS_service::clearOutputObjectsForShutdown(void)
+{
+	// These holders survive until CRT/static teardown. Clear the real owners before
+	// obs_shutdown() so later destructors do not release stale libobs pointers.
+	setStreamingOutput(nullptr, StreamServiceId::Main);
+	setStreamingOutput(nullptr, StreamServiceId::Second);
+	setRecordingOutput(nullptr);
+	setReplayBufferOutput(nullptr);
+	setVirtualWebcamOutput(nullptr);
+
+	enhancedBroadcastContext.reset();
 }
 
 void OBS_service::updateStreamingOutput(StreamServiceId serviceId)
