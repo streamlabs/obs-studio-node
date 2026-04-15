@@ -1668,52 +1668,10 @@ void OBS_API::destroyOBS_API(void)
 		archiveEncoder = nullptr;
 	}
 
-	obs_output_t *streamingOutput;
-	streamingOutput = OBS_service::getStreamingOutput(StreamServiceId::Main);
-	if (streamingOutput != NULL) {
-		obs_output_release(streamingOutput);
-		streamingEncoder = nullptr;
-	}
+	OBS_service::clearOutputObjectsForShutdown();
 
-	streamingOutput = OBS_service::getStreamingOutput(StreamServiceId::Second);
-	if (streamingOutput != NULL) {
-		obs_output_release(streamingOutput);
-		streamingEncoder = nullptr;
-	}
-
-	obs_output_t *recordingOutput = OBS_service::getRecordingOutput();
-	if (recordingOutput != NULL) {
-		obs_output_release(recordingOutput);
-		recordingOutput = nullptr;
-	}
-
-	obs_output_t *replayBufferOutput = OBS_service::getReplayBufferOutput();
-	if (replayBufferOutput != NULL) {
-		obs_output_release(replayBufferOutput);
-		replayBufferOutput = nullptr;
-	}
-
-	obs_output *virtualWebcamOutput = OBS_service::getVirtualWebcamOutput();
-	if (virtualWebcamOutput != NULL) {
-		if (obs_output_active(virtualWebcamOutput))
-			obs_output_stop(virtualWebcamOutput);
-
-		obs_output_release(virtualWebcamOutput);
-		virtualWebcamOutput = nullptr;
-	}
-
-	obs_service_t *service;
-	service = OBS_service::getService(StreamServiceId::Main);
-	if (service != NULL) {
-		obs_service_release(service);
-		service = nullptr;
-	}
-
-	service = OBS_service::getService(StreamServiceId::Second);
-	if (service != NULL) {
-		obs_service_release(service);
-		service = nullptr;
-	}
+	OBS_service::setService(nullptr, StreamServiceId::Main);
+	OBS_service::setService(nullptr, StreamServiceId::Second);
 
 	OBS_service::clearRecordingAudioEncoder();
 	osn::Volmeter::ClearVolmeters();
