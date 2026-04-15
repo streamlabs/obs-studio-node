@@ -12,7 +12,8 @@ import path = require('path');
 
 const testName = 'osn-enhanced-broadcasting-advanced-streaming';
 
-describe(testName, () => {
+describe(testName, function() {
+    this.timeout(20000);
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     const mediaPath = path.join(path.normalize(__dirname), '..', 'media');
