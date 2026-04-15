@@ -74,6 +74,7 @@ describe(testName, function() {
 
     it('Enhanced Broadcasting Advanced Streaming Single Canvas', async function() {
         if (obs.isCI()) {
+            logInfo(testName, 'Running in CI environment, skipping test that requires GPU');
             // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
@@ -168,6 +169,7 @@ describe(testName, function() {
 
     it('Enhanced Broadcasting Advanced Streaming Dual Canvas', async function() {
         if (obs.isCI()) {
+            logInfo(testName, 'Running in CI environment, skipping test that requires GPU');
             // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
