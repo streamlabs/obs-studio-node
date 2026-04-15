@@ -94,7 +94,7 @@ Napi::Value osn::Transition::Types(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Transition", "Types", {});
+	auto response = conn->call_synchronous_helper("Transition", "Types", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -133,7 +133,7 @@ Napi::Value osn::Transition::Create(const Napi::CallbackInfo &info)
 	if (settings_str.size() != 0)
 		params.push_back(ipc::value(settings_str));
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Transition", "Create", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "Create", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -174,7 +174,7 @@ Napi::Value osn::Transition::CreatePrivate(const Napi::CallbackInfo &info)
 	if (settings_str.size() != 0)
 		params.push_back(ipc::value(settings_str));
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Transition", "CreatePrivate", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "CreatePrivate", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -201,7 +201,7 @@ Napi::Value osn::Transition::FromName(const Napi::CallbackInfo &info)
 
 	auto params = std::vector<ipc::value>{ipc::value(name)};
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Transition", "FromName", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "FromName", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -219,7 +219,7 @@ Napi::Value osn::Transition::GetActiveSource(const Napi::CallbackInfo &info)
 
 	auto params = std::vector<ipc::value>{ipc::value(this->sourceId)};
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Transition", "GetActiveSource", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "GetActiveSource", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -247,7 +247,8 @@ Napi::Value osn::Transition::Clear(const Napi::CallbackInfo &info)
 
 	auto params = std::vector<ipc::value>{ipc::value(this->sourceId)};
 
-	conn->call("Transition", "Clear", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "Clear", {std::move(params)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -261,7 +262,8 @@ Napi::Value osn::Transition::Set(const Napi::CallbackInfo &info)
 
 	auto params = std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(scene->sourceId)};
 
-	conn->call("Transition", "Set", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "Set", {std::move(params)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -276,7 +278,7 @@ Napi::Value osn::Transition::Start(const Napi::CallbackInfo &info)
 
 	auto params = std::vector<ipc::value>{ipc::value(this->sourceId), ipc::value(ms), ipc::value(scene->sourceId)};
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Transition", "Start", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Transition", "Start", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

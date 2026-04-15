@@ -60,7 +60,8 @@ void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Valu
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!serviceRef.IsEmpty())
 			serviceRef.Reset();
-		conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetService", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -74,11 +75,12 @@ void osn::Streaming::SetService(const Napi::CallbackInfo &info, const Napi::Valu
 		return;
 	}
 
-	conn->call(className, "SetService", {ipc::value(this->uid), ipc::value(service->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetService", {ipc::value(this->uid), ipc::value(service->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (!serviceRef.IsEmpty())
 		serviceRef.Reset();
-
 	serviceRef = Napi::Persistent(obj);
 }
 
@@ -88,7 +90,7 @@ Napi::Value osn::Streaming::GetCanvas(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetVideoCanvas", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetVideoCanvas", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -111,7 +113,8 @@ void osn::Streaming::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call(className, "SetVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	auto response = conn->call_synchronous_helper(className, "SetVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Streaming::GetVideoEncoder(const Napi::CallbackInfo &info)
@@ -128,7 +131,8 @@ void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!videoEncoderRef.IsEmpty())
 			videoEncoderRef.Reset();
-		conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -143,11 +147,12 @@ void osn::Streaming::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 		return;
 	}
 
-	conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (!videoEncoderRef.IsEmpty())
 		videoEncoderRef.Reset();
-
 	videoEncoderRef = Napi::Persistent(obj);
 }
 
@@ -157,7 +162,7 @@ Napi::Value osn::Streaming::GetEnforceServiceBirate(const Napi::CallbackInfo &in
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetEnforceServiceBirate", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetEnforceServiceBirate", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -171,7 +176,8 @@ void osn::Streaming::SetEnforceServiceBirate(const Napi::CallbackInfo &info, con
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetEnforceServiceBirate", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper(className, "SetEnforceServiceBirate", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Streaming::GetEnableTwitchVOD(const Napi::CallbackInfo &info)
@@ -180,7 +186,7 @@ Napi::Value osn::Streaming::GetEnableTwitchVOD(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetEnableTwitchVOD", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetEnableTwitchVOD", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -194,7 +200,8 @@ void osn::Streaming::SetEnableTwitchVOD(const Napi::CallbackInfo &info, const Na
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetEnableTwitchVOD", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper(className, "SetEnableTwitchVOD", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Streaming::GetDelay(const Napi::CallbackInfo &info)
@@ -211,7 +218,8 @@ void osn::Streaming::SetDelay(const Napi::CallbackInfo &info, const Napi::Value 
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!delayRef.IsEmpty())
 			delayRef.Reset();
-		conn->call(className, "SetDelay", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetDelay", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -225,11 +233,12 @@ void osn::Streaming::SetDelay(const Napi::CallbackInfo &info, const Napi::Value 
 		return;
 	}
 
-	conn->call(className, "SetDelay", {ipc::value(this->uid), ipc::value(delay->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetDelay", {ipc::value(this->uid), ipc::value(delay->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (!delayRef.IsEmpty())
 		delayRef.Reset();
-
 	delayRef = Napi::Persistent(obj);
 }
 
@@ -247,7 +256,8 @@ void osn::Streaming::SetReconnect(const Napi::CallbackInfo &info, const Napi::Va
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!reconnectRef.IsEmpty())
 			reconnectRef.Reset();
-		conn->call(className, "SetReconnect", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetReconnect", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -261,11 +271,12 @@ void osn::Streaming::SetReconnect(const Napi::CallbackInfo &info, const Napi::Va
 		return;
 	}
 
-	conn->call(className, "SetReconnect", {ipc::value(this->uid), ipc::value(reconnect->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetReconnect", {ipc::value(this->uid), ipc::value(reconnect->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (!reconnectRef.IsEmpty())
 		reconnectRef.Reset();
-
 	reconnectRef = Napi::Persistent(obj);
 }
 
@@ -283,7 +294,8 @@ void osn::Streaming::SetNetwork(const Napi::CallbackInfo &info, const Napi::Valu
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!networkRef.IsEmpty())
 			networkRef.Reset();
-		conn->call(className, "SetNetwork", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetNetwork", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -297,11 +309,12 @@ void osn::Streaming::SetNetwork(const Napi::CallbackInfo &info, const Napi::Valu
 		return;
 	}
 
-	conn->call(className, "SetNetwork", {ipc::value(this->uid), ipc::value(network->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetNetwork", {ipc::value(this->uid), ipc::value(network->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (!networkRef.IsEmpty())
 		networkRef.Reset();
-
 	networkRef = Napi::Persistent(obj);
 }
 
@@ -356,7 +369,7 @@ void osn::Streaming::Start(const Napi::CallbackInfo &info)
 
 	startWorker(info.Env(), this->cb.Value(), className, this->uid);
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "Start", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "Start", {ipc::value(this->uid)});
 	ValidateResponse(info, response);
 }
 
@@ -370,7 +383,8 @@ void osn::Streaming::Stop(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
+	auto response = conn->call_synchronous_helper(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Streaming::GetDroppedFrames(const Napi::CallbackInfo &info)
@@ -379,7 +393,7 @@ Napi::Value osn::Streaming::GetDroppedFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetDroppedFrames", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetDroppedFrames", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -393,7 +407,7 @@ Napi::Value osn::Streaming::GetTotalFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetTotalFrames", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetTotalFrames", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -407,7 +421,7 @@ Napi::Value osn::Streaming::GetKBitsPerSec(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetKBitsPerSec", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetKBitsPerSec", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -421,7 +435,7 @@ Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetDataOutput", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetDataOutput", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

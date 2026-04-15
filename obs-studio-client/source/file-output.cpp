@@ -26,7 +26,7 @@ Napi::Value osn::FileOutput::GetPath(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetPath", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetPath", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -40,7 +40,8 @@ void osn::FileOutput::SetPath(const Napi::CallbackInfo &info, const Napi::Value 
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetPath", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetPath", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetCanvas(const Napi::CallbackInfo &info)
@@ -49,7 +50,7 @@ Napi::Value osn::FileOutput::GetCanvas(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetVideoCanvas", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetVideoCanvas", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -72,7 +73,8 @@ void osn::FileOutput::SetCanvas(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetFormat(const Napi::CallbackInfo &info)
@@ -81,7 +83,7 @@ Napi::Value osn::FileOutput::GetFormat(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetFormat", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetFormat", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -95,7 +97,8 @@ void osn::FileOutput::SetFormat(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetFormat", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetFormat", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetFileFormat(const Napi::CallbackInfo &info)
@@ -104,7 +107,7 @@ Napi::Value osn::FileOutput::GetFileFormat(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetFileFormat", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetFileFormat", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -118,7 +121,8 @@ void osn::FileOutput::SetFileFormat(const Napi::CallbackInfo &info, const Napi::
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetFileFormat", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetFileFormat", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetOverwrite(const Napi::CallbackInfo &info)
@@ -127,7 +131,7 @@ Napi::Value osn::FileOutput::GetOverwrite(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetOverwrite", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetOverwrite", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -141,7 +145,8 @@ void osn::FileOutput::SetOverwrite(const Napi::CallbackInfo &info, const Napi::V
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetOverwrite", {ipc::value(this->uid), ipc::value((uint32_t)value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetOverwrite", {ipc::value(this->uid), ipc::value((uint32_t)value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetNoSpace(const Napi::CallbackInfo &info)
@@ -150,7 +155,7 @@ Napi::Value osn::FileOutput::GetNoSpace(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetNoSpace", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetNoSpace", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -164,7 +169,8 @@ void osn::FileOutput::SetNoSpace(const Napi::CallbackInfo &info, const Napi::Val
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetNoSpace", {ipc::value(this->uid), ipc::value((uint32_t)value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetNoSpace", {ipc::value(this->uid), ipc::value((uint32_t)value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetMuxerSettings(const Napi::CallbackInfo &info)
@@ -173,7 +179,7 @@ Napi::Value osn::FileOutput::GetMuxerSettings(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetMuxerSettings", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetMuxerSettings", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -187,7 +193,8 @@ void osn::FileOutput::SetMuxerSettings(const Napi::CallbackInfo &info, const Nap
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("FileOutput", "SetMuxerSettings", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper("FileOutput", "SetMuxerSettings", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::FileOutput::GetLastFile(const Napi::CallbackInfo &info)
@@ -196,7 +203,7 @@ Napi::Value osn::FileOutput::GetLastFile(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("FileOutput", "GetLastFile", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("FileOutput", "GetLastFile", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

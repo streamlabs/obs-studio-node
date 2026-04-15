@@ -24,7 +24,7 @@ Napi::Value osn::AdvancedStreamingBase::GetAudioTrack(const Napi::CallbackInfo &
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "GetAudioTrack", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetAudioTrack", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -38,7 +38,9 @@ void osn::AdvancedStreamingBase::SetAudioTrack(const Napi::CallbackInfo &info, c
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedStreaming", "SetAudioTrack", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedStreaming", "SetAudioTrack", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedStreamingBase::GetTwitchTrack(const Napi::CallbackInfo &info)
@@ -47,7 +49,7 @@ Napi::Value osn::AdvancedStreamingBase::GetTwitchTrack(const Napi::CallbackInfo 
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "GetTwitchTrack", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetTwitchTrack", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -61,7 +63,9 @@ void osn::AdvancedStreamingBase::SetTwitchTrack(const Napi::CallbackInfo &info, 
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedStreaming", "SetTwitchTrack", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedStreaming", "SetTwitchTrack", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedStreamingBase::GetRescaling(const Napi::CallbackInfo &info)
@@ -70,7 +74,7 @@ Napi::Value osn::AdvancedStreamingBase::GetRescaling(const Napi::CallbackInfo &i
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "GetRescaling", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetRescaling", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -84,7 +88,8 @@ void osn::AdvancedStreamingBase::SetRescaling(const Napi::CallbackInfo &info, co
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedStreaming", "SetRescaling", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "SetRescaling", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedStreamingBase::GetOutputWidth(const Napi::CallbackInfo &info)
@@ -93,7 +98,7 @@ Napi::Value osn::AdvancedStreamingBase::GetOutputWidth(const Napi::CallbackInfo 
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "GetOutputWidth", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetOutputWidth", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -107,7 +112,9 @@ void osn::AdvancedStreamingBase::SetOutputWidth(const Napi::CallbackInfo &info, 
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedStreaming", "SetOutputWidth", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedStreaming", "SetOutputWidth", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AdvancedStreamingBase::GetOutputHeight(const Napi::CallbackInfo &info)
@@ -116,7 +123,7 @@ Napi::Value osn::AdvancedStreamingBase::GetOutputHeight(const Napi::CallbackInfo
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AdvancedStreaming", "GetOutputHeight", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetOutputHeight", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -130,5 +137,7 @@ void osn::AdvancedStreamingBase::SetOutputHeight(const Napi::CallbackInfo &info,
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("AdvancedStreaming", "SetOutputHeight", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response =
+		conn->call_synchronous_helper("AdvancedStreaming", "SetOutputHeight", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }

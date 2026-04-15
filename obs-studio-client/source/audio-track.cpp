@@ -65,7 +65,7 @@ Napi::Value osn::AudioTrack::Create(const Napi::CallbackInfo &info)
 
 	uint32_t bitrate = info[0].ToNumber().Uint32Value();
 	std::string name = info[1].ToString().Utf8Value();
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioTrack", "Create", {ipc::value(bitrate), ipc::value(name)});
+	auto response = conn->call_synchronous_helper("AudioTrack", "Create", {ipc::value(bitrate), ipc::value(name)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -81,7 +81,7 @@ Napi::Value osn::AudioTrack::GetAudioTracks(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioTrack", "GetAudioTracks", {});
+	auto response = conn->call_synchronous_helper("AudioTrack", "GetAudioTracks", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -105,7 +105,7 @@ Napi::Value osn::AudioTrack::GetAudioBitrates(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioTrack", "GetAudioBitrates", {});
+	auto response = conn->call_synchronous_helper("AudioTrack", "GetAudioBitrates", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -126,7 +126,7 @@ Napi::Value osn::AudioTrack::GetAtIndex(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioTrack", "GetAtIndex", {ipc::value(index)});
+	auto response = conn->call_synchronous_helper("AudioTrack", "GetAtIndex", {ipc::value(index)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -150,7 +150,8 @@ void osn::AudioTrack::SetAtIndex(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call("AudioTrack", "SetAtIndex", {ipc::value(audioTrack->uid), ipc::value(index)});
+	auto response = conn->call_synchronous_helper("AudioTrack", "SetAtIndex", {ipc::value(audioTrack->uid), ipc::value(index)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AudioTrack::GetBitrate(const Napi::CallbackInfo &info)
@@ -159,7 +160,7 @@ Napi::Value osn::AudioTrack::GetBitrate(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioTrack", "GetBitrate", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AudioTrack", "GetBitrate", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -173,7 +174,8 @@ void osn::AudioTrack::SetBitrate(const Napi::CallbackInfo &info, const Napi::Val
 	if (!conn)
 		return;
 
-	conn->call("AudioTrack", "SetBitrate", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper("AudioTrack", "SetBitrate", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::AudioTrack::GetName(const Napi::CallbackInfo &info)
@@ -182,7 +184,7 @@ Napi::Value osn::AudioTrack::GetName(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AudioTrack", "GetName", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("AudioTrack", "GetName", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -196,7 +198,8 @@ void osn::AudioTrack::SetName(const Napi::CallbackInfo &info, const Napi::Value 
 	if (!conn)
 		return;
 
-	conn->call("AudioTrack", "SetName", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper("AudioTrack", "SetName", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 void osn::AudioTrack::ImportLegacySettings(const Napi::CallbackInfo &info)

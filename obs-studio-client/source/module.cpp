@@ -76,7 +76,7 @@ Napi::Value osn::Module::Open(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "Open", {ipc::value(bin_path), ipc::value(data_path)});
+	auto response = conn->call_synchronous_helper("Module", "Open", {ipc::value(bin_path), ipc::value(data_path)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -92,7 +92,7 @@ Napi::Value osn::Module::Modules(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "Modules", {});
+	auto response = conn->call_synchronous_helper("Module", "Modules", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -112,7 +112,7 @@ Napi::Value osn::Module::Initialize(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "Initialize", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "Initialize", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -126,7 +126,7 @@ Napi::Value osn::Module::Name(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "GetName", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "GetName", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -140,7 +140,7 @@ Napi::Value osn::Module::FileName(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "GetFileName", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "GetFileName", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -154,7 +154,7 @@ Napi::Value osn::Module::Description(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "GetDescription", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "GetDescription", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -168,7 +168,7 @@ Napi::Value osn::Module::Author(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "GetAuthor", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "GetAuthor", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -182,7 +182,7 @@ Napi::Value osn::Module::BinaryPath(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "GetBinaryPath", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "GetBinaryPath", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -196,7 +196,7 @@ Napi::Value osn::Module::DataPath(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Module", "GetDataPath", {ipc::value(this->moduleId)});
+	auto response = conn->call_synchronous_helper("Module", "GetDataPath", {ipc::value(this->moduleId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

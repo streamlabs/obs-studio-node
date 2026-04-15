@@ -59,7 +59,7 @@ Napi::Value osn::Video::GetSkippedFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "GetSkippedFrames", {ipc::value((uint64_t)(this->canvasId))});
+	auto response = conn->call_synchronous_helper("Video", "GetSkippedFrames", {ipc::value((uint64_t)(this->canvasId))});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -73,7 +73,7 @@ Napi::Value osn::Video::GetEncodedFrames(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "GetEncodedFrames", {ipc::value((uint64_t)(this->canvasId))});
+	auto response = conn->call_synchronous_helper("Video", "GetEncodedFrames", {ipc::value((uint64_t)(this->canvasId))});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -87,7 +87,7 @@ Napi::Value osn::Video::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "AddVideoContext", {});
+	auto response = conn->call_synchronous_helper("Video", "AddVideoContext", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -103,7 +103,8 @@ void osn::Video::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "RemoveVideoContext", {ipc::value((uint64_t)(this->canvasId))});
+	auto response = conn->call_synchronous_helper("Video", "RemoveVideoContext", {ipc::value((uint64_t)(this->canvasId))});
+	ValidateResponse(info, response);
 	isLastVideoValid = false;
 	return;
 }
@@ -179,7 +180,7 @@ void osn::Video::set(const Napi::CallbackInfo &info, const Napi::Value &value)
 
 	args.push_back(this->canvasId);
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "SetVideoContext", args);
+	auto response = conn->call_synchronous_helper("Video", "SetVideoContext", args);
 
 	lastVideo.resize(0);
 	isLastVideoValid = false;
@@ -191,7 +192,7 @@ Napi::Value osn::Video::GetLegacySettings(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Video", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("Video", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

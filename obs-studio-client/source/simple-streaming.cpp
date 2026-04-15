@@ -95,7 +95,7 @@ Napi::Value osn::SimpleStreaming::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "Create", {});
+	auto response = conn->call_synchronous_helper("SimpleStreaming", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -121,7 +121,7 @@ void osn::SimpleStreaming::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "Destroy", {ipc::value(stream->uid)});
+	auto response = conn->call_synchronous_helper("SimpleStreaming", "Destroy", {ipc::value(stream->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -133,7 +133,7 @@ Napi::Value osn::SimpleStreaming::GetLegacySettings(const Napi::CallbackInfo &in
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("SimpleStreaming", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -156,7 +156,7 @@ void osn::SimpleStreaming::SetLegacySettings(const Napi::CallbackInfo &info, con
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("SimpleStreaming", "SetLegacySettings", {streaming->uid});
+	auto response = conn->call_synchronous_helper("SimpleStreaming", "SetLegacySettings", {streaming->uid});
 
 	if (!ValidateResponse(info, response))
 		return;

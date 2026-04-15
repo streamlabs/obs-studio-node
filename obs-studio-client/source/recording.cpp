@@ -34,7 +34,8 @@ void osn::Recording::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 	if (value.IsNull() || value.IsUndefined()) {
 		if (!videoEncoderRef.IsEmpty())
 			videoEncoderRef.Reset();
-		conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		auto response = conn->call_synchronous_helper(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(UINT64_MAX)});
+		ValidateResponse(info, response);
 		return;
 	}
 
@@ -49,11 +50,12 @@ void osn::Recording::SetVideoEncoder(const Napi::CallbackInfo &info, const Napi:
 		return;
 	}
 
-	conn->call(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetVideoEncoder", {ipc::value(this->uid), ipc::value(encoder->uid)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	if (!videoEncoderRef.IsEmpty())
 		videoEncoderRef.Reset();
-
 	videoEncoderRef = Napi::Persistent(obj);
 }
 
@@ -108,7 +110,8 @@ void osn::Recording::Start(const Napi::CallbackInfo &info)
 
 	startWorker(info.Env(), this->cb.Value(), className, this->uid);
 
-	conn->call(className, "Start", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "Start", {ipc::value(this->uid)});
+	ValidateResponse(info, response);
 }
 
 void osn::Recording::Stop(const Napi::CallbackInfo &info)
@@ -121,7 +124,8 @@ void osn::Recording::Stop(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
+	auto response = conn->call_synchronous_helper(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
+	ValidateResponse(info, response);
 }
 
 void osn::Recording::SplitFile(const Napi::CallbackInfo &info)
@@ -130,7 +134,8 @@ void osn::Recording::SplitFile(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call(className, "SplitFile", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "SplitFile", {ipc::value(this->uid)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Recording::GetEnableFileSplit(const Napi::CallbackInfo &info)
@@ -139,7 +144,7 @@ Napi::Value osn::Recording::GetEnableFileSplit(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetEnableFileSplit", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetEnableFileSplit", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -153,7 +158,9 @@ void osn::Recording::SetEnableFileSplit(const Napi::CallbackInfo &info, const Na
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetEnableFileSplit", {ipc::value(this->uid), ipc::value((uint32_t)value.ToBoolean().Value())});
+	auto response =
+		conn->call_synchronous_helper(className, "SetEnableFileSplit", {ipc::value(this->uid), ipc::value((uint32_t)value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Recording::GetSplitType(const Napi::CallbackInfo &info)
@@ -162,7 +169,7 @@ Napi::Value osn::Recording::GetSplitType(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetSplitType", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetSplitType", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -176,7 +183,8 @@ void osn::Recording::SetSplitType(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetSplitType", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper(className, "SetSplitType", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Recording::GetSplitTime(const Napi::CallbackInfo &info)
@@ -185,7 +193,7 @@ Napi::Value osn::Recording::GetSplitTime(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetSplitTime", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetSplitTime", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -199,7 +207,8 @@ void osn::Recording::SetSplitTime(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetSplitTime", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper(className, "SetSplitTime", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Recording::GetSplitSize(const Napi::CallbackInfo &info)
@@ -208,7 +217,7 @@ Napi::Value osn::Recording::GetSplitSize(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetSplitSize", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetSplitSize", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -222,7 +231,8 @@ void osn::Recording::SetSplitSize(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetSplitSize", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper(className, "SetSplitSize", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Recording::GetFileResetTimestamps(const Napi::CallbackInfo &info)
@@ -231,7 +241,7 @@ Napi::Value osn::Recording::GetFileResetTimestamps(const Napi::CallbackInfo &inf
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetFileResetTimestamps", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetFileResetTimestamps", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -245,5 +255,6 @@ void osn::Recording::SetFileResetTimestamps(const Napi::CallbackInfo &info, cons
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetFileResetTimestamps", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper(className, "SetFileResetTimestamps", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }

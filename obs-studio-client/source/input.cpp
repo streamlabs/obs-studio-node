@@ -121,7 +121,7 @@ Napi::Value osn::Input::Types(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "Types", {});
+	auto response = conn->call_synchronous_helper("Input", "Types", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -177,7 +177,7 @@ Napi::Value osn::Input::Create(const Napi::CallbackInfo &info)
 		}
 	}
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "Create", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Input", "Create", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -224,7 +224,7 @@ Napi::Value osn::Input::CreatePrivate(const Napi::CallbackInfo &info)
 		}
 	}
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "CreatePrivate", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Input", "CreatePrivate", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -259,7 +259,7 @@ Napi::Value osn::Input::FromName(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "FromName", {ipc::value(name)});
+	auto response = conn->call_synchronous_helper("Input", "FromName", {ipc::value(name)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -275,7 +275,7 @@ Napi::Value osn::Input::GetPublicSources(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetPublicSources", {});
+	auto response = conn->call_synchronous_helper("Input", "GetPublicSources", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -312,7 +312,7 @@ Napi::Value osn::Input::Duplicate(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(is_private));
 	}
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "Duplicate", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Input", "Duplicate", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -327,7 +327,7 @@ Napi::Value osn::Input::Active(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetActive", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetActive", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -341,7 +341,7 @@ Napi::Value osn::Input::Showing(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetShowing", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetShowing", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -355,7 +355,7 @@ Napi::Value osn::Input::Width(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetWidth", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetWidth", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -369,7 +369,7 @@ Napi::Value osn::Input::Height(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetHeight", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetHeight", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -383,7 +383,7 @@ Napi::Value osn::Input::GetVolume(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetVolume", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetVolume", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -397,7 +397,8 @@ void osn::Input::SetVolume(const Napi::CallbackInfo &info, const Napi::Value &va
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetVolume", {ipc::value((uint64_t)this->sourceId), ipc::value(value.ToNumber().FloatValue())});
+	auto response = conn->call_synchronous_helper("Input", "SetVolume", {ipc::value((uint64_t)this->sourceId), ipc::value(value.ToNumber().FloatValue())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Input::GetSyncOffset(const Napi::CallbackInfo &info)
@@ -406,7 +407,7 @@ Napi::Value osn::Input::GetSyncOffset(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetSyncOffset", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetSyncOffset", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -430,7 +431,8 @@ void osn::Input::SetSyncOffset(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetSyncOffset", {ipc::value((uint64_t)this->sourceId), ipc::value(syncoffset)});
+	auto response = conn->call_synchronous_helper("Input", "SetSyncOffset", {ipc::value((uint64_t)this->sourceId), ipc::value(syncoffset)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Input::GetAudioMixers(const Napi::CallbackInfo &info)
@@ -443,7 +445,7 @@ Napi::Value osn::Input::GetAudioMixers(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetAudioMixers", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetAudioMixers", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -464,7 +466,9 @@ void osn::Input::SetAudioMixers(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetAudioMixers", {ipc::value((uint64_t)this->sourceId), ipc::value(audiomixers)});
+	auto response = conn->call_synchronous_helper("Input", "SetAudioMixers", {ipc::value((uint64_t)this->sourceId), ipc::value(audiomixers)});
+	if (!ValidateResponse(info, response))
+		return;
 
 	SourceDataInfo *sdi = CacheManager<SourceDataInfo *>::getInstance().Retrieve(this->sourceId);
 	if (sdi) {
@@ -478,7 +482,7 @@ Napi::Value osn::Input::GetMonitoringType(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetMonitoringType", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetMonitoringType", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -494,7 +498,8 @@ void osn::Input::SetMonitoringType(const Napi::CallbackInfo &info, const Napi::V
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetMonitoringType", {ipc::value((uint64_t)this->sourceId), ipc::value(audiomixers)});
+	auto response = conn->call_synchronous_helper("Input", "SetMonitoringType", {ipc::value((uint64_t)this->sourceId), ipc::value(audiomixers)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Input::GetDeinterlaceFieldOrder(const Napi::CallbackInfo &info)
@@ -503,7 +508,7 @@ Napi::Value osn::Input::GetDeinterlaceFieldOrder(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetDeInterlaceFieldOrder", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetDeInterlaceFieldOrder", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -519,7 +524,9 @@ void osn::Input::SetDeinterlaceFieldOrder(const Napi::CallbackInfo &info, const 
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetDeInterlaceFieldOrder", {ipc::value((uint64_t)this->sourceId), ipc::value(deinterlaceOrder)});
+	auto response =
+		conn->call_synchronous_helper("Input", "SetDeInterlaceFieldOrder", {ipc::value((uint64_t)this->sourceId), ipc::value(deinterlaceOrder)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Input::GetDeinterlaceMode(const Napi::CallbackInfo &info)
@@ -528,7 +535,7 @@ Napi::Value osn::Input::GetDeinterlaceMode(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetDeInterlaceMode", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetDeInterlaceMode", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -544,7 +551,8 @@ void osn::Input::SetDeinterlaceMode(const Napi::CallbackInfo &info, const Napi::
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetDeInterlaceMode", {ipc::value((uint64_t)this->sourceId), ipc::value(deinterlaceMode)});
+	auto response = conn->call_synchronous_helper("Input", "SetDeInterlaceMode", {ipc::value((uint64_t)this->sourceId), ipc::value(deinterlaceMode)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Input::Filters(const Napi::CallbackInfo &info)
@@ -565,7 +573,7 @@ Napi::Value osn::Input::Filters(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetFilters", {ipc::value(this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetFilters", {ipc::value(this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -599,7 +607,10 @@ Napi::Value osn::Input::AddFilter(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Input", "AddFilter", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "AddFilter", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
 	SourceDataInfo *sdi = CacheManager<SourceDataInfo *>::getInstance().Retrieve(this->sourceId);
 	if (sdi) {
 		sdi->filtersOrderChanged = true;
@@ -615,7 +626,9 @@ Napi::Value osn::Input::RemoveFilter(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Input", "RemoveFilter", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "RemoveFilter", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
 
 	SourceDataInfo *sdi = CacheManager<SourceDataInfo *>::getInstance().Retrieve(this->sourceId);
 	if (sdi) {
@@ -633,7 +646,10 @@ Napi::Value osn::Input::SetFilterOrder(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Input", "MoveFilter", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId), ipc::value(movement)});
+	auto response =
+		conn->call_synchronous_helper("Input", "MoveFilter", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId), ipc::value(movement)});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
 
 	SourceDataInfo *sdi = CacheManager<SourceDataInfo *>::getInstance().Retrieve(this->sourceId);
 	if (sdi) {
@@ -651,7 +667,7 @@ Napi::Value osn::Input::FindFilter(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "FindFilter", {ipc::value(this->sourceId), ipc::value(name)});
+	auto response = conn->call_synchronous_helper("Input", "FindFilter", {ipc::value(this->sourceId), ipc::value(name)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -671,9 +687,11 @@ Napi::Value osn::Input::CopyFilters(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	bool ret = conn->call("Input", "CopyFiltersTo", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "CopyFiltersTo", {ipc::value(this->sourceId), ipc::value(objfilter->sourceId)});
+	if (!ValidateResponse(info, response))
+		return Napi::Boolean::New(info.Env(), false);
 
-	return Napi::Boolean::New(info.Env(), ret);
+	return Napi::Boolean::New(info.Env(), true);
 }
 
 Napi::Value osn::Input::CallIsConfigurable(const Napi::CallbackInfo &info)
@@ -863,7 +881,7 @@ Napi::Value osn::Input::GetDuration(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetDuration", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetDuration", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -878,7 +896,7 @@ Napi::Value osn::Input::GetTime(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetTime", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetTime", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -894,7 +912,8 @@ void osn::Input::SetTime(const Napi::CallbackInfo &info, const Napi::Value &valu
 	if (!conn)
 		return;
 
-	conn->call("Input", "SetTime", {ipc::value((uint64_t)this->sourceId), ipc::value(ms)});
+	auto response = conn->call_synchronous_helper("Input", "SetTime", {ipc::value((uint64_t)this->sourceId), ipc::value(ms)});
+	ValidateResponse(info, response);
 }
 
 void osn::Input::Play(const Napi::CallbackInfo &info)
@@ -903,7 +922,8 @@ void osn::Input::Play(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call("Input", "Play", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "Play", {ipc::value((uint64_t)this->sourceId)});
+	ValidateResponse(info, response);
 }
 
 void osn::Input::Pause(const Napi::CallbackInfo &info)
@@ -912,7 +932,8 @@ void osn::Input::Pause(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call("Input", "Pause", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "Pause", {ipc::value((uint64_t)this->sourceId)});
+	ValidateResponse(info, response);
 }
 
 void osn::Input::Restart(const Napi::CallbackInfo &info)
@@ -921,7 +942,8 @@ void osn::Input::Restart(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call("Input", "Restart", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "Restart", {ipc::value((uint64_t)this->sourceId)});
+	ValidateResponse(info, response);
 }
 
 void osn::Input::Stop(const Napi::CallbackInfo &info)
@@ -930,7 +952,8 @@ void osn::Input::Stop(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call("Input", "Stop", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "Stop", {ipc::value((uint64_t)this->sourceId)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Input::GetMediaState(const Napi::CallbackInfo &info)
@@ -940,7 +963,7 @@ Napi::Value osn::Input::GetMediaState(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Input", "GetMediaState", {ipc::value((uint64_t)this->sourceId)});
+	auto response = conn->call_synchronous_helper("Input", "GetMediaState", {ipc::value((uint64_t)this->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

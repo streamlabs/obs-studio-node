@@ -618,6 +618,7 @@ void osn::SceneItem::SetTransformInfo(void *data, const int64_t id, const std::v
 	info.bounds.y = args[10].value_union.fp32;
 	obs_sceneitem_set_info2(item, &info);
 
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

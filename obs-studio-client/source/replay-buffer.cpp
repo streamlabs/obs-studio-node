@@ -26,7 +26,7 @@ Napi::Value osn::ReplayBuffer::GetDuration(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetDuration", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetDuration", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -40,7 +40,8 @@ void osn::ReplayBuffer::SetDuration(const Napi::CallbackInfo &info, const Napi::
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetDuration", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper(className, "SetDuration", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ReplayBuffer::GetPrefix(const Napi::CallbackInfo &info)
@@ -49,7 +50,7 @@ Napi::Value osn::ReplayBuffer::GetPrefix(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetPrefix", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetPrefix", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -63,7 +64,8 @@ void osn::ReplayBuffer::SetPrefix(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetPrefix", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper(className, "SetPrefix", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ReplayBuffer::GetSuffix(const Napi::CallbackInfo &info)
@@ -72,7 +74,7 @@ Napi::Value osn::ReplayBuffer::GetSuffix(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(className, "GetSuffix", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "GetSuffix", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -86,7 +88,8 @@ void osn::ReplayBuffer::SetSuffix(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper(className, "SetSuffix", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	auto response = conn->call_synchronous_helper(className, "SetSuffix", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ReplayBuffer::GetUsesStream(const Napi::CallbackInfo &info)
@@ -102,7 +105,8 @@ void osn::ReplayBuffer::SetUsesStream(const Napi::CallbackInfo &info, const Napi
 		return;
 
 	usesStream = value.ToBoolean().Value();
-	conn->call_synchronous_helper(className, "SetUsesStream", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper(className, "SetUsesStream", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::ReplayBuffer::GetSignalHandler(const Napi::CallbackInfo &info)
@@ -133,7 +137,8 @@ void osn::ReplayBuffer::Start(const Napi::CallbackInfo &info)
 
 	startWorker(info.Env(), this->cb.Value(), className, this->uid);
 
-	conn->call(className, "Start", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "Start", {ipc::value(this->uid)});
+	ValidateResponse(info, response);
 }
 
 void osn::ReplayBuffer::Stop(const Napi::CallbackInfo &info)
@@ -146,7 +151,8 @@ void osn::ReplayBuffer::Stop(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
+	auto response = conn->call_synchronous_helper(className, "Stop", {ipc::value(this->uid), ipc::value(force)});
+	ValidateResponse(info, response);
 }
 
 void osn::ReplayBuffer::Save(const Napi::CallbackInfo &info)
@@ -155,5 +161,6 @@ void osn::ReplayBuffer::Save(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call(className, "Save", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper(className, "Save", {ipc::value(this->uid)});
+	ValidateResponse(info, response);
 }

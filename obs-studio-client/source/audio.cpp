@@ -62,7 +62,7 @@ Napi::Value osn::Audio::GetAudioContext(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetAudioContext", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetAudioContext", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -89,7 +89,8 @@ void osn::Audio::SetAudioContext(const Napi::CallbackInfo &info, const Napi::Val
 
 	std::vector<ipc::value> args;
 	SerializeAudioData(audio, args);
-	conn->call("Audio", "SetAudioContext", args);
+	auto response = conn->call_synchronous_helper("Audio", "SetAudioContext", args);
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Audio::GetLegacySettings(const Napi::CallbackInfo &info)
@@ -98,7 +99,7 @@ Napi::Value osn::Audio::GetLegacySettings(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -134,7 +135,7 @@ Napi::Value osn::Audio::GetMonitoringDevice(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetMonitoringDevice", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetMonitoringDevice", {});
 
 	if (!ValidateResponse(info, response) || response.size() != 3)
 		return info.Env().Undefined();
@@ -155,7 +156,8 @@ void osn::Audio::SetMonitoringDevice(const Napi::CallbackInfo &info, const Napi:
 	if (!conn)
 		return;
 
-	conn->call("Audio", "SetMonitoringDevice", {ipc::value(name), ipc::value(id)});
+	auto response = conn->call_synchronous_helper("Audio", "SetMonitoringDevice", {ipc::value(name), ipc::value(id)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Audio::GetMonitoringDeviceLegacy(const Napi::CallbackInfo &info)
@@ -164,7 +166,7 @@ Napi::Value osn::Audio::GetMonitoringDeviceLegacy(const Napi::CallbackInfo &info
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetMonitoringDeviceLegacy", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetMonitoringDeviceLegacy", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -181,7 +183,9 @@ Napi::Value osn::Audio::GetMonitoringDevices(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetMonitoringDevices", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetMonitoringDevices", {});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
 
 	uint32_t size = response[1].value_union.ui32;
 	auto devices = Napi::Array::New(info.Env(), size);
@@ -202,7 +206,7 @@ Napi::Value osn::Audio::GetDisableAudioDucking(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetDisableAudioDucking", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetDisableAudioDucking", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -227,7 +231,7 @@ Napi::Value osn::Audio::GetDisableAudioDuckingLegacy(const Napi::CallbackInfo &i
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Audio", "GetDisableAudioDuckingLegacy", {});
+	auto response = conn->call_synchronous_helper("Audio", "GetDisableAudioDuckingLegacy", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

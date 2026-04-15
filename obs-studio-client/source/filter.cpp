@@ -87,7 +87,7 @@ Napi::Value osn::Filter::Types(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Filter", "Types", {});
+	auto response = conn->call_synchronous_helper("Filter", "Types", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -125,7 +125,7 @@ Napi::Value osn::Filter::Create(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(settings_str));
 	}
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Filter", "Create", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Filter", "Create", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

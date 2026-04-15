@@ -70,10 +70,10 @@ Napi::Value osn::Fader::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Fader", "Create",
-									 {
-										 ipc::value(fader_type),
-									 });
+	auto response = conn->call_synchronous_helper("Fader", "Create",
+						      {
+							      ipc::value(fader_type),
+						      });
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -89,10 +89,10 @@ Napi::Value osn::Fader::GetDeziBel(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Fader", "GetDeziBel",
-									 {
-										 ipc::value(this->uid),
-									 });
+	auto response = conn->call_synchronous_helper("Fader", "GetDeziBel",
+						      {
+							      ipc::value(this->uid),
+						      });
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -108,7 +108,8 @@ void osn::Fader::SetDezibel(const Napi::CallbackInfo &info, const Napi::Value &v
 	if (!conn)
 		return;
 
-	conn->call("Fader", "SetDeziBel", {ipc::value(this->uid), ipc::value(db)});
+	auto response = conn->call_synchronous_helper("Fader", "SetDeziBel", {ipc::value(this->uid), ipc::value(db)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Fader::GetDeflection(const Napi::CallbackInfo &info)
@@ -117,10 +118,10 @@ Napi::Value osn::Fader::GetDeflection(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Fader", "GetDeflection",
-									 {
-										 ipc::value(this->uid),
-									 });
+	auto response = conn->call_synchronous_helper("Fader", "GetDeflection",
+						      {
+							      ipc::value(this->uid),
+						      });
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -136,7 +137,8 @@ void osn::Fader::SetDeflection(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call("Fader", "SetDeflection", {ipc::value(this->uid), ipc::value(deflection)});
+	auto response = conn->call_synchronous_helper("Fader", "SetDeflection", {ipc::value(this->uid), ipc::value(deflection)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Fader::GetMultiplier(const Napi::CallbackInfo &info)
@@ -145,10 +147,10 @@ Napi::Value osn::Fader::GetMultiplier(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Fader", "GetMultiplier",
-									 {
-										 ipc::value(this->uid),
-									 });
+	auto response = conn->call_synchronous_helper("Fader", "GetMultiplier",
+						      {
+							      ipc::value(this->uid),
+						      });
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -164,7 +166,8 @@ void osn::Fader::SetMultiplier(const Napi::CallbackInfo &info, const Napi::Value
 	if (!conn)
 		return;
 
-	conn->call("Fader", "SetMultiplier", {ipc::value(this->uid), ipc::value(mul)});
+	auto response = conn->call_synchronous_helper("Fader", "SetMultiplier", {ipc::value(this->uid), ipc::value(mul)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Fader::Destroy(const Napi::CallbackInfo &info)
@@ -173,7 +176,8 @@ Napi::Value osn::Fader::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call_synchronous_helper("Fader", "Destroy", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Fader", "Destroy", {ipc::value(this->uid)});
+	ValidateResponse(info, response);
 
 	return info.Env().Undefined();
 }
@@ -186,7 +190,7 @@ Napi::Value osn::Fader::Attach(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Fader", "Attach", {ipc::value(this->uid), ipc::value(input->sourceId)});
+	auto response = conn->call_synchronous_helper("Fader", "Attach", {ipc::value(this->uid), ipc::value(input->sourceId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -200,7 +204,7 @@ Napi::Value osn::Fader::Detach(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Fader", "Detach", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Fader", "Detach", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

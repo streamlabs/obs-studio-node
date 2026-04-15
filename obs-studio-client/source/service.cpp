@@ -64,7 +64,7 @@ Napi::Value osn::Service::Types(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "GetTypes", {});
+	auto response = conn->call_synchronous_helper("Service", "GetTypes", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -119,7 +119,7 @@ Napi::Value osn::Service::Create(const Napi::CallbackInfo &info)
 		}
 	}
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "Create", {std::move(params)});
+	auto response = conn->call_synchronous_helper("Service", "Create", {std::move(params)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -140,7 +140,7 @@ void osn::Service::Destroy(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "Destroy", {ipc::value(service->uid)});
+	auto response = conn->call_synchronous_helper("Service", "Destroy", {ipc::value(service->uid)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -152,7 +152,7 @@ Napi::Value osn::Service::GetName(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "GetName", {ipc::value((uint64_t)this->uid)});
+	auto response = conn->call_synchronous_helper("Service", "GetName", {ipc::value((uint64_t)this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -166,7 +166,7 @@ Napi::Value osn::Service::GetProperties(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "GetProperties", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Service", "GetProperties", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -194,7 +194,7 @@ void osn::Service::Update(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "Update", {ipc::value(this->uid), ipc::value(jsondata)});
+	auto response = conn->call_synchronous_helper("Service", "Update", {ipc::value(this->uid), ipc::value(jsondata)});
 
 	if (!ValidateResponse(info, response))
 		return;
@@ -209,7 +209,7 @@ Napi::Value osn::Service::GetSettings(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "GetSettings", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Service", "GetSettings", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -225,7 +225,7 @@ Napi::Value osn::Service::GetLegacySettings(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "GetLegacySettings", {});
+	auto response = conn->call_synchronous_helper("Service", "GetLegacySettings", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -248,7 +248,7 @@ void osn::Service::SetLegacySettings(const Napi::CallbackInfo &info, const Napi:
 	if (!conn)
 		return;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Service", "SetLegacySettings", {service->uid});
+	auto response = conn->call_synchronous_helper("Service", "SetLegacySettings", {service->uid});
 
 	if (!ValidateResponse(info, response))
 		return;

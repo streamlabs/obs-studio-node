@@ -63,7 +63,7 @@ Napi::Value osn::Delay::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Delay", "Create", {});
+	auto response = conn->call_synchronous_helper("Delay", "Create", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -90,7 +90,8 @@ void osn::Delay::Finalize(Napi::Env env)
 		return;
 	}
 
-	conn->call_synchronous_helper("Delay", "Destroy", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Delay", "Destroy", {ipc::value(this->uid)});
+	ValidateResponse(env, response);
 
 	this->uid = UINT64_MAX;
 }
@@ -101,7 +102,7 @@ Napi::Value osn::Delay::GetEnabled(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Delay", "GetEnabled", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Delay", "GetEnabled", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -115,7 +116,8 @@ void osn::Delay::SetEnabled(const Napi::CallbackInfo &info, const Napi::Value &v
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Delay", "SetEnabled", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("Delay", "SetEnabled", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Delay::GetDelaySec(const Napi::CallbackInfo &info)
@@ -124,7 +126,7 @@ Napi::Value osn::Delay::GetDelaySec(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Delay", "GetDelaySec", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Delay", "GetDelaySec", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -138,7 +140,8 @@ void osn::Delay::SetDelaySec(const Napi::CallbackInfo &info, const Napi::Value &
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Delay", "SetDelaySec", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	auto response = conn->call_synchronous_helper("Delay", "SetDelaySec", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Delay::GetPreserveDelay(const Napi::CallbackInfo &info)
@@ -147,7 +150,7 @@ Napi::Value osn::Delay::GetPreserveDelay(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Delay", "GetPreserveDelay", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("Delay", "GetPreserveDelay", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -161,5 +164,6 @@ void osn::Delay::SetPreserveDelay(const Napi::CallbackInfo &info, const Napi::Va
 	if (!conn)
 		return;
 
-	conn->call_synchronous_helper("Delay", "SetPreserveDelay", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	auto response = conn->call_synchronous_helper("Delay", "SetPreserveDelay", {ipc::value(this->uid), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }

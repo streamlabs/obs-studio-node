@@ -86,7 +86,7 @@ Napi::Value osn::VideoEncoder::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Create", {ipc::value(id), ipc::value(name), ipc::value(settings)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "Create", {ipc::value(id), ipc::value(name), ipc::value(settings)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -115,7 +115,8 @@ void osn::VideoEncoder::Finalize(Napi::Env env)
 		return;
 	}
 
-	conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "Finalize", {ipc::value(this->uid)});
+	ValidateResponse(env, response);
 	this->encoderInitialized = false;
 	this->uid = UINT64_MAX;
 }
@@ -126,7 +127,7 @@ Napi::Value osn::VideoEncoder::GetTypes(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetTypes", {});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetTypes", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -144,7 +145,7 @@ Napi::Value osn::VideoEncoder::GetName(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetName", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetName", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -160,7 +161,8 @@ void osn::VideoEncoder::SetName(const Napi::CallbackInfo &info, const Napi::Valu
 	if (!conn)
 		return;
 
-	conn->call("VideoEncoder", "SetName", {ipc::value(this->uid), ipc::value(name)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "SetName", {ipc::value(this->uid), ipc::value(name)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::VideoEncoder::GetType(const Napi::CallbackInfo &info)
@@ -169,7 +171,7 @@ Napi::Value osn::VideoEncoder::GetType(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetType", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetType", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -183,7 +185,7 @@ Napi::Value osn::VideoEncoder::GetActive(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetActive", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetActive", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -197,7 +199,7 @@ Napi::Value osn::VideoEncoder::GetId(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetId", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetId", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -211,7 +213,7 @@ Napi::Value osn::VideoEncoder::GetLastError(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetLastError", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetLastError", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -229,7 +231,7 @@ void osn::VideoEncoder::Release(const Napi::CallbackInfo &info)
 		return;
 
 	this->encoderInitialized = false;
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "Release", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "Release", {ipc::value(this->uid)});
 	this->uid = UINT64_MAX;
 	if (!ValidateResponse(info, response))
 		return;
@@ -247,7 +249,8 @@ void osn::VideoEncoder::Update(const Napi::CallbackInfo &info)
 	if (!conn)
 		return;
 
-	conn->call("VideoEncoder", "Update", {ipc::value(this->uid), ipc::value(jsondata)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "Update", {ipc::value(this->uid), ipc::value(jsondata)});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::VideoEncoder::GetProperties(const Napi::CallbackInfo &info)
@@ -256,7 +259,7 @@ Napi::Value osn::VideoEncoder::GetProperties(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetProperties", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetProperties", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -282,7 +285,7 @@ Napi::Value osn::VideoEncoder::GetSettings(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("VideoEncoder", "GetSettings", {ipc::value(this->uid)});
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetSettings", {ipc::value(this->uid)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

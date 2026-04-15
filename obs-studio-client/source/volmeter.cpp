@@ -69,10 +69,10 @@ Napi::Value osn::Volmeter::Create(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("Volmeter", "Create",
-									 {
-										 ipc::value(type),
-									 });
+	auto response = conn->call_synchronous_helper("Volmeter", "Create",
+						      {
+							      ipc::value(type),
+						      });
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -92,7 +92,8 @@ Napi::Value osn::Volmeter::Destroy(const Napi::CallbackInfo &info)
 
 	globalCallback::remove_volmeter(this->m_uid);
 
-	conn->call("Volmeter", "Destroy", {ipc::value(this->m_uid)});
+	auto response = conn->call_synchronous_helper("Volmeter", "Destroy", {ipc::value(this->m_uid)});
+	ValidateResponse(info, response);
 
 	return info.Env().Undefined();
 }
@@ -105,7 +106,8 @@ Napi::Value osn::Volmeter::Attach(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Volmeter", "Attach", {ipc::value(this->m_uid), ipc::value(input->sourceId)});
+	auto response = conn->call_synchronous_helper("Volmeter", "Attach", {ipc::value(this->m_uid), ipc::value(input->sourceId)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
 
@@ -115,6 +117,7 @@ Napi::Value osn::Volmeter::Detach(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->call("Volmeter", "Detach", {ipc::value(this->m_uid)});
+	auto response = conn->call_synchronous_helper("Volmeter", "Detach", {ipc::value(this->m_uid)});
+	ValidateResponse(info, response);
 	return info.Env().Undefined();
 }
