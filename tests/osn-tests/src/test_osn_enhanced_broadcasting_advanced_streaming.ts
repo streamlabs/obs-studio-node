@@ -16,7 +16,7 @@ describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     const mediaPath = path.join(path.normalize(__dirname), '..', 'media');
-    let secondContext: osn.IVideo = null;
+    let secondContext: osn.IVideo;
 
     // Initialize OBS process
     before(async() => {
@@ -28,21 +28,24 @@ describe(testName, function() {
         // Reserving user from pool
         await obs.reserveUser();
 
-        secondContext = osn.VideoFactory.create();
-        const secondVideoInfo: osn.IVideoInfo = {
-            fpsNum: 60,
-            fpsDen: 2,
-            baseWidth: 720,
-            baseHeight: 1280,
-            outputWidth: 720,
-            outputHeight: 1280,
-            outputFormat: osn.EVideoFormat.NV12,
-            colorspace: osn.EColorSpace.CS709,
-            range: osn.ERangeType.Full,
-            scaleType: osn.EScaleType.Lanczos,
-            fpsType: osn.EFPSType.Fractional
-        };
-        secondContext.video = secondVideoInfo;
+        if (!obs.isCI()) {
+            // Creating second video context for dual canvas streaming test.
+            secondContext = osn.VideoFactory.create();
+            const secondVideoInfo: osn.IVideoInfo = {
+                fpsNum: 60,
+                fpsDen: 2,
+                baseWidth: 720,
+                baseHeight: 1280,
+                outputWidth: 720,
+                outputHeight: 1280,
+                outputFormat: osn.EVideoFormat.NV12,
+                colorspace: osn.EColorSpace.CS709,
+                range: osn.ERangeType.Full,
+                scaleType: osn.EScaleType.Lanczos,
+                fpsType: osn.EFPSType.Fractional
+            };
+            secondContext.video = secondVideoInfo;
+        }
     });
 
     // Shutdown OBS process
@@ -50,7 +53,9 @@ describe(testName, function() {
         // Releasing user got from pool
         await obs.releaseUser();
 
-        secondContext.destroy();
+        if (secondContext) {
+            secondContext.destroy();
+        }
         obs.shutdown();
 
         if (hasTestFailed === true) {
