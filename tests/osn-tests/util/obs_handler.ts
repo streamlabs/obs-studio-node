@@ -552,6 +552,6 @@ export class OBSHandler {
     // is the build server environment
     isCI()
     {
-        return this.ci;
+        return this.ci || this.isDarwin();
     }
 }
