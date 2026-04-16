@@ -39,7 +39,7 @@ public:
 		sleepIntervalMS = 33;
 		workerThread = nullptr;
 	};
-	~WorkerSignals(){};
+	~WorkerSignals() {};
 
 protected:
 	bool isWorkerRunning;
@@ -88,6 +88,15 @@ protected:
 			auto conn = Controller::GetInstance().GetConnection();
 			if (conn) {
 				std::vector<ipc::value> response = conn->call_synchronous_helper(name, "Query", {ipc::value(refID)});
+				if (!response.empty()) {
+					ErrorCode firstError = (ErrorCode)response[0].value_union.ui64;
+					if (firstError == ErrorCode::InvalidReference) {
+						// This typically happens if the worker thread is orphaned.
+						std::cout << "Worker thread exiting due to Invalid reference error encountered." << std::endl;
+						isWorkerRunning = false;
+						break;
+					}
+				}
 				if ((response.size() == 5) && signalsList.size() < maximum_signals_in_queue) {
 					ErrorCode error = (ErrorCode)response[0].value_union.ui64;
 					if (error == ErrorCode::Ok) {
