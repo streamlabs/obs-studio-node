@@ -39,7 +39,7 @@ public:
 		sleepIntervalMS = 33;
 		workerThread = nullptr;
 	};
-	~WorkerSignals() {};
+	~WorkerSignals(){};
 
 protected:
 	bool isWorkerRunning;
