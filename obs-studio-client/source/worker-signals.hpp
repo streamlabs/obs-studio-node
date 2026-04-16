@@ -92,7 +92,8 @@ protected:
 					ErrorCode firstError = (ErrorCode)response[0].value_union.ui64;
 					if (firstError == ErrorCode::InvalidReference) {
 						// This typically happens if the worker thread is orphaned.
-						std::cout << "Worker thread exiting due to Invalid reference error encountered." << std::endl;
+						std::string errorMessage = response.size() > 1 ? response[1].value_str : "";
+						std::cout << "Worker thread exiting due to Invalid reference error encountered: " << errorMessage << std::endl;
 						isWorkerRunning = false;
 						break;
 					}
