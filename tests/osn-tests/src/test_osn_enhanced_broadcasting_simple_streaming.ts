@@ -45,6 +45,8 @@ describe(testName, function() {
                 fpsType: osn.EFPSType.Fractional
             };
             secondContext.video = secondVideoInfo;
+        } else {
+            logInfo(testName, 'Skip AddVideoContext. Running in CI environment, skipping creation of second video context that requires GPU');
         }
     });
 
