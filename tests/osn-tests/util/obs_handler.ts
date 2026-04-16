@@ -4,9 +4,12 @@ import { UserPoolHandler } from './user_pool_handler';
 import { CacheUploader } from '../util/cache-uploader'
 import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../util/obs_enums'
 import { sleep } from './general';
+import { loadTestEnv } from './env';
 import { v4 as uuidv4 } from 'uuid';
 const WaitQueue = require('wait-queue');
 const retryContext = require('./retry_context.ts');
+
+loadTestEnv();
 
 // Interfaces
 export interface IPerformanceState {
@@ -443,7 +446,12 @@ export class OBSHandler {
     }
 
     async getNextSignalInfo(output: string, signal: string): Promise<IOBSOutputSignalInfo> {
-        const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signal + ' signal timeout';
+        return await this.getNextSignalInfoOf(output, [signal]);
+    }
+
+    async getNextSignalInfoOf(output: string, signals: string[]): Promise<IOBSOutputSignalInfo> {
+        const signalDescription = signals.join('/');
+        const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signalDescription + ' signal timeout';
         const deadline = Date.now() + 30000;
 
         while (Date.now() < deadline) {
@@ -455,7 +463,7 @@ export class OBSHandler {
                 }),
             ]);
 
-            if (signalInfo.type === output && signalInfo.signal === signal) {
+            if (signalInfo.type === output && signals.indexOf(signalInfo.signal) >= 0) {
                 return signalInfo;
             }
 
@@ -465,7 +473,7 @@ export class OBSHandler {
 
             logWarning(
                 this.osnTestName,
-                `Skipping unexpected output signal while waiting for ${output}/${signal}: ${this.formatSignalInfo(signalInfo)}`,
+                `Skipping unexpected output signal while waiting for ${output}/${signalDescription}: ${this.formatSignalInfo(signalInfo)}`,
             );
         }
 
