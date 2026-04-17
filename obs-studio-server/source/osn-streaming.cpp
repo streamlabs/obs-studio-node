@@ -39,6 +39,43 @@ void osn::Streaming::DeleteOutput()
 	Output::DeleteOutput();
 }
 
+bool osn::Streaming::ApplyOutputSettings(obs_output_t *output, std::string &errorMessage)
+{
+	if (!output) {
+		errorMessage = "Invalid streaming output.";
+		return false;
+	}
+
+	if (!delay) {
+		errorMessage = "Invalid delay.";
+		return false;
+	}
+
+	obs_output_set_delay(output, delay->enabled ? uint32_t(delay->delaySec) : 0, delay->preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
+
+	if (!reconnect) {
+		errorMessage = "Invalid reconnect.";
+		return false;
+	}
+
+	uint32_t maxRetries = reconnect->enabled ? reconnect->maxRetries : 0;
+	obs_output_set_reconnect_settings(output, maxRetries, reconnect->retryDelay);
+
+	if (!network) {
+		errorMessage = "Invalid network.";
+		return false;
+	}
+
+	OBSDataAutoRelease settings = obs_data_create();
+	obs_data_set_string(settings, "bind_ip", network->bindIP.c_str());
+	obs_data_set_bool(settings, "dyn_bitrate", network->enableDynamicBitrate);
+	obs_data_set_bool(settings, "new_socket_loop_enabled", network->enableOptimizations);
+	obs_data_set_bool(settings, "low_latency_mode_enabled", network->enableLowLatency);
+	obs_output_update(output, settings);
+
+	return true;
+}
+
 void osn::IStreaming::GetService(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	blog(LOG_WARNING, "Function %s is deprecated", __func__);

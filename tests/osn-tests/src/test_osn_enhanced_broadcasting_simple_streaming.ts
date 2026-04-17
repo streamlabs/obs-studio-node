@@ -79,8 +79,8 @@ describe(testName, () => {
             this.skip();
         }
 
-        const configuredDelayMs = 20 * 1000;
-        const allowedTimingDriftMs = 2 * 1000;
+        const configuredDelayMs = 10 * 1000;
+        const allowedTimingDriftMs = 1 * 1000;
         const stream = osn.EnhancedBroadcastingSimpleStreamingFactory.create();
         let streamStartRequested = false;
         let scene: osn.IScene = null;

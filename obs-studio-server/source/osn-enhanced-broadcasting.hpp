@@ -20,6 +20,7 @@
 #include <obs.h>
 
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace osn {
@@ -94,6 +95,11 @@ public:
 
 		this->SetOutput(output.Get());
 		obs_output_set_service(output, multitrack_video_service);
+
+		std::string outputSettingsError;
+		if (!this->ApplyOutputSettings(output.Get(), outputSettingsError)) {
+			throw std::runtime_error(outputSettingsError);
+		}
 
 		// Register the BPM (Broadcast Performance Metrics) callback
 		obs_output_add_packet_callback(output, bpm_inject, NULL);

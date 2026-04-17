@@ -29,6 +29,7 @@
 #include "nodeobs_configManager.hpp"
 
 #include <optional>
+#include <string>
 
 namespace osn {
 class Streaming : public Output {
@@ -71,6 +72,7 @@ public:
 	bool simple;
 
 	bool isTwitchVODSupported();
+	bool ApplyOutputSettings(obs_output_t *output, std::string &errorMessage);
 	void getDelayLegacySettings();
 	void getReconnectLegacySettings();
 	void getNetworkLegacySettings();
