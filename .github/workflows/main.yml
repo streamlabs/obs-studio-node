@@ -145,7 +145,7 @@ jobs:
         # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
         id: run_tests
         timeout-minutes: 45
-        run: 'yarn run test:ci'
+        run: 'yarn run test:ci-4'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
           SLOBS_TEST_USER_POOL_TOKEN:  ${{secrets.testsUserPoolToken}}
