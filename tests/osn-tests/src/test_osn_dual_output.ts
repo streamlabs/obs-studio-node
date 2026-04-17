@@ -17,7 +17,7 @@ import { randomUUID } from 'crypto';
 
 const testName = 'osn-dual-output';
 
-describe(testName, () => {
+describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     let newSceneName = 'scene_' + randomUUID();
@@ -115,241 +115,252 @@ describe(testName, () => {
 
     it('Start Dual Output with advanced recording', async function() {
         const recording = osn.AdvancedRecordingFactory.create();
-        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MP4;
-        recording.useStreamEncoders = false;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-1');
-        recording.overwrite = false;
-        recording.noSpace = false;
-        recording.video = obs.defaultVideoContext;
-        const track1 = osn.AudioTrackFactory.create(160, 'track1');
-        osn.AudioTrackFactory.setAtIndex(track1, 1);
-        recording.signalHandler = (signal) => { obs.signals.push(signal) };
+        const recording2= osn.AdvancedRecordingFactory.create();
+        try {
+            recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MP4;
+            recording.useStreamEncoders = false;
+            recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-1');
+            recording.overwrite = false;
+            recording.noSpace = false;
+            recording.video = obs.defaultVideoContext;
+            const track1 = osn.AudioTrackFactory.create(160, 'track1');
+            osn.AudioTrackFactory.setAtIndex(track1, 1);
+            recording.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        const recording2 = osn.AdvancedRecordingFactory.create();
-        recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording2.format = ERecordingFormat.MP4;
-        recording2.useStreamEncoders = false;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
-        recording2.overwrite = false;
-        recording2.noSpace = false;
-        recording2.video = secondContext;
-        const track2 = osn.AudioTrackFactory.create(160, 'track2');
-        osn.AudioTrackFactory.setAtIndex(track2, 2);
-        recording2.signalHandler = (signal) => { obs.signals.push(signal) };
+            recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording2.format = ERecordingFormat.MP4;
+            recording2.useStreamEncoders = false;
+            recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
+            recording2.overwrite = false;
+            recording2.noSpace = false;
+            recording2.video = secondContext;
+            const track2 = osn.AudioTrackFactory.create(160, 'track2');
+            osn.AudioTrackFactory.setAtIndex(track2, 2);
+            recording2.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        recording.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            recording.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        recording2.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            recording2.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1500);
+            await sleep(1500);
 
-        recording.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            recording.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        recording2.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
-
-        const recordingEncoder = recording.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording);
-        recordingEncoder.release();
-
-        const recording2Encoder = recording2.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording2);
-        recording2Encoder.release();
+            recording2.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+        }
+        finally {
+            if (recording) {
+                const recordingEncoder = recording.videoEncoder;
+                osn.AdvancedRecordingFactory.destroy(recording);
+                recordingEncoder.release();
+            }
+            if (recording2) {
+                const recording2Encoder = recording2.videoEncoder;
+                osn.AdvancedRecordingFactory.destroy(recording2);
+                recording2Encoder.release();
+            }
+        }
     });
 
     it('Start Dual Output with recording and scene items', async function() {
         const returnSource = osn.Global.getOutputSource(0);
 
         const recording = osn.AdvancedRecordingFactory.create();
-        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MP4;
-        recording.useStreamEncoders = false;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-3');
-        recording.overwrite = false;
-        recording.noSpace = false;
-        recording.video = obs.defaultVideoContext;
-        const track1 = osn.AudioTrackFactory.create(160, 'track1');
-        osn.AudioTrackFactory.setAtIndex(track1, 1);
-        recording.signalHandler = (signal) => { obs.signals.push(signal) };
-
-        // Getting scene
-        let secondSceneName = 'scene_' + randomUUID();
-        const scene = osn.SceneFactory.create(secondSceneName);
-        osn.Global.setOutputSource(0, scene);
-
-        // Getting source
-        let settings: ISettings = {};
-        settings = inputSettings.colorSource;
-        settings['height'] = 500;
-        settings['width'] = 200;
-        let secondSourceName = EOBSInputTypes.ColorSource.toString() + '_' + randomUUID();
-        const source = osn.InputFactory.create(EOBSInputTypes.ColorSource, secondSourceName, settings);
-
-        // Adding input source to scene to create scene item
-        const sceneItem1 = scene.add(source);
-        sceneItem1.video = obs.defaultVideoContext;
-        sceneItem1.visible = true;
-        let position1: IVec2 = { x: 1100, y: 200 };
-        sceneItem1.position = position1;
-
-        const sceneItem2 = scene.add(source);
-        sceneItem2.video = secondContext;
-        sceneItem2.visible = true;
-        let position2: IVec2 = { x: 500, y: 1200 };
-        sceneItem2.position = position2;
-
         const recording2 = osn.AdvancedRecordingFactory.create();
-        recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording2.format = ERecordingFormat.MP4;
-        recording2.useStreamEncoders = false;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-4');
-        recording2.overwrite = false;
-        recording2.noSpace = false;
-        recording2.video = secondContext;
-        const track2 = osn.AudioTrackFactory.create(160, 'track2');
-        osn.AudioTrackFactory.setAtIndex(track2, 2);
-        recording2.signalHandler = (signal) => { obs.signals.push(signal) };
+        try {
+            recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MP4;
+            recording.useStreamEncoders = false;
+            recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-3');
+            recording.overwrite = false;
+            recording.noSpace = false;
+            recording.video = obs.defaultVideoContext;
+            const track1 = osn.AudioTrackFactory.create(160, 'track1');
+            osn.AudioTrackFactory.setAtIndex(track1, 1);
+            recording.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        recording.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            // Getting scene
+            let secondSceneName = 'scene_' + randomUUID();
+            const scene = osn.SceneFactory.create(secondSceneName);
+            osn.Global.setOutputSource(0, scene);
 
-        recording2.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            // Getting source
+            let settings: ISettings = {};
+            settings = inputSettings.colorSource;
+            settings['height'] = 500;
+            settings['width'] = 200;
+            let secondSourceName = EOBSInputTypes.ColorSource.toString() + '_' + randomUUID();
+            const source = osn.InputFactory.create(EOBSInputTypes.ColorSource, secondSourceName, settings);
 
-        await sleep(1500);
+            // Adding input source to scene to create scene item
+            const sceneItem1 = scene.add(source);
+            sceneItem1.video = obs.defaultVideoContext;
+            sceneItem1.visible = true;
+            let position1: IVec2 = { x: 1100, y: 200 };
+            sceneItem1.position = position1;
 
-        recording.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            const sceneItem2 = scene.add(source);
+            sceneItem2.video = secondContext;
+            sceneItem2.visible = true;
+            let position2: IVec2 = { x: 500, y: 1200 };
+            sceneItem2.position = position2;
 
-        recording2.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording2.format = ERecordingFormat.MP4;
+            recording2.useStreamEncoders = false;
+            recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-4');
+            recording2.overwrite = false;
+            recording2.noSpace = false;
+            recording2.video = secondContext;
+            const track2 = osn.AudioTrackFactory.create(160, 'track2');
+            osn.AudioTrackFactory.setAtIndex(track2, 2);
+            recording2.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        const recordingEncoder = recording.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording);
-        recordingEncoder.release();
+            recording.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        const recording2Encoder = recording2.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording2);
-        recording2Encoder.release();
+            recording2.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+
+            await sleep(1500);
+
+            recording.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+
+            recording2.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+
+            sceneItem1.source.release();
+            sceneItem1.remove();
+            sceneItem2.remove();
+            scene.release();
+        }
+        finally {
+            const recordingEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
+            recordingEncoder.release();
+
+            const recording2Encoder = recording2.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording2);
+            recording2Encoder.release();
+        }
 
         osn.Global.setOutputSource(0, returnSource);
-
-        sceneItem1.source.release();
-        sceneItem1.remove();
-        sceneItem2.remove();
-        scene.release();
     });
 
     it('Start Dual Output with advanced recording and audio scene items', async function() {
         const returnSource = osn.Global.getOutputSource(0);
 
         const recording = osn.AdvancedRecordingFactory.create();
-        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MP4;
-        recording.useStreamEncoders = false;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-5');
-        recording.overwrite = false;
-        recording.noSpace = false;
-        recording.mixer = 1;
-        recording.video = obs.defaultVideoContext;
-        const track1 = osn.AudioTrackFactory.create(160, 'track1');
-        osn.AudioTrackFactory.setAtIndex(track1, 1);
-        recording.signalHandler = (signal) => { obs.signals.push(signal) };
-
         const recording2 = osn.AdvancedRecordingFactory.create();
-        recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording2.format = ERecordingFormat.MP4;
-        recording2.useStreamEncoders = false;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-6');
-        recording2.overwrite = false;
-        recording2.noSpace = false;
-        recording2.mixer = 2;
-        recording2.video = secondContext;
-        const track2 = osn.AudioTrackFactory.create(160, 'track2');
-        osn.AudioTrackFactory.setAtIndex(track2, 2);
-        recording2.signalHandler = (signal) => { obs.signals.push(signal) };
+        try {
+            recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MP4;
+            recording.useStreamEncoders = false;
+            recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-5');
+            recording.overwrite = false;
+            recording.noSpace = false;
+            recording.mixer = 1;
+            recording.video = obs.defaultVideoContext;
+            const track1 = osn.AudioTrackFactory.create(160, 'track1');
+            osn.AudioTrackFactory.setAtIndex(track1, 1);
+            recording.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        // Getting scene
-        let secondSceneName = 'scene_' + randomUUID();
-        const scene = osn.SceneFactory.create(secondSceneName);
-        osn.Global.setOutputSource(0, scene);
+            recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording2.format = ERecordingFormat.MP4;
+            recording2.useStreamEncoders = false;
+            recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-6');
+            recording2.overwrite = false;
+            recording2.noSpace = false;
+            recording2.mixer = 2;
+            recording2.video = secondContext;
+            const track2 = osn.AudioTrackFactory.create(160, 'track2');
+            osn.AudioTrackFactory.setAtIndex(track2, 2);
+            recording2.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        // Getting source
-        let settings: ISettings = {};
-        settings = inputSettings.ffmpegSource;
-        settings['volume'] = 100;
-        settings['local_file'] = path.join( media_path, "sleek.mp3" );
-        settings['looping'] = true;
-        let firstSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
-        const firstsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, firstSourceName, settings);
+            // Getting scene
+            let secondSceneName = 'scene_' + randomUUID();
+            const scene = osn.SceneFactory.create(secondSceneName);
+            osn.Global.setOutputSource(0, scene);
 
-        // Adding input source to scene to create scene item
-        const sceneItem1 = scene.add(firstsource);
-        sceneItem1.video = obs.defaultVideoContext;
-        sceneItem1.visible = true;
-        let position1: IVec2 = { x: 1100, y: 200 };
-        sceneItem1.position = position1;
+            // Getting source
+            let settings: ISettings = {};
+            settings = inputSettings.ffmpegSource;
+            settings['volume'] = 100;
+            settings['local_file'] = path.join( media_path, "sleek.mp3" );
+            settings['looping'] = true;
+            let firstSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
+            const firstsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, firstSourceName, settings);
 
-        settings['local_file'] = path.join( media_path, "echoes.mp3" );
-        let secondSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
-        const secondsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, secondSourceName, settings);
+            // Adding input source to scene to create scene item
+            const sceneItem1 = scene.add(firstsource);
+            sceneItem1.video = obs.defaultVideoContext;
+            sceneItem1.visible = true;
+            let position1: IVec2 = { x: 1100, y: 200 };
+            sceneItem1.position = position1;
 
-        const sceneItem2 = scene.add(secondsource);
-        sceneItem2.video = secondContext;
-        sceneItem2.visible = true;
-        let position2: IVec2 = { x: 500, y: 1200 };
-        sceneItem2.position = position2;
+            settings['local_file'] = path.join( media_path, "echoes.mp3" );
+            let secondSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
+            const secondsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, secondSourceName, settings);
 
-        await sleep(1500);
+            const sceneItem2 = scene.add(secondsource);
+            sceneItem2.video = secondContext;
+            sceneItem2.visible = true;
+            let position2: IVec2 = { x: 500, y: 1200 };
+            sceneItem2.position = position2;
 
-        recording.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            await sleep(1500);
 
-        recording2.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            recording.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1500);
+            recording2.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        recording.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            await sleep(1500);
 
-        recording2.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            recording.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        const recordingEncoder = recording.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording);
+            recording2.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        const recording2Encoder = recording2.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording2);
+            osn.Global.setOutputSource(0, returnSource);
 
-        osn.Global.setOutputSource(0, returnSource);
+            sceneItem1.source.release();
+            sceneItem1.remove();
 
-        recordingEncoder.release();
-        recording2Encoder.release();
+            sceneItem2.source.release();
+            sceneItem2.remove();
 
-        sceneItem1.source.release();
-        sceneItem1.remove();
+            scene.release();
+        }
+        finally {
+            const recordingEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
 
-        sceneItem2.source.release();
-        sceneItem2.remove();
-
-        scene.release();
+            const recording2Encoder = recording2.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording2);
+            recordingEncoder.release();
+            recording2Encoder.release();
+        }
     });
 
 
@@ -357,108 +368,109 @@ describe(testName, () => {
         const returnSource = osn.Global.getOutputSource(0);
 
         const recording = osn.SimpleRecordingFactory.create();
-        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MP4;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-7');
-        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-1");
-        recording.audioEncoder.name = 'audio-encoder-test-recording-1';
-        recording.audioEncoder.bitrate = 160;
-        recording.overwrite = false;
-        recording.noSpace = false;
-        recording.quality = ERecordingQuality.HighQuality;
-        recording.video = obs.defaultVideoContext;
-        const track1 = osn.AudioTrackFactory.create(160, 'track1');
-        osn.AudioTrackFactory.setAtIndex(track1, 1);
-        recording.signalHandler = (signal) => { obs.signals.push(signal) };
-
         const recording2 = osn.SimpleRecordingFactory.create();
-        recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording2.format = ERecordingFormat.MP4;
-        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-8');
-        recording2.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-2");
-        recording2.audioEncoder.name = 'audio-encoder-test-recording-2';
-        recording2.audioEncoder.bitrate = 160;
-        recording2.overwrite = false;
-        recording2.noSpace = false;
-        recording2.quality = ERecordingQuality.HighQuality;
-        recording2.video = secondContext;
-        const track2 = osn.AudioTrackFactory.create(160, 'track2');
-        osn.AudioTrackFactory.setAtIndex(track2, 2);
-        recording2.signalHandler = (signal) => { obs.signals.push(signal) };
+        try {
+            recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MP4;
+            recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-7');
+            recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-1");
+            recording.audioEncoder.name = 'audio-encoder-test-recording-1';
+            recording.audioEncoder.bitrate = 160;
+            recording.overwrite = false;
+            recording.noSpace = false;
+            recording.quality = ERecordingQuality.HighQuality;
+            recording.video = obs.defaultVideoContext;
+            const track1 = osn.AudioTrackFactory.create(160, 'track1');
+            osn.AudioTrackFactory.setAtIndex(track1, 1);
+            recording.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        // Getting scene
-        let secondSceneName = 'scene_' + randomUUID();
-        const scene = osn.SceneFactory.create(secondSceneName);
-        osn.Global.setOutputSource(0, scene);
+            recording2.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording2.format = ERecordingFormat.MP4;
+            recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-8');
+            recording2.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-test-recording-2");
+            recording2.audioEncoder.name = 'audio-encoder-test-recording-2';
+            recording2.audioEncoder.bitrate = 160;
+            recording2.overwrite = false;
+            recording2.noSpace = false;
+            recording2.quality = ERecordingQuality.HighQuality;
+            recording2.video = secondContext;
+            const track2 = osn.AudioTrackFactory.create(160, 'track2');
+            osn.AudioTrackFactory.setAtIndex(track2, 2);
+            recording2.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        // Getting source
-        let settings: ISettings = {};
-        settings = inputSettings.ffmpegSource;
-        settings['volume'] = 100;
-        settings['local_file'] = path.join( media_path, "sleek.mp3" );
-        settings['looping'] = true;
-        let firstSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
-        const firstsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, firstSourceName, settings);
+            // Getting scene
+            let secondSceneName = 'scene_' + randomUUID();
+            const scene = osn.SceneFactory.create(secondSceneName);
+            osn.Global.setOutputSource(0, scene);
 
-        // Adding input source to scene to create scene item
-        const sceneItem1 = scene.add(firstsource);
-        sceneItem1.video = obs.defaultVideoContext;
-        sceneItem1.visible = true;
-        let position1: IVec2 = { x: 1100, y: 200 };
-        sceneItem1.position = position1;
+            // Getting source
+            let settings: ISettings = {};
+            settings = inputSettings.ffmpegSource;
+            settings['volume'] = 100;
+            settings['local_file'] = path.join( media_path, "sleek.mp3" );
+            settings['looping'] = true;
+            let firstSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
+            const firstsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, firstSourceName, settings);
 
-        settings['local_file'] = path.join( media_path, "echoes.mp3" );
-        let secondSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
-        const secondsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, secondSourceName, settings);
+            // Adding input source to scene to create scene item
+            const sceneItem1 = scene.add(firstsource);
+            sceneItem1.video = obs.defaultVideoContext;
+            sceneItem1.visible = true;
+            let position1: IVec2 = { x: 1100, y: 200 };
+            sceneItem1.position = position1;
 
-        const sceneItem2 = scene.add(secondsource);
-        sceneItem2.video = secondContext;
-        sceneItem2.visible = true;
-        let position2: IVec2 = { x: 500, y: 1200 };
-        sceneItem2.position = position2;
+            settings['local_file'] = path.join( media_path, "echoes.mp3" );
+            let secondSourceName = EOBSInputTypes.FFMPEGSource.toString() + '_' + randomUUID();
+            const secondsource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, secondSourceName, settings);
 
-        await sleep(1500);
+            const sceneItem2 = scene.add(secondsource);
+            sceneItem2.video = secondContext;
+            sceneItem2.visible = true;
+            let position2: IVec2 = { x: 500, y: 1200 };
+            sceneItem2.position = position2;
 
-        recording.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            await sleep(1500);
 
-        recording2.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            recording.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1500);
+            recording2.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        recording.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            await sleep(1500);
 
-        recording2.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            recording.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        const recordingEncoder = recording.videoEncoder;
-        const recordingAudioEncoder = recording.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
+            recording2.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        const recording2Encoder = recording2.videoEncoder;
-        const recording2AudioEncoder = recording2.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording2);
+            osn.Global.setOutputSource(0, returnSource);
 
-        osn.Global.setOutputSource(0, returnSource);
+            sceneItem1.source.release();
+            sceneItem1.remove();
 
-        sceneItem1.source.release();
-        sceneItem1.remove();
+            sceneItem2.source.release();
+            sceneItem2.remove();
 
-        sceneItem2.source.release();
-        sceneItem2.remove();
+            scene.release();
+        } finally {
+            const recordingEncoder = recording.videoEncoder;
+            const recordingAudioEncoder = recording.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
 
-        scene.release();
-
-        recordingEncoder.release();
-        recording2Encoder.release();
-        recordingAudioEncoder.release();
-        recording2AudioEncoder.release();
+            const recording2Encoder = recording2.videoEncoder;
+            const recording2AudioEncoder = recording2.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording2);
+            recordingEncoder.release();
+            recording2Encoder.release();
+            recordingAudioEncoder.release();
+            recording2AudioEncoder.release();
+        }
     });
 
     it('Start Dual Output with legacy streaming to two services', async function() {
