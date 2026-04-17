@@ -234,11 +234,13 @@ describe(testName, function() {
             await sleep(1500);
 
             recording.stop();
+            logInfo(testName, 'Waiting for recording output signals for first recording');
             await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
             await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
             await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
             recording2.stop();
+            logInfo(testName, 'Waiting for recording output signals for second recording');
             await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
             await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
             await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
@@ -247,6 +249,10 @@ describe(testName, function() {
             sceneItem1.remove();
             sceneItem2.remove();
             scene.release();
+        }
+        catch (error) {
+            logInfo(testName, 'Error occurred during test execution: ' + error);
+            throw error;
         }
         finally {
             const recordingEncoder = recording.videoEncoder;
@@ -351,6 +357,10 @@ describe(testName, function() {
             sceneItem2.remove();
 
             scene.release();
+        }
+        catch (error) {
+            logInfo(testName, 'Error occurred during test execution: ' + error);
+            throw error;
         }
         finally {
             const recordingEncoder = recording.videoEncoder;
@@ -458,7 +468,11 @@ describe(testName, function() {
             sceneItem2.remove();
 
             scene.release();
-        } finally {
+        } catch (error) {
+            logInfo(testName, 'Error occurred during test execution: ' + error);
+            throw error;
+        }
+        finally {
             const recordingEncoder = recording.videoEncoder;
             const recordingAudioEncoder = recording.audioEncoder;
             osn.SimpleRecordingFactory.destroy(recording);
