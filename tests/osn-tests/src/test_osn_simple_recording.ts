@@ -13,7 +13,7 @@ import path = require('path');
 
 const testName = 'osn-simple-recording';
 
-describe(testName, () => {
+describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     // Initialize OBS process
