@@ -3185,6 +3185,103 @@ void OBS_service::DestroyVirtualCameraScene()
 	vCamSourceSceneItem = nullptr;
 }
 
+static obs_video_info *GetPrimaryVCamCanvas()
+{
+	obs_video_info *primary = nullptr;
+	osn::Video::Manager::GetInstance().for_each([&primary](obs_video_info *canvas) {
+		if (!primary)
+			primary = canvas;
+	});
+	return primary;
+}
+
+// Resolve the scene to render for SceneOutput. Falls back to the current program
+// scene when the configured name is missing (the client may send a display label
+// for the default selection).
+static OBSSourceAutoRelease ResolveVCamScene(const std::string &name)
+{
+	OBSSourceAutoRelease s = obs_get_source_by_name(name.c_str());
+	if (s)
+		return s;
+
+	OBSSourceAutoRelease transition = obs_get_output_source(0);
+	if (transition)
+		s = obs_transition_get_active_source(transition);
+	blog(LOG_INFO, "VCam SceneOutput: scene '%s' not found, falling back to program scene (found=%d)", name.c_str(), !!s);
+	return s;
+}
+
+// Resolve the source to render for SourceOutput. Falls back to the first
+// non-scene item in the program scene when the configured name is missing.
+static OBSSourceAutoRelease ResolveVCamSource(const std::string &name)
+{
+	OBSSourceAutoRelease s = obs_get_source_by_name(name.c_str());
+	if (s)
+		return s;
+
+	OBSSourceAutoRelease transition = obs_get_output_source(0);
+	OBSSourceAutoRelease programSrc;
+	if (transition)
+		programSrc = obs_transition_get_active_source(transition);
+	obs_scene_t *programScene = programSrc ? obs_scene_from_source(programSrc) : nullptr;
+	if (!programScene)
+		return s;
+
+	obs_source_t *result = nullptr;
+	obs_scene_enum_items(
+		programScene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *data) -> bool {
+			obs_source_t *itemSrc = obs_sceneitem_get_source(item);
+			if (itemSrc && !obs_scene_from_source(itemSrc)) {
+				*static_cast<obs_source_t **>(data) = obs_source_get_ref(itemSrc);
+				return false;
+			}
+			return true;
+		},
+		&result);
+
+	s = result;
+	blog(LOG_INFO, "VCam SourceOutput: source '%s' not found, falling back to program scene source (found=%d)", name.c_str(), !!s);
+	return s;
+}
+
+// Copy each scene item from `userScene` into `wrapper`, preserving transform,
+// crop and visibility. When a primary canvas is known, items from other canvases
+// (dual output) are skipped so we render only the active canvas.
+static void CopySceneItemsToWrapper(obs_scene_t *userScene, obs_scene_t *wrapper, obs_video_info *primaryCanvas)
+{
+	struct CopyCtx {
+		obs_scene_t *wrapper;
+		obs_video_info *canvas;
+	};
+	CopyCtx ctx = {wrapper, primaryCanvas};
+
+	obs_scene_enum_items(
+		userScene,
+		[](obs_scene_t *, obs_sceneitem_t *item, void *data) -> bool {
+			auto *c = static_cast<CopyCtx *>(data);
+			if (c->canvas && obs_sceneitem_get_canvas(item) != c->canvas)
+				return true;
+
+			obs_source_t *itemSource = obs_sceneitem_get_source(item);
+			obs_sceneitem_t *newItem = obs_scene_add(c->wrapper, itemSource);
+			if (!newItem)
+				return true;
+
+			struct obs_transform_info info;
+			obs_sceneitem_get_info2(item, &info);
+			obs_sceneitem_set_info2(newItem, &info);
+
+			struct obs_sceneitem_crop crop;
+			obs_sceneitem_get_crop(item, &crop);
+			obs_sceneitem_set_crop(newItem, &crop);
+
+			obs_sceneitem_set_visible(newItem, obs_sceneitem_visible(item));
+			return true;
+		},
+		&ctx);
+}
+
 void OBS_service::UpdateVirtualCamOutputSource()
 {
 	if (!vcamEnabled || !virtualCamView)
@@ -3197,17 +3294,34 @@ void OBS_service::UpdateVirtualCamOutputSource()
 	case VCamOutputType::ProgramView:
 		DestroyVirtualCameraScene();
 		return;
-	case VCamOutputType::PreviewOutput: {
-		// is not supported yet (Studio Mode VCam)
+	case VCamOutputType::PreviewOutput:
+		// Studio Mode VCam — not supported yet
+		break;
+	case VCamOutputType::SceneOutput: {
+		OBSSourceAutoRelease s = ResolveVCamScene(vcamConfig.scene);
+		obs_scene_t *userScene = s ? obs_scene_from_source(s) : nullptr;
+		if (!userScene) {
+			blog(LOG_WARNING, "VCam SceneOutput: no usable scene for '%s'", vcamConfig.scene.c_str());
+			DestroyVirtualCameraScene();
+			break;
+		}
+
+		if (!vCamSourceScene) {
+			vCamSourceScene = obs_scene_create_private("vcam_scene");
+			obs_activate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
+		}
+
+		source = obs_source_get_ref(obs_scene_get_source(vCamSourceScene));
+		CopySceneItemsToWrapper(userScene, vCamSourceScene, GetPrimaryVCamCanvas());
 		break;
 	}
-	case VCamOutputType::SceneOutput:
-		DestroyVirtualCameraScene();
-		source = obs_get_source_by_name(vcamConfig.scene.c_str());
-		obs_activate_scene_on_backstage(source);
-		break;
-	case VCamOutputType::SourceOutput:
-		OBSSourceAutoRelease s = obs_get_source_by_name(vcamConfig.source.c_str());
+	case VCamOutputType::SourceOutput: {
+		OBSSourceAutoRelease s = ResolveVCamSource(vcamConfig.source);
+		if (!s) {
+			blog(LOG_WARNING, "VCam SourceOutput: source '%s' not found and no fallback available", vcamConfig.source.c_str());
+			DestroyVirtualCameraScene();
+			break;
+		}
 
 		if (!vCamSourceScene) {
 			vCamSourceScene = obs_scene_create_private("vcam_source");
@@ -3216,14 +3330,13 @@ void OBS_service::UpdateVirtualCamOutputSource()
 
 		source = obs_source_get_ref(obs_scene_get_source(vCamSourceScene));
 
-		if (vCamSourceSceneItem && (obs_sceneitem_get_source(vCamSourceSceneItem) != s)) {
+		if (vCamSourceSceneItem && obs_sceneitem_get_source(vCamSourceSceneItem) != s) {
 			obs_sceneitem_remove(vCamSourceSceneItem);
 			vCamSourceSceneItem = nullptr;
 		}
 
 		if (!vCamSourceSceneItem) {
 			vCamSourceSceneItem = obs_scene_add(vCamSourceScene, s);
-
 			obs_sceneitem_set_bounds_type(vCamSourceSceneItem, OBS_BOUNDS_SCALE_INNER);
 			obs_sceneitem_set_bounds_alignment(vCamSourceSceneItem, OBS_ALIGN_CENTER);
 
@@ -3235,44 +3348,46 @@ void OBS_service::UpdateVirtualCamOutputSource()
 		}
 		break;
 	}
+	}
 
 	OBSSourceAutoRelease current = obs_view_get_source(virtualCamView, 0);
-	if (source != current) {
+	if (source != current)
 		obs_view_set_source(virtualCamView, 0, source);
-	}
 }
 
 void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 {
-	blog(LOG_INFO, "StartVirtualCam");
-
 	if (!virtualCam) {
 		virtualCam = obs_output_create(VIRTUAL_CAM_ID, "Virtual Webcam", nullptr, nullptr);
 		vcamEnabled = (obs_get_output_flags(VIRTUAL_CAM_ID) & OBS_OUTPUT_VIDEO) != 0;
 	}
 
-	if (VirtualCamActive()) {
+	if (VirtualCamActive())
 		return;
-	}
 
-	if (!vcamEnabled) {
+	if (!vcamEnabled)
 		return;
-	}
 
 	const bool typeIsProgram = vcamConfig.type == VCamOutputType::ProgramView;
 
-	if (!virtualCamView && !typeIsProgram) {
+	if (!virtualCamView && !typeIsProgram)
 		virtualCamView = obs_view_create();
-	}
-
-	if (vCamSourceScene) {
-		obs_activate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
-	}
 
 	UpdateVirtualCamOutputSource();
 
 	if (!virtualCamVideo) {
-		virtualCamVideo = typeIsProgram ? obs_get_video() : obs_view_add(virtualCamView);
+		if (typeIsProgram) {
+			// In multi-canvas builds obs_get_video() is empty; pull the mix
+			// from the primary canvas instead.
+			if (obs_video_info *primaryCanvas = GetPrimaryVCamCanvas()) {
+				if (obs_core_video_mix_t *mix = obs_video_mix_get(primaryCanvas, OBS_MAIN_VIDEO_RENDERING))
+					virtualCamVideo = obs_video_mix_get_video(mix);
+			}
+			if (!virtualCamVideo)
+				virtualCamVideo = obs_get_video();
+		} else {
+			virtualCamVideo = obs_view_add(virtualCamView);
+		}
 
 		if (!virtualCamVideo) {
 			PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to create virtual camera video");
@@ -3284,6 +3399,7 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 	bool success = obs_output_start(virtualCam);
 	if (!success) {
 		const char *error = obs_output_get_last_error(virtualCam);
+		blog(LOG_ERROR, "StartVirtualCam: output start failed: %s", error ? error : "(null)");
 		DestroyVirtualCamView();
 		PRETTY_ERROR_RETURN(ErrorCode::Error, error);
 	}
@@ -3316,17 +3432,13 @@ void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, cons
 
 void OBS_service::StopVirtualCam()
 {
-	blog(LOG_INFO, "StopVirtualCam");
-
 	virtualCamActive = false;
 
-	if (vCamSourceScene) {
+	if (vCamSourceScene)
 		obs_deactivate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
-	}
 
-	if (vcamEnabled) {
+	if (vcamEnabled)
 		obs_output_stop(virtualCam);
-	}
 }
 
 void OBS_service::OBS_service_stopVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -3347,12 +3459,7 @@ void OBS_service::OBS_service_stopVirtualCam(void *data, const int64_t id, const
 
 void OBS_service::DeactivateSources()
 {
-	if (vcamConfig.type == VCamOutputType::SceneOutput) {
-		OBSSourceAutoRelease source = obs_get_source_by_name(vcamConfig.scene.c_str());
-		if (source) {
-			obs_deactivate_scene_on_backstage(source);
-		}
-	}
+	DestroyVirtualCameraScene();
 }
 
 void OBS_service::OBS_service_updateVirtualCam(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
