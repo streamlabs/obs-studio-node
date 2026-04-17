@@ -544,8 +544,8 @@ export class OBSHandler {
     }
 
     removeSourceMessageListener() {
-        osn.NodeObs.RegisterSourceCallback(null);
-        osn.NodeObs.RegisterSourceMessageCallback(null);
+        osn.NodeObs.RemoveSourceCallback();
+        osn.NodeObs.RemoveSourceMessageCallback();
     }
 
     isDarwin()
