@@ -52,59 +52,63 @@ describe(testName, function() {
 
     it('Create simple recording', async () => {
         const recording = osn.SimpleRecordingFactory.create();
-        expect(recording).to.not.equal(
-            undefined, "Error while creating the simple recording output");
+        try {
+            expect(recording).to.not.equal(
+                undefined, "Error while creating the simple recording output");
 
-        expect(recording.path).to.equal(
-            '', "Invalid path default value");
-        expect(recording.format).to.equal(
-            ERecordingFormat.MP4, "Invalid format default value");
-        expect(recording.fileFormat).to.equal(
-            '%CCYY-%MM-%DD %hh-%mm-%ss', "Invalid fileFormat default value");
-        expect(recording.overwrite).to.equal(
-            false, "Invalid overwrite default value");
-        expect(recording.noSpace).to.equal(
-            false, "Invalid noSpace default value");
-        expect(recording.muxerSettings).to.equal(
-            '', "Invalid muxerSettings default value");
-        expect(recording.quality).to.equal(
-            osn.ERecordingQuality.Stream, "Invalid quality default value");
-        expect(recording.lowCPU).to.equal(
-            false, "Invalid lowCPU default value");
-        
-        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MOV;
-        recording.quality = ERecordingQuality.HighQuality;
-        recording.video = obs.defaultVideoContext;
-        recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-1');
-        recording.lowCPU = true;
-        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
-        recording.overwrite = true;
-        recording.noSpace = false;
+            expect(recording.path).to.equal(
+                '', "Invalid path default value");
+            expect(recording.format).to.equal(
+                ERecordingFormat.MP4, "Invalid format default value");
+            expect(recording.fileFormat).to.equal(
+                '%CCYY-%MM-%DD %hh-%mm-%ss', "Invalid fileFormat default value");
+            expect(recording.overwrite).to.equal(
+                false, "Invalid overwrite default value");
+            expect(recording.noSpace).to.equal(
+                false, "Invalid noSpace default value");
+            expect(recording.muxerSettings).to.equal(
+                '', "Invalid muxerSettings default value");
+            expect(recording.quality).to.equal(
+                osn.ERecordingQuality.Stream, "Invalid quality default value");
+            expect(recording.lowCPU).to.equal(
+                false, "Invalid lowCPU default value");
+            
+            recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MOV;
+            recording.quality = ERecordingQuality.HighQuality;
+            recording.video = obs.defaultVideoContext;
+            recording.videoEncoder =
+                osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-1');
+            recording.lowCPU = true;
+            recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
+            recording.overwrite = true;
+            recording.noSpace = false;
 
-        expect(recording.path).to.equal(
-            path.join(path.normalize(__dirname), '..', 'osnData'), "Invalid path value");
-        expect(recording.format).to.equal(
-            ERecordingFormat.MOV, "Invalid format value");
-        expect(recording.quality).to.equal(
-            osn.ERecordingQuality.HighQuality, "Invalid quality value");
-        expect(recording.lowCPU).to.equal(
-            true, "Invalid lowCPU value");
-        expect(recording.overwrite).to.equal(
-            true, "Invalid overwrite value");
-        expect(recording.noSpace).to.equal(
-            false, "Invalid noSpace value");
-
-        const videoEncoder = recording.videoEncoder;
-        const audioEncoder = recording.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
-        videoEncoder.release();
-        audioEncoder.release();
+            expect(recording.path).to.equal(
+                path.join(path.normalize(__dirname), '..', 'osnData'), "Invalid path value");
+            expect(recording.format).to.equal(
+                ERecordingFormat.MOV, "Invalid format value");
+            expect(recording.quality).to.equal(
+                osn.ERecordingQuality.HighQuality, "Invalid quality value");
+            expect(recording.lowCPU).to.equal(
+                true, "Invalid lowCPU value");
+            expect(recording.overwrite).to.equal(
+                true, "Invalid overwrite value");
+            expect(recording.noSpace).to.equal(
+                false, "Invalid noSpace value");
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            const audioEncoder = recording.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
+            videoEncoder.release();
+            audioEncoder.release();
+        }
     });
 
     it('Start simple recording - Stream', async function () {
         const recording = osn.SimpleRecordingFactory.create();
+        const stream = osn.SimpleStreamingFactory.create();
+        try {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.quality = ERecordingQuality.Stream;
@@ -114,7 +118,6 @@ describe(testName, function() {
         recording.video = obs.defaultVideoContext;
         recording.signalHandler = (signal) => {obs.signals.push(signal)};
 
-        const stream = osn.SimpleStreamingFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-stream-1');
@@ -228,17 +231,19 @@ describe(testName, function() {
             EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        const streamEncoder = stream.videoEncoder;
-        const audioEncoder = stream.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
-        osn.SimpleStreamingFactory.destroy(stream);
-        streamEncoder.release();
-        audioEncoder.release();
+        } finally {
+            const streamEncoder = stream.videoEncoder;
+            const audioEncoder = stream.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
+            osn.SimpleStreamingFactory.destroy(stream);
+            if (streamEncoder) streamEncoder.release();
+            if (audioEncoder) audioEncoder.release();
+        }
     });
 
     it('Start simple recording - HighQuality', async function () {
         const recording = osn.SimpleRecordingFactory.create();
+        try {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.quality = ERecordingQuality.HighQuality;
@@ -302,12 +307,13 @@ describe(testName, function() {
             EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        const videoEncoder = recording.videoEncoder;
-        const audioEncoder = recording.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
-        videoEncoder.release();
-        audioEncoder.release();
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            const audioEncoder = recording.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
+            videoEncoder.release();
+            audioEncoder.release();
+        }
     });
 
     it('Start simple recording - mpegts', async function () {
@@ -321,202 +327,206 @@ describe(testName, function() {
       ];
       for (const format of formats) {
         const recording = osn.SimpleRecordingFactory.create();
+        try {
+            recording.path = path.join(path.normalize(__dirname), "..", "osnData");
+            recording.format = format as ERecordingFormat;
+            recording.quality = ERecordingQuality.HighQuality;
+            recording.video = obs.defaultVideoContext;
+            recording.videoEncoder = osn.VideoEncoderFactory.create(
+            "obs_x264",
+            `video-encoder-recording-${format}`
+            );
+            recording.lowCPU = false;
+            recording.audioEncoder = osn.AudioEncoderFactory.create(
+            "ffmpeg_aac",
+            `audio-encoder-simple-recording-${format}`
+            );
+            recording.overwrite = false;
+            recording.noSpace = false;
+            recording.signalHandler = (signal) => obs.signals.push(signal);
 
-        recording.path = path.join(path.normalize(__dirname), "..", "osnData");
-        recording.format = format as ERecordingFormat;
-        recording.quality = ERecordingQuality.HighQuality;
-        recording.video = obs.defaultVideoContext;
-        recording.videoEncoder = osn.VideoEncoderFactory.create(
-          "obs_x264",
-          `video-encoder-recording-${format}`
-        );
-        recording.lowCPU = false;
-        recording.audioEncoder = osn.AudioEncoderFactory.create(
-          "ffmpeg_aac",
-          `audio-encoder-simple-recording-${format}`
-        );
-        recording.overwrite = false;
-        recording.noSpace = false;
-        recording.signalHandler = (signal) => obs.signals.push(signal);
+            /* ---------- start ---------- */
+            recording.start();
 
-        /* ---------- start ---------- */
-        recording.start();
+            let signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording,
+            EOBSOutputSignal.Start
+            );
 
-        let signalInfo = await obs.getNextSignalInfo(
-          EOBSOutputType.Recording,
-          EOBSOutputSignal.Start
-        );
+            if (signalInfo.signal === EOBSOutputSignal.Stop) {
+            throw Error(
+                GetErrorMessage(
+                ETestErrorMsg.RecordOutputDidNotStart,
+                signalInfo.code.toString(),
+                signalInfo.error
+                )
+            );
+            }
 
-        if (signalInfo.signal === EOBSOutputSignal.Stop) {
-          throw Error(
-            GetErrorMessage(
-              ETestErrorMsg.RecordOutputDidNotStart,
-              signalInfo.code.toString(),
-              signalInfo.error
-            )
-          );
+            expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+            expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Start,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+
+            await sleep(2500);
+
+            /* ---------- stop ---------- */
+            recording.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording,
+            EOBSOutputSignal.Stopping
+            );
+
+            expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+            expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Stopping,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+
+            signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording,
+            EOBSOutputSignal.Stop
+            );
+
+            if (signalInfo.code !== 0) {
+            throw Error(
+                GetErrorMessage(
+                ETestErrorMsg.RecordOutputStoppedWithError,
+                signalInfo.code.toString(),
+                signalInfo.error
+                )
+            );
+            }
+
+            expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+            expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Stop,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+
+            signalInfo = await obs.getNextSignalInfo(
+            EOBSOutputType.Recording,
+            EOBSOutputSignal.Wrote
+            );
+
+            if (signalInfo.code !== 0) {
+            throw Error(
+                GetErrorMessage(
+                ETestErrorMsg.RecordOutputStoppedWithError,
+                signalInfo.code.toString(),
+                signalInfo.error
+                )
+            );
+            }
+
+            expect(signalInfo.type).to.equal(
+            EOBSOutputType.Recording,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+            expect(signalInfo.signal).to.equal(
+            EOBSOutputSignal.Wrote,
+            GetErrorMessage(ETestErrorMsg.RecordingOutput)
+            );
+        } finally {
+            // cleanup for this format
+            const videoEncoder = recording.videoEncoder;
+            const audioEncoder = recording.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
+            videoEncoder.release();
+            audioEncoder.release();
         }
-
-        expect(signalInfo.type).to.equal(
-          EOBSOutputType.Recording,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-        expect(signalInfo.signal).to.equal(
-          EOBSOutputSignal.Start,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-
-        await sleep(2500);
-
-        /* ---------- stop ---------- */
-        recording.stop();
-
-        signalInfo = await obs.getNextSignalInfo(
-          EOBSOutputType.Recording,
-          EOBSOutputSignal.Stopping
-        );
-
-        expect(signalInfo.type).to.equal(
-          EOBSOutputType.Recording,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-        expect(signalInfo.signal).to.equal(
-          EOBSOutputSignal.Stopping,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-
-        signalInfo = await obs.getNextSignalInfo(
-          EOBSOutputType.Recording,
-          EOBSOutputSignal.Stop
-        );
-
-        if (signalInfo.code !== 0) {
-          throw Error(
-            GetErrorMessage(
-              ETestErrorMsg.RecordOutputStoppedWithError,
-              signalInfo.code.toString(),
-              signalInfo.error
-            )
-          );
-        }
-
-        expect(signalInfo.type).to.equal(
-          EOBSOutputType.Recording,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-        expect(signalInfo.signal).to.equal(
-          EOBSOutputSignal.Stop,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-
-        signalInfo = await obs.getNextSignalInfo(
-          EOBSOutputType.Recording,
-          EOBSOutputSignal.Wrote
-        );
-
-        if (signalInfo.code !== 0) {
-          throw Error(
-            GetErrorMessage(
-              ETestErrorMsg.RecordOutputStoppedWithError,
-              signalInfo.code.toString(),
-              signalInfo.error
-            )
-          );
-        }
-
-        expect(signalInfo.type).to.equal(
-          EOBSOutputType.Recording,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-        expect(signalInfo.signal).to.equal(
-          EOBSOutputSignal.Wrote,
-          GetErrorMessage(ETestErrorMsg.RecordingOutput)
-        );
-
-        // cleanup for this format
-        const videoEncoder = recording.videoEncoder;
-        const audioEncoder = recording.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
-        videoEncoder.release();
-        audioEncoder.release();
       }
     });
 
     it('Start simple recording - HigherQuality', async function () {
         const recording = osn.SimpleRecordingFactory.create();
-        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MP4;
-        recording.quality = ERecordingQuality.HigherQuality;
-        recording.video = obs.defaultVideoContext;
-        recording.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-3');
-        recording.lowCPU = false;
-        recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
-        recording.overwrite = false;
-        recording.noSpace = false;
-        recording.signalHandler = (signal) => {obs.signals.push(signal)};
+        try {
+            recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MP4;
+            recording.quality = ERecordingQuality.HigherQuality;
+            recording.video = obs.defaultVideoContext;
+            recording.videoEncoder =
+                osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-recording-3');
+            recording.lowCPU = false;
+            recording.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-recording-1");
+            recording.overwrite = false;
+            recording.noSpace = false;
+            recording.signalHandler = (signal) => {obs.signals.push(signal)};
 
-        recording.start();
+            recording.start();
 
-        let signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Recording, EOBSOutputSignal.Start);
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Start);
 
-        if (signalInfo.signal == EOBSOutputSignal.Stop) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            if (signalInfo.signal == EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            await sleep(500);
+
+            recording.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stop);
+
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Wrote);
+
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            const audioEncoder = recording.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
+            videoEncoder.release();
+            audioEncoder.release();
         }
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        await sleep(500);
-
-        recording.stop();
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Recording, EOBSOutputSignal.Stop);
-
-        if (signalInfo.code != 0) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
-        }
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Recording, EOBSOutputSignal.Wrote);
-
-        if (signalInfo.code != 0) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
-        }
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        const videoEncoder = recording.videoEncoder;
-        const audioEncoder = recording.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
-        videoEncoder.release();
-        audioEncoder.release();
     });
 
     it('Start simple recording - Lossless', async function () {
         const recording = osn.SimpleRecordingFactory.create();
+        try {
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
         recording.quality = ERecordingQuality.Lossless;
@@ -564,8 +574,9 @@ describe(testName, function() {
             EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        osn.SimpleRecordingFactory.destroy(recording);
+        } finally {
+            osn.SimpleRecordingFactory.destroy(recording);
+        }
     });
 
     it('Create a browser source and test messages', async function () {
@@ -601,70 +612,73 @@ describe(testName, function() {
         sceneItem1.visible = true;
 
         const recording = osn.SimpleRecordingFactory.create();
-        recording.path   = path.join(path.normalize(__dirname), '..', 'osnData');
-        recording.format = ERecordingFormat.MP4;
-        recording.quality = ERecordingQuality.HighQuality;
-        recording.video  = obs.defaultVideoContext;
-        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-browser-rec');
-        recording.audioEncoder = osn.AudioEncoderFactory.create('ffmpeg_aac', 'audio-encoder-browser-rec')
-        recording.overwrite = true;
-        recording.noSpace   = false;
-        recording.signalHandler = (sig) => obs.signals.push(sig);
+        try {
+            recording.path   = path.join(path.normalize(__dirname), '..', 'osnData');
+            recording.format = ERecordingFormat.MP4;
+            recording.quality = ERecordingQuality.HighQuality;
+            recording.video  = obs.defaultVideoContext;
+            recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-browser-rec');
+            recording.audioEncoder = osn.AudioEncoderFactory.create('ffmpeg_aac', 'audio-encoder-browser-rec')
+            recording.overwrite = true;
+            recording.noSpace   = false;
+            recording.signalHandler = (sig) => obs.signals.push(sig);
 
-        obs.setSourceMessageListener();
-        recording.start();
-        let sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Start,);
+            obs.setSourceMessageListener();
+            recording.start();
+            let sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Start,);
 
-        if (sig.signal === EOBSOutputSignal.Stop) {
-            throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputDidNotStart,sig.code.toString(),sig.error,),);
+            if (sig.signal === EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputDidNotStart,sig.code.toString(),sig.error,),);
+            }
+
+            settings['message'] = "First message";
+            browserInput.sendMessage(settings);
+
+            await sleep(1500);
+            settings['message'] = "Second message after timeout";
+            browserInput.sendMessage(settings);
+            
+            await sleep(1500);
+            settings['message'] = "Third message after timeout";
+            browserInput.sendMessage(settings);
+                    
+            await sleep(1500);
+            sceneItem1.visible = false;
+            await sleep(1500);
+            sceneItem1.visible = true;
+
+            await sleep(1500);
+            recording.stop();
+            sig = await obs.getNextSignalInfo(EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+            expect(sig.signal).to.equal(EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Stop,);
+
+            if (sig.code !== 0) {
+                throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
+            }
+            expect(sig.signal).to.equal(EOBSOutputSignal.Stop,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
+
+            sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Wrote,);
+            if (sig.code !== 0) {
+                throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
+            }
+            expect(sig.signal).to.equal(EOBSOutputSignal.Wrote,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
+        } finally {
+
+            const videoEncoder = recording.videoEncoder;
+            const audioEncoder = recording.audioEncoder;
+            osn.SimpleRecordingFactory.destroy(recording);
+            videoEncoder.release();
+            audioEncoder.release();
+
+            browserInput.release();
+            sceneItem1.source.release();
+            sceneItem1.remove();
+
+            scene.release();
+            obs.removeSourceMessageListener();
         }
-
-        settings['message'] = "First message";
-        browserInput.sendMessage(settings);
-
-        await sleep(1500);
-        settings['message'] = "Second message after timeout";
-        browserInput.sendMessage(settings);
-        
-        await sleep(1500);
-        settings['message'] = "Third message after timeout";
-        browserInput.sendMessage(settings);
-                
-        await sleep(1500);
-        sceneItem1.visible = false;
-        await sleep(1500);
-        sceneItem1.visible = true;
-
-        await sleep(1500);
-        recording.stop();
-        sig = await obs.getNextSignalInfo(EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
-        expect(sig.signal).to.equal(EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Stop,);
-
-        if (sig.code !== 0) {
-            throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
-        }
-        expect(sig.signal).to.equal(EOBSOutputSignal.Stop,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
-
-        sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Wrote,);
-        if (sig.code !== 0) {
-            throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
-        }
-        expect(sig.signal).to.equal(EOBSOutputSignal.Wrote,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
-
-        const videoEncoder = recording.videoEncoder;
-        const audioEncoder = recording.audioEncoder;
-        osn.SimpleRecordingFactory.destroy(recording);
-        videoEncoder.release();
-        audioEncoder.release();
-
-        browserInput.release();
-        sceneItem1.source.release();
-        sceneItem1.remove();
-
-        scene.release();
-        obs.removeSourceMessageListener();
     });
 
 
