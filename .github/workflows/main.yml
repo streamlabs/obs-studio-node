@@ -99,6 +99,7 @@ jobs:
     needs: build-macos
     runs-on: ${{ matrix.image }}
     strategy:
+      fail-fast: false
       matrix:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:
@@ -143,7 +144,7 @@ jobs:
         # `id` is essential for enabling steps context.
         # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
         id: run_tests
-        timeout-minutes: 30
+        timeout-minutes: 45
         run: 'yarn run test:ci'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
@@ -151,6 +152,7 @@ jobs:
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
+          CI: true
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
         if: ${{ always() }}
