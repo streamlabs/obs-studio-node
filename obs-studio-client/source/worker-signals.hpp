@@ -132,7 +132,8 @@ protected:
 
 			auto tp_end = std::chrono::high_resolution_clock::now();
 			auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-			totalSleepMS = sleepIntervalMS - dur.count();
+			auto durCount = dur.count();
+			totalSleepMS = durCount < sleepIntervalMS ? sleepIntervalMS - durCount : 0;
 			std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
 		}
 
