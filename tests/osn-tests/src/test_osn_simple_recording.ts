@@ -664,6 +664,7 @@ describe(testName, () => {
         sceneItem1.remove();
 
         scene.release();
+        obs.removeSourceMessageListener();
     });
 
 
