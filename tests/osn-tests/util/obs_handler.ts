@@ -551,6 +551,11 @@ export class OBSHandler {
         });
     }
 
+    removeSourceMessageListener() {
+        osn.NodeObs.RemoveSourceCallback();
+        osn.NodeObs.RemoveSourceMessageCallback();
+    }
+
     isDarwin()
     {
         // Wrapped this in a function- just incase we want to add more conditions later or disable only within the build agent.
