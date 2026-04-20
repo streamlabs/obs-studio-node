@@ -312,12 +312,24 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	pid_t pid;
 	std::vector<const char *> argv = {"obs64", uri.c_str(), version.c_str(), serverBinaryPath.c_str(), nullptr};
 
-	posix_spawn_file_actions_t file_actions;
-	posix_spawn_file_actions_init(&file_actions);
-	posix_spawn_file_actions_addopen(&file_actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
-	posix_spawn_file_actions_addopen(&file_actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), &file_actions, NULL, const_cast<char *const *>(argv.data()), environ);
-	posix_spawn_file_actions_destroy(&file_actions);
+	const char *ciEnv = std::getenv("CI");
+	int ret = 0;
+	if (ciEnv == nullptr) {
+		// For development, it can be helpful for process to share stdout/stderr
+		ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
+	} else {
+		// On CI, we should ideally upload OBS logs as an artifact if desired but we
+		// definitely do not want to share stdout/stderr with parent process. This prevents
+		// console output from being interleaved with the parent plus makes it easier to read
+		// test output.
+		posix_spawn_file_actions_t file_actions;
+		posix_spawn_file_actions_init(&file_actions);
+		posix_spawn_file_actions_addopen(&file_actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+		posix_spawn_file_actions_addopen(&file_actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+		ret = posix_spawnp(&pid, serverBinaryPath.c_str(), &file_actions, NULL, const_cast<char *const *>(argv.data()), environ);
+		posix_spawn_file_actions_destroy(&file_actions);
+	}
+
 	if (ret != 0) {
 		std::cerr << "Could not spawn the server at " << serverBinaryPath.c_str() << " with error code: " << ret << std::endl;
 		return nullptr;

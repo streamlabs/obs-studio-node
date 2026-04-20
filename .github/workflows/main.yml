@@ -158,7 +158,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: obs-logs-mac-${{ matrix.Architecture }}
-          path: tests/osn-tests/osnData/slobs-client/logs/
+          path: tests/osn-tests/osnData/slobs-client/node-obs/logs/
           if-no-files-found: ignore
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
