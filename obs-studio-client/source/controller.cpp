@@ -312,16 +312,13 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	pid_t pid;
 	std::vector<const char *> argv = {"obs64", uri.c_str(), version.c_str(), serverBinaryPath.c_str(), nullptr};
 
-	const char *ciEnv = std::getenv("CI");
+	const char *suppressLogsEnv = std::getenv("SUPPRESS_STREAMLABS_OBS_LOGS");
 	int ret = 0;
-	if (ciEnv == nullptr) {
-		// For development, it can be helpful for process to share stdout/stderr
+	if (suppressLogsEnv == nullptr) {
+		// For development, it can be helpful for process to share stdout/stderr.
 		ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
 	} else {
-		// On CI, we should ideally upload OBS logs as an artifact if desired but we
-		// definitely do not want to share stdout/stderr with parent process. This prevents
-		// console output from being interleaved with the parent plus makes it easier to read
-		// test output.
+		// Do not send the blog(s) to stdout/stderr.
 		posix_spawn_file_actions_t file_actions;
 		posix_spawn_file_actions_init(&file_actions);
 		posix_spawn_file_actions_addopen(&file_actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
