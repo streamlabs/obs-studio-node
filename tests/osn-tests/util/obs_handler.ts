@@ -282,6 +282,10 @@ export class OBSHandler {
             'streaming starting signal timeout',
             'streaming activate signal timeout',
             'streaming start signal timeout',
+            'recording start signal timeout',
+            'recording wrote signal timeout',
+            'replay-buffer start signal timeout',
+            'replay-buffer writing signal timeout',
         ];
 
         if (retryableTimeouts.some(timeoutMessage => normalizedMessage.includes(timeoutMessage))) {
