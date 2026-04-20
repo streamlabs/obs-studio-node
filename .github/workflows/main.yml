@@ -153,6 +153,13 @@ jobs:
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
           CI: true
+      - name: Upload OBS logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-logs-mac-${{ matrix.Architecture }}
+          path: tests/osn-tests/osnData/slobs-client/logs/
+          if-no-files-found: ignore
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
         if: ${{ always() }}
