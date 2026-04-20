@@ -5,7 +5,8 @@ import { logInfo, logEmptyLine } from '../util/logger';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
-import { EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
+import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
+import * as inputSettings from '../util/input_settings';
 
 import path = require('path');
 
@@ -241,6 +242,97 @@ describe(testName, () => {
         osn.SimpleStreamingFactory.destroy(stream);
         streamEncoder.release();
         audioEncoder.release();
+    });
+
+    it('Simple Streaming honors stream delay', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        const configuredDelayMs = 10 * 1000;
+        const allowedTimingDriftMs = 1 * 1000;
+        const stream = osn.SimpleStreamingFactory.create();
+        let streamStartRequested = false;
+        let scene: osn.IScene = null;
+        let sceneItem: osn.ISceneItem = null;
+        let videoSource: osn.IInput = null;
+
+        try {
+            expect(stream).to.not.be.null;
+            stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-delay');
+            stream.service = osn.ServiceFactory.legacySettings;
+            stream.delay = osn.DelayFactory.create();
+            stream.delay.enabled = true;
+            stream.delay.delaySec = configuredDelayMs / 1000;
+            stream.delay.preserveDelay = true;
+            stream.reconnect = osn.ReconnectFactory.create();
+            stream.network = osn.NetworkFactory.create();
+            stream.video = obs.defaultVideoContext;
+            stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-delay");
+            stream.signalHandler = (signal) => {obs.signals.push(signal)};
+
+            scene = osn.SceneFactory.create('simple_stream_delay_scene');
+            expect(scene).to.not.be.null;
+            osn.Global.setOutputSource(0, scene);
+
+            let settings = inputSettings.ffmpegSource;
+            settings['volume'] = 100;
+            settings['local_file'] = path.join(mediaPath, "bigbuckbunny.mp4");
+            settings['looping'] = true;
+            videoSource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, 'simple_stream_delay_video_source', settings);
+            expect(videoSource).to.not.be.null;
+
+            sceneItem = scene.add(videoSource);
+            expect(sceneItem).to.not.be.null;
+            sceneItem.video = obs.defaultVideoContext;
+            sceneItem.visible = true;
+            sceneItem.position = { x: 0, y: 0 };
+
+            const startTimeMs = Date.now();
+            stream.start();
+            streamStartRequested = true;
+
+            const preStartSignals = [EOBSOutputSignal.Starting, EOBSOutputSignal.Activate];
+            while (preStartSignals.length > 0) {
+                let signalInfo = await obs.getNextSignalInfoOf(EOBSOutputType.Streaming, preStartSignals);
+                const signalIndex = preStartSignals.indexOf(signalInfo.signal);
+                expect(signalIndex).to.be.greaterThan(-1, GetErrorMessage(ETestErrorMsg.StreamOutput));
+                expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+                preStartSignals.splice(signalIndex, 1);
+            }
+
+            let signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Start);
+            expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            const elapsedMs = Date.now() - startTimeMs;
+            expect(elapsedMs).to.be.greaterThan(
+                configuredDelayMs - allowedTimingDriftMs,
+                `Simple stream started after ${elapsedMs}ms, expected approximately ${configuredDelayMs}ms delay`,
+            );
+        } finally {
+            if (streamStartRequested) {
+                try {
+                    stream.stop();
+                    await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stopping);
+                    await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
+                    await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
+                } catch (e) {
+                    // Preserve the original assertion failure if cleanup also fails.
+                }
+            }
+
+            osn.Global.setOutputSource(0, null);
+            if (sceneItem) sceneItem.remove();
+            if (videoSource) videoSource.release();
+            if (scene) scene.release();
+
+            const streamEncoder = stream.videoEncoder;
+            const audioEncoder = stream.audioEncoder;
+            osn.SimpleStreamingFactory.destroy(stream);
+            if (streamEncoder) streamEncoder.release();
+            if (audioEncoder) audioEncoder.release();
+        }
     });
 
     it('Stream with invalid stream key', async function() {

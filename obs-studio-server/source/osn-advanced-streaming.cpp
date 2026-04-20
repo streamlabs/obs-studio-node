@@ -413,29 +413,10 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	obs_output_set_service(streaming->GetOutput(), streaming->service);
 
-	if (!streaming->delay) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid delay.");
+	std::string outputSettingsError;
+	if (!streaming->ApplyOutputSettings(streaming->GetOutput(), outputSettingsError)) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, outputSettingsError.c_str());
 	}
-	obs_output_set_delay(streaming->GetOutput(), streaming->delay->enabled ? uint32_t(streaming->delay->delaySec) : 0,
-			     streaming->delay->preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
-
-	if (!streaming->reconnect) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid reconnect.");
-	}
-	uint32_t maxReties = streaming->reconnect->enabled ? streaming->reconnect->maxRetries : 0;
-	obs_output_set_reconnect_settings(streaming->GetOutput(), maxReties, streaming->reconnect->retryDelay);
-
-	if (!streaming->network) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid network.");
-	}
-
-	obs_data_t *settings = obs_data_create();
-	obs_data_set_string(settings, "bind_ip", streaming->network->bindIP.c_str());
-	obs_data_set_bool(settings, "dyn_bitrate", streaming->network->enableDynamicBitrate);
-	obs_data_set_bool(settings, "new_socket_loop_enabled", streaming->network->enableOptimizations);
-	obs_data_set_bool(settings, "low_latency_mode_enabled", streaming->network->enableLowLatency);
-	obs_output_update(streaming->GetOutput(), settings);
-	obs_data_release(settings);
 
 	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
 
