@@ -122,7 +122,7 @@ export class OBSHandler {
             const exitCode = osn.NodeObs.IPC.host(this.pipeName);
             if (exitCode !== osn.EVideoCodes.Success) {
                 if (exitCode === osn.EIPCError.OTHER_ERROR) {
-                    throw Error('OBS IPC host failed: missing executable or some other error.');
+                    throw Error(`OBS IPC host failed: missing executable or some other error. Code ${exitCode}`);
                 }
                 throw Error(`OBS IPC host failed with code ${exitCode}. See osn.EIPCError for more details.`);
             }
