@@ -3160,7 +3160,10 @@ bool OBS_service::VirtualCamActive()
 void OBS_service::DestroyVirtualCamView()
 {
 	blog(LOG_INFO, "DestroyVirtualCamView");
-	if (vcamConfig.type == VCamOutputType::ProgramView) {
+
+	DestroyVirtualCameraScene();
+
+	if (!virtualCamView) {
 		virtualCamVideo = nullptr;
 		return;
 	}
@@ -3171,8 +3174,6 @@ void OBS_service::DestroyVirtualCamView()
 
 	obs_view_destroy(virtualCamView);
 	virtualCamView = nullptr;
-
-	DestroyVirtualCameraScene();
 }
 
 void OBS_service::DestroyVirtualCameraScene()
@@ -3186,10 +3187,15 @@ void OBS_service::DestroyVirtualCameraScene()
 	if (!vCamSourceScene)
 		return;
 
-	obs_deactivate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
+	if (vCamSourceSceneItem) {
+		obs_sceneitem_remove(vCamSourceSceneItem);
+		vCamSourceSceneItem = nullptr;
+	}
+
+	obs_source_t *sceneSource = obs_scene_get_source(vCamSourceScene);
+	obs_deactivate_scene_on_backstage(sceneSource);
 	obs_scene_release(vCamSourceScene);
 	vCamSourceScene = nullptr;
-	vCamSourceSceneItem = nullptr;
 }
 
 static obs_video_info *GetPrimaryVCamCanvas()
@@ -3274,23 +3280,15 @@ void OBS_service::UpdateVirtualCamOutputSource()
 			DestroyVirtualCameraScene();
 			break;
 		}
-		blog(LOG_INFO, "VCam SceneOutput: resolved scene '%s' (name='%s', type=%d, w=%u, h=%u, is_scene=%d)",
-		     vcamConfig.scene.c_str(), obs_source_get_name(s),
-		     (int)obs_source_get_type(s),
-		     obs_source_get_width(s), obs_source_get_height(s),
-		     !!obs_scene_from_source(s));
 		if (vCamActiveScene != s) {
 			if (vCamActiveScene) {
-				blog(LOG_INFO, "VCam SceneOutput: deactivating old scene '%s'", obs_source_get_name(vCamActiveScene));
 				obs_deactivate_scene_on_backstage(vCamActiveScene);
 				obs_source_release(vCamActiveScene);
 			}
-			blog(LOG_INFO, "VCam SceneOutput: backstage-activating scene '%s'", obs_source_get_name(s));
 			obs_activate_scene_on_backstage(s);
 			vCamActiveScene = obs_source_get_ref(s);
 		}
 		source = obs_source_get_ref(s);
-		blog(LOG_INFO, "VCam SceneOutput: source ptr=0x%p, view ptr=0x%p", (void *)(obs_source_t *)source, (void *)virtualCamView);
 		break;
 	}
 	case VCamOutputType::SourceOutput: {
@@ -3329,15 +3327,8 @@ void OBS_service::UpdateVirtualCamOutputSource()
 	}
 
 	OBSSourceAutoRelease current = obs_view_get_source(virtualCamView, 0);
-	if (source != current) {
-		blog(LOG_INFO, "VCam: setting view source '%s' (was '%s')",
-		     source ? obs_source_get_name(source) : "(null)",
-		     current ? obs_source_get_name(current) : "(null)");
+	if (source != current)
 		obs_view_set_source(virtualCamView, 0, source);
-	} else {
-		blog(LOG_INFO, "VCam: view source unchanged '%s'",
-		     source ? obs_source_get_name(source) : "(null)");
-	}
 }
 
 void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
@@ -3372,7 +3363,6 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 				virtualCamVideo = obs_get_video();
 		} else {
 			virtualCamVideo = obs_view_add2(virtualCamView, GetPrimaryVCamCanvas());
-			blog(LOG_INFO, "VCam: obs_view_add2 returned video=%p, canvas=%p", (void *)virtualCamVideo, (void *)GetPrimaryVCamCanvas());
 		}
 
 		if (!virtualCamVideo) {
@@ -3380,9 +3370,6 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 		}
 	}
 
-	blog(LOG_INFO, "VCam: output_set_media video=%p, view_source='%s'",
-	     (void *)virtualCamVideo,
-	     virtualCamView ? (obs_view_get_source(virtualCamView, 0) ? obs_source_get_name(obs_view_get_source(virtualCamView, 0)) : "(null)") : "(no view)");
 	obs_output_set_media(virtualCam, virtualCamVideo, obs_get_audio());
 
 	bool success = obs_output_start(virtualCam);
@@ -3422,12 +3409,6 @@ void OBS_service::OBS_service_startVirtualCam(void *data, const int64_t id, cons
 void OBS_service::StopVirtualCam()
 {
 	virtualCamActive = false;
-
-	if (vCamActiveScene)
-		obs_deactivate_scene_on_backstage(vCamActiveScene);
-
-	if (vCamSourceScene)
-		obs_deactivate_scene_on_backstage(obs_scene_get_source(vCamSourceScene));
 
 	if (vcamEnabled)
 		obs_output_stop(virtualCam);
@@ -3618,6 +3599,9 @@ void OBS_service::stopAllOutputs()
 		obs_output_stop(virtualCamOutput);
 
 	WaitForAllOutputsToStop();
+
+	DestroyVirtualCamView();
+	virtualCamActive = false;
 
 	isStreaming[StreamServiceId::Main] = false;
 	isStreaming[StreamServiceId::Second] = false;
