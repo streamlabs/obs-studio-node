@@ -314,7 +314,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 
 	const char *suppressLogsEnv = std::getenv("SUPPRESS_STREAMLABS_OBS_LOGS");
 	int ret = 0;
-	if (suppressLogsEnv == nullptr || strcmp(suppressLogsEnv, "false") == 0) {
+	if (suppressLogsEnv == nullptr || strcasecmp(suppressLogsEnv, "false") == 0) {
 		// For development, it can be helpful for process to share stdout/stderr.
 		ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
 	} else {
