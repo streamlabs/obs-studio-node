@@ -104,7 +104,7 @@ jobs:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:
           - BuildReleases: Release-x86_64
-            image: macos-15-large
+            image: macos-15-intel
             BuildConfig: RelWithDebInfo
             ReleaseName: release
             Architecture: x86_64
