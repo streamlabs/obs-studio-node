@@ -456,7 +456,7 @@ export class OBSHandler {
     async getNextSignalInfoOf(output: string, signals: string[]): Promise<IOBSOutputSignalInfo> {
         const signalDescription = signals.join('/');
         const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signalDescription + ' signal timeout';
-        const deadline = Date.now() + 30000;
+        const deadline = Date.now() + 60000;
 
         while (Date.now() < deadline) {
             const remainingMs = deadline - Date.now();
