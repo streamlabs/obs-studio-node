@@ -135,6 +135,7 @@ describe(testName, function() {
             recording2.overwrite = false;
             recording2.noSpace = false;
             recording2.video = secondContext;
+            recording2.mixer = 2;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
             recording2.signalHandler = (signal) => { obs.signals.push(signal) };
@@ -221,6 +222,7 @@ describe(testName, function() {
             recording2.overwrite = false;
             recording2.noSpace = false;
             recording2.video = secondContext;
+            recording2.mixer = 2;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
             recording2.signalHandler = (signal) => { obs.signals.push(signal) };
