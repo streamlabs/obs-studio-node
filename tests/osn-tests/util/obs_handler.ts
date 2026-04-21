@@ -456,7 +456,7 @@ export class OBSHandler {
     async getNextSignalInfoOf(output: string, signals: string[]): Promise<IOBSOutputSignalInfo> {
         const signalDescription = signals.join('/');
         const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signalDescription + ' signal timeout';
-        const deadline = Date.now() + 40000;
+        const deadline = Date.now() + 50000; // 50 second timeout for receiving expected signal, since some steps (like recording stop) can take a while on slower CI machines
 
         while (Date.now() < deadline) {
             const remainingMs = deadline - Date.now();
