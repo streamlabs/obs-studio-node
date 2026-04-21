@@ -3200,12 +3200,15 @@ void OBS_service::DestroyVirtualCameraScene()
 
 static obs_video_info *GetPrimaryVCamCanvas()
 {
-	obs_video_info *primary = nullptr;
-	osn::Video::Manager::GetInstance().for_each([&primary](obs_video_info *canvas) {
-		if (!primary)
-			primary = canvas;
+	obs_video_info *best = nullptr;
+	osn::Video::Manager::GetInstance().for_each([&best](obs_video_info *canvas) {
+		if (!best || canvas->base_width * best->base_height > best->base_width * canvas->base_height)
+			best = canvas;
 	});
-	return primary;
+	if (best)
+		return best;
+
+	return videoInfo[StreamServiceId::Main];
 }
 
 // Resolve the scene to render for SceneOutput. Falls back to the current program
