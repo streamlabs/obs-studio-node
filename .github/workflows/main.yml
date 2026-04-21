@@ -154,7 +154,7 @@ jobs:
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
           CI: true
-          SUPPRESS_STREAMLABS_OBS_LOGS: false # Prevents logs from being printed in the test output, but still generates log files that can be uploaded as artifacts.
+          SUPPRESS_STREAMLABS_OBS_LOGS: true # Prevents logs from being printed in the test output, but still generates log files that can be uploaded as artifacts.
       - name: Upload OBS logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
