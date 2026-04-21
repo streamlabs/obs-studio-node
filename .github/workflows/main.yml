@@ -33,6 +33,7 @@ jobs:
     name: 'Build macOS'
     runs-on: ${{ matrix.image }}
     strategy:
+      fail-fast: false # Don't cancel the other architecture's builds if one fails
       matrix:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:
@@ -99,7 +100,7 @@ jobs:
     needs: build-macos
     runs-on: ${{ matrix.image }}
     strategy:
-      fail-fast: false
+      fail-fast: false # Don't cancel the other architecture's tests if one fails, so we can get test results for both.
       matrix:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:
