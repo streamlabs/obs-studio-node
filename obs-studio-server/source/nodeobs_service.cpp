@@ -3198,6 +3198,9 @@ void OBS_service::DestroyVirtualCameraScene()
 	vCamSourceScene = nullptr;
 }
 
+// TODO: Let the user select the virtual cam canvas explicitly.
+// For now, pick the widest aspect ratio; fall back to the legacy
+// videoInfo API which will be removed once canvas selection is in place.
 static obs_video_info *GetPrimaryVCamCanvas()
 {
 	obs_video_info *best = nullptr;
