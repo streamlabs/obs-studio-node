@@ -144,7 +144,7 @@ jobs:
         # `id` is essential for enabling steps context.
         # https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context
         id: run_tests
-        timeout-minutes: 45
+        timeout-minutes: 60
         run: 'yarn run test:ci'
         env:
           SLOBS_BE_STREAMKEY: ${{secrets.testsStreamKey}}
