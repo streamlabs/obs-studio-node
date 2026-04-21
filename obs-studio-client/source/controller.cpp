@@ -305,7 +305,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 		if (st == PROC_PIDTBSDINFO_SIZE) {
 			if (strcmp("obs64", proc.pbi_name) == 0) {
 				if (pids[i] != 0) {
-                    std::cout << "Terminating previous obs64" << std::endl;
+					std::cout << "Terminating previous obs64" << std::endl;
 					kill(pids[i], SIGKILL);
 					waitpid(pids[i], nullptr, 0);
 				}
