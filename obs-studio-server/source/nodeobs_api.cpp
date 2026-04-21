@@ -875,7 +875,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	std::string locale = args[1].value_str;
 	currentVersion = args[2].value_str;
 	std::string logFilename;
-    // Skip index 3 which is reserved for crash-handler server
+	// Skip index 3 which is reserved for crash-handler server
 	if (args.size() > 4) {
 		// Parse the log filename
 		std::ostringstream ss;
