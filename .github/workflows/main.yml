@@ -33,7 +33,6 @@ jobs:
     name: 'Build macOS'
     runs-on: ${{ matrix.image }}
     strategy:
-      fail-fast: false # Don't cancel the other architecture's builds if one fails
       matrix:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:
