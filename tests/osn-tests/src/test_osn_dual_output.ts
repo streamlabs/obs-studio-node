@@ -134,7 +134,6 @@ describe(testName, function() {
             recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
             recording2.overwrite = false;
             recording2.noSpace = false;
-            recording2.mixer = 2;
             recording2.video = secondContext;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
@@ -221,7 +220,6 @@ describe(testName, function() {
             recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-4');
             recording2.overwrite = false;
             recording2.noSpace = false;
-            recording2.mixer = 2;
             recording2.video = secondContext;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
