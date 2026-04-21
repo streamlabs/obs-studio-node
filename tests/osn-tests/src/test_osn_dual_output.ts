@@ -105,9 +105,13 @@ describe(testName, function() {
     });
 
     async function handleStreamSignals(expectedType: EOBSOutputType, expectedSignal: EOBSOutputSignal, errorMessage: string): Promise<void> {
-        const signalInfo = await obs.getNextSignalInfo(expectedType, expectedSignal);
-        if (signalInfo.type !== expectedType || signalInfo.signal !== expectedSignal) {
-            logInfo(testName, `Received unexpected signal. Type: ${signalInfo.type}, Signal: ${signalInfo.signal}, Code: ${signalInfo.code}, Error: ${signalInfo.error}`);
+        logInfo(testName, `Waiting for Type: ${expectedType}, Signal: ${expectedSignal}`); // TODO: Remove this log after debugging on CI
+        let signalInfo;
+        try {
+            signalInfo = await obs.getNextSignalInfo(expectedType, expectedSignal);
+        } catch (error) {
+            logInfo(testName, `Error while waiting for signal. Got type: ${signalInfo?.type} ${signalInfo?.signal} But expected Type: ${expectedType}, Signal: ${expectedSignal}, Error: ${error}`);
+            throw error;
         }
         expect(signalInfo.type).to.equal(expectedType, GetErrorMessage(errorMessage));
         expect(signalInfo.signal).to.equal(expectedSignal, GetErrorMessage(errorMessage));
