@@ -105,12 +105,11 @@ describe(testName, function() {
     });
 
     async function handleStreamSignals(expectedType: EOBSOutputType, expectedSignal: EOBSOutputSignal, errorMessage: string): Promise<void> {
-        logInfo(testName, `Waiting for Type: ${expectedType}, Signal: ${expectedSignal}`); // TODO: Remove this log after debugging on CI
         let signalInfo;
         try {
             signalInfo = await obs.getNextSignalInfo(expectedType, expectedSignal);
         } catch (error) {
-            logInfo(testName, `Error while waiting for signal. Got type: ${signalInfo?.type} ${signalInfo?.signal} But expected Type: ${expectedType}, Signal: ${expectedSignal}, Error: ${error}`);
+            logInfo(testName, `Error while waiting for signal. Expected Type: ${expectedType}, Signal: ${expectedSignal}, ${error}`);
             throw error;
         }
         expect(signalInfo.type).to.equal(expectedType, GetErrorMessage(errorMessage));
@@ -141,6 +140,7 @@ describe(testName, function() {
             recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-2');
             recording2.overwrite = false;
             recording2.noSpace = false;
+            recording2.mixer = 2;
             recording2.video = secondContext;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
@@ -227,6 +227,7 @@ describe(testName, function() {
             recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-4');
             recording2.overwrite = false;
             recording2.noSpace = false;
+            recording2.mixer = 2;
             recording2.video = secondContext;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
