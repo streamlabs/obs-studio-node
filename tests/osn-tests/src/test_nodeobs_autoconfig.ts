@@ -50,9 +50,6 @@ describe(testName, function() {
     });
 
     it('Run autoconfig', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const start = performance.now();
         let progressInfo: IConfigProgress;
 	    let settingValue: any;
