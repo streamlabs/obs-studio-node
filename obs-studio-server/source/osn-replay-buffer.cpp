@@ -152,20 +152,18 @@ void osn::IReplayBuffer::Query(void *data, const int64_t id, const std::vector<i
 
 void osn::IReplayBuffer::Save(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	ReplayBuffer *replayBuffer = static_cast<ReplayBuffer *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
-	if (!replayBuffer) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "ReplayBuffer reference is not valid.");
-	}
-
-	obs_output_t *output = replayBuffer->GetOutput();
-	if (!output) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid replay buffer output.");
-	}
-
-	calldata_t cd = {0};
-	proc_handler_t *ph = obs_output_get_proc_handler(output);
-	proc_handler_call(ph, "save", &cd);
-	calldata_free(&cd);
+	obs_enum_hotkeys(
+		[](void *data, obs_hotkey_id id, obs_hotkey_t *key) {
+			if (obs_hotkey_get_registerer_type(key) == OBS_HOTKEY_REGISTERER_OUTPUT) {
+				std::string key_name = obs_hotkey_get_name(key);
+				if (key_name.compare("ReplayBuffer.Save") == 0) {
+					obs_hotkey_enable_callback_rerouting(true);
+					obs_hotkey_trigger_routed_callback(id, true);
+				}
+			}
+			return true;
+		},
+		nullptr);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
