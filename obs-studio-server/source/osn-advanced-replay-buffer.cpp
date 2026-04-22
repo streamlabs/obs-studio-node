@@ -22,6 +22,7 @@
 #include "shared.hpp"
 #include "osn-audio-track.hpp"
 #include "osn-encoders.hpp"
+#include <algorithm>
 
 void osn::IAdvancedReplayBuffer::Register(ipc::server &srv)
 {

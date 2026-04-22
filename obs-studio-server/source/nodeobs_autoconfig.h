@@ -26,7 +26,7 @@
 #include <queue>
 #include <thread>
 #include "nodeobs_api.h"
-#include "nodeobs_service.h"
+
 
 namespace autoConfig {
 void Register(ipc::server &srv);
@@ -54,4 +54,6 @@ void SetDefaultSettings();
 void TestHardwareEncoding();
 bool CanTestServer(const char *server);
 void WaitPendingTests(double timeout = 10);
+int GetStartingBitrate(const std::string& serviceName);
+void TestBandwidthThreadV2(void);
 } // namespace autoConfig

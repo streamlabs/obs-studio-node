@@ -342,7 +342,8 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 	int ret = OBS_VIDEO_FAIL;
 	try {
 		// Cannot disrupt video ptr inside obs while outputs are connecting
-		OBS_service::stopConnectingOutputs();
+		// TODO APIv2 have to deprecate OBS_service and replace this call with APIv2 equivalent
+		//OBS_service::stopConnectingOutputs();
 		ret = obs_set_video_info(canvas, &video);
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Failed to set video context %s", error);
@@ -401,12 +402,11 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 
 	int ret = OBS_VIDEO_FAIL;
 	try {
-
 		// Cannot disrupt video ptr inside obs while outputs are connecting
-		OBS_service::stopConnectingOutputs();
+		// TODO APIv2 have to deprecate OBS_service and replace this call with APIv2 equivalent
+		//OBS_service::stopConnectingOutputs();
 
 		ret = obs_remove_video_info(canvas);
-
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Error occurred while removing video %s", error);
 	}

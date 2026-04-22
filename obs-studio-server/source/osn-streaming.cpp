@@ -342,6 +342,13 @@ void osn::IStreaming::Query(void *data, const int64_t id, const std::vector<ipc:
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
+	if (streaming->testMode) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		rval.push_back(ipc::value(true));
+		AUTO_DEBUG;
+		return;
+	}
+
 	auto signalOpt = streaming->PopReceivedSignal();
 	if (!signalOpt.has_value()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -421,6 +428,15 @@ void osn::Streaming::setNetworkLegacySettings()
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "DynamicBitrate", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "NewSocketLoopEnable", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "LowLatencyEnable", network->enableDynamicBitrate);
+}
+
+std::string osn::Streaming::testQuery()
+{
+	auto signalOpt = PopReceivedSignal();
+	if (!signalOpt.has_value()) {
+		return "";
+	}
+	return signalOpt.value().signal;
 }
 
 void osn::IStreaming::GetDroppedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

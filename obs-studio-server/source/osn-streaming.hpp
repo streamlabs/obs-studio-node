@@ -50,6 +50,7 @@ public:
 		lastBytesSent = 0;
 		lastBytesSentTime = 0;
 		simple = true;
+		testMode = false;
 	}
 	virtual ~Streaming();
 
@@ -70,6 +71,7 @@ public:
 	uint64_t lastBytesSent;
 	uint64_t lastBytesSentTime;
 	bool simple;
+	bool testMode;
 
 	bool isTwitchVODSupported();
 	bool ApplyOutputSettings(obs_output_t *output, std::string &errorMessage);
@@ -79,6 +81,7 @@ public:
 	void setDelayLegacySettings();
 	void setReconnectLegacySettings();
 	void setNetworkLegacySettings();
+	std::string testQuery();
 };
 
 class IStreaming {

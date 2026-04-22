@@ -30,7 +30,7 @@
 #include <vector>
 #include <queue>
 #include "nodeobs_configManager.hpp"
-#include "nodeobs_service.h"
+//#include "nodeobs_service.h"
 #include "util-osx.hpp"
 
 extern std::string g_moduleDirectory;
