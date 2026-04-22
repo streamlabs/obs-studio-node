@@ -72,6 +72,7 @@ describe(testName, () => {
     // - vertical primary canvas
 
     it('Enhanced Broadcasting Advanced Streaming reports unsupported GPU without crashing in CI', function() {
+        // This test is CI only because CI server is guarantted to not have a GPU.
         if (obs.isDarwin()) {
             this.skip();
         }
