@@ -294,7 +294,7 @@ static void UpdateRecordingSettings_crf(enum osn::RecQuality quality, osn::Simpl
 	if (!settings)
 		return;
 	if (obs_get_multiple_rendering()) {
-		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
+		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
 		obs_encoder_set_video_mix(recording->videoEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
