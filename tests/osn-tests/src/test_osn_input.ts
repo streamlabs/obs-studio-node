@@ -390,9 +390,6 @@ describe(testName, () => {
     });
 
     it('Add video filter to video sources', function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         let videoFilters: string[] = [];
         let addedFilters: string[] = [];
 

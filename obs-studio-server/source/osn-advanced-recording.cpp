@@ -216,8 +216,6 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		if ((recording->mixer & (1 << i)) != 0 && audioTrack && audioTrack->audioEnc) {
 			obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
 			obs_output_set_audio_encoder(recording->GetOutput(), audioTrack->audioEnc, idx);
-
-			obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
 			idx++;
 		}
 	}
