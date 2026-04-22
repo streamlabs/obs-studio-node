@@ -24,7 +24,7 @@
 #include "util/platform.h"
 #include "osn-encoders.hpp"
 
-extern char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, int width, int height);
+extern char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, obs_video_info *ovi);
 
 osn::Recording::~Recording()
 {
@@ -99,9 +99,9 @@ void osn::IRecording::Query(void *data, const int64_t id, const std::vector<ipc:
 	AUTO_DEBUG;
 }
 
-std::string osn::IRecording::GenerateSpecifiedFilename(const std::string &extension, bool noSpace, const std::string &format, int width, int height)
+std::string osn::IRecording::GenerateSpecifiedFilename(const std::string &extension, bool noSpace, const std::string &format, obs_video_info *ovi)
 {
-	char *filename = osn_generate_formatted_filename(extension.c_str(), !noSpace, format.c_str(), width, height);
+	char *filename = osn_generate_formatted_filename(extension.c_str(), !noSpace, format.c_str(), ovi);
 	if (filename == nullptr) {
 		throw "Invalid filename";
 	}

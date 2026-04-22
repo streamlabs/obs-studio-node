@@ -11,6 +11,7 @@ import { EFPSType } from '../osn';
 import path = require('path');
 
 const testName = 'osn-advanced-recording';
+const customFilenamePattern = '%CCYY-%MM-%DD_%hh-%mm-%ss-%s-%%';
 
 describe(testName, () => {
     let obs: OBSHandler;
@@ -79,6 +80,7 @@ describe(testName, () => {
         
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MOV;
+        recording.fileFormat = customFilenamePattern;
         recording.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-1');
         recording.overwrite = true;
@@ -94,6 +96,8 @@ describe(testName, () => {
             path.join(path.normalize(__dirname), '..', 'osnData'), "Invalid path value");
         expect(recording.format).to.equal(
             ERecordingFormat.MOV, "Invalid format value");
+        expect(recording.fileFormat).to.equal(
+            customFilenamePattern, "Invalid fileFormat value");
         expect(recording.overwrite).to.equal(
             true, "Invalid overwrite value");
         expect(recording.noSpace).to.equal(
@@ -121,6 +125,7 @@ describe(testName, () => {
         const recording = osn.AdvancedRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = ERecordingFormat.MP4;
+        recording.fileFormat = customFilenamePattern;
         recording.overwrite = false;
         recording.noSpace = false;
         recording.video = obs.defaultVideoContext;
@@ -212,6 +217,12 @@ describe(testName, () => {
             EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+        const lastFile = path.basename(recording.lastFile());
+        expect(lastFile).to.match(
+            /^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}-\d+-%\.mp4$/,
+            'Wrong recording filename formatting',
+        );
 
         stream.stop();
 
