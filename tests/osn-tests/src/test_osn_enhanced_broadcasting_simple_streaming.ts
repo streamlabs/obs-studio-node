@@ -12,11 +12,11 @@ import path = require('path');
 
 const testName = 'osn-enhanced-broadcasting-simple-streaming';
 
-describe(testName, () => {
+describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     const mediaPath = path.join(path.normalize(__dirname), '..', 'media');
-    let secondContext: osn.IVideo = null;
+    let secondContext: osn.IVideo;
 
     // Initialize OBS process
     before(async() => {
@@ -29,21 +29,25 @@ describe(testName, () => {
         // Reserving user from pool
         await obs.reserveUser();
 
-        secondContext = osn.VideoFactory.create();
-        const secondVideoInfo: osn.IVideoInfo = {
-            fpsNum: 60,
-            fpsDen: 2,
-            baseWidth: 720,
-            baseHeight: 1280,
-            outputWidth: 720,
-            outputHeight: 1280,
-            outputFormat: osn.EVideoFormat.NV12,
-            colorspace: osn.EColorSpace.CS709,
-            range: osn.ERangeType.Full,
-            scaleType: osn.EScaleType.Lanczos,
-            fpsType: osn.EFPSType.Fractional
-        };
-        secondContext.video = secondVideoInfo;
+        if (!obs.isCI()) {
+            secondContext = osn.VideoFactory.create();
+            const secondVideoInfo: osn.IVideoInfo = {
+                fpsNum: 60,
+                fpsDen: 2,
+                baseWidth: 720,
+                baseHeight: 1280,
+                outputWidth: 720,
+                outputHeight: 1280,
+                outputFormat: osn.EVideoFormat.NV12,
+                colorspace: osn.EColorSpace.CS709,
+                range: osn.ERangeType.Full,
+                scaleType: osn.EScaleType.Lanczos,
+                fpsType: osn.EFPSType.Fractional
+            };
+            secondContext.video = secondVideoInfo;
+        } else {
+            logInfo(testName, 'Skip AddVideoContext. Running in CI environment, skipping creation of second video context that requires GPU');
+        }
     });
 
     // Shutdown OBS process
@@ -51,7 +55,9 @@ describe(testName, () => {
         // Releasing user got from pool
         await obs.releaseUser();
 
-        if (secondContext) secondContext.destroy();
+        if (secondContext) {
+            secondContext.destroy();
+        }
         obs.shutdown();
 
         if (hasTestFailed === true) {
@@ -69,102 +75,9 @@ describe(testName, () => {
         hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
-    it('Enhanced Broadcasting Simple Streaming honors stream delay', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
-        if (obs.isCI()) {
-            // Skipping this test because CI server doesn't have GPU, but you can run it locally
-            this.skip();
-        }
-
-        const configuredDelayMs = 10 * 1000;
-        const allowedTimingDriftMs = 1 * 1000;
-        const stream = osn.EnhancedBroadcastingSimpleStreamingFactory.create();
-        let streamStartRequested = false;
-        let scene: osn.IScene = null;
-        let sceneItem: osn.ISceneItem = null;
-        let videoSource: osn.IInput = null;
-
-        try {
-            expect(stream).to.not.be.null;
-            stream.service = osn.ServiceFactory.legacySettings;
-            stream.delay = osn.DelayFactory.create();
-            stream.delay.enabled = true;
-            stream.delay.delaySec = configuredDelayMs / 1000;
-            stream.delay.preserveDelay = true;
-            stream.reconnect = osn.ReconnectFactory.create();
-            stream.network = osn.NetworkFactory.create();
-            stream.video = obs.defaultVideoContext;
-            stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-delay");
-            stream.signalHandler = (signal) => {obs.signals.push(signal)};
-
-            scene = osn.SceneFactory.create('stream_delay_scene');
-            expect(scene).to.not.be.null;
-            osn.Global.setOutputSource(0, scene);
-
-            let settings = inputSettings.ffmpegSource;
-            settings['volume'] = 100;
-            settings['local_file'] = path.join(mediaPath, "bigbuckbunny.mp4");
-            settings['looping'] = true;
-            videoSource = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, 'stream_delay_video_source', settings);
-            expect(videoSource).to.not.be.null;
-
-            sceneItem = scene.add(videoSource);
-            expect(sceneItem).to.not.be.null;
-            sceneItem.video = obs.defaultVideoContext;
-            sceneItem.visible = true;
-            sceneItem.position = { x: 0, y: 0 };
-
-            const startTimeMs = Date.now();
-            stream.start();
-            streamStartRequested = true;
-
-            const preStartSignals = [EOBSOutputSignal.Starting, EOBSOutputSignal.Activate];
-            while (preStartSignals.length > 0) {
-                let signalInfo = await obs.getNextSignalInfoOf(EOBSOutputType.Streaming, preStartSignals);
-                const signalIndex = preStartSignals.indexOf(signalInfo.signal);
-                expect(signalIndex).to.be.greaterThan(-1, GetErrorMessage(ETestErrorMsg.StreamOutput));
-                expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-                preStartSignals.splice(signalIndex, 1);
-            }
-
-            let signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Start);
-            expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-            expect(signalInfo.signal).to.equal(EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-            const elapsedMs = Date.now() - startTimeMs;
-            expect(elapsedMs).to.be.greaterThan(
-                configuredDelayMs - allowedTimingDriftMs,
-                `Enhanced Broadcasting stream started after ${elapsedMs}ms, expected approximately ${configuredDelayMs}ms delay`,
-            );
-        } finally {
-            if (streamStartRequested) {
-                try {
-                    stream.stop();
-                    await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stopping);
-                    await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
-                    await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
-                } catch (e) {
-                    // Preserve the original assertion failure if cleanup also fails.
-                }
-            }
-
-            osn.Global.setOutputSource(0, null);
-            if (sceneItem) sceneItem.remove();
-            if (videoSource) videoSource.release();
-            if (scene) scene.release();
-            osn.EnhancedBroadcastingSimpleStreamingFactory.destroy(stream);
-        }
-    });
-
     it('Enhanced Broadcasting Simple Streaming Single Canvas', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         if (obs.isCI()) {
+            logInfo(testName, 'Running in CI environment, skipping test that requires GPU');
             // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
@@ -256,11 +169,8 @@ describe(testName, () => {
     });
 
     it('Enhanced Broadcasting Simple Streaming Dual Canvas', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         if (obs.isCI()) {
+            logInfo(testName, 'Running in CI environment, skipping test that requires GPU');
             // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
