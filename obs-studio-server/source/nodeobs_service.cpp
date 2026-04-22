@@ -901,10 +901,6 @@ static void erase_ch(struct dstr *str, size_t pos)
 
 char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, obs_video_info *ovi)
 {
-	// TODO: this is a hack to make dependency checker happy and not complain about "api-ms-win-crt-utility-l1-1-0.dll".
-	// There is no other good solution to fix this because of runtime differences
-	rand();
-
 	time_t now = time(0);
 	struct tm *cur_time;
 	cur_time = localtime(&now);
