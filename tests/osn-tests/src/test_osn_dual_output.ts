@@ -5,14 +5,13 @@ import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler, IOBSOutputSignalInfo, IVec2 } from '../util/obs_handler';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { IInput, ISettings, ITimeSpec } from '../osn';
-import { deleteConfigFiles, sleep } from '../util/general';
+import { deleteConfigFiles, sleep, waitForFile } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType, EOBSSettingsCategories } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
 import { EFPSType } from '../osn';
 import { UserPoolHandler } from '../util/user_pool_handler';
 import * as inputSettings from '../util/input_settings';
 
-import fs = require('fs');
 import path = require('path');
 import { randomUUID } from 'crypto';
 
@@ -112,18 +111,6 @@ describe(testName, () => {
         if (signalInfo.signal === EOBSOutputSignal.Stop && signalInfo.code !== 0) {
             throw Error(GetErrorMessage(ETestErrorMsg.StreamOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
         }
-    }
-
-    async function waitForFile(filePath: string, timeoutMs: number = 5000): Promise<void> {
-        const timeoutAt = Date.now() + timeoutMs;
-        while (Date.now() < timeoutAt) {
-            if (fs.existsSync(filePath)) {
-                return;
-            }
-            await sleep(100);
-        }
-
-        throw Error(`Timed out waiting for file: ${filePath}`);
     }
 
     it('Start Dual Output with advanced recording', async function() {
