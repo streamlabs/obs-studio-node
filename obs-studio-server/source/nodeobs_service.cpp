@@ -901,11 +901,13 @@ static void erase_ch(struct dstr *str, size_t pos)
 
 char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, obs_video_info *ovi)
 {
+	// TODO: this is a hack to make dependency checker happy and not complain about "api-ms-win-crt-utility-l1-1-0.dll".
+	// There is no other good solution to fix this because of runtime differences
+	rand();
+
 	time_t now = time(0);
 	struct tm *cur_time;
 	cur_time = localtime(&now);
-	const int width = 0;
-	const int height = 0;
 
 	const size_t spec_count = 23;
 	static const char *spec[][2] = {
@@ -981,14 +983,6 @@ char *osn_generate_formatted_filename(const char *extension, bool space, const c
 
 	if (!space)
 		dstr_replace(&sf, " ", "_");
-
-	if (width > 0 && height > 0) {
-		std::string resolution = std::to_string(width) + std::string("x") + std::to_string(height) + std::string("-");
-		dstr_cat(&sf, resolution.c_str());
-
-		dstr_cat_ch(&sf, (char)(rand() % 9 + 0x30));
-		dstr_cat_ch(&sf, (char)(rand() % 9 + 0x30));
-	}
 
 	dstr_cat_ch(&sf, '.');
 	dstr_cat(&sf, extension);
