@@ -168,7 +168,7 @@ describe(testName, () => {
         recording2Encoder.release();
     });
 
-    it('Start Dual Output with advanced recording uses collision handling instead of resolution suffix', async function() {
+    it('Dual canvas recording avoids name collision', async function() {
         if (obs.isDarwin()) {
             this.skip();
         }
