@@ -164,9 +164,11 @@ void osn::IReplayBuffer::Save(void *data, const int64_t id, const std::vector<ip
 
 	calldata_t cd = {0};
 	proc_handler_t *ph = obs_output_get_proc_handler(output);
-	proc_handler_call(ph, "save", &cd);
+	bool hasInvoked = proc_handler_call(ph, "save", &cd);
 	calldata_free(&cd);
 
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+    if (!hasInvoked)
+        PRETTY_ERROR_RETURN(ErrorCode::NotFound, "Could not find ReplayBuffer::Save");
+    rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
