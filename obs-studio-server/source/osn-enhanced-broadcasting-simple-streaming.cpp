@@ -23,6 +23,7 @@
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
+#include <exception>
 #include <osn-video.hpp>
 
 void osn::IEnhancedBroadcastingSimpleStreaming::Register(ipc::server &srv)
@@ -115,7 +116,13 @@ void osn::IEnhancedBroadcastingSimpleStreaming::Start(void *data, const int64_t 
 	}
 
 	// Note: unlike advanced mode, there is no Twitch VOD track for simple mode
-	streaming->StartEnhancedBroadcastingStream();
+	try {
+		streaming->StartEnhancedBroadcastingStream();
+	} catch (const std::exception &error) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, error.what());
+	} catch (...) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to start enhanced broadcasting stream.");
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

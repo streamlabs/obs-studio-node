@@ -71,6 +71,57 @@ describe(testName, () => {
     // TODO: more tests:
     // - vertical primary canvas
 
+    it('Enhanced Broadcasting Advanced Streaming reports unsupported GPU without crashing in CI', function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        if (!obs.isCI()) {
+            this.skip();
+        }
+
+        const stream = osn.EnhancedBroadcastingAdvancedStreamingFactory.create();
+        const unsupportedGpuMessage = 'Your GPU is not currently supported by Twitch Enhanced Broadcasting';
+        let startError: Error = null;
+
+        try {
+            expect(stream).to.not.be.null;
+            stream.service = osn.ServiceFactory.legacySettings;
+            stream.service.update({
+                service: 'Twitch',
+                server: 'auto',
+                key: obs.userStreamKey,
+            });
+            stream.delay = osn.DelayFactory.create();
+            stream.reconnect = osn.ReconnectFactory.create();
+            stream.network = osn.NetworkFactory.create();
+            stream.video = obs.defaultVideoContext;
+            const track1 = osn.AudioTrackFactory.create(160, 'track1');
+            osn.AudioTrackFactory.setAtIndex(track1, 1);
+
+            try {
+                stream.start();
+            } catch (error) {
+                startError = error as Error;
+            }
+
+            expect(startError).to.not.be.null;
+            expect(startError.message).to.contain(unsupportedGpuMessage);
+
+            expect(osn.ServiceFactory.types()).to.include('rtmp_common');
+        } finally {
+            if (!startError) {
+                try {
+                    stream.stop();
+                } catch (error) {
+                    // Best-effort cleanup if the stream unexpectedly started.
+                }
+            }
+
+            osn.EnhancedBroadcastingAdvancedStreamingFactory.destroy(stream);
+        }
+    });
+
     it('Enhanced Broadcasting Advanced Streaming Single Canvas', async function() {
         if (obs.isDarwin()) {
             this.skip();
