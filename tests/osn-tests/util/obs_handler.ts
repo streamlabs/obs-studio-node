@@ -118,7 +118,6 @@ export class OBSHandler {
         let initResult: number;
         logInfo(this.osnTestName, 'Initializing OBS');
 
-        const startTime = Date.now();
         try {
             const exitCode = osn.NodeObs.IPC.host(this.pipeName);
             if (exitCode !== osn.EVideoCodes.Success) {
@@ -132,8 +131,6 @@ export class OBSHandler {
         } catch (e) {
             throw Error('Exception when initializing OBS process: ' + e);
         }
-        const duration = Date.now() - startTime;
-        logInfo(this.osnTestName, `OBS initialization took ${duration}ms`);
 
         if (initResult !== osn.EVideoCodes.Success) {
             throw Error('OBS process initialization failed with code ' + initResult);
@@ -149,15 +146,14 @@ export class OBSHandler {
 
         logInfo(this.osnTestName, 'Shutting down OBS');
 
-        const startTime = Date.now();
         try {
             osn.NodeObs.OBS_service_removeCallback();
             osn.NodeObs.IPC.disconnect();
         } catch (e) {
             throw Error('Exception when shutting down OBS process: ' + e);
         }
-        const duration = Date.now() - startTime;
-        logInfo(this.osnTestName, `OBS shutdown successfully in ${duration}ms`);
+
+        logInfo(this.osnTestName, 'OBS shutdown successfully');
     }
 
     instantiateUserPool(testName: string) {
