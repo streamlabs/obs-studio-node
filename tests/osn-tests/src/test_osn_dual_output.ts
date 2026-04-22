@@ -50,7 +50,7 @@ describe(testName, function() {
             outputFormat: osn.EVideoFormat.NV12,
             colorspace: osn.EColorSpace.CS709,
             range: osn.ERangeType.Full,
-            scaleType: osn.EScaleType.Lanczos,
+            scaleType: osn.EScaleType.Bilinear,
             fpsType: EFPSType.Fractional
         };
         secondContext.video = secondVideoInfo;
@@ -135,6 +135,7 @@ describe(testName, function() {
             recording2.overwrite = false;
             recording2.noSpace = false;
             recording2.video = secondContext;
+            recording2.mixer = 2;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
             recording2.signalHandler = (signal) => { obs.signals.push(signal) };
@@ -221,6 +222,7 @@ describe(testName, function() {
             recording2.overwrite = false;
             recording2.noSpace = false;
             recording2.video = secondContext;
+            recording2.mixer = 2;
             const track2 = osn.AudioTrackFactory.create(160, 'track2');
             osn.AudioTrackFactory.setAtIndex(track2, 2);
             recording2.signalHandler = (signal) => { obs.signals.push(signal) };
