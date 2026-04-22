@@ -18,12 +18,13 @@ import { randomUUID } from 'crypto';
 const testName = 'osn-dual-output';
 
 describe(testName, function() {
+    this.timeout(90000); // 90 seconds timeout since this test is especially flaky on slower MacOS CI machines
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     let newSceneName = 'scene_' + randomUUID();
     let newSourceName: string = 'image_source_' + randomUUID();
     const media_path = path.join(path.normalize(__dirname), '..', 'media');
-    let secondContext;
+    let secondContext : osn.IVideo;
 
     // Initialize OBS process
     before(async () => {
