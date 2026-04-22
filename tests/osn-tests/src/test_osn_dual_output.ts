@@ -50,7 +50,7 @@ describe(testName, function() {
             outputFormat: osn.EVideoFormat.NV12,
             colorspace: osn.EColorSpace.CS709,
             range: osn.ERangeType.Full,
-            scaleType: osn.EScaleType.Bilinear,
+            scaleType: osn.EScaleType.Lanczos,
             fpsType: EFPSType.Fractional
         };
         secondContext.video = secondVideoInfo;
