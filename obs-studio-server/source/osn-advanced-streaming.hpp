@@ -47,6 +47,8 @@ public:
 	uint32_t outputHeight;
 
 	void UpdateEncoders();
+	void start() override;
+	void checkOutput() override;
 };
 
 class IAdvancedStreaming : public IStreaming {

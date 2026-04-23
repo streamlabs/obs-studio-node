@@ -104,14 +104,23 @@ Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 {
 	Napi::Function async_callback = info[0].As<Napi::Function>();
 	Napi::Object serverInfo = info[1].ToObject();
-	std::string continent = serverInfo.Get("continent").ToString().Utf8Value();
-	std::string service = serverInfo.Get("service_name").ToString().Utf8Value();
+	// Targets — frontend supplies the osn object ids the run should operate on.
+	// Missing fields default to 0 (= "no target of this kind"). Exactly one of the
+	// streaming ids should be non-zero.
+	auto readId = [&](const char *key) -> uint64_t {
+		return serverInfo.Has(key) ? (uint64_t)serverInfo.Get(key).ToNumber().Int64Value() : 0;
+	};
+	uint64_t simpleStreamingId = readId("simpleStreamingId");
+	uint64_t advancedStreamingId = readId("advancedStreamingId");
+	uint64_t simpleRecordingId = readId("simpleRecordingId");
+	uint64_t videoId = readId("videoId");
 
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "InitializeAutoConfig", {continent, service});
+	std::vector<ipc::value> response = conn->call_synchronous_helper(
+		"AutoConfig", "InitializeAutoConfig", {ipc::value(simpleStreamingId), ipc::value(advancedStreamingId), ipc::value(simpleRecordingId), ipc::value(videoId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

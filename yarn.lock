@@ -1423,6 +1423,7 @@ __metadata:
     chai: "npm:^4.2.0"
     chai-subset: "npm:^1.6.0"
     colors: "npm:^1.4.0"
+    dotenv: "npm:^17.4.2"
     electron: "npm:29.4.3"
     electron-mocha: "npm:^12.1.0"
     get-func-name: "npm:^3.0.0"
@@ -2273,6 +2274,13 @@ __metadata:
   version: 7.0.0
   resolution: "diff@npm:7.0.0"
   checksum: 10c0/251fd15f85ffdf814cfc35a728d526b8d2ad3de338dcbd011ac6e57c461417090766b28995f8ff733135b5fbc3699c392db1d5e27711ac4e00244768cd1d577b
+  languageName: node
+  linkType: hard
+
+"dotenv@npm:^17.4.2":
+  version: 17.4.2
+  resolution: "dotenv@npm:17.4.2"
+  checksum: 10c0/164f8e77a646c8446867d5b588d26ea6005c8ea7c5eb41cf926f6113d23f2191355f6e0cfd95ea9bab98394a5b0a3f1e51a8399711b666fe55cc7b0bd745f942
   languageName: node
   linkType: hard
 

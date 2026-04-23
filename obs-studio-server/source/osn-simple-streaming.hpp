@@ -33,26 +33,17 @@ public:
 		audioEncoder = nullptr;
 		useAdvanced = false;
 		customEncSettings = "";
-		originalServiceSettings = nullptr;
 	}
-	~SimpleStreaming() 
-	{
-		if (originalServiceSettings) {
-			obs_data_release(originalServiceSettings);
-		}
-	}
+	~SimpleStreaming() {}
 
 public:
 	obs_encoder_t *audioEncoder;
 	bool useAdvanced;
 	std::string customEncSettings;
-	obs_data_t *originalServiceSettings;
 
 	void updateEncoders();
-	void start();
-	void checkOutput();
-	void testBandwidth(bool &gotError);
-	void CleanTestMode();
+	void start() override;
+	void checkOutput() override;
 };
 
 class ISimpleStreaming : public IStreaming {

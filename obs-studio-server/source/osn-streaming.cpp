@@ -32,6 +32,64 @@ osn::Streaming::~Streaming()
 		obs_encoder_release(streamArchive);
 		streamArchive = nullptr;
 	}
+	if (originalServiceSettings) {
+		obs_data_release(originalServiceSettings);
+		originalServiceSettings = nullptr;
+	}
+}
+
+void osn::Streaming::testBandwidth(bool &gotError)
+{
+	if (!service) {
+		gotError = true;
+		return;
+	}
+
+	if (originalServiceSettings) {
+		obs_data_release(originalServiceSettings);
+	}
+	originalServiceSettings = obs_service_get_settings(service);
+	obs_data_addref(originalServiceSettings);
+
+	obs_data_t *serviceSettings = obs_data_create();
+	obs_data_apply(serviceSettings, originalServiceSettings);
+
+	const char *serviceName = obs_data_get_string(serviceSettings, "service");
+	if (serviceName && strcmp(serviceName, "Twitch") == 0) {
+		std::string key = obs_service_get_connect_info(service, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
+
+		while (!key.empty()) {
+			char ch = key.back();
+			if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')
+				key.pop_back();
+			else
+				break;
+		}
+
+		key += "?bandwidthtest";
+		obs_data_set_string(serviceSettings, "key", key.c_str());
+	}
+
+	obs_service_update(service, serviceSettings);
+	obs_data_release(serviceSettings);
+
+	testMode = true;
+	start();
+}
+
+void osn::Streaming::CleanTestMode()
+{
+	if (GetOutput() && obs_output_active(GetOutput())) {
+		obs_output_stop(GetOutput());
+	}
+
+	if (service && originalServiceSettings) {
+		obs_service_update(service, originalServiceSettings);
+		obs_data_release(originalServiceSettings);
+		originalServiceSettings = nullptr;
+	}
+
+	testMode = false;
 }
 
 void osn::Streaming::DeleteOutput()

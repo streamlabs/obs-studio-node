@@ -326,65 +326,6 @@ void osn::SimpleStreaming::updateEncoders()
 	}
 }
 
-void osn::SimpleStreaming::testBandwidth(bool &gotError)
-{
-	if (!service) {
-		gotError = true;
-		return;
-	}
-
-	// Store original service settings
-	if (originalServiceSettings) {
-		obs_data_release(originalServiceSettings);
-	}
-	originalServiceSettings = obs_service_get_settings(service);
-	obs_data_addref(originalServiceSettings);
-
-	// Get service settings and modify key for Twitch bandwidth test
-	obs_data_t *serviceSettings = obs_data_create();
-	obs_data_apply(serviceSettings, originalServiceSettings);
-	
-	const char *serviceName = obs_data_get_string(serviceSettings, "service");
-	if (serviceName && strcmp(serviceName, "Twitch") == 0) {
-		std::string key = obs_service_get_connect_info(service, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
-		
-		// Remove trailing whitespace
-		while (!key.empty()) {
-			char ch = key.back();
-			if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')
-				key.pop_back();
-			else
-				break;
-		}
-		
-		// Append bandwidth test parameter
-		key += "?bandwidthtest";
-		obs_data_set_string(serviceSettings, "key", key.c_str());
-	}
-	
-	obs_service_update(service, serviceSettings);
-	obs_data_release(serviceSettings);
-
-	testMode = true;
-	start();
-}
-
-void osn::SimpleStreaming::CleanTestMode()
-{
-	if (GetOutput() && obs_output_active(GetOutput())) {
-		obs_output_stop(GetOutput());
-	}
-
-	// Restore original service settings
-	if (service && originalServiceSettings) {
-		obs_service_update(service, originalServiceSettings);
-		obs_data_release(originalServiceSettings);
-		originalServiceSettings = nullptr;
-	}
-
-	testMode = false;
-}
-
 void osn::SimpleStreaming::start()
 {
 	updateEncoders();

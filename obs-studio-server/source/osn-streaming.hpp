@@ -51,6 +51,7 @@ public:
 		lastBytesSentTime = 0;
 		simple = true;
 		testMode = false;
+		originalServiceSettings = nullptr;
 	}
 	virtual ~Streaming();
 
@@ -72,6 +73,7 @@ public:
 	uint64_t lastBytesSentTime;
 	bool simple;
 	bool testMode;
+	obs_data_t *originalServiceSettings;
 
 	bool isTwitchVODSupported();
 	bool ApplyOutputSettings(obs_output_t *output, std::string &errorMessage);
@@ -82,6 +84,13 @@ public:
 	void setReconnectLegacySettings();
 	void setNetworkLegacySettings();
 	std::string testQuery();
+
+	// Autoconfig hooks. start() and checkOutput() are subclass-specific (different
+	// pipelines for simple/advanced); testBandwidth() and CleanTestMode() are shared.
+	virtual void start() {}
+	virtual void checkOutput() {}
+	void testBandwidth(bool &gotError);
+	void CleanTestMode();
 };
 
 class IStreaming {

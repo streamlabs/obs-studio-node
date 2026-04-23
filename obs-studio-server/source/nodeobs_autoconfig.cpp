@@ -62,52 +62,56 @@ std::array<std::future<void>, ThreadedTests::Count> asyncTests;
 std::mutex eventsMutex;
 std::queue<AutoConfigInfo> events;
 
-// Service serviceSelected = Service::Other;
-Quality recordingQuality = Quality::Stream;
-Encoder recordingEncoder = Encoder::Stream;
-Encoder streamingEncoder = Encoder::x264;
-Type type = Type::Streaming;
-FPSType fpsType = FPSType::PreferHighFPS;
-uint64_t idealBitrate = 4500;
-uint64_t baseResolutionCX = 1920;
-uint64_t baseResolutionCY = 1080;
-uint64_t idealResolutionCX = 1280;
-uint64_t idealResolutionCY = 720;
-int idealFPSNum = 60;
-int idealFPSDen = 1;
-// std::string serviceName;
-// std::string serverName;
-std::string server;
-//std::string key;
+// Per-run context. One autoconfig run at a time. Targets are osn object ids supplied
+// by the frontend at InitializeAutoConfig; chosen values are stored back here as each
+// stage runs and are pushed to the live objects in Phase 2's applyResults().
+struct AutoconfigRun {
+	// Targets — 0 means "not provided". Exactly one of simple/advanced streaming id
+	// must be set per run.
+	uint64_t simpleStreamingId = 0;
+	uint64_t advancedStreamingId = 0;
+	uint64_t simpleRecordingId = 0;
+	uint64_t videoId = 0;
 
-bool hardwareEncodingAvailable = false;
-bool nvencAvailable = false;
-bool qsvAvailable = false;
-bool vceAvailable = false;
-bool appleAvailable = false;
+	// Inputs / options.
+	Type type = Type::Streaming;
+	FPSType fpsType = FPSType::PreferHighFPS;
+	bool preferHardware = true;
+	bool preferHighFPS = true;
+	bool bandwidthTest = true;
+	bool customServer = false;
+	int specificFPSNum = 0;
+	int specificFPSDen = 0;
+	uint64_t baseResolutionCX = 1920;
+	uint64_t baseResolutionCY = 1080;
+	int startingBitrate = 4500;
 
-int startingBitrate = 4500;
-bool customServer = false;
-bool bandwidthTest = true;
-// bool testRegions = true;
+	// Detected encoder availability (filled by TestHardwareEncoding).
+	bool hardwareEncodingAvailable = false;
+	bool nvencAvailable = false;
+	bool qsvAvailable = false;
+	bool vceAvailable = false;
+	bool appleAvailable = false;
+	bool softwareTested = false;
 
-// bool regionNA = false;
-// bool regionSA = false;
-// bool regionEU = false;
-// bool regionAS = false;
-// bool regionOC = false;
+	// Chosen values (filled by each test stage; consumed by applyResults).
+	Quality recordingQuality = Quality::Stream;
+	Encoder recordingEncoder = Encoder::Stream;
+	Encoder streamingEncoder = Encoder::x264;
+	uint64_t idealBitrate = 4500;
+	uint64_t idealResolutionCX = 1280;
+	uint64_t idealResolutionCY = 720;
+	int idealFPSNum = 60;
+	int idealFPSDen = 1;
+	std::string server;
+};
 
-bool preferHighFPS = true;
-bool preferHardware = true;
-int specificFPSNum = 0;
-int specificFPSDen = 0;
+static AutoconfigRun runContext;
 
 std::condition_variable cv;
 std::mutex m;
 bool cancel = false;
 bool started = false;
-
-bool softwareTested = false;
 
 struct ServerInfo {
 	std::string name;
@@ -123,8 +127,10 @@ void autoConfig::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("AutoConfig");
 
-	cls->register_function(std::make_shared<ipc::function>("InitializeAutoConfig", std::vector<ipc::type>{ipc::type::String, ipc::type::String},
-							       autoConfig::InitializeAutoConfig));
+	cls->register_function(std::make_shared<ipc::function>(
+		"InitializeAutoConfig",
+		std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::UInt64, ipc::type::UInt64},
+		autoConfig::InitializeAutoConfig));
 	cls->register_function(std::make_shared<ipc::function>("StartBandwidthTest", std::vector<ipc::type>{}, autoConfig::StartBandwidthTest));
 	cls->register_function(std::make_shared<ipc::function>("StartStreamEncoderTest", std::vector<ipc::type>{}, autoConfig::StartStreamEncoderTest));
 	cls->register_function(std::make_shared<ipc::function>("StartRecordingEncoderTest", std::vector<ipc::type>{}, autoConfig::StartRecordingEncoderTest));
@@ -166,11 +172,11 @@ void autoConfig::TestHardwareEncoding(void)
 	const char *id;
 	while (obs_enum_encoder_types(idx++, &id)) {
 		if (strcmp(id, ADVANCED_ENCODER_NVENC) == 0)
-			hardwareEncodingAvailable = nvencAvailable = true;
+			runContext.hardwareEncodingAvailable = runContext.nvencAvailable = true;
 		else if (strcmp(id, ADVANCED_ENCODER_QSV) == 0)
-			hardwareEncodingAvailable = qsvAvailable = true;
+			runContext.hardwareEncodingAvailable = runContext.qsvAvailable = true;
 		else if (strcmp(id, ADVANCED_ENCODER_AMD) == 0)
-			hardwareEncodingAvailable = vceAvailable = true;
+			runContext.hardwareEncodingAvailable = runContext.vceAvailable = true;
 #ifdef __APPLE__
 		else if (strcmp(id, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0
 #ifndef __aarch64__
@@ -178,7 +184,7 @@ void autoConfig::TestHardwareEncoding(void)
 #endif
 		)
 			if (__builtin_available(macOS 13.0, *))
-				hardwareEncodingAvailable = appleAvailable = true;
+				runContext.hardwareEncodingAvailable = runContext.appleAvailable = true;
 #endif
 	}
 }
@@ -325,9 +331,14 @@ void autoConfig::StopThread(void)
 
 void autoConfig::InitializeAutoConfig(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	// serverName = "Auto (Recommended)";
-	// server = "auto";
-	// todo only need this if it was not set by user yet
+	// Reset the per-run context. Frontend passes the targets it wants the run to operate
+	// on as 64-bit ids; pass 0 for any kind it doesn't want exercised. Exactly one of
+	// simpleStreamingId or advancedStreamingId should be non-zero.
+	runContext = AutoconfigRun{};
+	runContext.simpleStreamingId = args[0].value_union.ui64;
+	runContext.advancedStreamingId = args[1].value_union.ui64;
+	runContext.simpleRecordingId = args[2].value_union.ui64;
+	runContext.videoId = args[3].value_union.ui64;
 
 	cancel = false;
 
@@ -459,11 +470,11 @@ int EvaluateBandwidth(ServerInfo &server, bool &connected, bool &stopped, bool &
 		bitrate = (uint64_t)total_bytes * 8U * 1000000000U / total_time / 1000U;
 	}
 
-	startingBitrate = (int)obs_data_get_int(vencoder_settings, "bitrate");
-	if (obs_output_get_frames_dropped(output) || (int)bitrate < (startingBitrate * 75 / 100)) {
+	runContext.startingBitrate = (int)obs_data_get_int(vencoder_settings, "bitrate");
+	if (obs_output_get_frames_dropped(output) || (int)bitrate < (runContext.startingBitrate * 75 / 100)) {
 		server.bitrate = (int)bitrate * 70 / 100;
 	} else {
-		server.bitrate = startingBitrate;
+		server.bitrate = runContext.startingBitrate;
 	}
 
 	server.ms = obs_output_get_connect_time_ms(output);
@@ -513,33 +524,53 @@ void autoConfig::TestBandwidthThreadV2(void)
 		events.push(AutoConfigInfo("starting_step", "bandwidth_test", 0));
 	}
 
-	if (osn::ISimpleStreaming::Manager::GetInstance().size() != 0) {
-		int startedTests = 0;
-		std::vector<osn::SimpleStreaming *> testingServices;
+	// Resolve the run target. Frontend supplies exactly one of simpleStreamingId or
+	// advancedStreamingId at InitializeAutoConfig time. The vector wrapper keeps the
+	// rest of the loop ready for Phase-3 multi-target without restructuring.
+	std::vector<osn::Streaming *> targets;
+	if (runContext.simpleStreamingId != 0) {
+		auto *streaming = osn::IStreaming::Manager::GetInstance().find(runContext.simpleStreamingId);
+		if (!streaming) {
+			sendErrorMessage("simple_streaming_id_not_found");
+			gotError = true;
+		} else {
+			targets.push_back(streaming);
+		}
+	} else if (runContext.advancedStreamingId != 0) {
+		auto *streaming = osn::IStreaming::Manager::GetInstance().find(runContext.advancedStreamingId);
+		if (!streaming) {
+			sendErrorMessage("advanced_streaming_id_not_found");
+			gotError = true;
+		} else {
+			targets.push_back(streaming);
+		}
+	} else {
+		sendErrorMessage("no_streaming_target_provided");
+		gotError = true;
+	}
 
-		osn::ISimpleStreaming::Manager::GetInstance().for_each([&](osn::Streaming *baseStreaming) {
-			osn::SimpleStreaming *streaming = static_cast<osn::SimpleStreaming *>(baseStreaming);
+	if (!gotError) {
+		std::vector<osn::Streaming *> testingServices;
+
+		for (auto *streaming : targets) {
 			streaming->checkOutput();
 			streaming->testBandwidth(gotError);
 			if (!gotError && streaming->GetOutput()) {
-				startedTests++;
 				testingServices.push_back(streaming);
-			} else {
-				if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
-					obs_output_stop(streaming->GetOutput());
-				}
+			} else if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
+				obs_output_stop(streaming->GetOutput());
 			}
-		});
+		}
 
-		if (!gotError && startedTests > 0) {
+		if (!gotError && !testingServices.empty()) {
 			auto startTime = std::chrono::steady_clock::now();
 			bool allConnected = false;
 
-			// Wait up to 10 seconds for all services to connect or fail
+			// Wait up to 10 seconds for all services to connect or fail.
 			while (!allConnected && !gotError && std::chrono::steady_clock::now() - startTime < std::chrono::seconds(10)) {
 				allConnected = true;
 
-				for (auto streaming : testingServices) {
+				for (auto *streaming : testingServices) {
 					std::string signal = streaming->testQuery();
 
 					if (signal == "error") {
@@ -563,9 +594,8 @@ void autoConfig::TestBandwidthThreadV2(void)
 				}
 			}
 
-			// Stop all outputs and collect results
 			if (!gotError) {
-				for (auto streaming : testingServices) {
+				for (auto *streaming : testingServices) {
 					if (streaming->GetOutput() && obs_output_active(streaming->GetOutput())) {
 						uint64_t totalBytes = obs_output_get_total_bytes(streaming->GetOutput());
 						int connectTimeMs = obs_output_get_connect_time_ms(streaming->GetOutput());
@@ -573,11 +603,13 @@ void autoConfig::TestBandwidthThreadV2(void)
 
 						obs_output_stop(streaming->GetOutput());
 
-						// Calculate bitrate if we have data
 						if (totalBytes > 0 && connectTimeMs > 0) {
-							uint64_t bitrate = (totalBytes * 8 * 1000) / connectTimeMs / 1000;
+							// Explicit unsigned 64-bit arithmetic — the multiply chain stays
+							// in uint64_t so an unusually long test (or any future reuse on
+							// a high-throughput link) can't silently overflow an int.
+							uint64_t bitrate =
+								(totalBytes * 8ULL * 1000ULL) / static_cast<uint64_t>(connectTimeMs) / 1000ULL;
 
-							// Get server address from service
 							std::string serverAddress;
 							if (streaming->service) {
 								serverAddress =
@@ -588,11 +620,10 @@ void autoConfig::TestBandwidthThreadV2(void)
 							result.address = serverAddress;
 							result.ms = connectTimeMs;
 
-							// Adjust bitrate based on dropped frames
-							if (droppedFrames > 0 || (int)bitrate < (startingBitrate * 75 / 100)) {
+							if (droppedFrames > 0 || (int)bitrate < (runContext.startingBitrate * 75 / 100)) {
 								result.bitrate = (int)bitrate * 70 / 100;
 							} else {
-								result.bitrate = startingBitrate;
+								result.bitrate = runContext.startingBitrate;
 							}
 
 							testResults.push_back(result);
@@ -602,19 +633,9 @@ void autoConfig::TestBandwidthThreadV2(void)
 			}
 		}
 
-		// Clean up test mode for all services
-		osn::ISimpleStreaming::Manager::GetInstance().for_each([](osn::Streaming *baseStreaming) {
-			osn::SimpleStreaming *streaming = static_cast<osn::SimpleStreaming *>(baseStreaming);
+		for (auto *streaming : targets) {
 			streaming->CleanTestMode();
-		});
-
-	} else if (osn::IAdvancedStreaming::Manager::GetInstance().size() != 0) {
-		// Advanced streaming support to be implemented later
-		sendErrorMessage("advanced_streaming_not_supported_yet");
-		gotError = true;
-	} else {
-		sendErrorMessage("no_streaming_services_available");
-		gotError = true;
+		}
 	}
 
 	if (!gotError) {
@@ -626,8 +647,8 @@ void autoConfig::TestBandwidthThreadV2(void)
 			std::sort(testResults.begin(), testResults.end(),
 				  [](const ServerInfo &a, const ServerInfo &b) { return (a.bitrate > b.bitrate) || (a.bitrate == b.bitrate && a.ms < b.ms); });
 
-			idealBitrate = testResults.front().bitrate;
-			server = testResults.front().address;
+			runContext.idealBitrate = testResults.front().bitrate;
+			runContext.server = testResults.front().address;
 		}
 	}
 
@@ -939,9 +960,9 @@ void autoConfig::TestBandwidthThread(void)
 		// 		bestMS = server.ms;
 		// 	}
 		// }
-		server = bestServer;
+		runContext.server = bestServer;
 		serverName = bestServerName;
-		idealBitrate = bestBitrate;
+		runContext.idealBitrate = bestBitrate;
 	}
 
 	obs_output_release(output);
@@ -968,7 +989,7 @@ static long double EstimateBitrateVal(int cx, int cy, int fps_num, int fps_den)
 
 static long double EstimateMinBitrate(int cx, int cy, int fps_num, int fps_den)
 {
-	long double val = EstimateBitrateVal((int)baseResolutionCX, (int)baseResolutionCY, 60, 1) / 5800.0l;
+	long double val = EstimateBitrateVal((int)runContext.baseResolutionCX, (int)runContext.baseResolutionCY, 60, 1) / 5800.0l;
 	if (val < std::numeric_limits<double>::epsilon() && val > -std::numeric_limits<double>::epsilon()) {
 		return 0.0;
 	}
@@ -997,15 +1018,15 @@ struct Result {
 
 void autoConfig::FindIdealHardwareResolution()
 {
-	int baseCX = (int)baseResolutionCX;
-	int baseCY = (int)baseResolutionCY;
+	int baseCX = (int)runContext.baseResolutionCX;
+	int baseCY = (int)runContext.baseResolutionCY;
 
 	std::vector<Result> results;
 
 	int pcores = os_get_physical_cores();
 	int maxDataRate;
 	if (pcores >= 4) {
-		maxDataRate = int(baseResolutionCX * baseResolutionCY * 60 + 1000);
+		maxDataRate = int(runContext.baseResolutionCX * runContext.baseResolutionCY * 60 + 1000);
 	} else {
 		maxDataRate = 1280 * 720 * 30 + 1000;
 	}
@@ -1015,8 +1036,8 @@ void autoConfig::FindIdealHardwareResolution()
 			return;
 
 		if (!fps_num || !fps_den) {
-			fps_num = specificFPSNum;
-			fps_den = specificFPSDen;
+			fps_num = runContext.specificFPSNum;
+			fps_den = runContext.specificFPSDen;
 		}
 
 		long double fps = ((long double)fps_num / (long double)fps_den);
@@ -1029,13 +1050,13 @@ void autoConfig::FindIdealHardwareResolution()
 			return;
 
 		int minBitrate = int(EstimateMinBitrate(cx, cy, fps_num, fps_den) * 114 / 100);
-		if (type == Type::Recording)
+		if (runContext.type == Type::Recording)
 			force = true;
-		if (force || idealBitrate >= minBitrate)
+		if (force || runContext.idealBitrate >= minBitrate)
 			results.emplace_back(cx, cy, fps_num, fps_den);
 	};
 
-	if (specificFPSNum && specificFPSDen) {
+	if (runContext.specificFPSNum && runContext.specificFPSDen) {
 		testRes(1.0, 0, 0, false);
 		testRes(1.5, 0, 0, false);
 		testRes(1.0 / 0.6, 0, 0, false);
@@ -1056,7 +1077,7 @@ void autoConfig::FindIdealHardwareResolution()
 
 	int minArea = 960 * 540 + 1000;
 
-	if (!specificFPSNum && preferHighFPS && results.size() > 1) {
+	if (!runContext.specificFPSNum && runContext.preferHighFPS && results.size() > 1) {
 		Result &result1 = results[0];
 		Result &result2 = results[1];
 
@@ -1068,16 +1089,16 @@ void autoConfig::FindIdealHardwareResolution()
 	}
 
 	Result result = results.front();
-	idealResolutionCX = result.cx;
-	idealResolutionCY = result.cy;
+	runContext.idealResolutionCX = result.cx;
+	runContext.idealResolutionCY = result.cy;
 
-	if (idealResolutionCX * idealResolutionCY > 1280 * 720) {
-		idealResolutionCX = 1280;
-		idealResolutionCY = 720;
+	if (runContext.idealResolutionCX * runContext.idealResolutionCY > 1280 * 720) {
+		runContext.idealResolutionCX = 1280;
+		runContext.idealResolutionCY = 720;
 	}
 
-	idealFPSNum = result.fps_num;
-	idealFPSDen = result.fps_den;
+	runContext.idealFPSNum = result.fps_num;
+	runContext.idealFPSDen = result.fps_den;
 }
 
 bool autoConfig::TestSoftwareEncoding()
@@ -1095,9 +1116,9 @@ bool autoConfig::TestSoftwareEncoding()
 	obs_data_release(vencoder_settings);
 	obs_data_set_int(aencoder_settings, "bitrate", 32);
 
-	if (type != Type::Recording) {
+	if (runContext.type != Type::Recording) {
 		obs_data_set_int(vencoder_settings, "keyint_sec", 2);
-		obs_data_set_int(vencoder_settings, "bitrate", idealBitrate);
+		obs_data_set_int(vencoder_settings, "bitrate", runContext.idealBitrate);
 		obs_data_set_string(vencoder_settings, "rate_control", "CBR");
 		obs_data_set_string(vencoder_settings, "profile", "main");
 		obs_data_set_string(vencoder_settings, "preset", "veryfast");
@@ -1141,8 +1162,8 @@ bool autoConfig::TestSoftwareEncoding()
 	/* -----------------------------------*/
 	/* calculate starting resolution      */
 
-	int baseCX = int(baseResolutionCX);
-	int baseCY = int(baseResolutionCY);
+	int baseCX = int(runContext.baseResolutionCX);
+	int baseCY = int(runContext.baseResolutionCY);
 
 	/* -----------------------------------*/
 	/* calculate starting test rates      */
@@ -1152,15 +1173,15 @@ bool autoConfig::TestSoftwareEncoding()
 	int maxDataRate;
 	if (lcores > 8 || pcores > 4) {
 		/* superb */
-		maxDataRate = int(baseResolutionCX * baseResolutionCY * 60 + 1000);
+		maxDataRate = int(runContext.baseResolutionCX * runContext.baseResolutionCY * 60 + 1000);
 
 	} else if (lcores > 4 && pcores == 4) {
 		/* great */
-		maxDataRate = int(baseResolutionCX * baseResolutionCY * 60 + 1000);
+		maxDataRate = int(runContext.baseResolutionCX * runContext.baseResolutionCY * 60 + 1000);
 
 	} else if (pcores == 4) {
 		/* okay */
-		maxDataRate = int(baseResolutionCX * baseResolutionCY * 30 + 1000);
+		maxDataRate = int(runContext.baseResolutionCX * runContext.baseResolutionCY * 30 + 1000);
 
 	} else {
 		/* toaster */
@@ -1184,8 +1205,8 @@ bool autoConfig::TestSoftwareEncoding()
 			return true;
 
 		if (!fps_num || !fps_den) {
-			fps_num = specificFPSNum;
-			fps_den = specificFPSDen;
+			fps_num = runContext.specificFPSNum;
+			fps_den = runContext.specificFPSDen;
 		}
 
 		long double fps = ((long double)fps_num / (long double)fps_den);
@@ -1193,9 +1214,9 @@ bool autoConfig::TestSoftwareEncoding()
 		int cx = int((long double)baseCX / div);
 		int cy = int((long double)baseCY / div);
 
-		if (!force && type != Type::Recording) {
+		if (!force && runContext.type != Type::Recording) {
 			int est = int(EstimateMinBitrate(cx, cy, fps_num, fps_den));
-			if (est > idealBitrate)
+			if (est > runContext.idealBitrate)
 				return true;
 		}
 
@@ -1246,7 +1267,7 @@ bool autoConfig::TestSoftwareEncoding()
 		return !cancel;
 	};
 
-	if (specificFPSNum && specificFPSDen) {
+	if (runContext.specificFPSNum && runContext.specificFPSDen) {
 		count = 5;
 		if (!testRes(1.0, 0, 0, false))
 			return false;
@@ -1287,7 +1308,7 @@ bool autoConfig::TestSoftwareEncoding()
 
 	int minArea = 960 * 540 + 1000;
 
-	if (!specificFPSNum && preferHighFPS && results.size() > 1) {
+	if (!runContext.specificFPSNum && runContext.preferHighFPS && results.size() > 1) {
 		Result &result1 = results[0];
 		Result &result2 = results[1];
 
@@ -1299,28 +1320,28 @@ bool autoConfig::TestSoftwareEncoding()
 	}
 
 	Result result = results.front();
-	idealResolutionCX = result.cx;
-	idealResolutionCY = result.cy;
+	runContext.idealResolutionCX = result.cx;
+	runContext.idealResolutionCY = result.cy;
 
-	if (idealResolutionCX * idealResolutionCY > 1280 * 720) {
-		idealResolutionCX = 1280;
-		idealResolutionCY = 720;
+	if (runContext.idealResolutionCX * runContext.idealResolutionCY > 1280 * 720) {
+		runContext.idealResolutionCX = 1280;
+		runContext.idealResolutionCY = 720;
 	}
 
-	idealFPSNum = result.fps_num;
-	idealFPSDen = result.fps_den;
+	runContext.idealFPSNum = result.fps_num;
+	runContext.idealFPSDen = result.fps_den;
 
 	long double fUpperBitrate = EstimateUpperBitrate(result.cx, result.cy, result.fps_num, result.fps_den);
 
 	int upperBitrate = int(floor(fUpperBitrate / 50.0l) * 50.0l);
 
-	if (streamingEncoder != Encoder::x264) {
+	if (runContext.streamingEncoder != Encoder::x264) {
 		upperBitrate *= 114;
 		upperBitrate /= 100;
 	}
 
-	if (idealBitrate > upperBitrate)
-		idealBitrate = upperBitrate;
+	if (runContext.idealBitrate > upperBitrate)
+		runContext.idealBitrate = upperBitrate;
 
 	obs_output_release(output);
 	obs_encoder_release(vencoder);
@@ -1331,92 +1352,92 @@ bool autoConfig::TestSoftwareEncoding()
 		blog(LOG_ERROR, "[VIDEO_CANVAS] Failed to remove video info after TestSoftwareEncoding, %08X", ovi);
 	}
 
-	softwareTested = true;
+	runContext.softwareTested = true;
 	return true;
 }
 
 void autoConfig::TestStreamEncoderThread()
 {
 	eventsMutex.lock();
-	events.push(AutoConfigInfo("starting_step", "streamingEncoder_test", 0));
+	events.push(AutoConfigInfo("starting_step", "runContext.streamingEncoder_test", 0));
 	eventsMutex.unlock();
 
 	TestHardwareEncoding();
 
-	if (!softwareTested) {
-		if (!preferHardware || !hardwareEncodingAvailable) {
+	if (!runContext.softwareTested) {
+		if (!runContext.preferHardware || !runContext.hardwareEncodingAvailable) {
 			if (!TestSoftwareEncoding()) {
 				return;
 			}
 		}
 	}
 
-	if (preferHardware && !softwareTested && hardwareEncodingAvailable)
+	if (runContext.preferHardware && !runContext.softwareTested && runContext.hardwareEncodingAvailable)
 		FindIdealHardwareResolution();
 
-	if (!softwareTested) {
-		if (nvencAvailable)
-			streamingEncoder = Encoder::NVENC;
-		else if (qsvAvailable)
-			streamingEncoder = Encoder::QSV;
-		else if (vceAvailable)
-			streamingEncoder = Encoder::AMD;
+	if (!runContext.softwareTested) {
+		if (runContext.nvencAvailable)
+			runContext.streamingEncoder = Encoder::NVENC;
+		else if (runContext.qsvAvailable)
+			runContext.streamingEncoder = Encoder::QSV;
+		else if (runContext.vceAvailable)
+			runContext.streamingEncoder = Encoder::AMD;
 		// HW encoding seems to not be stable on Mac
 		// else if (appleHWAvailable)
-		// 	streamingEncoder = Encoder::appleHW;
+		// 	runContext.streamingEncoder = Encoder::appleHW;
 	} else {
-		streamingEncoder = Encoder::x264;
+		runContext.streamingEncoder = Encoder::x264;
 	}
 
 	eventsMutex.lock();
-	events.push(AutoConfigInfo("stopping_step", "streamingEncoder_test", 100));
+	events.push(AutoConfigInfo("stopping_step", "runContext.streamingEncoder_test", 100));
 	eventsMutex.unlock();
 }
 
 void autoConfig::TestRecordingEncoderThread()
 {
 	eventsMutex.lock();
-	events.push(AutoConfigInfo("starting_step", "recordingEncoder_test", 0));
+	events.push(AutoConfigInfo("starting_step", "runContext.recordingEncoder_test", 0));
 	eventsMutex.unlock();
 
 	TestHardwareEncoding();
 
-	if (!hardwareEncodingAvailable && !softwareTested) {
+	if (!runContext.hardwareEncodingAvailable && !runContext.softwareTested) {
 		if (!TestSoftwareEncoding()) {
 			return;
 		}
 	}
 
-	if (type == Type::Recording && hardwareEncodingAvailable)
+	if (runContext.type == Type::Recording && runContext.hardwareEncodingAvailable)
 		FindIdealHardwareResolution();
 
-	recordingQuality = Quality::High;
+	runContext.recordingQuality = Quality::High;
 
-	bool recordingOnly = type == Type::Recording;
+	bool recordingOnly = runContext.type == Type::Recording;
 
-	if (hardwareEncodingAvailable) {
-		if (nvencAvailable)
-			recordingEncoder = Encoder::NVENC;
-		else if (qsvAvailable)
-			recordingEncoder = Encoder::QSV;
-		else if (vceAvailable)
-			recordingEncoder = Encoder::AMD;
+	if (runContext.hardwareEncodingAvailable) {
+		if (runContext.nvencAvailable)
+			runContext.recordingEncoder = Encoder::NVENC;
+		else if (runContext.qsvAvailable)
+			runContext.recordingEncoder = Encoder::QSV;
+		else if (runContext.vceAvailable)
+			runContext.recordingEncoder = Encoder::AMD;
 		// HW encoding seems to not be stable on Mac
 		// else if (appleHWAvailable)
-		// 	recordingEncoder = Encoder::appleHW;
+		// 	runContext.recordingEncoder = Encoder::appleHW;
 	} else {
-		recordingEncoder = Encoder::x264;
+		runContext.recordingEncoder = Encoder::x264;
 	}
 
-	if (recordingEncoder != Encoder::NVENC) {
+	if (runContext.recordingEncoder != Encoder::NVENC) {
 		if (!recordingOnly) {
-			recordingEncoder = Encoder::Stream;
-			recordingQuality = Quality::Stream;
+			runContext.recordingEncoder = Encoder::Stream;
+			runContext.recordingQuality = Quality::Stream;
 		}
 	}
 
 	eventsMutex.lock();
-	events.push(AutoConfigInfo("stopping_step", "recordingEncoder_test", 100));
+	events.push(AutoConfigInfo("stopping_step", "runContext.recordingEncoder_test", 100));
 	eventsMutex.unlock();
 }
 
@@ -1472,9 +1493,9 @@ bool autoConfig::CheckSettings(void)
 
 	video.base_width = 1280;
 	video.base_height = 720;
-	video.output_width = (uint32_t)idealResolutionCX;
-	video.output_height = (uint32_t)idealResolutionCY;
-	video.fps_num = idealFPSNum;
+	video.output_width = (uint32_t)runContext.idealResolutionCX;
+	video.output_height = (uint32_t)runContext.idealResolutionCY;
+	video.fps_num = runContext.idealFPSNum;
 	video.fps_den = 1;
 	video.initialized = true;
 	int ret = obs_set_video_info(ovi, &video);
@@ -1486,7 +1507,7 @@ bool autoConfig::CheckSettings(void)
 		return false;
 	}
 
-	OBSEncoder vencoder = obs_video_encoder_create(GetEncoderId(streamingEncoder), "test_encoder", nullptr, nullptr);
+	OBSEncoder vencoder = obs_video_encoder_create(GetEncoderId(runContext.streamingEncoder), "test_encoder", nullptr, nullptr);
 	OBSEncoder aencoder = obs_audio_encoder_create("ffmpeg_aac", "test_aac", nullptr, 0, nullptr);
 	OBSOutput output = obs_output_create("rtmp_output", "test_stream", nullptr, nullptr);
 
@@ -1499,7 +1520,7 @@ bool autoConfig::CheckSettings(void)
 	obs_data_release(aencoder_settings);
 	obs_data_release(output_settings);
 
-	obs_data_set_int(vencoder_settings, "bitrate", idealBitrate);
+	obs_data_set_int(vencoder_settings, "bitrate", runContext.idealBitrate);
 	obs_data_set_string(vencoder_settings, "rate_control", "CBR");
 	obs_data_set_string(vencoder_settings, "preset", "veryfast");
 	obs_data_set_int(vencoder_settings, "keyint_sec", 2);
@@ -1607,13 +1628,13 @@ void autoConfig::SetDefaultSettings(void)
 	events.push(AutoConfigInfo("starting_step", "setting_default_settings", 0));
 	eventsMutex.unlock();
 
-	idealResolutionCX = 1280;
-	idealResolutionCY = 720;
-	idealFPSNum = 30;
-	recordingQuality = Quality::High;
-	idealBitrate = 4500;
-	streamingEncoder = Encoder::x264;
-	recordingEncoder = Encoder::Stream;
+	runContext.idealResolutionCX = 1280;
+	runContext.idealResolutionCY = 720;
+	runContext.idealFPSNum = 30;
+	runContext.recordingQuality = Quality::High;
+	runContext.idealBitrate = 4500;
+	runContext.streamingEncoder = Encoder::x264;
+	runContext.recordingEncoder = Encoder::Stream;
 
 	eventsMutex.lock();
 	events.push(AutoConfigInfo("stopping_step", "setting_default_settings", 100));
@@ -1652,8 +1673,8 @@ void autoConfig::SaveStreamSettings()
 
 	// /* ---------------------------------- */
 	// /* save stream settings               */
-	// config_set_int(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", idealBitrate);
-	// config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", GetEncoderId(streamingEncoder));
+	// config_set_int(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", runContext.idealBitrate);
+	// config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", GetEncoderId(runContext.streamingEncoder));
 	// config_remove_value(ConfigManager::getInstance().getBasic(), "SimpleOutput", "UseAdvanced");
 
 	// config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
@@ -1669,22 +1690,22 @@ void autoConfig::SaveSettings()
 	// events.push(AutoConfigInfo("starting_step", "saving_settings", 0));
 	// eventsMutex.unlock();
 
-	// if (recordingEncoder != Encoder::Stream)
-	// 	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", GetEncoderId(recordingEncoder));
+	// if (runContext.recordingEncoder != Encoder::Stream)
+	// 	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", GetEncoderId(runContext.recordingEncoder));
 
-	// const char *quality = recordingQuality == Quality::High ? "Small" : "Stream";
+	// const char *quality = runContext.recordingQuality == Quality::High ? "Small" : "Stream";
 
 	// config_set_string(ConfigManager::getInstance().getBasic(), "Output", "Mode", "Simple");
 	// config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality", quality);
-	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "OutputCX", idealResolutionCX);
-	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "OutputCY", idealResolutionCY);
+	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "OutputCX", runContext.idealResolutionCX);
+	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "OutputCY", runContext.idealResolutionCY);
 	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "Canvases", 1);
 
 	// config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "DynamicBitrate", false);
 
 	// if (fpsType != FPSType::UseCurrent) {
 	// 	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType", 0);
-	// 	config_set_string(ConfigManager::getInstance().getBasic(), "Video", "FPSCommon", std::to_string(idealFPSNum).c_str());
+	// 	config_set_string(ConfigManager::getInstance().getBasic(), "Video", "FPSCommon", std::to_string(runContext.idealFPSNum).c_str());
 	// }
 
 	// config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
