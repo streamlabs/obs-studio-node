@@ -442,3 +442,8 @@ Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
 
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }
+
+Napi::Value osn::Streaming::GetUid(const Napi::CallbackInfo &info)
+{
+	return Napi::Number::New(info.Env(), (double)this->uid);
+}

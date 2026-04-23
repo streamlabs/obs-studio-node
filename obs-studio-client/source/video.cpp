@@ -38,6 +38,8 @@ Napi::Object osn::Video::Init(Napi::Env env, Napi::Object exports)
 
 						  InstanceAccessor("skippedFrames", &osn::Video::GetSkippedFrames, nullptr),
 						  InstanceAccessor("encodedFrames", &osn::Video::GetEncodedFrames, nullptr),
+						  InstanceAccessor("canvasId", &osn::Video::GetCanvasId, nullptr),
+						  InstanceMethod("refresh", &osn::Video::Refresh),
 					  });
 	exports.Set("Video", func);
 	osn::Video::constructor = Napi::Persistent(func);
@@ -107,6 +109,16 @@ void osn::Video::Destroy(const Napi::CallbackInfo &info)
 	ValidateResponse(info, response);
 	isLastVideoValid = false;
 	return;
+}
+
+Napi::Value osn::Video::GetCanvasId(const Napi::CallbackInfo &info)
+{
+	return Napi::Number::New(info.Env(), (double)this->canvasId);
+}
+
+void osn::Video::Refresh(const Napi::CallbackInfo &)
+{
+	isLastVideoValid = false;
 }
 
 inline void CreateVideo(const Napi::CallbackInfo &info, const std::vector<ipc::value> &response, Napi::Object &video, uint32_t index)

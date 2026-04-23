@@ -50,6 +50,7 @@ Napi::Object osn::SimpleStreaming::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("totalFrames", &osn::SimpleStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::SimpleStreaming::GetKBitsPerSec, nullptr),
 		 InstanceAccessor("dataOutput", &osn::SimpleStreaming::GetDataOutput, nullptr),
+		 InstanceAccessor("uid", &osn::SimpleStreaming::GetUid, nullptr),
 
 		 InstanceMethod("start", &osn::SimpleStreaming::Start),
 		 InstanceMethod("stop", &osn::SimpleStreaming::Stop),

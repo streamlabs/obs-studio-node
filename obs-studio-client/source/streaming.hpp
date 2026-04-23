@@ -64,5 +64,9 @@ protected:
 	Napi::Value GetAvailableEncoders(const Napi::CallbackInfo &info);
 	void Start(const Napi::CallbackInfo &info);
 	void Stop(const Napi::CallbackInfo &info);
+
+	// Read-only accessor exposing the server-side object id. Required so the frontend
+	// can pass this id into APIs that reference live osn objects by id (e.g. autoconfig).
+	Napi::Value GetUid(const Napi::CallbackInfo &info);
 };
 }

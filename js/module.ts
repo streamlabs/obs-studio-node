@@ -1465,6 +1465,20 @@ export interface IVideo {
       * Number of total encoded frames
       */
      readonly encodedFrames: number;
+
+     /**
+      * Server-side canvas id. Pass to APIs that reference video contexts by id
+      * (e.g. NodeObs.InitializeAutoConfig).
+      */
+     readonly canvasId: number;
+
+     /**
+      * Drops the cached video-info snapshot so the next `video` read hits the
+      * server. Call after any flow that mutates server-side state without going
+      * through the JS setter — e.g. after autoconfig's apply phase pushed a new
+      * resolution / FPS via NodeObs.StartSaveSettings.
+      */
+     refresh(): void;
 }
 
 export interface IVideoFactory {
@@ -1719,6 +1733,11 @@ export interface IStreaming {
     totalFrames: number;
     kbitsPerSec: number;
     dataOutput: number;
+    /**
+     * Server-side object id. Pass to APIs that reference live osn objects by id
+     * (e.g. NodeObs.InitializeAutoConfig).
+     */
+    readonly uid: number;
 }
 
 export interface EOutputSignal {

@@ -46,5 +46,15 @@ public:
 
 	Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
 	void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
+
+	// Read-only accessor exposing the server-side canvas id (the same value the
+	// server's osn::Video::Manager keys this object by). Required so the frontend
+	// can refer to a canvas in APIs like autoconfig that take ids.
+	Napi::Value GetCanvasId(const Napi::CallbackInfo &info);
+
+	// Drops the cached video-info snapshot so the next `video` read hits the server.
+	// Needed when the server mutated the canvas without going through this object's
+	// JS setter — e.g. after autoconfig's apply phase pushes a new resolution / FPS.
+	void Refresh(const Napi::CallbackInfo &info);
 };
 }

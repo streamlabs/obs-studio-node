@@ -30,6 +30,9 @@
 #include "osn-simple-streaming.hpp"
 #include "osn-advanced-streaming.hpp"
 #include "osn-streaming-helpers.hpp"
+#include "osn-recording.hpp"
+#include "osn-video.hpp"
+#include <cmath>
 
 enum class Type { Invalid, Streaming, Recording };
 
@@ -66,12 +69,13 @@ std::queue<AutoConfigInfo> events;
 // by the frontend at InitializeAutoConfig; chosen values are stored back here as each
 // stage runs and are pushed to the live objects in Phase 2's applyResults().
 struct AutoconfigRun {
-	// Targets — 0 means "not provided". Exactly one of simple/advanced streaming id
-	// must be set per run.
-	uint64_t simpleStreamingId = 0;
-	uint64_t advancedStreamingId = 0;
-	uint64_t simpleRecordingId = 0;
-	uint64_t videoId = 0;
+	// Targets — UINT64_MAX means "not provided" (uid 0 is a valid id, the first one
+	// allocated, so a zero check would silently swallow the very first object created).
+	// Exactly one of simple/advanced streaming id must be set per run.
+	uint64_t simpleStreamingId = UINT64_MAX;
+	uint64_t advancedStreamingId = UINT64_MAX;
+	uint64_t simpleRecordingId = UINT64_MAX;
+	uint64_t videoId = UINT64_MAX;
 
 	// Inputs / options.
 	Type type = Type::Streaming;
@@ -528,7 +532,7 @@ void autoConfig::TestBandwidthThreadV2(void)
 	// advancedStreamingId at InitializeAutoConfig time. The vector wrapper keeps the
 	// rest of the loop ready for Phase-3 multi-target without restructuring.
 	std::vector<osn::Streaming *> targets;
-	if (runContext.simpleStreamingId != 0) {
+	if (runContext.simpleStreamingId != UINT64_MAX) {
 		auto *streaming = osn::IStreaming::Manager::GetInstance().find(runContext.simpleStreamingId);
 		if (!streaming) {
 			sendErrorMessage("simple_streaming_id_not_found");
@@ -536,7 +540,7 @@ void autoConfig::TestBandwidthThreadV2(void)
 		} else {
 			targets.push_back(streaming);
 		}
-	} else if (runContext.advancedStreamingId != 0) {
+	} else if (runContext.advancedStreamingId != UINT64_MAX) {
 		auto *streaming = osn::IStreaming::Manager::GetInstance().find(runContext.advancedStreamingId);
 		if (!streaming) {
 			sendErrorMessage("advanced_streaming_id_not_found");
@@ -1641,77 +1645,134 @@ void autoConfig::SetDefaultSettings(void)
 	eventsMutex.unlock();
 }
 
+// Push the chosen values from runContext into the live osn objects the frontend
+// passed at InitializeAutoConfig time. No basic.ini writes — APIv2 contract is that
+// the frontend re-fetches via Get*() after seeing the "done" event.
+//
+// Order matters: obs_set_video_info fails while any output is still active, so we
+// stop test outputs first, then mutate the video context, then service / encoders.
+static void applyResults()
+{
+	osn::Streaming *streaming = nullptr;
+	if (runContext.simpleStreamingId != UINT64_MAX)
+		streaming = osn::IStreaming::Manager::GetInstance().find(runContext.simpleStreamingId);
+	else if (runContext.advancedStreamingId != UINT64_MAX)
+		streaming = osn::IStreaming::Manager::GetInstance().find(runContext.advancedStreamingId);
+
+	osn::Recording *recording = nullptr;
+	if (runContext.simpleRecordingId != UINT64_MAX) {
+		// IRecording::Manager stores FileOutput *; Recording is a known-safe downcast
+		// because every entry registered via osn::ISimpleRecording::Create is a Recording.
+		auto *fileOutput = osn::IRecording::Manager::GetInstance().find(runContext.simpleRecordingId);
+		recording = static_cast<osn::Recording *>(fileOutput);
+	}
+
+	obs_video_info *video = runContext.videoId != UINT64_MAX ? osn::Video::Manager::GetInstance().find(runContext.videoId) : nullptr;
+
+	// Defensive — CleanTestMode in the bandwidth path already does this, but this
+	// runs unconditionally so a frontend that calls SaveSettings without first
+	// running the bandwidth test still leaves outputs idle before we touch video.
+	if (streaming && streaming->GetOutput() && obs_output_active(streaming->GetOutput()))
+		obs_output_stop(streaming->GetOutput());
+
+	// 1. Resolution / FPS — must run before encoders (encoder video-mix indices are
+	//    tied to the video context). Keep base_width/base_height the user set; only
+	//    autoconfig-chosen output dims change.
+	if (video) {
+		obs_video_info v = *video;
+		v.fps_num = (uint32_t)runContext.idealFPSNum;
+		v.fps_den = (uint32_t)(runContext.idealFPSDen ? runContext.idealFPSDen : 1);
+		v.output_width = ((uint32_t)runContext.idealResolutionCX) & 0xFFFFFFFC;
+		v.output_height = ((uint32_t)runContext.idealResolutionCY) & 0xFFFFFFFE;
+		int ret = obs_set_video_info(video, &v);
+		std::lock_guard<std::mutex> lock(eventsMutex);
+		events.push(AutoConfigInfo("applied", ret == OBS_VIDEO_SUCCESS ? "video" : ("video_failed_ret_" + std::to_string(ret)),
+					   (double)ret));
+		if (ret != OBS_VIDEO_SUCCESS) {
+			blog(LOG_WARNING, "applyResults: obs_set_video_info returned %d", ret);
+		}
+	}
+
+	// 2. Service URL — bandwidth test stored the winning server in runContext.server.
+	if (streaming && streaming->service && !runContext.server.empty()) {
+		obs_data_t *settings = obs_data_create();
+		obs_data_set_string(settings, "server", runContext.server.c_str());
+		obs_service_update(streaming->service, settings);
+		obs_data_release(settings);
+		std::lock_guard<std::mutex> lock(eventsMutex);
+		events.push(AutoConfigInfo("applied", "service", 0));
+	}
+
+	// 3. Streaming bitrate, capped via EstimateUpperBitrate so the chosen value can't
+	//    exceed what the picked res/FPS can plausibly carry. Hardware encoders get a
+	//    14% headroom multiplier (matches legacy behavior).
+	if (streaming && streaming->videoEncoder && runContext.idealBitrate > 0) {
+		long double upperBitrate_d = EstimateUpperBitrate((int)runContext.idealResolutionCX, (int)runContext.idealResolutionCY,
+								  runContext.idealFPSNum, runContext.idealFPSDen ? runContext.idealFPSDen : 1);
+		uint64_t upperBitrate = (uint64_t)(std::floor(upperBitrate_d / 50.0L) * 50.0L);
+		if (runContext.streamingEncoder != Encoder::x264 && upperBitrate > 0) {
+			upperBitrate = upperBitrate * 114ULL / 100ULL;
+		}
+		uint64_t finalBitrate = runContext.idealBitrate;
+		if (upperBitrate > 0 && finalBitrate > upperBitrate)
+			finalBitrate = upperBitrate;
+
+		obs_data_t *encSettings = obs_data_create();
+		obs_data_set_int(encSettings, "bitrate", (long long)finalBitrate);
+		obs_encoder_update(streaming->videoEncoder, encSettings);
+		obs_data_release(encSettings);
+		std::lock_guard<std::mutex> lock(eventsMutex);
+		events.push(AutoConfigInfo("applied", "video_encoder", 0));
+	}
+
+	// 4. Recording bitrate — same value flows to the recording target's videoEncoder
+	//    when one was supplied. Recording encoder *type* selection is deferred (see
+	//    note below).
+	if (recording && recording->videoEncoder && runContext.idealBitrate > 0) {
+		obs_data_t *encSettings = obs_data_create();
+		obs_data_set_int(encSettings, "bitrate", (long long)runContext.idealBitrate);
+		obs_encoder_update(recording->videoEncoder, encSettings);
+		obs_data_release(encSettings);
+		std::lock_guard<std::mutex> lock(eventsMutex);
+		events.push(AutoConfigInfo("applied", "recording_video_encoder", 0));
+	}
+
+	// 5. Encoder *type* swap is deferred. If the autoconfig picked NVENC but the
+	//    streaming target currently holds an x264 encoder, the frontend has to
+	//    create a new osn::VideoEncoder of the chosen kind and assign it via
+	//    SetVideoEncoder — we don't manufacture encoder objects here. Log the
+	//    mismatch so frontend diagnostics can surface it.
+	if (streaming && streaming->videoEncoder) {
+		const char *currentId = obs_encoder_get_id(streaming->videoEncoder);
+		const char *chosenId = GetEncoderId(runContext.streamingEncoder);
+		if (currentId && chosenId && strcmp(currentId, chosenId) != 0) {
+			blog(LOG_INFO, "applyResults: chosen streaming encoder '%s' differs from current '%s'; frontend must swap", chosenId,
+			     currentId);
+		}
+	}
+}
+
 void autoConfig::SaveStreamSettings()
 {
-	/* ---------------------------------- */
-	/* save service                       */
-
-	// eventsMutex.lock();
-	// events.push(AutoConfigInfo("starting_step", "saving_service", 0));
-	// eventsMutex.unlock();
-
-	// const char *service_id = "rtmp_common";
-
-	// obs_service_t *oldService = OBS_service::getService(StreamServiceId::Main);
-	// OBSData hotkeyData = obs_hotkeys_save_service(oldService);
-	// obs_data_release(hotkeyData);
-
-	// OBSData settings = obs_data_create();
-
-	// if (!customServer)
-	// 	obs_data_set_string(settings, "service", serviceName.c_str());
-	// obs_data_set_string(settings, "server", server.c_str());
-	// obs_data_set_string(settings, "key", key.c_str());
-
-	// OBSService newService = obs_service_create(service_id, "default_service", settings, hotkeyData);
-
-	// if (!newService)
-	// 	return;
-
-	// OBS_service::setService(newService, StreamServiceId::Main);
-	// OBS_service::saveService();
-
-	// /* ---------------------------------- */
-	// /* save stream settings               */
-	// config_set_int(ConfigManager::getInstance().getBasic(), "SimpleOutput", "VBitrate", runContext.idealBitrate);
-	// config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder", GetEncoderId(runContext.streamingEncoder));
-	// config_remove_value(ConfigManager::getInstance().getBasic(), "SimpleOutput", "UseAdvanced");
-
-	// config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
-
-	// eventsMutex.lock();
-	// events.push(AutoConfigInfo("stopping_step", "saving_service", 100));
-	// eventsMutex.unlock();
+	// Legacy IPC stage. The actual apply happens in SaveSettings (the terminal
+	// stage in the legacy frontend contract). Kept here as a no-op so callers that
+	// invoke both don't error.
+	std::lock_guard<std::mutex> lock(eventsMutex);
+	events.push(AutoConfigInfo("stopping_step", "saving_service", 100));
 }
 
 void autoConfig::SaveSettings()
 {
-	// eventsMutex.lock();
-	// events.push(AutoConfigInfo("starting_step", "saving_settings", 0));
-	// eventsMutex.unlock();
+	{
+		std::lock_guard<std::mutex> lock(eventsMutex);
+		events.push(AutoConfigInfo("starting_step", "applying_settings", 0));
+	}
 
-	// if (runContext.recordingEncoder != Encoder::Stream)
-	// 	config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder", GetEncoderId(runContext.recordingEncoder));
+	applyResults();
 
-	// const char *quality = runContext.recordingQuality == Quality::High ? "Small" : "Stream";
-
-	// config_set_string(ConfigManager::getInstance().getBasic(), "Output", "Mode", "Simple");
-	// config_set_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality", quality);
-	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "OutputCX", runContext.idealResolutionCX);
-	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "OutputCY", runContext.idealResolutionCY);
-	// config_set_int(ConfigManager::getInstance().getBasic(), "Video", "Canvases", 1);
-
-	// config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "DynamicBitrate", false);
-
-	// if (fpsType != FPSType::UseCurrent) {
-	// 	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType", 0);
-	// 	config_set_string(ConfigManager::getInstance().getBasic(), "Video", "FPSCommon", std::to_string(runContext.idealFPSNum).c_str());
-	// }
-
-	// config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
-
-	// eventsMutex.lock();
-	// events.push(AutoConfigInfo("stopping_step", "saving_settings", 100));
-	// events.push(AutoConfigInfo("done", "", 0));
-	// eventsMutex.unlock();
+	{
+		std::lock_guard<std::mutex> lock(eventsMutex);
+		events.push(AutoConfigInfo("stopping_step", "applying_settings", 100));
+		events.push(AutoConfigInfo("done", "", 100));
+	}
 }

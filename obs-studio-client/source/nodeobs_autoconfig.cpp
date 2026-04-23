@@ -105,10 +105,11 @@ Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 	Napi::Function async_callback = info[0].As<Napi::Function>();
 	Napi::Object serverInfo = info[1].ToObject();
 	// Targets — frontend supplies the osn object ids the run should operate on.
-	// Missing fields default to 0 (= "no target of this kind"). Exactly one of the
-	// streaming ids should be non-zero.
+	// Missing fields default to UINT64_MAX (the "not provided" sentinel; uid 0 is a
+	// valid id — the very first object allocated will get it). Exactly one of the
+	// streaming ids should be a real uid.
 	auto readId = [&](const char *key) -> uint64_t {
-		return serverInfo.Has(key) ? (uint64_t)serverInfo.Get(key).ToNumber().Int64Value() : 0;
+		return serverInfo.Has(key) ? (uint64_t)serverInfo.Get(key).ToNumber().Int64Value() : UINT64_MAX;
 	};
 	uint64_t simpleStreamingId = readId("simpleStreamingId");
 	uint64_t advancedStreamingId = readId("advancedStreamingId");
