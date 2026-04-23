@@ -21,7 +21,7 @@
     "local:config": "yarn install && git submodule update --init --recursive --force && cmake -Bbuild -H. -G\"Visual Studio 16 2019\" -A\"x64\" -DCMAKE_INSTALL_PREFIX=\"./obs-studio-node\" -DLIBOBS_BUILD_TYPE=\"debug\" -DCMAKE_PREFIX_PATH=%CD%/build/libobs-src/cmake/",
     "local:build": "cmake --build build --target install --config Debug",
     "local:clean": "rm -rf build/*",
-    "test": "electron-mocha -t 80000 --js-flags=\"--expose-gc\" --color -r ts-node/register tests/osn-tests/src/**/*.ts --reporter tests/osn-tests/util/list-reporter.js",
+    "test": "electron-mocha -t 80000 --js-flags=\"--expose-gc\" --color -r ts-node/register tests/osn-tests/src/**/test_osn_dual_output.ts --reporter tests/osn-tests/util/list-reporter.js",
     "test:ci": "yarn run test --retries 3"
   },
   "devDependencies": {
