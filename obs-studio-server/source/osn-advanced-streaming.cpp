@@ -412,6 +412,8 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
 	}
 
+	streaming->UpdateEncoders();
+
 	const char *type = osn::streaming_helpers::getStreamOutputType(streaming->service);
 	if (!type)
 		type = "rtmp_output";

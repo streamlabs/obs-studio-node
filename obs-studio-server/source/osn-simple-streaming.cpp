@@ -377,12 +377,19 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
 	}
 
-	if (!streaming->testMode) {
+	// Refuse a normal Start() while the streaming object is in autoconfig test mode —
+	// the test owns the output until CleanTestMode() runs. Note this is the only
+	// guard on regular Start; the testMode flag is cleared in CleanTestMode.
+	if (streaming->testMode) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Service in test mode.");
 	}
 
 	if (!streaming->service) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
+	}
+
+	if (!streaming->GetCanvas()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
 	}
 
 	streaming->checkOutput();
