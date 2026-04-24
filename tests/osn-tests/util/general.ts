@@ -103,3 +103,15 @@ export function getRandomValue(list: any) {
 export function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+export async function waitForFile(filePath: string, timeoutMs: number = 5000, pollIntervalMs: number = 100): Promise<void> {
+    const timeoutAt = Date.now() + timeoutMs;
+    while (Date.now() < timeoutAt) {
+        if (fs.existsSync(filePath)) {
+            return;
+        }
+        await sleep(pollIntervalMs);
+    }
+
+    throw Error(`Timed out waiting for file: ${filePath}`);
+}

@@ -64,7 +64,7 @@ obs_source_t *vCamActiveScene = nullptr;
 obs_encoder_t *audioSimpleRecordingEncoder = nullptr;
 std::vector<obs_encoder_t *> audioStreamingEncoder = {nullptr, nullptr};
 std::vector<obs_encoder_t *> videoStreamingEncoder = {nullptr, nullptr};
-std::vector<obs_video_info_t *> videoInfo = {nullptr, nullptr};
+std::vector<obs_video_info *> videoInfo = {nullptr, nullptr};
 obs_encoder_t *videoRecordingEncoder = nullptr;
 std::vector<obs_service_t *> services = {nullptr, nullptr};
 
@@ -899,7 +899,7 @@ static void erase_ch(struct dstr *str, size_t pos)
 	*str = new_str;
 }
 
-char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, int width, int height)
+char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, obs_video_info *ovi)
 {
 	time_t now = time(0);
 	struct tm *cur_time;
@@ -938,6 +938,35 @@ char *osn_generate_formatted_filename(const char *extension, bool space, const c
 			}
 		}
 
+		if (!convert[0]) {
+			const char *cmp = sf.array + pos;
+			if (ovi && astrcmp_n(cmp, "%FPS", 4) == 0) {
+				if (ovi->fps_den <= 1) {
+					snprintf(convert, sizeof(convert), "%u", ovi->fps_num);
+				} else {
+					const double obsFPS = (double)ovi->fps_num / (double)ovi->fps_den;
+					snprintf(convert, sizeof(convert), "%.2f", obsFPS);
+				}
+				replace_text(&sf, pos, 4, convert);
+
+			} else if (ovi && astrcmp_n(cmp, "%CRES", 5) == 0) {
+				snprintf(convert, sizeof(convert), "%ux%u", ovi->base_width, ovi->base_height);
+				replace_text(&sf, pos, 5, convert);
+
+			} else if (ovi && astrcmp_n(cmp, "%ORES", 5) == 0) {
+				snprintf(convert, sizeof(convert), "%ux%u", ovi->output_width, ovi->output_height);
+				replace_text(&sf, pos, 5, convert);
+
+			} else if (ovi && astrcmp_n(cmp, "%VF", 3) == 0) {
+				strcpy(convert, get_video_format_name(ovi->output_format));
+				replace_text(&sf, pos, 3, convert);
+
+			} else if (astrcmp_n(cmp, "%s", 2) == 0) {
+				snprintf(convert, sizeof(convert), "%lld", static_cast<long long>(now));
+				replace_text(&sf, pos, 2, convert);
+			}
+		}
+
 		if (convert[0]) {
 			pos += strlen(convert);
 			convert[0] = 0;
@@ -951,14 +980,6 @@ char *osn_generate_formatted_filename(const char *extension, bool space, const c
 	if (!space)
 		dstr_replace(&sf, " ", "_");
 
-	if (width > 0 && height > 0) {
-		std::string resolution = std::to_string(width) + std::string("x") + std::to_string(height) + std::string("-");
-		dstr_cat(&sf, resolution.c_str());
-
-		dstr_cat_ch(&sf, (char)(rand() % 9 + 0x30));
-		dstr_cat_ch(&sf, (char)(rand() % 9 + 0x30));
-	}
-
 	dstr_cat_ch(&sf, '.');
 	dstr_cat(&sf, extension);
 	dstr_free(&c);
@@ -969,15 +990,14 @@ char *osn_generate_formatted_filename(const char *extension, bool space, const c
 	return sf.array;
 }
 
-std::string GenerateSpecifiedFilename(const char *extension, bool noSpace, const char *format, int width, int height)
+std::string GenerateSpecifiedFilename(const char *extension, bool noSpace, const char *format, obs_video_info *ovi)
 {
-	char *filename = osn_generate_formatted_filename(extension, !noSpace, format, width, height);
+	char *filename = osn_generate_formatted_filename(extension, !noSpace, format, ovi);
 	if (filename == nullptr) {
 		throw "Invalid filename";
 	}
 
 	std::string result(filename);
-	result = result;
 	bfree(filename);
 	return result;
 }
@@ -2335,7 +2355,7 @@ void OBS_service::updateFfmpegOutput(bool isSimpleMode, obs_output_t *output)
 		strPath += "/";
 
 	if (fileNameFormat != NULL && format.size())
-		strPath += GenerateSpecifiedFilename(ffmpegOutput ? "avi" : format.c_str(), noSpace, fileNameFormat, 0, 0);
+		strPath += GenerateSpecifiedFilename(ffmpegOutput ? "avi" : format.c_str(), noSpace, fileNameFormat, base_canvas);
 
 	if (!overwriteIfExists)
 		FindBestFilename(strPath, noSpace);
