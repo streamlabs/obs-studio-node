@@ -23,6 +23,7 @@
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
+#include <exception>
 #include <osn-video.hpp>
 
 void osn::IEnhancedBroadcastingAdvancedStreaming::Register(ipc::server &srv)
@@ -118,7 +119,13 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 	}
 
 	auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD) ? std::optional{streaming->twitchTrack} : std::nullopt;
-	streaming->StartEnhancedBroadcastingStream(vod_track_mixer);
+	try {
+		streaming->StartEnhancedBroadcastingStream(vod_track_mixer);
+	} catch (const std::exception &error) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, error.what());
+	} catch (...) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to start enhanced broadcasting stream.");
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
