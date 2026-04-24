@@ -6,9 +6,31 @@ import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler, IConfigProgress } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
 
+// =============================================================================
+// DEPRECATED — replaced by tests/osn-tests/src/test_osn_autoconfig_v2.ts
+// =============================================================================
+// This file exercises the legacy autoconfig contract:
+//   - obs.startAutoconfig() with no target ids
+//   - server-side persistence via basic config file (config_set_int / config_set_string)
+//   - assertions via obs.getSetting('Output', 'VBitrate') etc.
+//
+// Both halves of that contract are gone after the autoconfig-v2 port:
+//   1. obs.startAutoconfig() now requires target ids ({ simpleStreamingId, videoId,
+//      ... }); calling it with no args resolves to UINT64_MAX sentinels and the
+//      server emits 'no_streaming_target_provided' instead of running the test.
+//   2. SaveStreamSettings / SaveSettings no longer write to basic.ini — Phase 2
+//      replaced them with applyResults() which mutates live osn objects via
+//      obs_service_update / obs_encoder_update / obs_set_video_info. The
+//      obs.getSetting(...) assertions below would never see the autoconfig output
+//      again because that path simply doesn't exist.
+//
+// The suite is skipped wholesale rather than deleted so the historical contract
+// stays grep-able. Once the legacy nodeobs_autoconfig.cpp ifdef block and dead
+// code are removed in Phase 5 cleanup, drop this file too.
+// =============================================================================
 const testName = 'nodeobs_autoconfig';
 
-describe(testName, function() {
+describe.skip(testName + ' (DEPRECATED — see test_osn_autoconfig_v2.ts)', function() {
     this.timeout(30000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
