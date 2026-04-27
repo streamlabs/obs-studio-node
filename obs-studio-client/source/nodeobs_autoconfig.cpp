@@ -108,9 +108,7 @@ Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 	// Missing fields default to UINT64_MAX (the "not provided" sentinel; uid 0 is a
 	// valid id — the very first object allocated will get it). Exactly one of the
 	// streaming ids should be a real uid.
-	auto readId = [&](const char *key) -> uint64_t {
-		return serverInfo.Has(key) ? (uint64_t)serverInfo.Get(key).ToNumber().Int64Value() : UINT64_MAX;
-	};
+	auto readId = [&](const char *key) -> uint64_t { return serverInfo.Has(key) ? (uint64_t)serverInfo.Get(key).ToNumber().Int64Value() : UINT64_MAX; };
 	uint64_t simpleStreamingId = readId("simpleStreamingId");
 	uint64_t advancedStreamingId = readId("advancedStreamingId");
 	uint64_t simpleRecordingId = readId("simpleRecordingId");
@@ -120,8 +118,9 @@ Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper(
-		"AutoConfig", "InitializeAutoConfig", {ipc::value(simpleStreamingId), ipc::value(advancedStreamingId), ipc::value(simpleRecordingId), ipc::value(videoId)});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "InitializeAutoConfig",
+									 {ipc::value(simpleStreamingId), ipc::value(advancedStreamingId),
+									  ipc::value(simpleRecordingId), ipc::value(videoId)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
