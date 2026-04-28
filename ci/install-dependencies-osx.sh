@@ -23,6 +23,9 @@ fi
 # Verify cmake
 cmake --version
 
+corepack enable
+corepack prepare yarn@4.14.1 --activate
+
 # Install module dependencies
 yarn install
 yarn add electron@${ElectronVersion}
