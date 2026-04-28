@@ -1434,7 +1434,7 @@ __metadata:
     typedoc: "npm:^0.28.0"
     typedoc-plugin-markdown: "npm:^4.0.0"
     typescript: "npm:^5.0.0"
-    uuid: "npm:^9.0.0"
+    uuid: "npm:^14.0.0"
     wait-queue: "npm:^1.1.4"
   languageName: unknown
   linkType: soft
@@ -4293,12 +4293,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"uuid@npm:^9.0.0":
-  version: 9.0.1
-  resolution: "uuid@npm:9.0.1"
+"uuid@npm:^14.0.0":
+  version: 14.0.0
+  resolution: "uuid@npm:14.0.0"
   bin:
-    uuid: dist/bin/uuid
-  checksum: 10c0/1607dd32ac7fc22f2d8f77051e6a64845c9bce5cd3dd8aa0070c074ec73e666a1f63c7b4e0f4bf2bc8b9d59dc85a15e17807446d9d2b17c8485fbc2147b27f9b
+    uuid: dist-node/bin/uuid
+  checksum: 10c0/a57ae7794c45005c1a9208989196c5baf79a7679c30f43c1bee9033a2c4d113a2cea216fa6fcc9663b08b0d55635df1a7c6eb7e7f3d21c3e50688c698fa39a50
   languageName: node
   linkType: hard
 

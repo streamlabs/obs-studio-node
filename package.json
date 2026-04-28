@@ -46,7 +46,7 @@
     "typedoc": "^0.28.0",
     "typedoc-plugin-markdown": "^4.0.0",
     "typescript": "^5.0.0",
-    "uuid": "^9.0.0",
+    "uuid": "^14.0.0",
     "wait-queue": "^1.1.4"
   },
   "keywords": [
