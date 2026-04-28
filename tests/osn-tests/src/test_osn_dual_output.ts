@@ -202,41 +202,45 @@ describe(testName, function() {
         osn.AudioTrackFactory.setAtIndex(track2, 2);
         recording2.signalHandler = (signal) => { obs.signals.push(signal) };
 
-        recording.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
-        await waitForFile(firstExpectedFile);
+        try {
+            recording.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            await waitForFile(firstExpectedFile);
 
-        recording2.start();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+            recording2.start();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
 
-        await sleep(1500);
+            await sleep(1500);
 
-        recording.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            recording.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        recording2.stop();
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
-        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+            recording2.stop();
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+            await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
-        const firstLastFile = path.basename(recording.lastFile());
-        const secondLastFile = path.basename(recording2.lastFile());
-        expect([firstLastFile, secondLastFile]).to.have.members([
-            `${sharedFilename}.mp4`,
-            `${sharedFilename} (2).mp4`,
-        ]);
-        expect(firstLastFile).to.not.match(/\d+x\d+-\d{2}\.mp4$/, 'Unexpected resolution suffix in first recording filename');
-        expect(secondLastFile).to.not.match(/\d+x\d+-\d{2}\.mp4$/, 'Unexpected resolution suffix in second recording filename');
+            const firstLastFile = path.basename(recording.lastFile());
+            const secondLastFile = path.basename(recording2.lastFile());
+            expect([firstLastFile, secondLastFile]).to.have.members([
+                `${sharedFilename}.mp4`,
+                `${sharedFilename} (2).mp4`,
+            ]);
+            expect(firstLastFile).to.not.match(/\d+x\d+-\d{2}\.mp4$/, 'Unexpected resolution suffix in first recording filename');
+            expect(secondLastFile).to.not.match(/\d+x\d+-\d{2}\.mp4$/, 'Unexpected resolution suffix in second recording filename');
+        }
+        finally
+        {
+            const recordingEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
+            recordingEncoder.release();
 
-        const recordingEncoder = recording.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording);
-        recordingEncoder.release();
-
-        const recording2Encoder = recording2.videoEncoder;
-        osn.AdvancedRecordingFactory.destroy(recording2);
-        recording2Encoder.release();
+            const recording2Encoder = recording2.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording2);
+            recording2Encoder.release();
+        }
     });
 
     it('Start Dual Output with recording and scene items', async function() {
