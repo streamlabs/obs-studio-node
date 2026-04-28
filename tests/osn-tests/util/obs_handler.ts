@@ -453,8 +453,8 @@ export class OBSHandler {
         return await this.getNextSignalInfoOf(output, [signal]);
     }
 
-    async getNextSignalInfoOf(output: string, signals: string[]): Promise<IOBSOutputSignalInfo> {
-        const signalDescription = signals.join('/');
+    async getNextSignalInfoOf(output: string, signalsList: string[]): Promise<IOBSOutputSignalInfo> {
+        const signalDescription = signalsList.join('/');
         const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signalDescription + ' signal timeout';
         const expectedDeadline = Date.now() + 30000;
         const deadline = Date.now() + 60000; // 60 second timeout for receiving expected signal, since some steps (like recording stop) can take a while on slower CI machines
@@ -469,7 +469,7 @@ export class OBSHandler {
                 }),
             ]);
 
-            if (signalInfo.type === output && signals.indexOf(signalInfo.signal) >= 0) {
+            if (signalInfo.type === output && signalsList.indexOf(signalInfo.signal) >= 0) {
                 if (Date.now() > expectedDeadline) {
                     logWarning(this.osnTestName, `Received expected ${output}/${signalDescription} signal after ${Date.now() - startTime}ms, which is longer than the expected ${expectedDeadline - startTime}ms. Signal info: ${this.formatSignalInfo(signalInfo)}`);
                 }
