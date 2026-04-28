@@ -286,7 +286,8 @@ jobs:
           node-version: '20.x'
       - name: Install dependencies
         run: |
-          npm install -g yarn@4.9.1
+          corepack enable
+          corepack prepare yarn@4.9.1 --activate
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: Configure obs-studio-node
@@ -342,7 +343,8 @@ jobs:
           node-version: '20.x'
       - name: Install dependencies
         run: |
-          npm install -g yarn@4.9.1
+          corepack enable
+          corepack prepare yarn@4.9.1 --activate
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: 'Run tests'
