@@ -55,7 +55,7 @@ public:
 		description = a_description;
 		percentage = a_percentage;
 	};
-	~AutoConfigInfo() {};
+	~AutoConfigInfo(){};
 
 	std::string event;
 	std::string description;
@@ -597,8 +597,7 @@ void autoConfig::TestBandwidthThreadV2(void)
 						obs_output_stop(streaming->GetOutput());
 
 						if (totalBytes > 0 && connectTimeMs > 0) {
-							uint64_t bitrate =
-								(totalBytes * 8ULL * 1000ULL) / static_cast<uint64_t>(connectTimeMs) / 1000ULL;
+							uint64_t bitrate = (totalBytes * 8ULL * 1000ULL) / static_cast<uint64_t>(connectTimeMs) / 1000ULL;
 
 							std::string serverAddress;
 							if (streaming->service) {
@@ -646,8 +645,9 @@ void autoConfig::TestBandwidthThreadV2(void)
 				if (targetSpecific.empty())
 					continue;
 
-				std::sort(targetSpecific.begin(), targetSpecific.end(),
-					  [](const ServerInfo &a, const ServerInfo &b) { return (a.bitrate > b.bitrate) || (a.bitrate == b.bitrate && a.ms < b.ms); });
+				std::sort(targetSpecific.begin(), targetSpecific.end(), [](const ServerInfo &a, const ServerInfo &b) {
+					return (a.bitrate > b.bitrate) || (a.bitrate == b.bitrate && a.ms < b.ms);
+				});
 
 				AutoconfigRun::TargetResult tr;
 				tr.streamingId = targetIds[ti];
@@ -1626,7 +1626,7 @@ bool autoConfig::CheckSettings(void)
 		blog(LOG_ERROR, "[VIDEO_CANVAS] Failed to remove video info after CheckSettings, %08X", ovi);
 	}
 	return success;
-	#endif //deprecated old api bandwidth test
+#endif //deprecated old api bandwidth test
 	return true;
 }
 
@@ -1696,8 +1696,7 @@ static void applyResults()
 		v.output_height = ((uint32_t)runContext.idealResolutionCY) & 0xFFFFFFFE;
 		int ret = obs_set_video_info(video, &v);
 		std::lock_guard<std::mutex> lock(eventsMutex);
-		events.push(AutoConfigInfo("applied", ret == OBS_VIDEO_SUCCESS ? "video" : ("video_failed_ret_" + std::to_string(ret)),
-					   (double)ret));
+		events.push(AutoConfigInfo("applied", ret == OBS_VIDEO_SUCCESS ? "video" : ("video_failed_ret_" + std::to_string(ret)), (double)ret));
 		if (ret != OBS_VIDEO_SUCCESS) {
 			blog(LOG_WARNING, "applyResults: obs_set_video_info returned %d", ret);
 		}
@@ -1766,8 +1765,7 @@ static void applyResults()
 			const char *currentId = obs_encoder_get_id(st.streaming->videoEncoder);
 			const char *chosenId = GetEncoderId(runContext.streamingEncoder);
 			if (currentId && chosenId && strcmp(currentId, chosenId) != 0) {
-				blog(LOG_INFO, "applyResults: target %llu: chosen encoder '%s' differs from current '%s'", st.id, chosenId,
-				     currentId);
+				blog(LOG_INFO, "applyResults: target %llu: chosen encoder '%s' differs from current '%s'", st.id, chosenId, currentId);
 			}
 		}
 	}

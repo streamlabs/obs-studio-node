@@ -8,6 +8,11 @@
     "experimentalDecorators": true,
     "lib": [ "es6", "es5" ],
   },
+  "ts-node": {
+    "compilerOptions": {
+      "module": "commonjs"
+    }
+  },
   "exclude": [
     "node_modules"
   ],

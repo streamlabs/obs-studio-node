@@ -72,7 +72,7 @@ inline const char *getStreamOutputType(obs_service_t *service)
 {
 	if (!service)
 		return nullptr;
-		
+
 	const char *protocol = obs_service_get_protocol(service);
 	if (!protocol) {
 		blog(LOG_WARNING, "The service '%s' has no protocol set", obs_service_get_id(service));

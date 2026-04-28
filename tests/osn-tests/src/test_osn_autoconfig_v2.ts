@@ -243,7 +243,7 @@ describe(testName, function() {
         // Need at least one error event; description identifies the missing target.
         const errorEvent = events.find((e) => e.event === 'error');
         expect(errorEvent).to.not.equal(undefined, 'Expected an error event');
-        expect(errorEvent.description).to.equal('no_streaming_target_provided');
+        expect(errorEvent.description).to.equal('no_streaming_targets_registered');
     });
 
     it('TerminateAutoConfig mid-bandwidth-test leaves live values untouched', async function() {

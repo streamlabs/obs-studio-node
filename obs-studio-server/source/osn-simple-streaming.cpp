@@ -343,8 +343,7 @@ void osn::SimpleStreaming::start()
 
 	obs_output_set_service(GetOutput(), service);
 
-	obs_output_set_delay(GetOutput(), delay->enabled ? uint32_t(delay->delaySec) : 0,
-				 delay->preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
+	obs_output_set_delay(GetOutput(), delay->enabled ? uint32_t(delay->delaySec) : 0, delay->preserveDelay ? OBS_OUTPUT_DELAY_PRESERVE : 0);
 
 	uint32_t maxReties = reconnect->enabled ? reconnect->maxRetries : 0;
 	obs_output_set_reconnect_settings(GetOutput(), maxReties, reconnect->retryDelay);

@@ -42,12 +42,15 @@
     "mocha": "^11.0.0",
     "mocha-junit-reporter": "^1.22.0",
     "node-addon-api": "^7.1.1",
-    "ts-node": "^10.9.0",
+    "ts-node": "^10.9.2",
     "typedoc": "^0.28.0",
     "typedoc-plugin-markdown": "^4.0.0",
     "typescript": "^5.0.0",
     "uuid": "^9.0.0",
     "wait-queue": "^1.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   },
   "keywords": [
     "capture",
