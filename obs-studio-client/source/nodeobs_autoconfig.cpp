@@ -103,24 +103,12 @@ void autoConfig::stop_worker()
 Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 {
 	Napi::Function async_callback = info[0].As<Napi::Function>();
-	Napi::Object serverInfo = info[1].ToObject();
-	// Targets — frontend supplies the osn object ids the run should operate on.
-	// Missing fields default to UINT64_MAX (the "not provided" sentinel; uid 0 is a
-	// valid id — the very first object allocated will get it). Exactly one of the
-	// streaming ids should be a real uid.
-	auto readId = [&](const char *key) -> uint64_t { return serverInfo.Has(key) ? (uint64_t)serverInfo.Get(key).ToNumber().Int64Value() : UINT64_MAX; };
-	uint64_t simpleStreamingId = readId("simpleStreamingId");
-	uint64_t advancedStreamingId = readId("advancedStreamingId");
-	uint64_t simpleRecordingId = readId("simpleRecordingId");
-	uint64_t videoId = readId("videoId");
 
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "InitializeAutoConfig",
-									 {ipc::value(simpleStreamingId), ipc::value(advancedStreamingId),
-									  ipc::value(simpleRecordingId), ipc::value(videoId)});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "InitializeAutoConfig", {});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();

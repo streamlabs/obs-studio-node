@@ -480,16 +480,9 @@ export class OBSHandler {
         throw new Error(timeoutMessage);
     }
 
-    startAutoconfig(targets: {
-        simpleStreamingId?: number,
-        advancedStreamingId?: number,
-        simpleRecordingId?: number,
-        videoId?: number,
-    } = {}) {
-        // The server reads simpleStreamingId / advancedStreamingId / simpleRecordingId / videoId
-        // (see obs-studio-client/source/nodeobs_autoconfig.cpp:103). Missing fields default to
-        // UINT64_MAX server-side (the "not provided" sentinel; uid 0 is a valid id).
-        // Exactly one of the streaming ids should be a real uid.
+    startAutoconfig() {
+        // Server discovers all registered streaming/recording/video targets
+        // automatically — no IDs needed from the frontend.
 
         // Drop any progress events left over from a prior run so the next drain
         // sees only this run's events.
@@ -500,7 +493,7 @@ export class OBSHandler {
                 || progressInfo.event === 'error' || (progressInfo.event as string) === 'applied') {
                 this.progress.push(progressInfo);
             }
-        }, targets);
+        });
     }
 
     getNextProgressInfo(autoconfigStep: string): Promise<IConfigProgress> {

@@ -133,7 +133,7 @@ describe(testName, function() {
 
     it('Bandwidth test contacts the mock RTMP server', async function() {
         // This test only validates the orchestration of the bandwidth path: that the
-        // run targets the right SimpleStreaming, that the bandwidth thread actually
+        // server discovers the registered SimpleStreaming, that the bandwidth thread
         // dials the configured RTMP server, and that bytes flow over the socket. It
         // does NOT assert a final bitrate, because the minimal mock only handles the
         // initial RTMP handshake — libobs never enters the "publishing" state, so
@@ -148,7 +148,7 @@ describe(testName, function() {
 
         const t = buildStreamingTarget('bw', `rtmp://127.0.0.1:${MOCK_RTMP_PORT}/live`);
         try {
-            obs.startAutoconfig({ simpleStreamingId: t.stream.uid, videoId: videoContext.canvasId });
+            obs.startAutoconfig();
             osn.NodeObs.StartBandwidthTest();
 
             const events = await drainUntil(stageDone('bandwidth_test'));
@@ -166,9 +166,9 @@ describe(testName, function() {
     it('Apply phase lands defaults on live osn objects', async function() {
         // SetDefaultSettings populates runContext with hardcoded, known values
         // (idealResolutionCX=1280, CY=720, FPSNum=30, idealBitrate=4500). SaveSettings
-        // then runs applyResults() which pushes those into the targets we passed.
-        // After 'done', the live objects' Get* methods should report the applied
-        // values — which exactly verifies the Phase-2 apply path.
+        // then runs applyResults() which discovers all registered streaming targets
+        // and pushes those values into them. After 'done', the live objects' Get*
+        // methods should report the applied values.
 
         // Use a fresh video context here. The shared `videoContext` from before()
         // gets touched by other tests' streaming pipelines and ends up with libobs
@@ -185,7 +185,7 @@ describe(testName, function() {
             fpsType: osn.EFPSType.Fractional,
         };
 
-        const t = buildStreamingTarget('apply', 'rtmp://127.0.0.1:1/live');
+        const t = buildStreamingTarget('apply', `rtmp://127.0.0.1:${MOCK_RTMP_PORT}/live`);
         // Re-point this stream's video at the local context.
         t.stream.video = localVideo;
         try {
@@ -193,7 +193,7 @@ describe(testName, function() {
             const before = localVideo.video;
             logInfo(testName, `pre-apply video: ${JSON.stringify(before)}`);
 
-            obs.startAutoconfig({ simpleStreamingId: t.stream.uid, videoId: localVideo.canvasId });
+            obs.startAutoconfig();
 
             osn.NodeObs.StartSetDefaultSettings();
             await drainUntil(stageDone('setting_default_settings'));
@@ -234,8 +234,9 @@ describe(testName, function() {
     });
 
     it('Autoconfig with no streaming target reports an error event', async function() {
-        // Initialize with all-zero ids — server should reject with no_streaming_target_provided.
-        obs.startAutoconfig({});
+        // No streaming objects registered in the manager — server should reject
+        // with no_streaming_target_provided during bandwidth test.
+        obs.startAutoconfig();
         osn.NodeObs.StartBandwidthTest();
 
         const events = await drainUntil(stageDone('bandwidth_test'));
@@ -253,7 +254,7 @@ describe(testName, function() {
         const beforeServer = t.service.settings['server'] as string;
 
         try {
-            obs.startAutoconfig({ simpleStreamingId: t.stream.uid, videoId: videoContext.canvasId });
+            obs.startAutoconfig();
             osn.NodeObs.StartBandwidthTest();
 
             // Give the test a moment to actually start streaming, then cancel.
@@ -272,6 +273,89 @@ describe(testName, function() {
             expect(t.service.settings['server']).to.equal(beforeServer, 'Server URL must not change on cancel');
         } finally {
             cleanupStreamingTarget(t);
+        }
+    });
+
+    // ---- Dual-target (Dual Output) tests ----
+
+    const MOCK_RTMP_PORT2 = 11936;
+
+    it('Dual-target bandwidth test contacts both mock RTMP servers', async function() {
+        if (obs.isDarwin()) this.skip();
+
+        const mockRtmp2 = await startMockRtmp(MOCK_RTMP_PORT2);
+        try {
+            const connsBefore1 = mockRtmp.getConnections();
+            const connsBefore2 = mockRtmp2.getConnections();
+
+            const t1 = buildStreamingTarget('dual-bw1', `rtmp://127.0.0.1:${MOCK_RTMP_PORT}/live`);
+            const t2 = buildStreamingTarget('dual-bw2', `rtmp://127.0.0.1:${MOCK_RTMP_PORT2}/live`);
+            try {
+                obs.startAutoconfig();
+                osn.NodeObs.StartBandwidthTest();
+
+                const events = await drainUntil(stageDone('bandwidth_test'));
+                logInfo(testName, `dual-bw events: ${JSON.stringify(events)} mock1 conns=${mockRtmp.getConnections() - connsBefore1} mock2 conns=${mockRtmp2.getConnections() - connsBefore2}`);
+
+                expect(mockRtmp.getConnections() - connsBefore1).to.be.greaterThan(0,
+                    'Mock RTMP #1 saw no connection — primary target was not tested');
+                expect(mockRtmp2.getConnections() - connsBefore2).to.be.greaterThan(0,
+                    'Mock RTMP #2 saw no connection — secondary target was not tested');
+            } finally {
+                cleanupStreamingTarget(t1);
+                cleanupStreamingTarget(t2);
+            }
+        } finally {
+            await mockRtmp2.close();
+        }
+    });
+
+    it('Apply phase with dual targets applies per-target values', async function() {
+        const localVideo = osn.VideoFactory.create();
+        localVideo.video = {
+            fpsNum: 60, fpsDen: 1,
+            baseWidth: 1920, baseHeight: 1080,
+            outputWidth: 1920, outputHeight: 1080,
+            outputFormat: osn.EVideoFormat.NV12,
+            colorspace: osn.EColorSpace.CS709,
+            range: osn.ERangeType.Full,
+            scaleType: osn.EScaleType.Lanczos,
+            fpsType: osn.EFPSType.Fractional,
+        };
+
+        const t1 = buildStreamingTarget('dual-apply1', `rtmp://127.0.0.1:${MOCK_RTMP_PORT}/live`);
+        const t2 = buildStreamingTarget('dual-apply2', `rtmp://127.0.0.1:${MOCK_RTMP_PORT2}/live`);
+        t1.stream.video = localVideo;
+        t2.stream.video = localVideo;
+
+        try {
+            obs.startAutoconfig();
+
+            osn.NodeObs.StartSetDefaultSettings();
+            await drainUntil(stageDone('setting_default_settings'));
+
+            osn.NodeObs.StartSaveSettings();
+            const events = await drainUntil(isDone);
+            logInfo(testName, `dual-apply events: ${JSON.stringify(events)}`);
+
+            const terminal = events[events.length - 1];
+            expect(terminal.event).to.equal('done', `Expected terminal 'done', got '${terminal.event}/${terminal.description}'`);
+
+            // Both targets should have received a bitrate update from applyResults.
+            const br1 = t1.videoEncoder.settings['bitrate'] as number;
+            const br2 = t2.videoEncoder.settings['bitrate'] as number;
+            expect(br1).to.be.greaterThan(2500, `target1 bitrate not updated: got ${br1}`);
+            expect(br2).to.be.greaterThan(2500, `target2 bitrate not updated: got ${br2}`);
+
+            // Video canvas should have been updated too.
+            localVideo.refresh();
+            const v = localVideo.video;
+            expect(v.outputWidth).to.equal(1280, `expected outputWidth 1280, got ${v.outputWidth}`);
+            expect(v.outputHeight).to.equal(720, `expected outputHeight 720, got ${v.outputHeight}`);
+        } finally {
+            cleanupStreamingTarget(t1);
+            cleanupStreamingTarget(t2);
+            localVideo.destroy();
         }
     });
 });
