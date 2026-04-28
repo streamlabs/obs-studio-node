@@ -40,7 +40,7 @@ public:
 		sleepIntervalMS = 33;
 		workerThread = nullptr;
 	};
-	~WorkerSignals() {};
+	~WorkerSignals(){};
 
 protected:
 	std::atomic<bool> isWorkerRunning;
