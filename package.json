@@ -49,6 +49,7 @@
     "uuid": "^9.0.0",
     "wait-queue": "^1.1.4"
   },
+  "packageManager": "yarn@4.9.1",
   "engines": {
     "node": ">=18.0.0"
   },
