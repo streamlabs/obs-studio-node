@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "controller.hpp"
+#include <filesystem>
 #include "osn-error.hpp"
 #include "nodeobs_api.hpp"
 #include <sstream>
