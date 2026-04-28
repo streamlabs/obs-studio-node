@@ -46,6 +46,7 @@ public:
 protected:
 	std::atomic<bool> isWorkerRunning;
 	std::atomic<bool> workerStop;
+	std::atomic<bool> isOrphaned;
 	uint32_t sleepIntervalMS;
 	std::thread *workerThread;
 	Napi::ThreadSafeFunction jsThread;
@@ -53,9 +54,11 @@ protected:
 
 	void startWorker(napi_env env, Napi::Function asyncCallback, const std::string &name, const uint64_t &refID)
 	{
-		if (!workerStop || isWorkerRunning)
+		// If worker has been orphaned; allow it to be rejoined
+		if (!isOrphaned && (!workerStop || isWorkerRunning))
 			return;
 
+		isOrphaned = false;
 		isWorkerRunning = true;
 		workerStop = false;
 		jsThread = Napi::ThreadSafeFunction::New(env, asyncCallback, name.c_str(), 0, 1, [](Napi::Env) {});
@@ -97,7 +100,7 @@ protected:
 						std::string errorMessage = response.size() > 1 ? response[1].value_str : "";
 						std::cout << "Worker thread exiting due to Invalid reference error encountered: " << errorMessage << std::endl;
 						isWorkerRunning = false;
-						workerStop = true;
+						isOrphaned = true;
 						break;
 					}
 				}

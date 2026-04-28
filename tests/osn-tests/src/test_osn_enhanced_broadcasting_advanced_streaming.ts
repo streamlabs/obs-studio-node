@@ -80,10 +80,6 @@ describe(testName, function() {
 
     it('Enhanced Broadcasting Advanced Streaming rejects without crashing in CI', function() {
         // This test is CI only because CI is expected to hit a Twitch Enhanced Broadcasting rejection.
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         if (!obs.isCI()) {
             this.skip();
         }

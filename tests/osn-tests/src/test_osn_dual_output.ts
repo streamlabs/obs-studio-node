@@ -172,10 +172,6 @@ describe(testName, function() {
     });
 
     it('Dual canvas recording avoids name collision', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         const outputDir = path.join(path.normalize(__dirname), '..', 'osnData');
         const sharedFilename = 'dual-output-collision-' + randomUUID();
         const firstExpectedFile = path.join(outputDir, `${sharedFilename}.mp4`);
