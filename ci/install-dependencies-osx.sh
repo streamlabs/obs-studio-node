@@ -23,8 +23,6 @@ fi
 # Verify cmake
 cmake --version
 
-# Where is global yarn installed?
-which yarn
 corepack enable
 corepack prepare yarn@4.9.1 --activate
 

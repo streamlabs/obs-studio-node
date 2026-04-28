@@ -282,6 +282,8 @@ jobs:
         shell: pwsh
       - name: Install dependencies
         run: |
+          corepack enable
+          corepack prepare yarn@4.9.1 --activate
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
       - name: Configure obs-studio-node
