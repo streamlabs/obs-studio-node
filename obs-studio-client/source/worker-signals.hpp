@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #pragma once
+#include <atomic>
 #include <iostream>
 #include <napi.h>
 #include "osn-error.hpp"
