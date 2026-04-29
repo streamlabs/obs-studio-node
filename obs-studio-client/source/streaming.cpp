@@ -426,7 +426,7 @@ Napi::Value osn::Streaming::GetKBitsPerSec(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
 
 Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
@@ -440,5 +440,5 @@ Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }

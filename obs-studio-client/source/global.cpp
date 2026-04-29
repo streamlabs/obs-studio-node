@@ -247,7 +247,7 @@ Napi::Value osn::Global::GetCPUPercentage(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
 
 Napi::Value osn::Global::GetCurrentFrameRate(const Napi::CallbackInfo &info)
@@ -261,7 +261,7 @@ Napi::Value osn::Global::GetCurrentFrameRate(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
 
 Napi::Value osn::Global::GetAverageTimeToRenderFrame(const Napi::CallbackInfo &info)
@@ -275,7 +275,7 @@ Napi::Value osn::Global::GetAverageTimeToRenderFrame(const Napi::CallbackInfo &i
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
 
 Napi::Value osn::Global::GetDiskSpaceAvailable(const Napi::CallbackInfo &info)
@@ -303,5 +303,5 @@ Napi::Value osn::Global::GetMemoryUsage(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
