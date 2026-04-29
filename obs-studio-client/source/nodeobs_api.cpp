@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "controller.hpp"
+#include <filesystem>
 #include "osn-error.hpp"
 #include "nodeobs_api.hpp"
 #include <sstream>
@@ -36,12 +37,15 @@ Napi::Value api::OBS_API_initAPI(const Napi::CallbackInfo &info)
 	std::string language;
 	std::string version;
 	std::string crashserverurl;
+	std::string logFilename;
 
 	ASSERT_GET_VALUE(info, info[0], language);
 	ASSERT_GET_VALUE(info, info[1], path);
 	ASSERT_GET_VALUE(info, info[2], version);
 	if (info.Length() > 3)
 		ASSERT_GET_VALUE(info, info[3], crashserverurl);
+	if (info.Length() > 4)
+		ASSERT_GET_VALUE(info, info[4], logFilename);
 
 	auto conn = GetConnection(info);
 	if (!conn)
@@ -50,7 +54,7 @@ Napi::Value api::OBS_API_initAPI(const Napi::CallbackInfo &info)
 	conn->set_freeze_callback(ipc_freeze_callback, path);
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper(
-		"API", "OBS_API_initAPI", {ipc::value(path), ipc::value(language), ipc::value(version), ipc::value(crashserverurl)});
+		"API", "OBS_API_initAPI", {ipc::value(path), ipc::value(language), ipc::value(version), ipc::value(crashserverurl), ipc::value(logFilename)});
 
 	// The API init method will return a response error + graphical error
 	// If there is a problem with the IPC the number of responses here will be zero so we must validate the
