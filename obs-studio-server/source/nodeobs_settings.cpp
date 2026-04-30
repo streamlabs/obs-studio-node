@@ -1708,22 +1708,55 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 	streamingSettings.params.push_back(applyServiceSettings);
 
-	// Rescale Output : boolean
-	Parameter rescale;
-	rescale.name = "Rescale";
-	rescale.type = "OBS_PROPERTY_BOOL";
-	rescale.description = "Rescale Output";
+	// Rescale Output : list
+	Parameter rescaleFilter;
+	rescaleFilter.name = "RescaleFilter";
+	rescaleFilter.type = "OBS_PROPERTY_LIST";
+	rescaleFilter.description = "Rescale Output";
+	rescaleFilter.subType = "OBS_COMBO_FORMAT_INT";
 
-	bool doRescale = config_get_bool(config, "AdvOut", "Rescale");
+	int64_t currentRescaleFilter = config_get_int(config, "AdvOut", "RescaleFilter");
 
-	rescale.currentValue.resize(sizeof(doRescale));
-	memcpy(rescale.currentValue.data(), &doRescale, sizeof(doRescale));
-	rescale.sizeOfCurrentValue = sizeof(doRescale);
-	rescale.visible = (encoderCurrentValue != ENCODER_NVENC_H264_TEX);
-	rescale.enabled = isCategoryEnabled;
-	rescale.masked = false;
+	rescaleFilter.currentValue.resize(sizeof(currentRescaleFilter));
+	memcpy(rescaleFilter.currentValue.data(), &currentRescaleFilter, sizeof(currentRescaleFilter));
+	rescaleFilter.sizeOfCurrentValue = sizeof(currentRescaleFilter);
 
-	streamingSettings.params.push_back(rescale);
+	std::vector<std::pair<std::string, int64_t>> rescaleFilterValues = {
+		{"Disabled", OBS_SCALE_DISABLE},
+		{"Bilinear", OBS_SCALE_BILINEAR},
+		{"Area", OBS_SCALE_AREA},
+		{"Bicubic", OBS_SCALE_BICUBIC},
+		{"Lanczos", OBS_SCALE_LANCZOS},
+	};
+
+	for (const auto &filter : rescaleFilterValues) {
+		const std::string &name = filter.first;
+
+		uint64_t sizeName = name.length();
+		std::vector<char> sizeNameBuffer;
+		sizeNameBuffer.resize(sizeof(sizeName));
+		memcpy(sizeNameBuffer.data(), &sizeName, sizeof(sizeName));
+
+		rescaleFilter.values.insert(rescaleFilter.values.end(), sizeNameBuffer.begin(), sizeNameBuffer.end());
+		rescaleFilter.values.insert(rescaleFilter.values.end(), name.begin(), name.end());
+
+		int64_t value = filter.second;
+		std::vector<char> valueBuffer;
+		valueBuffer.resize(sizeof(value));
+		memcpy(valueBuffer.data(), &value, sizeof(value));
+
+		rescaleFilter.values.insert(rescaleFilter.values.end(), valueBuffer.begin(), valueBuffer.end());
+	}
+
+	rescaleFilter.sizeOfValues = rescaleFilter.values.size();
+	rescaleFilter.countValues = rescaleFilterValues.size();
+	rescaleFilter.visible = true;
+	rescaleFilter.enabled = isCategoryEnabled;
+	rescaleFilter.masked = false;
+
+	streamingSettings.params.push_back(rescaleFilter);
+
+	bool doRescale = currentRescaleFilter != OBS_SCALE_DISABLE;
 
 	if (doRescale) {
 		// Output Resolution : list
@@ -1768,7 +1801,7 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 
 		rescaleRes.sizeOfValues = rescaleRes.values.size();
 		rescaleRes.countValues = outputResolutions.size();
-		rescaleRes.visible = (encoderCurrentValue != ENCODER_NVENC_H264_TEX);
+		rescaleRes.visible = true;
 		rescaleRes.enabled = isCategoryEnabled;
 		rescaleRes.masked = false;
 
@@ -2583,6 +2616,12 @@ void OBS_settings::saveAdvancedOutputStreamingSettings(std::vector<SubCategory> 
 			if (subType.compare("OBS_COMBO_FORMAT_INT") == 0) {
 				int64_t *value = reinterpret_cast<int64_t *>(param.currentValue.data());
 				if (i < indexEncoderSettings) {
+					if (name.compare("RescaleFilter") == 0 && *value != OBS_SCALE_DISABLE) {
+						indexEncoderSettings++;
+						config_set_bool(ConfigManager::getInstance().getBasic(), section.c_str(), "Rescale", true);
+					} else if (name.compare("RescaleFilter") == 0) {
+						config_set_bool(ConfigManager::getInstance().getBasic(), section.c_str(), "Rescale", false);
+					}
 					config_set_int(ConfigManager::getInstance().getBasic(), section.c_str(), name.c_str(), *value);
 				} else {
 					obs_data_set_int(encoderSettings, name.c_str(), *value);

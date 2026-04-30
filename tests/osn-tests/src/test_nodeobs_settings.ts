@@ -916,8 +916,8 @@ describe(testName, function() {
             obs.setSetting(EOBSSettingsCategories.Output, 'rate_control', 'LA');
             obs.setSetting(EOBSSettingsCategories.Output, 'Recrate_control', 'LA');
 
-            // Setting rescale to true
-            obs.setSetting(EOBSSettingsCategories.Output, 'Rescale', true);
+            // Setting rescale to Bicubic
+            obs.setSetting(EOBSSettingsCategories.Output, 'RescaleFilter', osn.EScaleType.Bicubic);
             obs.setSetting(EOBSSettingsCategories.Output, 'RecRescale', true);
 
             // Getting advanced output settings container with LA parameters
@@ -935,8 +935,8 @@ describe(testName, function() {
                             expect(parameter.currentValue).to.equal('obs_qsv11', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
-                        case 'Rescale': {
-                            expect(parameter.currentValue).to.equal(true, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                        case 'RescaleFilter': {
+                            expect(parameter.currentValue).to.equal(osn.EScaleType.Bicubic, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'RescaleRes': {
@@ -1788,6 +1788,10 @@ describe(testName, function() {
             // Setting recording format
             obs.setSetting(EOBSSettingsCategories.Output, 'RecFormat', 'flv');
 
+            // Setting streaming rescale filter
+            obs.setSetting(EOBSSettingsCategories.Output, 'RescaleFilter', osn.EScaleType.Bicubic);
+            obs.setSetting(EOBSSettingsCategories.Output, 'RescaleRes', '852x480');
+
             // Getting advanced output settings container with CBR parameters
             let cbrOutputSettings = obs.getSettingsContainer(EOBSSettingsCategories.Output);
 
@@ -1809,6 +1813,14 @@ describe(testName, function() {
                         }
                         case 'ApplyServiceSettings': {
                             parameter.currentValue = false;
+                            break;
+                        }
+                        case 'RescaleFilter': {
+                            expect(parameter.currentValue).to.equal(osn.EScaleType.Bicubic, GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
+                            break;
+                        }
+                        case 'RescaleRes': {
+                            expect(parameter.currentValue).to.equal('852x480', GetErrorMessage(ETestErrorMsg.SingleOutputSetting, parameter.name));
                             break;
                         }
                         case 'rate_control': {

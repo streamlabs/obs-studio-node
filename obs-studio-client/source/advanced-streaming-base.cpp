@@ -92,6 +92,31 @@ void osn::AdvancedStreamingBase::SetRescaling(const Napi::CallbackInfo &info, co
 	ValidateResponse(info, response);
 }
 
+Napi::Value osn::AdvancedStreamingBase::GetRescaleFilter(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper("AdvancedStreaming", "GetRescaleFilter", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+void osn::AdvancedStreamingBase::SetRescaleFilter(const Napi::CallbackInfo &info, const Napi::Value &value)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	auto response =
+		conn->call_synchronous_helper("AdvancedStreaming", "SetRescaleFilter", {ipc::value(this->uid), ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
+}
+
 Napi::Value osn::AdvancedStreamingBase::GetOutputWidth(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

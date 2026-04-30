@@ -65,6 +65,8 @@ describe(testName, () => {
             2, "Invalid twitchTrack default value");
         expect(stream.rescaling).to.equal(
             false, "Invalid rescaling default value");
+        expect((stream as any).rescaleFilter).to.equal(
+            osn.EScaleType.Disable, "Invalid rescaleFilter default value");
         expect(stream.outputWidth).to.equal(
             1280, "Invalid outputWidth default value");
         expect(stream.outputHeight).to.equal(
@@ -75,6 +77,7 @@ describe(testName, () => {
         stream.audioTrack = 2;
         stream.twitchTrack = 3;
         stream.rescaling = true;
+        (stream as any).rescaleFilter = osn.EScaleType.Bicubic;
         stream.outputWidth = 1920;
         stream.outputHeight = 1080;
         stream.video = obs.defaultVideoContext;
@@ -89,10 +92,45 @@ describe(testName, () => {
             3, "Invalid twitchTrack default value");
         expect(stream.rescaling).to.equal(
             true, "Invalid rescaling default value");
+        expect((stream as any).rescaleFilter).to.equal(
+            osn.EScaleType.Bicubic, "Invalid rescaleFilter value");
         expect(stream.outputWidth).to.equal(
             1920, "Invalid outputWidth default value");
         expect(stream.outputHeight).to.equal(
             1080, "Invalid outputHeight default value");
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Reads advanced streaming rescale filter from legacy settings', async () => {
+        obs.setSetting('Output', 'Mode', 'Advanced');
+        obs.setSetting('Output', 'RescaleFilter', osn.EScaleType.Lanczos);
+        obs.setSetting('Output', 'RescaleRes', '960x540');
+
+        const stream = osn.AdvancedStreamingFactory.legacySettings;
+
+        expect(stream.rescaling).to.equal(
+            true, "RescaleFilter should enable advanced stream rescaling");
+        expect((stream as any).rescaleFilter).to.equal(
+            osn.EScaleType.Lanczos, "Invalid legacy rescaleFilter value");
+        expect(stream.outputWidth).to.equal(
+            960, "Invalid legacy outputWidth value");
+        expect(stream.outputHeight).to.equal(
+            540, "Invalid legacy outputHeight value");
+
+        osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Reads disabled advanced streaming rescale filter from legacy settings', async () => {
+        obs.setSetting('Output', 'Mode', 'Advanced');
+        obs.setSetting('Output', 'RescaleFilter', osn.EScaleType.Disable);
+
+        const stream = osn.AdvancedStreamingFactory.legacySettings;
+
+        expect(stream.rescaling).to.equal(
+            false, "Disabled RescaleFilter should disable advanced stream rescaling");
+        expect((stream as any).rescaleFilter).to.equal(
+            osn.EScaleType.Disable, "Invalid disabled legacy rescaleFilter value");
 
         osn.AdvancedStreamingFactory.destroy(stream);
     });

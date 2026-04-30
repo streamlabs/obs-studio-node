@@ -61,6 +61,8 @@ Napi::Object osn::EnhancedBroadcastingAdvancedStreaming::Init(Napi::Env env, Nap
 				  &osn::EnhancedBroadcastingAdvancedStreaming::SetTwitchTrack),
 		 InstanceAccessor("rescaling", &osn::EnhancedBroadcastingAdvancedStreaming::GetRescaling,
 				  &osn::EnhancedBroadcastingAdvancedStreaming::SetRescaling),
+		 InstanceAccessor("rescaleFilter", &osn::EnhancedBroadcastingAdvancedStreaming::GetRescaleFilter,
+				  &osn::EnhancedBroadcastingAdvancedStreaming::SetRescaleFilter),
 		 InstanceAccessor("outputWidth", &osn::EnhancedBroadcastingAdvancedStreaming::GetOutputWidth,
 				  &osn::EnhancedBroadcastingAdvancedStreaming::SetOutputWidth),
 		 InstanceAccessor("outputHeight", &osn::EnhancedBroadcastingAdvancedStreaming::GetOutputHeight,

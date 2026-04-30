@@ -2244,22 +2244,21 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode, StreamServiceId
 		obs_data_release(h264Settings);
 		obs_data_release(aacSettings);
 	} else {
-		const char *streamEncoder = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "Encoder");
-		if (streamEncoder && strcmp(streamEncoder, ENCODER_NVENC_H264_TEX) != 0) {
-			unsigned int cx = 0;
-			unsigned int cy = 0;
+		unsigned int cx = 0;
+		unsigned int cy = 0;
 
-			bool rescale = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "Rescale");
-			const char *rescaleRes = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleRes");
+		int rescaleFilter = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleFilter");
+		const char *rescaleRes = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleRes");
 
-			if (rescale && rescaleRes && *rescaleRes) {
-				if (sscanf(rescaleRes, "%ux%u", &cx, &cy) != 2) {
-					cx = 0;
-					cy = 0;
-				}
-				obs_encoder_set_scaled_size(videoStreamingEncoder[serviceId], cx, cy);
+		if (rescaleFilter != OBS_SCALE_DISABLE && rescaleRes && *rescaleRes) {
+			if (sscanf(rescaleRes, "%ux%u", &cx, &cy) != 2) {
+				cx = 0;
+				cy = 0;
 			}
 		}
+
+		obs_encoder_set_scaled_size(videoStreamingEncoder[serviceId], cx, cy);
+		obs_encoder_set_gpu_scale_type(videoStreamingEncoder[serviceId], (obs_scale_type)rescaleFilter);
 	}
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoStreamingEncoder[serviceId], obs_video_mix_get(videoInfo[serviceId], OBS_STREAMING_VIDEO_RENDERING));
