@@ -1722,11 +1722,8 @@ SubCategory OBS_settings::getAdvancedOutputStreamingSettings(config_t *config, b
 	rescaleFilter.sizeOfCurrentValue = sizeof(currentRescaleFilter);
 
 	std::vector<std::pair<std::string, int64_t>> rescaleFilterValues = {
-		{"Disabled", OBS_SCALE_DISABLE},
-		{"Bilinear", OBS_SCALE_BILINEAR},
-		{"Area", OBS_SCALE_AREA},
-		{"Bicubic", OBS_SCALE_BICUBIC},
-		{"Lanczos", OBS_SCALE_LANCZOS},
+		{"Disabled", OBS_SCALE_DISABLE}, {"Bilinear", OBS_SCALE_BILINEAR}, {"Area", OBS_SCALE_AREA},
+		{"Bicubic", OBS_SCALE_BICUBIC},  {"Lanczos", OBS_SCALE_LANCZOS},
 	};
 
 	for (const auto &filter : rescaleFilterValues) {
