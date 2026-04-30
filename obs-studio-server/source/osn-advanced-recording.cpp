@@ -251,7 +251,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	obs_data_set_string(settings, "muxer_settings", recording->muxerSettings.c_str());
 	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
-
+	recording->LoadConfig(false /* advancedMode*/);
 	if (recording->enableFileSplit)
 		recording->ConfigureRecFileSplitting();
 

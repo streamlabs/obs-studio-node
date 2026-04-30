@@ -50,6 +50,7 @@ public:
 	bool simple;
 
 	void ConfigureRecFileSplitting();
+	void LoadConfig(const bool isSimpleMode);
 };
 
 class IRecording : public IFileOutput {

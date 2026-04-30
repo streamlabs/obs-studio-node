@@ -328,3 +328,19 @@ void osn::Recording::ConfigureRecFileSplitting()
 	obs_output_update(this->GetOutput(), settings);
 	obs_data_release(settings);
 }
+
+void osn::Recording::LoadConfig(const bool isSimpleMode)
+{
+	std::string section = isSimpleMode ? "SimpleOutput" : "AdvOut";
+	enableFileSplit = config_get_bool(ConfigManager::getInstance().getBasic(), section.c_str(), "RecSplitFile");
+	const char *splitFileType = config_get_string(ConfigManager::getInstance().getBasic(), section.c_str(), "RecSplitFileType");
+	if (strcmp(splitFileType, "Time") == 0)
+		splitType = SplitFileType::TIME;
+	else if (strcmp(splitFileType, "Size") == 0)
+		splitType = SplitFileType::SIZE;
+	else
+		splitType = SplitFileType::MANUAL;
+	splitTime = config_get_uint(ConfigManager::getInstance().getBasic(), section.c_str(), "RecSplitFileTime");
+	splitSize = config_get_uint(ConfigManager::getInstance().getBasic(), section.c_str(), "RecSplitFileSize");
+	fileResetTimestamps = config_get_bool(ConfigManager::getInstance().getBasic(), section.c_str(), "RecSplitFileResetTimestamps");
+}

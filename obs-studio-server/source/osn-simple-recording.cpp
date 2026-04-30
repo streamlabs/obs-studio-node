@@ -418,9 +418,6 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
 
-	if (recording->enableFileSplit)
-		recording->ConfigureRecFileSplitting();
-
 	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
 	recording->StartOutput();
