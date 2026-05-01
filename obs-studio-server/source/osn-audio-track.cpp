@@ -101,10 +101,9 @@ void osn::IAudioTrack::SetAudioTrack(AudioTrack *track, uint32_t index)
 	if (oldTrack)
 		delete oldTrack;
 
-	obs_data_t *settings = obs_data_create();
+	OBSData settings = obs_data_create();
 	obs_data_set_int(settings, "bitrate", track->bitrate);
 	track->audioEnc = obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), track->name.c_str(), settings, index, nullptr);
-	obs_data_release(settings);
 	audioTracks[index] = track;
 }
 
