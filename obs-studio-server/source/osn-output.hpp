@@ -68,6 +68,7 @@ private:
 
 	std::condition_variable m_cvStop;
 	std::mutex m_mtxOutputStop;
+	bool m_outputStopped = false;
 
 	const std::vector<std::string> m_signals;
 };

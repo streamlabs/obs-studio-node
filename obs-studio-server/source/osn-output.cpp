@@ -35,9 +35,17 @@ osn::Output::~Output() {}
 
 void osn::Output::InitOutput(obs_output_t *output)
 {
+	{
+		std::unique_lock lock(m_mtxOutputStop);
+		m_outputStopped = false;
+	}
+
 	auto onStopped = [](void *data, calldata_t *) {
 		osn::Output *context = reinterpret_cast<osn::Output *>(data);
-		std::unique_lock lock(context->m_mtxOutputStop);
+		{
+			std::unique_lock lock(context->m_mtxOutputStop);
+			context->m_outputStopped = true;
+		}
 		context->m_cvStop.notify_one();
 	};
 
@@ -69,10 +77,16 @@ void osn::Output::DeleteOutput()
 
 	blog(LOG_INFO, "osn::Output::DeleteOutput");
 
-	if (obs_output_active(m_output)) {
+	bool shouldWaitForStop = false;
+	{
+		std::unique_lock lock(m_mtxOutputStop);
+		shouldWaitForStop = obs_output_active(m_output) && !m_outputStopped;
+	}
+
+	if (shouldWaitForStop) {
 		obs_output_stop(m_output);
 		std::unique_lock lock(m_mtxOutputStop);
-		m_cvStop.wait_for(lock, std::chrono::seconds(20));
+		m_cvStop.wait_for(lock, std::chrono::seconds(20), [this] { return m_outputStopped; });
 	}
 	obs_output_release(m_output);
 	m_output = nullptr;
@@ -115,6 +129,11 @@ void osn::Output::StartOutput()
 {
 	if (!m_output)
 		return;
+
+	{
+		std::unique_lock lock(m_mtxOutputStop);
+		m_outputStopped = false;
+	}
 
 	outdated_driver_error::instance()->set_active(true);
 	bool result = obs_output_start(m_output);
