@@ -49,6 +49,9 @@ void osn::IAdvancedStreaming::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("SetTwitchTrack", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetTwitchTrack));
 	cls->register_function(std::make_shared<ipc::function>("GetRescaling", std::vector<ipc::type>{ipc::type::UInt64}, GetRescaling));
 	cls->register_function(std::make_shared<ipc::function>("SetRescaling", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetRescaling));
+	cls->register_function(std::make_shared<ipc::function>("GetRescaleFilter", std::vector<ipc::type>{ipc::type::UInt64}, GetRescaleFilter));
+	cls->register_function(
+		std::make_shared<ipc::function>("SetRescaleFilter", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetRescaleFilter));
 	cls->register_function(std::make_shared<ipc::function>("GetOutputWidth", std::vector<ipc::type>{ipc::type::UInt64}, GetOutputWidth));
 	cls->register_function(std::make_shared<ipc::function>("SetOutputWidth", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32}, SetOutputWidth));
 	cls->register_function(std::make_shared<ipc::function>("GetOutputHeight", std::vector<ipc::type>{ipc::type::UInt64}, GetOutputHeight));
@@ -170,6 +173,36 @@ void osn::IAdvancedStreaming::SetRescaling(void *data, const int64_t id, const s
 	}
 
 	streaming->rescaling = args[1].value_union.ui32;
+	if (streaming->rescaling && streaming->rescaleFilter == OBS_SCALE_DISABLE)
+		streaming->rescaleFilter = OBS_SCALE_BILINEAR;
+	else if (!streaming->rescaling)
+		streaming->rescaleFilter = OBS_SCALE_DISABLE;
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::IAdvancedStreaming::GetRescaleFilter(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	AdvancedStreaming *streaming = static_cast<AdvancedStreaming *>(osn::IAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(streaming->rescaleFilter));
+	AUTO_DEBUG;
+}
+
+void osn::IAdvancedStreaming::SetRescaleFilter(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	AdvancedStreaming *streaming = static_cast<AdvancedStreaming *>(osn::IAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!streaming) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
+	}
+
+	streaming->rescaleFilter = args[1].value_union.ui32;
+	streaming->rescaling = streaming->rescaleFilter != OBS_SCALE_DISABLE;
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -400,8 +433,15 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the audio encoder.");
 	}
 
-	if (streaming->rescaling)
-		obs_encoder_set_scaled_size(streaming->videoEncoder, streaming->outputWidth, streaming->outputHeight);
+	uint32_t cx = 0;
+	uint32_t cy = 0;
+	if (streaming->rescaleFilter != OBS_SCALE_DISABLE) {
+		cx = streaming->outputWidth;
+		cy = streaming->outputHeight;
+	}
+
+	obs_encoder_set_scaled_size(streaming->videoEncoder, cx, cy);
+	obs_encoder_set_gpu_scale_type(streaming->videoEncoder, (obs_scale_type)streaming->rescaleFilter);
 
 	obs_output_set_video_encoder(streaming->GetOutput(), streaming->videoEncoder);
 
@@ -478,7 +518,8 @@ void osn::IAdvancedStreaming::GetLegacySettings(void *data, const int64_t id, co
 	streaming->twitchTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex") - 1);
 	streaming->enforceServiceBitrate = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "ApplyServiceSettings");
 
-	streaming->rescaling = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "Rescale");
+	streaming->rescaleFilter = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleFilter"));
+	streaming->rescaling = streaming->rescaleFilter != OBS_SCALE_DISABLE;
 	const char *rescaleRes = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleRes"));
 	unsigned int cx = 0;
 	unsigned int cy = 0;
@@ -526,7 +567,9 @@ void osn::IAdvancedStreaming::SetLegacySettings(void *data, const int64_t id, co
 	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex", streaming->audioTrack + 1);
 	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex", streaming->twitchTrack + 1);
 
+	streaming->rescaling = streaming->rescaleFilter != OBS_SCALE_DISABLE;
 	config_set_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "Rescale", streaming->rescaling);
+	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleFilter", streaming->rescaleFilter);
 	std::string rescaledRes = std::to_string(streaming->outputWidth);
 	rescaledRes += 'x';
 	rescaledRes += std::to_string(streaming->outputHeight);

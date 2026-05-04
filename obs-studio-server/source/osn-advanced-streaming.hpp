@@ -33,6 +33,7 @@ public:
 		audioTrack = 1;
 		twitchTrack = 2;
 		rescaling = false;
+		rescaleFilter = OBS_SCALE_DISABLE;
 		outputWidth = 1280;
 		outputHeight = 720;
 		simple = false;
@@ -43,6 +44,7 @@ public:
 	uint32_t audioTrack;
 	uint32_t twitchTrack;
 	bool rescaling;
+	uint32_t rescaleFilter;
 	uint32_t outputWidth;
 	uint32_t outputHeight;
 
@@ -61,6 +63,8 @@ public:
 	static void SetTwitchTrack(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetRescaling(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetRescaling(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetRescaleFilter(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetRescaleFilter(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetOutputWidth(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetOutputWidth(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetOutputHeight(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

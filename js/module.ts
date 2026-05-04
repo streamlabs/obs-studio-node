@@ -1749,6 +1749,7 @@ export interface IAdvancedStreaming extends IStreaming {
     audioTrack: number,
     twitchTrack: number,
     rescaling: boolean,
+    rescaleFilter?: EScaleType,
     outputWidth?: number,
     outputHeight?: number
 }

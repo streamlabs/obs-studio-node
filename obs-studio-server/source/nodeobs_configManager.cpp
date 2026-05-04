@@ -23,6 +23,7 @@
 #include <windows.h>
 #endif
 
+#include <obs.h>
 #include <util/platform.h>
 #include "shared.hpp"
 #include "nodeobs_service.h"
@@ -121,6 +122,10 @@ void initBasicDefault(config_t *config)
 		config_remove_value(config, "AdvOut", "nameTrack5");
 		config_save_safe(config, "tmp", nullptr);
 	}
+	if (config_get_bool(config, "AdvOut", "Rescale") && !config_has_user_value(config, "AdvOut", "RescaleFilter")) {
+		config_set_int(config, "AdvOut", "RescaleFilter", OBS_SCALE_BILINEAR);
+		config_save_safe(config, "tmp", nullptr);
+	}
 
 	config_set_default_string(config, "Output", "Mode", "Simple");
 	std::string filePath = GetDefaultVideoSavePath();
@@ -146,6 +151,7 @@ void initBasicDefault(config_t *config)
 
 	config_set_default_bool(config, "AdvOut", "ApplyServiceSettings", true);
 	config_set_default_bool(config, "AdvOut", "UseRescale", false);
+	config_set_default_int(config, "AdvOut", "RescaleFilter", OBS_SCALE_DISABLE);
 	config_set_default_uint(config, "AdvOut", "TrackIndex", 1);
 	config_set_default_uint(config, "AdvOut", "VodTrackIndex", 2);
 	config_set_default_string(config, "AdvOut", "Encoder", ADVANCED_ENCODER_X264);

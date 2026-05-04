@@ -50,6 +50,7 @@ Napi::Object osn::AdvancedStreaming::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("audioTrack", &osn::AdvancedStreaming::GetAudioTrack, &osn::AdvancedStreaming::SetAudioTrack),
 		 InstanceAccessor("twitchTrack", &osn::AdvancedStreaming::GetTwitchTrack, &osn::AdvancedStreaming::SetTwitchTrack),
 		 InstanceAccessor("rescaling", &osn::AdvancedStreaming::GetRescaling, &osn::AdvancedStreaming::SetRescaling),
+		 InstanceAccessor("rescaleFilter", &osn::AdvancedStreaming::GetRescaleFilter, &osn::AdvancedStreaming::SetRescaleFilter),
 		 InstanceAccessor("outputWidth", &osn::AdvancedStreaming::GetOutputWidth, &osn::AdvancedStreaming::SetOutputWidth),
 		 InstanceAccessor("outputHeight", &osn::AdvancedStreaming::GetOutputHeight, &osn::AdvancedStreaming::SetOutputHeight),
 

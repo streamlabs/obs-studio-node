@@ -30,6 +30,8 @@ public:
 	void SetTwitchTrack(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetRescaling(const Napi::CallbackInfo &info);
 	void SetRescaling(const Napi::CallbackInfo &info, const Napi::Value &value);
+	Napi::Value GetRescaleFilter(const Napi::CallbackInfo &info);
+	void SetRescaleFilter(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetOutputWidth(const Napi::CallbackInfo &info);
 	void SetOutputWidth(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetOutputHeight(const Napi::CallbackInfo &info);
