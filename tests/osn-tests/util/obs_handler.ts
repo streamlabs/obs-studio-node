@@ -515,7 +515,7 @@ export class OBSHandler {
         logInfo(this.osnTestName, 'createDefaultVideoContext called');
         this.defaultVideoContext = osn.VideoFactory.create();
         const defaultVideoInfo: osn.IVideoInfo = {
-            fpsNum: 30,
+            fpsNum: 60,
             fpsDen: 1,
             baseWidth: 1280,
             baseHeight: 720,
