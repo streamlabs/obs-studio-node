@@ -42,12 +42,10 @@ void osn::Output::InitOutput(obs_output_t *output)
 
 	auto onStopped = [](void *data, calldata_t *) {
 		osn::Output *context = reinterpret_cast<osn::Output *>(data);
-		{
-			std::unique_lock lock(context->m_mtxOutputStop);
-			context->m_outputStopped = true;
-		}
+		std::unique_lock lock(context->m_mtxOutputStop);
+		context->m_outputStopped = true;
 		context->m_cvStop.notify_one();
-	};
+	}
 
 	signal_handler *sh = obs_output_get_signal_handler(output);
 	signal_handler_connect(sh, "stop", onStopped, this);
