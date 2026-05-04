@@ -7,8 +7,8 @@ import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
-import { EFPSType } from '../osn';
 import path = require('path');
+const fs = require('fs');
 
 const testName = 'osn-advanced-recording';
 const customFilenamePattern = '%CCYY-%MM-%DD_%hh-%mm-%ss-%s-%%';
@@ -348,5 +348,120 @@ describe(testName, () => {
             audioTrackBitrate,
             'Audio track encoder did not use the configured bitrate',
         );
+    });
+
+    it('Start advanced recording - Enable file split every second', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const recording = osn.AdvancedRecordingFactory.create();
+        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+        recording.format = ERecordingFormat.MP4;
+        recording.useStreamEncoders = false;
+        recording.enableFileSplit = true;
+        recording.splitTime = 1; // Split file every 1 second
+        recording.videoEncoder =
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-2');
+        recording.overwrite = false;
+        recording.noSpace = false;
+        recording.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        recording.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        try {
+            const filesBeforeRecording = fs.readdirSync(recording.path);
+            recording.start();
+
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Start);
+
+            if (signalInfo.signal == EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            await sleep(9000); // Wait for 9 seconds to ensure multiple splits happen
+
+            recording.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            const filesAfterRecording = fs.readdirSync(recording.path);
+            logInfo(testName, `Number of files generated: ${filesAfterRecording.length - filesBeforeRecording.length}`);
+            expect(filesAfterRecording.length).to.be.greaterThan(filesBeforeRecording.length + 2, "File split did not create the expected minimum number of files");
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
+            videoEncoder.release();
+        }
+    });
+
+    it('Start advanced recording - Enable file split every few bytes', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+        const recording = osn.AdvancedRecordingFactory.create();
+        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+        recording.format = ERecordingFormat.MP4;
+        recording.useStreamEncoders = false;
+        recording.enableFileSplit = true;
+        recording.splitType = osn.ERecSplitType.Size;
+        recording.splitSize = 1; // Split file every byte
+        recording.videoEncoder =
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-2');
+        recording.overwrite = false;
+        recording.noSpace = false;
+        recording.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        recording.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        try {
+            const filesBeforeRecording = fs.readdirSync(recording.path);
+            recording.start();
+
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Start);
+
+            if (signalInfo.signal == EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            await sleep(15000); // Wait for 15 seconds to ensure multiple splits happen
+
+            recording.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            const filesAfterRecording = fs.readdirSync(recording.path);
+            logInfo(testName, `Number of files generated is ${filesAfterRecording.length - filesBeforeRecording.length} after using size-based splitting`);
+            expect(filesAfterRecording.length).to.be.greaterThan(filesBeforeRecording.length + 2, "File split did not create the expected minimum number of files");
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
+            videoEncoder.release();
+        }
     });
 });
