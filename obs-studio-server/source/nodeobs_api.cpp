@@ -180,6 +180,7 @@ void OBS_API::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetForceGPURendering", std::vector<ipc::type>{}, GetForceGPURendering));
 	cls->register_function(std::make_shared<ipc::function>("SetForceGPURendering", std::vector<ipc::type>{}, SetForceGPURendering));
 	cls->register_function(std::make_shared<ipc::function>("GetForceGPURenderingLegacy", std::vector<ipc::type>{}, GetForceGPURenderingLegacy));
+	cls->register_function(std::make_shared<ipc::function>("OBS_API_Blog", std::vector<ipc::type>{ipc::type::UInt32, ipc::type::String}, OBS_API_Blog));
 
 	srv.register_collection(cls);
 	g_server = &srv;
@@ -2312,5 +2313,14 @@ void OBS_API::GetForceGPURenderingLegacy(void *data, const int64_t id, const std
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint32_t)config_get_bool(ConfigManager::getInstance().getBasic(), "Video", "ForceGPUAsRenderDevice")));
+	AUTO_DEBUG;
+}
+
+void OBS_API::OBS_API_Blog(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	int level = args[0].value_union.i32;
+	std::string msg = args[1].value_str;
+	blog(level, "%s", msg.c_str());
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }

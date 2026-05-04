@@ -113,6 +113,7 @@ public:
 	static void GetForceGPURendering(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetForceGPURendering(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetForceGPURenderingLegacy(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_API_Blog(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 	static bool getBrowserAcceleration();
 	static bool getMediaFileCaching();

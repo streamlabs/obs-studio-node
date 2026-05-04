@@ -61,4 +61,6 @@ Napi::Value GetHdrNominalPeakLevelLegacy(const Napi::CallbackInfo &info);
 Napi::Value GetLowLatencyAudioBuffering(const Napi::CallbackInfo &info);
 void SetLowLatencyAudioBuffering(const Napi::CallbackInfo &info);
 Napi::Value GetLowLatencyAudioBufferingLegacy(const Napi::CallbackInfo &info);
+
+Napi::Value OBS_API_Blog(const Napi::CallbackInfo &info);
 }

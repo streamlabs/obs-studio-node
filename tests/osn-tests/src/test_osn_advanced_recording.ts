@@ -46,6 +46,10 @@ describe(testName, function() {
         logEmptyLine();
     });
 
+    beforeEach(function() {
+        osn.NodeObs.OBS_API_Blog(osn.LogLevel.LOG_INFO, "Starting test case: " + this.currentTest?.title);
+    });
+
     afterEach(async function() {
         hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });

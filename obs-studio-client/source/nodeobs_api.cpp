@@ -593,4 +593,22 @@ void api::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "GetForceGPURendering"), Napi::Function::New(env, api::GetForceGPURendering));
 	exports.Set(Napi::String::New(env, "SetForceGPURendering"), Napi::Function::New(env, api::SetForceGPURendering));
 	exports.Set(Napi::String::New(env, "GetForceGPURenderingLegacy"), Napi::Function::New(env, api::GetForceGPURenderingLegacy));
+	exports.Set(Napi::String::New(env, "OBS_API_Blog"), Napi::Function::New(env, api::OBS_API_Blog));
+}
+
+Napi::Value api::OBS_API_Blog(const Napi::CallbackInfo &info)
+{
+	int log_level;
+	std::string message;
+
+	ASSERT_GET_VALUE(info, info[0], log_level);
+	ASSERT_GET_VALUE(info, info[1], message);
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	conn->call("API", "OBS_API_Blog", {ipc::value(log_level), ipc::value(message)});
+
+	return info.Env().Undefined();
 }
