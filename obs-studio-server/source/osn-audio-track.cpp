@@ -101,7 +101,9 @@ void osn::IAudioTrack::SetAudioTrack(AudioTrack *track, uint32_t index)
 	if (oldTrack)
 		delete oldTrack;
 
-	track->audioEnc = obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), track->name.c_str(), nullptr, index, nullptr);
+	OBSData settings = obs_data_create();
+	obs_data_set_int(settings, "bitrate", track->bitrate);
+	track->audioEnc = obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), track->name.c_str(), settings, index, nullptr);
 	audioTracks[index] = track;
 }
 
@@ -126,8 +128,14 @@ void osn::IAudioTrack::GetBitrate(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "AudioTrack reference is not valid.");
 	}
 
+	uint32_t bitrate = audioTrack->bitrate;
+	if (audioTrack->audioEnc) {
+		OBSData settings = obs_encoder_get_settings(audioTrack->audioEnc);
+		bitrate = static_cast<uint32_t>(obs_data_get_int(settings, "bitrate"));
+	}
+
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(audioTrack->bitrate));
+	rval.push_back(ipc::value(bitrate));
 	AUTO_DEBUG;
 }
 

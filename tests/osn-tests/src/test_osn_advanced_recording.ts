@@ -333,4 +333,20 @@ describe(testName, () => {
         osn.AdvancedRecordingFactory.destroy(recording);
         videoEncoder.release();
     });
+
+    it('Audio track uses configured bitrate after binding to an OBS encoder', function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        const audioTrackBitrate = 192;
+        const audioTrackName = `bitrate-track-${Date.now()}`;
+        const track1 = osn.AudioTrackFactory.create(audioTrackBitrate, audioTrackName);
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+
+        expect(osn.AudioTrackFactory.getAtIndex(1).bitrate).to.equal(
+            audioTrackBitrate,
+            'Audio track encoder did not use the configured bitrate',
+        );
+    });
 });
