@@ -52,7 +52,7 @@ describe(testName, () => {
 
     afterEach(async function() {
         // Destroying created outputs and encoders in case the test failed before they were destroyed in the test itself
-        const streamEncoder = recording?.videoEncoder;
+        const videoEncoder = recording?.videoEncoder;
         if (replayBuffer) {
             osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
             replayBuffer = null;
@@ -61,11 +61,13 @@ describe(testName, () => {
             osn.AdvancedRecordingFactory.destroy(recording);
             recording = null;
         }
+        const streamVideoEncoder = stream?.videoEncoder;
         if (stream) {
             osn.AdvancedStreamingFactory.destroy(stream);
             stream = null;
         }
-        streamEncoder?.release();
+        videoEncoder?.release();
+        streamVideoEncoder?.release();
         hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
