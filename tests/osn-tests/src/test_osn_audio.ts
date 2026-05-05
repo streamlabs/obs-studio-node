@@ -57,4 +57,36 @@ describe(testName, () => {
         expect(currentAudio.sampleRate).to.equal(48000, GetErrorMessage(ETestErrorMsg.AudioSampleRate));
         expect(currentAudio.speakers).to.equal(osn.ESpeakerLayout.SevenOne, GetErrorMessage(ETestErrorMsg.AudioSpeakers));
     });
+
+    it('Get output audio devices', function() {
+        const devices = osn.NodeObs.OBS_settings_getOutputAudioDevices();
+        expect(devices).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.AudioDevices));
+        expect(Array.isArray(devices)).to.equal(true, GetErrorMessage(ETestErrorMsg.AudioDevicesIsArray));
+        let foundDefaultDevice = false;
+        for (const device of devices) {
+            expect(device).to.have.property('id');
+            expect(device).to.have.property('description');
+            if (device.id === 'default') {
+                foundDefaultDevice = true;
+                break;
+            }
+        }
+        expect(foundDefaultDevice).to.equal(true, GetErrorMessage(ETestErrorMsg.DefaultDeviceNotFound));
+    });
+
+    it('Get input audio devices', function() {
+        const devices = osn.NodeObs.OBS_settings_getInputAudioDevices();
+        expect(devices).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.AudioDevices));
+        expect(Array.isArray(devices)).to.equal(true, GetErrorMessage(ETestErrorMsg.AudioDevicesIsArray));
+        let foundDefaultDevice = false;
+        for (const device of devices) {
+            expect(device).to.have.property('id');
+            expect(device).to.have.property('description');
+            if (device.id === 'default') {
+                foundDefaultDevice = true;
+                break;
+            }
+        }
+        expect(foundDefaultDevice).to.equal(true, GetErrorMessage(ETestErrorMsg.DefaultDeviceNotFound));
+    });
 });
