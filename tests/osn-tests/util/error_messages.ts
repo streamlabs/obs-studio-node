@@ -199,7 +199,10 @@ export const enum ETestErrorMsg {
     AudioDefaultSampleRate = 'The default value of audio sample rate is wrong',
     AudioDefaultSpeakers = 'The default value of audio speakers is wrong',
     AudioSampleRate = 'Failed to set the new sample rate value',
-    AudioSpeakers = 'Failed to set the new speakers value'
+    AudioSpeakers = 'Failed to set the new speakers value',
+    AudioDevices = 'Failed to get audio devices',
+    AudioDevicesIsArray = 'Returned audio devices value is not an array',
+    DefaultDeviceNotFound = 'Did not find the default audio device in the list of output audio devices',
 }
 
 export function GetErrorMessage(message: string, value1?: string, value2?: string, value3?: string): string {
