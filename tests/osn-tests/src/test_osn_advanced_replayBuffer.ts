@@ -13,6 +13,10 @@ const testName = 'osn-advanced-replay-buffer';
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
+    let replayBuffer : osn.IAdvancedReplayBuffer | undefined | null;
+    let recording : osn.IAdvancedRecording | undefined | null;
+    let stream : osn.IAdvancedStreaming | undefined | null;
+
     // Initialize OBS process
     before(async() => {
         logInfo(testName, 'Starting ' + testName + ' tests');
@@ -38,17 +42,35 @@ describe(testName, () => {
         }
 
         obs = null;
+        replayBuffer = null;
+        recording = null;
+        stream = null;
         deleteConfigFiles();
         logInfo(testName, 'Finished ' + testName + ' tests');
         logEmptyLine();
     });
 
     afterEach(async function() {
+        // Destroying created outputs and encoders in case the test failed before they were destroyed in the test itself
+        const streamEncoder = recording?.videoEncoder;
+        if (replayBuffer) {
+            osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
+            replayBuffer = null;
+        }
+        if (recording) {
+            osn.AdvancedRecordingFactory.destroy(recording);
+            recording = null;
+        }
+        if (stream) {
+            osn.AdvancedStreamingFactory.destroy(stream);
+            stream = null;
+        }
+        streamEncoder?.release();
         hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
     it('Create advanced replay buffer', async () => {
-        const replayBuffer = osn.AdvancedReplayBufferFactory.create();
+        replayBuffer = osn.AdvancedReplayBufferFactory.create();
         expect(replayBuffer).to.not.equal(
             undefined, "Error while creating the simple replayBuffer output");
 
@@ -104,15 +126,13 @@ describe(testName, () => {
             true, "Invalid usesStream value");
         expect(replayBuffer.mixer).to.equal(
             7, "Invalid mixer default value");
-
-        osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
     });
 
     it('Start advanced replay buffer - Use Recording', async function() {
         if (obs.isDarwin()) {
             this.skip();
         }
-        const replayBuffer = osn.AdvancedReplayBufferFactory.create();
+        replayBuffer = osn.AdvancedReplayBufferFactory.create();
         replayBuffer.path = path.join(path.normalize(__dirname), '..', 'osnData');
         replayBuffer.format = osn.ERecordingFormat.MP4;
         replayBuffer.overwrite = false;
@@ -123,7 +143,7 @@ describe(testName, () => {
         replayBuffer.prefix = 'Prefix';
         replayBuffer.suffix = 'Suffix';
 
-        const recording = osn.AdvancedRecordingFactory.create();
+        recording = osn.AdvancedRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = osn.ERecordingFormat.MP4;
         recording.useStreamEncoders = false;
@@ -236,18 +256,13 @@ describe(testName, () => {
             EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
-
-        const streamEncoder = recording.videoEncoder;
-        osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
-        osn.AdvancedRecordingFactory.destroy(recording);
-        streamEncoder.release();
     });
 
     it('Start advanced replay buffer - Use Stream through Recording', async function() {
         if (obs.isDarwin()) {
             this.skip();
         }
-        const replayBuffer = osn.AdvancedReplayBufferFactory.create();
+        replayBuffer = osn.AdvancedReplayBufferFactory.create();
         replayBuffer.path = path.join(path.normalize(__dirname), '..', 'osnData');
         replayBuffer.format = osn.ERecordingFormat.MP4;
         replayBuffer.overwrite = false;
@@ -258,7 +273,7 @@ describe(testName, () => {
         replayBuffer.prefix = 'Prefix';
         replayBuffer.suffix = 'Suffix';
 
-        const recording = osn.AdvancedRecordingFactory.create();
+        recording = osn.AdvancedRecordingFactory.create();
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = osn.ERecordingFormat.MP4;
         recording.useStreamEncoders = true;
@@ -268,7 +283,7 @@ describe(testName, () => {
         recording.useStreamEncoders = true;
         recording.signalHandler = (signal) => {obs.signals.push(signal)};
 
-        const stream = osn.AdvancedStreamingFactory.create();
+        stream = osn.AdvancedStreamingFactory.create();
         stream.video = obs.defaultVideoContext;
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-stream-1');
@@ -432,11 +447,5 @@ describe(testName, () => {
             EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
         expect(signalInfo.signal).to.equal(
             EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        const videoEncoder = stream.videoEncoder;
-        osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
-        osn.AdvancedRecordingFactory.destroy(recording);
-        osn.AdvancedStreamingFactory.destroy(stream);
-        videoEncoder.release();
     });
 });
