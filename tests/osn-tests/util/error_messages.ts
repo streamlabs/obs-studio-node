@@ -202,7 +202,7 @@ export const enum ETestErrorMsg {
     AudioSpeakers = 'Failed to set the new speakers value',
     AudioDevices = 'Failed to get audio devices',
     AudioDevicesIsArray = 'Returned audio devices value is not an array',
-    DefaultDeviceNotFound = 'Did not find the default audio device in the list of output audio devices',
+    DefaultDeviceNotFound = 'Did not find the default audio device in the list of audio devices',
 }
 
 export function GetErrorMessage(message: string, value1?: string, value2?: string, value3?: string): string {

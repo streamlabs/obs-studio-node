@@ -66,6 +66,7 @@ describe(testName, () => {
         for (const device of devices) {
             expect(device).to.have.property('id');
             expect(device).to.have.property('description');
+            logInfo(testName, `Output audio device found: ${device.description} with id ${device.id}`);
             if (device.id === 'default') {
                 foundDefaultDevice = true;
             }
@@ -81,6 +82,7 @@ describe(testName, () => {
         for (const device of devices) {
             expect(device).to.have.property('id');
             expect(device).to.have.property('description');
+            logInfo(testName, `Input audio device found: ${device.description} with id ${device.id}`);
             if (device.id === 'default') {
                 foundDefaultDevice = true;
             }
