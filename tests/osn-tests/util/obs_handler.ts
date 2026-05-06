@@ -557,6 +557,12 @@ export class OBSHandler {
         return this.os === 'darwin';
     }
 
+    isOnDarwinCI()
+    {
+        // Wrapped this in a function- just incase we want to add more conditions later or disable only within the build agent.
+        return this.os === 'darwin' && this.ci;
+    }
+
     // is the build server environment
     isCI()
     {
