@@ -795,7 +795,6 @@ export interface IVideoEncoderFactory {
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;
 }
 export interface IStreaming {
-    // Video encoder value is only ignored in the Enhanced Broadcasting mode, otherwise it should be set
     videoEncoder?: IVideoEncoder;
     service: IService;
     enforceServiceBitrate: boolean;
@@ -806,7 +805,7 @@ export interface IStreaming {
     video: IVideo;
     signalHandler: (signal: EOutputSignal) => void;
     getAvailableEncoders(): IEncoderOption[];
-    start(): void; // throws
+    start(): void;
     stop(force?: boolean): void;
     droppedFrames: number;
     totalFrames: number;
@@ -847,9 +846,7 @@ export interface IAdvancedStreamingFactory {
     legacySettings: IAdvancedStreaming;
 }
 export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
-    additionalVideo?: IVideo,
+    additionalVideo?: IVideo;
 }
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
     create(): IEnhancedBroadcastingAdvancedStreaming;
@@ -857,9 +854,7 @@ export interface IEnhancedBroadcastingAdvancedStreamingFactory {
     legacySettings: IEnhancedBroadcastingAdvancedStreaming;
 }
 export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
-    additionalVideo?: IVideo,
+    additionalVideo?: IVideo;
 }
 export interface IEnhancedBroadcastingSimpleStreamingFactory {
     create(): IEnhancedBroadcastingSimpleStreaming;
