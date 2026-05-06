@@ -403,6 +403,8 @@ SET(osn-server_SOURCES
 if (APPLE)
     SET(osn-server-osx_SOURCES
         "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info-osx.mm"
+        "${PROJECT_SOURCE_DIR}/source/nodeobs_settings-osx.h"
+        "${PROJECT_SOURCE_DIR}/source/nodeobs_settings-osx.mm"
 
         ###### osx-util ######
         "${PROJECT_SOURCE_DIR}/source/util-osx.hpp"
