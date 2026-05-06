@@ -4091,11 +4091,11 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	rval.push_back(ipc::value((uint32_t)0));
 	enumVideoDevices(rval);
 #elif __APPLE__
-    // Here we do not invoke getDevices() because the mac-capture
-    // plugin will not enumerate video devices unless it is fully initialized.
-    // So instead, we will enumerate video devices manually. Hopefully,
-    // mac-capture doesn't do anything special to enumerate video devices.
-    // If so, then this implementation will need to be updated.
+	// Here we do not invoke getDevices() because the mac-capture
+	// plugin will not enumerate video devices unless it is fully initialized.
+	// So instead, we will enumerate video devices manually. Hopefully,
+	// mac-capture doesn't do anything special to enumerate video devices.
+	// If so, then this implementation will need to be updated.
 	auto devices = getVideoDevicesMacOS();
 	rval.push_back(ipc::value((uint64_t)devices.size()));
 	for (const auto &[name, uid] : devices) {

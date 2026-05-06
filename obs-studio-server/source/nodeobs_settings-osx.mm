@@ -7,8 +7,7 @@ std::vector<std::pair<std::string, std::string>> getVideoDevicesMacOS()
 	std::vector<std::pair<std::string, std::string>> result;
 
 	if (@available(macOS 12.0, *)) {
-		NSMutableArray<AVCaptureDeviceType> *deviceTypes =
-			[NSMutableArray arrayWithObject:AVCaptureDeviceTypeBuiltInWideAngleCamera];
+		NSMutableArray<AVCaptureDeviceType> *deviceTypes = [NSMutableArray arrayWithObject:AVCaptureDeviceTypeBuiltInWideAngleCamera];
 
 		if (@available(macOS 13.0, *)) {
 			[deviceTypes addObject:AVCaptureDeviceTypeExternal];
@@ -21,10 +20,9 @@ std::vector<std::pair<std::string, std::string>> getVideoDevicesMacOS()
 #pragma clang diagnostic pop
 		}
 
-		AVCaptureDeviceDiscoverySession *session = [AVCaptureDeviceDiscoverySession
-			discoverySessionWithDeviceTypes:deviceTypes
-			                      mediaType:AVMediaTypeVideo
-			                       position:AVCaptureDevicePositionUnspecified];
+		AVCaptureDeviceDiscoverySession *session = [AVCaptureDeviceDiscoverySession discoverySessionWithDeviceTypes:deviceTypes
+														  mediaType:AVMediaTypeVideo
+														   position:AVCaptureDevicePositionUnspecified];
 
 		for (AVCaptureDevice *device in session.devices) {
 			if (!device.localizedName || !device.uniqueID)
