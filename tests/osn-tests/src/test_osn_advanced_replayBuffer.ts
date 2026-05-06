@@ -131,9 +131,6 @@ describe(testName, () => {
     });
 
     it('Start advanced replay buffer - Use Recording', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         replayBuffer = osn.AdvancedReplayBufferFactory.create();
         replayBuffer.path = path.join(path.normalize(__dirname), '..', 'osnData');
         replayBuffer.format = osn.ERecordingFormat.MP4;
@@ -261,9 +258,6 @@ describe(testName, () => {
     });
 
     it('Start advanced replay buffer - Use Stream through Recording', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         replayBuffer = osn.AdvancedReplayBufferFactory.create();
         replayBuffer.path = path.join(path.normalize(__dirname), '..', 'osnData');
         replayBuffer.format = osn.ERecordingFormat.MP4;
