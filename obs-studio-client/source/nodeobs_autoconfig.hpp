@@ -16,6 +16,7 @@
 
 ******************************************************************************/
 #pragma once
+#include <chrono>
 #include <napi.h>
 #include "utility-v8.hpp"
 #ifdef WIN32
@@ -40,7 +41,7 @@ extern sem_t *ac_sem;
 namespace autoConfig {
 extern bool isWorkerRunning;
 extern bool worker_stop;
-extern uint32_t sleepIntervalMS;
+extern std::chrono::milliseconds sleepInterval;
 extern Napi::ThreadSafeFunction js_thread;
 extern std::thread *worker_thread;
 extern std::vector<std::thread *> ac_queue_task_workers;

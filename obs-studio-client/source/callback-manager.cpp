@@ -32,7 +32,7 @@
 
 bool globalCallback::isWorkerRunning = false;
 bool globalCallback::worker_stop = true;
-uint32_t globalCallback::sleepIntervalMS = 50;
+std::chrono::milliseconds globalCallback::sleepInterval(50);
 std::thread *globalCallback::worker_thread = nullptr;
 Napi::ThreadSafeFunction globalCallback::js_source_callback;
 Napi::ThreadSafeFunction globalCallback::js_transition_callback;
@@ -244,8 +244,6 @@ void globalCallback::worker()
 		delete data;
 	};
 
-	size_t totalSleepMS = 0;
-
 	while (!worker_stop && !m_all_workers_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -382,9 +380,9 @@ void globalCallback::worker()
 	do_sleep:
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		totalSleepMS = std::max(0, static_cast<int>(sleepIntervalMS - dur.count()));
-		if (totalSleepMS > 0)
-			std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
+		const auto sleepDuration = sleepInterval - dur;
+		if (sleepDuration > std::chrono::milliseconds(0))
+			std::this_thread::sleep_for(sleepDuration);
 	}
 	return;
 }

@@ -16,6 +16,7 @@
 
 ******************************************************************************/
 
+#include <chrono>
 #include <mutex>
 #include <napi.h>
 #include <thread>
@@ -40,7 +41,7 @@ namespace service {
 
 extern bool isWorkerRunning;
 extern bool worker_stop;
-extern uint32_t sleepIntervalMS;
+extern std::chrono::milliseconds sleepInterval;
 extern std::thread *worker_thread;
 extern Napi::ThreadSafeFunction js_thread;
 extern Napi::FunctionReference cb;

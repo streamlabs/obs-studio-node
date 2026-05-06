@@ -16,6 +16,7 @@
 
 ******************************************************************************/
 
+#include <chrono>
 #include <mutex>
 #include <napi.h>
 #include <string>
@@ -60,7 +61,7 @@ struct SourceMessageInfoData {
 namespace globalCallback {
 extern bool isWorkerRunning;
 extern bool worker_stop;
-extern uint32_t sleepIntervalMS;
+extern std::chrono::milliseconds sleepInterval;
 extern std::thread *worker_thread;
 extern Napi::ThreadSafeFunction js_source_callback;
 extern Napi::ThreadSafeFunction js_transition_callback;
