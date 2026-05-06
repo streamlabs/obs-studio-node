@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #pragma once
+#include <chrono>
 #include <napi.h>
 #include "osn-error.hpp"
 #include "utility.hpp"
@@ -36,7 +37,7 @@ public:
 	{
 		isWorkerRunning = false;
 		workerStop = true;
-		sleepIntervalMS = 33;
+		sleepInterval = std::chrono::milliseconds(33);
 		workerThread = nullptr;
 	};
 	~WorkerSignals(){};
@@ -44,7 +45,7 @@ public:
 protected:
 	bool isWorkerRunning;
 	bool workerStop;
-	uint32_t sleepIntervalMS;
+	std::chrono::milliseconds sleepInterval;
 	std::thread *workerThread;
 	Napi::ThreadSafeFunction jsThread;
 	Napi::FunctionReference cb;
@@ -79,7 +80,6 @@ protected:
 			}
 			data->sent = true;
 		};
-		size_t totalSleepMS = 0;
 		std::vector<SignalOutput *> signalsList;
 		while (!workerStop) {
 			auto tp_start = std::chrono::high_resolution_clock::now();
@@ -122,8 +122,9 @@ protected:
 
 			auto tp_end = std::chrono::high_resolution_clock::now();
 			auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-			totalSleepMS = sleepIntervalMS - dur.count();
-			std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
+			const auto sleepDuration = sleepInterval - dur;
+			if (sleepDuration > std::chrono::milliseconds(0))
+				std::this_thread::sleep_for(sleepDuration);
 		}
 
 		return;

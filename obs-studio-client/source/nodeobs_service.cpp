@@ -43,7 +43,7 @@ enum VcamInstalledStatus : uint8_t { NotInstalled = 0, LegacyInstalled = 1, Inst
 
 bool service::isWorkerRunning = false;
 bool service::worker_stop = true;
-uint32_t service::sleepIntervalMS = 33;
+std::chrono::milliseconds service::sleepInterval(33);
 std::thread *service::worker_thread = nullptr;
 Napi::ThreadSafeFunction service::js_thread;
 Napi::FunctionReference service::cb;
@@ -304,7 +304,6 @@ void service::worker()
 		}
 		data->sent = true;
 	};
-	size_t totalSleepMS = 0;
 	std::vector<ServiceSignalInfo *> signalsList;
 	while (!worker_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
@@ -348,8 +347,9 @@ void service::worker()
 
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		totalSleepMS = sleepIntervalMS - dur.count();
-		std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
+		const auto sleepDuration = sleepInterval - dur;
+		if (sleepDuration > std::chrono::milliseconds(0))
+			std::this_thread::sleep_for(sleepDuration);
 	}
 
 	for (auto &signalData : signalsList) {

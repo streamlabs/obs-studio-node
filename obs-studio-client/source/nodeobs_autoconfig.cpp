@@ -21,7 +21,7 @@
 
 bool autoConfig::isWorkerRunning = false;
 bool autoConfig::worker_stop = true;
-uint32_t autoConfig::sleepIntervalMS = 33;
+std::chrono::milliseconds autoConfig::sleepInterval(33);
 Napi::ThreadSafeFunction autoConfig::js_thread;
 std::thread *autoConfig::worker_thread = nullptr;
 std::vector<std::thread *> autoConfig::ac_queue_task_workers;
@@ -36,8 +36,6 @@ sem_t *ac_sem;
 
 void autoConfig::worker()
 {
-	size_t totalSleepMS = 0;
-
 	while (!worker_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -66,8 +64,9 @@ void autoConfig::worker()
 	do_sleep:
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		totalSleepMS = sleepIntervalMS - dur.count();
-		std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
+		const auto sleepDuration = sleepInterval - dur;
+		if (sleepDuration > std::chrono::milliseconds(0))
+			std::this_thread::sleep_for(sleepDuration);
 	}
 	return;
 }
