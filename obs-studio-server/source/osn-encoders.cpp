@@ -23,6 +23,8 @@
 #include <util/dstr.h>
 #include "utility.hpp"
 
+static bool codecListContains(const char **codecs, const char *codec);
+static const char *getStreamOutputType(const obs_service_t *service);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
 static void convert_nvenc_h264_presets(obs_data_t *data);
@@ -104,16 +106,79 @@ bool osn::EncoderUtils::isCodecAvailableForService(const char *encoder, obs_serv
 	auto supportedCodecs = obs_service_get_supported_video_codecs(service);
 	auto encoderCodec = obs_get_encoder_codec(encoder);
 
-	if (!supportedCodecs || !encoderCodec)
+	if (!encoderCodec)
 		return false;
 
-	while (*supportedCodecs) {
-		if (strcmp(*supportedCodecs, encoderCodec) == 0)
+	if (supportedCodecs)
+		return codecListContains(supportedCodecs, encoderCodec);
+
+	// Custom services do not expose codec lists, so mirror OBS and fall back to the output type.
+	auto outputType = getStreamOutputType(service);
+	if (!outputType)
+		return false;
+
+	auto outputSupportedCodecs = obs_get_output_supported_video_codecs(outputType);
+	if (!outputSupportedCodecs)
+		return false;
+
+	auto splitOutputSupportedCodecs = strlist_split(outputSupportedCodecs, ';', false);
+	bool supported = codecListContains((const char **)splitOutputSupportedCodecs, encoderCodec);
+	strlist_free(splitOutputSupportedCodecs);
+
+	return supported;
+}
+
+static bool codecListContains(const char **codecs, const char *codec)
+{
+	if (!codecs || !codec)
+		return false;
+
+	while (*codecs) {
+		if (strcmp(*codecs, codec) == 0)
 			return true;
-		supportedCodecs++;
+		codecs++;
 	}
 
 	return false;
+}
+
+// Resolves the OBS output type used by a streaming service.
+// Returns a non-owned output type ID, such as "rtmp_output", or nullptr if no compatible output is registered.
+static const char *getStreamOutputType(const obs_service_t *service)
+{
+	const char *protocol = obs_service_get_protocol(service);
+
+	if (!protocol)
+		return nullptr;
+
+	if (!obs_is_output_protocol_registered(protocol))
+		return nullptr;
+
+	const char *output = obs_service_get_preferred_output_type(service);
+	if (output && (obs_get_output_flags(output) & OBS_OUTPUT_SERVICE) != 0)
+		return output;
+
+	auto canUseOutput = [](const char *prot, const char *output, const char *prot_test1, const char *prot_test2 = nullptr) {
+		return (strcmp(prot, prot_test1) == 0 || (prot_test2 && strcmp(prot, prot_test2) == 0)) &&
+		       (obs_get_output_flags(output) & OBS_OUTPUT_SERVICE) != 0;
+	};
+
+	if (canUseOutput(protocol, "rtmp_output", "RTMP", "RTMPS")) {
+		return "rtmp_output";
+	} else if (canUseOutput(protocol, "ffmpeg_hls_muxer", "HLS")) {
+		return "ffmpeg_hls_muxer";
+	} else if (canUseOutput(protocol, "ffmpeg_mpegts_muxer", "SRT", "RIST")) {
+		return "ffmpeg_mpegts_muxer";
+	}
+
+	auto returnFirstOutputId = [](void *data, const char *id) {
+		const char **output = (const char **)data;
+
+		*output = id;
+		return false;
+	};
+	obs_enum_output_types_with_protocol(protocol, &output, returnFirstOutputId);
+	return output;
 }
 
 bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service_t *service, bool simpleMode, bool recording, const std::string &container,
