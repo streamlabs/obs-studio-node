@@ -1,8 +1,8 @@
 #!/bin/bash
 # Verify that the committed tsc outputs under js/ match what regenerating
 # from js/module.ts would produce. CI runs `yarn build:javascript` first,
-# so any modified file at this point is a stale generated file.
-dirty=$(git ls-files --modified js/)
+# so any change under js/ at this point is a stale generated file.
+dirty=$(git status --porcelain -- js/)
 
 set +x
 if [[ $dirty ]]; then
