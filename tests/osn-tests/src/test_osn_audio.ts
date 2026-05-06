@@ -70,9 +70,7 @@ describe(testName, () => {
                 foundDefaultDevice = true;
             }
         }
-        if (!obs.isDarwin()) { // On virtual mac the default output device is not included in the list of output devices
-            expect(foundDefaultDevice).to.equal(true, GetErrorMessage(ETestErrorMsg.DefaultDeviceNotFound));
-        }
+        expect(foundDefaultDevice).to.equal(true, GetErrorMessage(ETestErrorMsg.DefaultDeviceNotFound));
     });
 
     it('Get input audio devices', function() {

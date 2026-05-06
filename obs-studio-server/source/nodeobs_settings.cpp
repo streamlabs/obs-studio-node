@@ -3864,7 +3864,7 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 	config_save_safe(config, "tmp", nullptr);
 }
 
-void getDevices(const char *source_id, const char *property_name, std::vector<ipc::value> &rval)
+void getDevices(const char *source_id, const char *property_name, bool shouldInitPlugin, std::vector<ipc::value> &rval)
 {
 	auto settings = obs_get_source_defaults(source_id);
 	if (!settings)
@@ -3877,7 +3877,16 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 		obs_data_set_string(settings, "audio_device_id", dummy_device_name);
 	}
 
-	auto props = obs_get_source_properties(source_id);
+	// Create a dummy source so that the "device" property can be init
+    OBSSourceAutoRelease dummy_source = nullptr;
+    if (shouldInitPlugin) {
+        dummy_source = obs_source_create(source_id, dummy_device_name, settings, nullptr);
+        if (!dummy_source) {
+            obs_data_release(settings);
+            return;
+        }
+    }
+    auto props = dummy_source != nullptr ? obs_source_properties(dummy_source) : obs_get_source_properties(source_id);
 	if (!props) {
 		obs_data_release(settings);
 		blog(LOG_WARNING, "Could not get source properties for source id: %s", source_id);
@@ -4058,7 +4067,10 @@ void OBS_settings::OBS_settings_getInputAudioDevices(void *data, const int64_t i
 	enumAudioDevices(rval, eCapture);
 #elif __APPLE__
 	const char *source_id = "coreaudio_input_capture";
-	getDevices(source_id, "device_id", rval);
+    // Do not init mac-coreaudio plugin. When passed a non-existent object
+    // it will create a reconnect_thread and try to initialize it.
+    const bool shouldInitCoreAudio = false;
+	getDevices(source_id, "device_id", shouldInitCoreAudio, rval);
 #endif
 
 	AUTO_DEBUG;
@@ -4075,7 +4087,10 @@ void OBS_settings::OBS_settings_getOutputAudioDevices(void *data, const int64_t 
 	enumAudioDevices(rval, eRender);
 #elif __APPLE__
 	const char *source_id = "coreaudio_output_capture";
-	getDevices(source_id, "device_id", rval);
+    // Do not init mac-coreaudio plugin. When passed a non-existent object
+    // it will create a reconnect_thread and try to initialize it.
+    const bool shouldInitCoreAudio = false;
+    getDevices(source_id, "device_id", shouldInitCoreAudio, rval);
 #endif
 
 	AUTO_DEBUG;
@@ -4091,7 +4106,12 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 #elif __APPLE__
 	const char *source_id = "macos_avcapture";
 	const char *property_name = "device";
-	getDevices(source_id, property_name, rval);
+    // We must initialize the macos_avcapture plugin so that
+    // it can enumerate the video devices -or- we can provide
+    // our own custom implementation that enumerates video devices
+    // on MacOS.
+    const bool shouldInitPlugin = true;
+	getDevices(source_id, property_name, shouldInitPlugin, rval);
 #endif
 
 	AUTO_DEBUG;

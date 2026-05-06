@@ -191,4 +191,15 @@ describe(testName, () => {
 
         context.destroy();
     });
+
+    it('Get output video devices', function() {
+        const devices = osn.NodeObs.OBS_settings_getVideoDevices();
+        expect(devices).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.VideoDevices));
+        expect(Array.isArray(devices)).to.equal(true, GetErrorMessage(ETestErrorMsg.VideoDevicesIsArray));
+        for (const device of devices) {
+            expect(device).to.have.property('id');
+            expect(device).to.have.property('description');
+            logInfo(testName, `Output Video Device Found: ${device.description} with id: ${device.id}`);
+        }
+    });
 });
