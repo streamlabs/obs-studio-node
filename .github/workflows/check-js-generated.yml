@@ -8,6 +8,9 @@ on:
     paths-ignore: ['**.md']
     branches-ignore: [staging]
 
+permissions:
+  contents: read
+
 jobs:
   check-js-generated:
     runs-on: ubuntu-22.04
