@@ -136,9 +136,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing video encoder', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.service = osn.ServiceFactory.legacySettings;
         stream.video = obs.defaultVideoContext;
@@ -155,9 +152,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing service', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
         stream.video = obs.defaultVideoContext;
@@ -174,9 +168,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing canvas', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.service = osn.ServiceFactory.legacySettings;
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
@@ -193,9 +184,6 @@ describe(testName, () => {
     });
 
     it('Start streaming', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-1');
@@ -283,9 +271,6 @@ describe(testName, () => {
     });
 
     it('Stream with invalid stream key', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.AdvancedStreamingFactory.create();
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-streaming-2');

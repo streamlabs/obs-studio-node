@@ -12,11 +12,11 @@ import path = require('path');
 
 const testName = 'osn-enhanced-broadcasting-advanced-streaming';
 
-describe(testName, () => {
+describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
     const mediaPath = path.join(path.normalize(__dirname), '..', 'media');
-    let secondContext: osn.IVideo = null;
+    let secondContext: osn.IVideo;
 
     // Initialize OBS process
     before(async() => {
@@ -28,21 +28,26 @@ describe(testName, () => {
         // Reserving user from pool
         await obs.reserveUser();
 
-        secondContext = osn.VideoFactory.create();
-        const secondVideoInfo: osn.IVideoInfo = {
-            fpsNum: 60,
-            fpsDen: 2,
-            baseWidth: 720,
-            baseHeight: 1280,
-            outputWidth: 720,
-            outputHeight: 1280,
-            outputFormat: osn.EVideoFormat.NV12,
-            colorspace: osn.EColorSpace.CS709,
-            range: osn.ERangeType.Full,
-            scaleType: osn.EScaleType.Lanczos,
-            fpsType: osn.EFPSType.Fractional
-        };
-        secondContext.video = secondVideoInfo;
+        if (!obs.isCI()) {
+            // Creating second video context for dual canvas streaming test.
+            secondContext = osn.VideoFactory.create();
+            const secondVideoInfo: osn.IVideoInfo = {
+                fpsNum: 60,
+                fpsDen: 2,
+                baseWidth: 720,
+                baseHeight: 1280,
+                outputWidth: 720,
+                outputHeight: 1280,
+                outputFormat: osn.EVideoFormat.NV12,
+                colorspace: osn.EColorSpace.CS709,
+                range: osn.ERangeType.Full,
+                scaleType: osn.EScaleType.Lanczos,
+                fpsType: osn.EFPSType.Fractional
+            };
+            secondContext.video = secondVideoInfo;
+        } else {
+            logInfo(testName, 'Skip AddVideoContext. Running in CI environment, skipping creation of second video context that requires GPU');
+        }
     });
 
     // Shutdown OBS process
@@ -50,7 +55,9 @@ describe(testName, () => {
         // Releasing user got from pool
         await obs.releaseUser();
 
-        secondContext.destroy();
+        if (secondContext) {
+            secondContext.destroy();
+        }
         obs.shutdown();
 
         if (hasTestFailed === true) {
@@ -73,10 +80,6 @@ describe(testName, () => {
 
     it('Enhanced Broadcasting Advanced Streaming rejects without crashing in CI', function() {
         // This test is CI only because CI is expected to hit a Twitch Enhanced Broadcasting rejection.
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         if (!obs.isCI()) {
             this.skip();
         }
@@ -121,11 +124,8 @@ describe(testName, () => {
     });
 
     it('Enhanced Broadcasting Advanced Streaming Single Canvas', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         if (obs.isCI()) {
+            logInfo(testName, 'Running in CI environment, skipping test that requires GPU');
             // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
@@ -219,11 +219,8 @@ describe(testName, () => {
     });
 
     it('Enhanced Broadcasting Advanced Streaming Dual Canvas', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         if (obs.isCI()) {
+            logInfo(testName, 'Running in CI environment, skipping test that requires GPU');
             // Skipping this test because CI server doesn't have GPU, but you can run it locally
             this.skip();
         }
