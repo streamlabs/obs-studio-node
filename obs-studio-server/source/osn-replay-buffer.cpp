@@ -152,7 +152,7 @@ void osn::IReplayBuffer::Query(void *data, const int64_t id, const std::vector<i
 
 void osn::IReplayBuffer::Save(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	ReplayBuffer *replayBuffer = static_cast<ReplayBuffer *>(osn::IFileOutput::Manager::GetInstance().find(args.at(0).value_union.ui64));
+	ReplayBuffer *replayBuffer = static_cast<ReplayBuffer *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
 	if (!replayBuffer) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "ReplayBuffer reference is not valid.");
 	}
