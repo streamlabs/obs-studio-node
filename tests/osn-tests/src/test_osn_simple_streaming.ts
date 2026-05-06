@@ -84,9 +84,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing video encoder', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.SimpleStreamingFactory.create();
         stream.service = osn.ServiceFactory.legacySettings;
         stream.video = obs.defaultVideoContext;
@@ -102,9 +99,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing audio encoder', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
         stream.service = osn.ServiceFactory.legacySettings;
@@ -120,9 +114,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing service', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
         stream.video = obs.defaultVideoContext;
@@ -138,9 +129,6 @@ describe(testName, () => {
     });
 
     it('Stream with missing canvas', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder');
         stream.service = osn.ServiceFactory.legacySettings;
@@ -155,100 +143,97 @@ describe(testName, () => {
     });
 
     it('Start streaming', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.SimpleStreamingFactory.create();
-        stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
-        stream.service = osn.ServiceFactory.legacySettings;
-        stream.delay =
-            osn.DelayFactory.create();
-        stream.reconnect =
-            osn.ReconnectFactory.create();
-        stream.network =
-            osn.NetworkFactory.create();
-        stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-4");
-        stream.signalHandler = (signal) => {obs.signals.push(signal)};
+        try {
+            stream.videoEncoder =
+                osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
+            stream.service = osn.ServiceFactory.legacySettings;
+            stream.delay =
+                osn.DelayFactory.create();
+            stream.reconnect =
+                osn.ReconnectFactory.create();
+            stream.network =
+                osn.NetworkFactory.create();
+            stream.video = obs.defaultVideoContext;
+            stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-4");
+            stream.signalHandler = (signal) => {obs.signals.push(signal)};
 
-        stream.start();
+            stream.start();
 
-        let signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
 
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Activate);
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Activate);
 
-        if (signalInfo.signal == EOBSOutputSignal.Stop) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.StreamOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            if (signalInfo.signal == EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.StreamOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(EOBSOutputSignal.Activate, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Start);
+            expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            await sleep(500);
+
+            expect(stream.droppedFrames).to.not.equal(
+                undefined, "Undefined droppedFrames");
+            expect(stream.totalFrames).to.not.equal(
+                undefined, "Undefined totalFrames");
+            expect(stream.kbitsPerSec).to.not.equal(
+                undefined, "Undefined kbitsPerSec");
+            expect(stream.dataOutput).to.not.equal(
+                undefined, "Undefined dataOutput");
+
+            stream.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Stopping);
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
+
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.StreamOutputStoppedWithError,
+                    signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
         }
-
-        expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(EOBSOutputSignal.Activate, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Start);
-        expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        await sleep(500);
-
-        expect(stream.droppedFrames).to.not.equal(
-            undefined, "Undefined droppedFrames");
-        expect(stream.totalFrames).to.not.equal(
-            undefined, "Undefined totalFrames");
-        expect(stream.kbitsPerSec).to.not.equal(
-            undefined, "Undefined kbitsPerSec");
-        expect(stream.dataOutput).to.not.equal(
-            undefined, "Undefined dataOutput");
-
-        stream.stop();
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Stopping);
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
-
-        if (signalInfo.code != 0) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.StreamOutputStoppedWithError,
-                signalInfo.code.toString(), signalInfo.error));
+        finally
+        {
+            const streamEncoder = stream.videoEncoder;
+            const audioEncoder = stream.audioEncoder;
+            osn.SimpleStreamingFactory.destroy(stream);
+            if (streamEncoder) streamEncoder.release();
+            if (audioEncoder) audioEncoder.release();
         }
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        const streamEncoder = stream.videoEncoder;
-        const audioEncoder = stream.audioEncoder;
-        osn.SimpleStreamingFactory.destroy(stream);
-        streamEncoder.release();
-        audioEncoder.release();
     });
 
     it('Simple Streaming honors stream delay', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-
         const configuredDelayMs = 10 * 1000;
         const allowedTimingDriftMs = 1 * 1000;
         const stream = osn.SimpleStreamingFactory.create();
@@ -336,9 +321,6 @@ describe(testName, () => {
     });
 
     it('Stream with invalid stream key', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
         const stream = osn.SimpleStreamingFactory.create();
         stream.videoEncoder =
             osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-2');

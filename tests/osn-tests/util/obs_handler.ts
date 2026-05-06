@@ -122,12 +122,12 @@ export class OBSHandler {
             const exitCode = osn.NodeObs.IPC.host(this.pipeName);
             if (exitCode !== osn.EVideoCodes.Success) {
                 if (exitCode === osn.EIPCError.OTHER_ERROR) {
-                    throw Error('OBS IPC host failed: missing executable or some other error.');
+                    throw Error(`OBS IPC host failed: missing executable or some other error. Code ${exitCode}`);
                 }
                 throw Error(`OBS IPC host failed with code ${exitCode}. See osn.EIPCError for more details.`);
             }
             osn.NodeObs.SetWorkingDirectory(this.workingDirectory);
-            initResult = osn.NodeObs.OBS_API_initAPI(this.language, this.obsPath, this.version, this.crashServer);
+            initResult = osn.NodeObs.OBS_API_initAPI(this.language, this.obsPath, this.version, this.crashServer, this.osnTestName);
         } catch (e) {
             throw Error('Exception when initializing OBS process: ' + e);
         }
@@ -282,6 +282,10 @@ export class OBSHandler {
             'streaming starting signal timeout',
             'streaming activate signal timeout',
             'streaming start signal timeout',
+            'recording start signal timeout',
+            'recording wrote signal timeout',
+            'replay-buffer start signal timeout',
+            'replay-buffer writing signal timeout',
         ];
 
         if (retryableTimeouts.some(timeoutMessage => normalizedMessage.includes(timeoutMessage))) {
@@ -449,10 +453,12 @@ export class OBSHandler {
         return await this.getNextSignalInfoOf(output, [signal]);
     }
 
-    async getNextSignalInfoOf(output: string, signals: string[]): Promise<IOBSOutputSignalInfo> {
-        const signalDescription = signals.join('/');
+    async getNextSignalInfoOf(output: string, signalsList: string[]): Promise<IOBSOutputSignalInfo> {
+        const signalDescription = signalsList.join('/');
         const timeoutMessage = output.replace(/^\w/, c => c.toUpperCase()) + ' ' + signalDescription + ' signal timeout';
-        const deadline = Date.now() + 30000;
+        const expectedDeadline = Date.now() + 30000;
+        const deadline = Date.now() + 60000; // 60 second timeout for receiving expected signal, since some steps (like recording stop) can take a while on slower CI machines
+        const startTime = Date.now();
 
         while (Date.now() < deadline) {
             const remainingMs = deadline - Date.now();
@@ -463,7 +469,10 @@ export class OBSHandler {
                 }),
             ]);
 
-            if (signalInfo.type === output && signals.indexOf(signalInfo.signal) >= 0) {
+            if (signalInfo.type === output && signalsList.indexOf(signalInfo.signal) >= 0) {
+                if (Date.now() > expectedDeadline) {
+                    logWarning(this.osnTestName, `Received expected ${output}/${signalDescription} signal after ${Date.now() - startTime}ms, which is longer than the expected ${expectedDeadline - startTime}ms. Signal info: ${this.formatSignalInfo(signalInfo)}`);
+                }
                 return signalInfo;
             }
 
@@ -551,10 +560,15 @@ export class OBSHandler {
         });
     }
 
-    isDarwin()
+    removeSourceMessageListener() {
+        osn.NodeObs.RemoveSourceCallback();
+        osn.NodeObs.RemoveSourceMessageCallback();
+    }
+
+    isOnDarwinCI()
     {
         // Wrapped this in a function- just incase we want to add more conditions later or disable only within the build agent.
-        return this.os === 'darwin';
+        return this.os === 'darwin' && this.ci;
     }
 
     // is the build server environment

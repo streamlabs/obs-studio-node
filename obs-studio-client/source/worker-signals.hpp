@@ -17,6 +17,8 @@
 ******************************************************************************/
 
 #pragma once
+#include <atomic>
+#include <iostream>
 #include <napi.h>
 #include "osn-error.hpp"
 #include "utility.hpp"
@@ -42,8 +44,9 @@ public:
 	~WorkerSignals(){};
 
 protected:
-	bool isWorkerRunning;
-	bool workerStop;
+	std::atomic<bool> isWorkerRunning;
+	std::atomic<bool> workerStop;
+	std::atomic<bool> isOrphaned;
 	uint32_t sleepIntervalMS;
 	std::thread *workerThread;
 	Napi::ThreadSafeFunction jsThread;
@@ -51,9 +54,11 @@ protected:
 
 	void startWorker(napi_env env, Napi::Function asyncCallback, const std::string &name, const uint64_t &refID)
 	{
-		if (!workerStop || isWorkerRunning)
+		// If worker has been orphaned; allow it to be rejoined
+		if (!isOrphaned && (!workerStop || isWorkerRunning))
 			return;
 
+		isOrphaned = false;
 		isWorkerRunning = true;
 		workerStop = false;
 		jsThread = Napi::ThreadSafeFunction::New(env, asyncCallback, name.c_str(), 0, 1, [](Napi::Env) {});
@@ -88,6 +93,17 @@ protected:
 			auto conn = Controller::GetInstance().GetConnection();
 			if (conn) {
 				std::vector<ipc::value> response = conn->call_synchronous_helper(name, "Query", {ipc::value(refID)});
+				if (!response.empty()) {
+					ErrorCode firstError = (ErrorCode)response[0].value_union.ui64;
+					if (firstError == ErrorCode::InvalidReference) {
+						// This typically happens if the worker thread is orphaned.
+						std::string errorMessage = response.size() > 1 ? response[1].value_str : "";
+						std::cout << "Worker thread exiting due to Invalid reference error encountered: " << errorMessage << std::endl;
+						isWorkerRunning = false;
+						isOrphaned = true;
+						break;
+					}
+				}
 				if ((response.size() == 5) && signalsList.size() < maximum_signals_in_queue) {
 					ErrorCode error = (ErrorCode)response[0].value_union.ui64;
 					if (error == ErrorCode::Ok) {
@@ -122,7 +138,8 @@ protected:
 
 			auto tp_end = std::chrono::high_resolution_clock::now();
 			auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-			totalSleepMS = sleepIntervalMS - dur.count();
+			auto durCount = dur.count();
+			totalSleepMS = durCount < sleepIntervalMS ? sleepIntervalMS - durCount : 0;
 			std::this_thread::sleep_for(std::chrono::milliseconds(totalSleepMS));
 		}
 

@@ -49,10 +49,16 @@ std::wstring utfWorkingDir = L"";
 #include <wchar.h>
 #include <windows.h>
 #else
+#include <algorithm>
+#include <errno.h>
 #include <signal.h>
 #include <libproc.h>
 #include <iostream>
 #include <spawn.h>
+#include <fcntl.h>
+#include <strings.h>
+#include <unistd.h>
+#include <sys/wait.h>
 extern char **environ;
 #endif
 
@@ -301,8 +307,9 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 		int st = proc_pidinfo(pids[i], PROC_PIDTBSDINFO, 0, &proc, PROC_PIDTBSDINFO_SIZE);
 		if (st == PROC_PIDTBSDINFO_SIZE) {
 			if (strcmp("obs64", proc.pbi_name) == 0) {
-				if (pids[i] != 0)
-					kill(pids[i], SIGKILL);
+				if (pids[i] != 0 && kill(pids[i], SIGKILL) != 0) {
+					std::cout << "Warning: could not kill orphaned/former obs64 process" << std::endl;
+				}
 			}
 		}
 	}
@@ -310,7 +317,21 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	pid_t pid;
 	std::vector<const char *> argv = {"obs64", uri.c_str(), version.c_str(), serverBinaryPath.c_str(), nullptr};
 
-	int ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
+	const char *suppressLogsEnv = std::getenv("SUPPRESS_STREAMLABS_OBS_LOGS");
+	int ret = 0;
+	if (suppressLogsEnv == nullptr || strcasecmp(suppressLogsEnv, "false") == 0) {
+		// For development, it can be helpful for process to share stdout/stderr.
+		ret = posix_spawnp(&pid, serverBinaryPath.c_str(), NULL, NULL, const_cast<char *const *>(argv.data()), environ);
+	} else {
+		// Do not send the logs to stdout/stderr.
+		posix_spawn_file_actions_t file_actions;
+		posix_spawn_file_actions_init(&file_actions);
+		posix_spawn_file_actions_addopen(&file_actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+		posix_spawn_file_actions_addopen(&file_actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+		ret = posix_spawnp(&pid, serverBinaryPath.c_str(), &file_actions, NULL, const_cast<char *const *>(argv.data()), environ);
+		posix_spawn_file_actions_destroy(&file_actions);
+	}
+
 	if (ret != 0) {
 		std::cerr << "Could not spawn the server at " << serverBinaryPath.c_str() << " with error code: " << ret << std::endl;
 		return nullptr;
