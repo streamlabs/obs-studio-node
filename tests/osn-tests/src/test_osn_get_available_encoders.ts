@@ -9,6 +9,21 @@ import { ERecordingFormat } from '../osn';
 import path = require('path');
 
 const testName = 'osn-get-available-encoders';
+const av1EncoderNames = new Set([
+    'ffmpeg_aom_av1',
+    'ffmpeg_svt_av1',
+    'obs_nvenc_av1_tex',
+    'obs_qsv11_av1',
+    'av1_texture_amf',
+]);
+
+function getEncoderNames(encoders: { name: string }[]): string[] {
+    return encoders.map(encoder => encoder.name);
+}
+
+function getAv1EncoderNames(encoders: { name: string }[]): string[] {
+    return getEncoderNames(encoders).filter(name => av1EncoderNames.has(name));
+}
 
 describe(testName, () => {
     let obs: OBSHandler;
@@ -140,6 +155,41 @@ describe(testName, () => {
         }
 
         osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Get available AV1 encoders for custom RTMP streaming using output codec fallback', async () => {
+        const youtubeService = osn.ServiceFactory.create('rtmp_common', 'youtube-service', {
+            service: 'YouTube - RTMPS',
+            server: 'rtmps://a.rtmps.youtube.com:443/live2',
+            key: 'test',
+        });
+        const customService = osn.ServiceFactory.create('rtmp_custom', 'custom-service', {
+            server: 'rtmps://a.rtmps.youtube.com:443/live2',
+            key: 'test',
+        });
+        const youtubeStream = osn.AdvancedStreamingFactory.create();
+        const customStream = osn.AdvancedStreamingFactory.create();
+
+        try {
+            youtubeStream.service = youtubeService;
+            customStream.service = customService;
+
+            const youtubeAv1Encoders = getAv1EncoderNames(youtubeStream.getAvailableEncoders());
+            const customEncoderNames = getEncoderNames(customStream.getAvailableEncoders());
+
+            expect(youtubeAv1Encoders.length).to.be.greaterThan(0,
+                'Test requires at least one registered AV1 encoder for YouTube');
+
+            for (const encoder of youtubeAv1Encoders) {
+                expect(customEncoderNames).to.include(encoder,
+                    `Custom RTMP service should allow ${encoder} when the output supports AV1`);
+            }
+        } finally {
+            osn.AdvancedStreamingFactory.destroy(customStream);
+            osn.AdvancedStreamingFactory.destroy(youtubeStream);
+            osn.ServiceFactory.destroy(customService);
+            osn.ServiceFactory.destroy(youtubeService);
+        }
     });
 
     it('Get available encoders for simple recording', async () => {
