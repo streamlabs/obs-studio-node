@@ -518,7 +518,6 @@ export interface IInput extends ISource {
     sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
     sendFocus(focus: boolean): void;
     sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
-    sendMessage(message: ISettings): void;
     setFilterOrder(filter: IFilter, movement: EOrderMovement): void;
     copyFilters(other: IInput): boolean;
     readonly filters: IFilter[];
@@ -612,6 +611,7 @@ export interface IConfigurable {
 export interface ISource extends IConfigurable, IReleasable {
     remove(): void;
     save(): void;
+    sendMessage(message: ISettings): void;
     readonly status: number;
     readonly type: ESourceType;
     readonly id: string;
