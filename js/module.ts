@@ -907,12 +907,6 @@ export interface IInput extends ISource {
     sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
 
     /**
-     * Forward a serializable message to the underlying source plugin.
-     * Currently only registered on input sources on the native side.
-     */
-    sendMessage(message: ISettings): void;
-
-    /**
      * Move a filter up, down, top, or bottom in the filter list.
      * @param filter - The filter to move within the input source.
      * @param movement - The movement to make within the list.
@@ -1299,6 +1293,13 @@ export interface ISource extends IConfigurable, IReleasable {
      * its settings.
      */
     save(): void;
+
+    /**
+     * Forward a serializable message to the underlying source plugin.
+     * Note: only registered on input sources on the native side; calling on
+     * a filter, scene, or transition will throw at runtime.
+     */
+    sendMessage(message: ISettings): void;
 
     /**
      * The validity of the source
