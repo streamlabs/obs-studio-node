@@ -20,6 +20,7 @@
 #include "osn-error.hpp"
 #include "nodeobs_api.h"
 #include "shared.hpp"
+#include <sstream>
 #include "memory-manager.h"
 #include "osn-video.hpp"
 #include "osn-encoders.hpp"
@@ -3864,39 +3865,48 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 	config_save_safe(config, "tmp", nullptr);
 }
 
-void getDevices(const char *source_id, const char *property_name, std::vector<ipc::value> &rval)
+// Gets the devices using a "dummy" source object that does not exist. For most
+// plugins this is fine but should be avoided for plugins like mac-coreaudio
+// because it will create a reconnect_thread. Triggers the following callbacks
+// on the obs_source_info: get_properties, get_defaults, and get_updates.
+void getDevicesUsingDummySource(const char *source_id, const char *property_name, std::vector<ipc::value> &rval)
 {
-	auto settings = obs_get_source_defaults(source_id);
-	if (!settings)
-		return;
+	OBSDataAutoRelease settings = obs_get_source_defaults(source_id);
+	if (!settings) {
+		std::ostringstream ss;
+		ss << "Could not get settings for source id: " << source_id;
+		PRETTY_ERROR_RETURN(ErrorCode::Error, ss.str());
+	}
 
 	const char *dummy_device_name = "does_not_exist";
 	obs_data_set_string(settings, property_name, dummy_device_name);
-	if (strcmp(source_id, "dshow_input") == 0) {
-		obs_data_set_string(settings, "video_device_id", dummy_device_name);
-		obs_data_set_string(settings, "audio_device_id", dummy_device_name);
+
+	// Create a dummy source so that the "device" property can be init
+	OBSSourceAutoRelease dummy_source = obs_source_create(source_id, dummy_device_name, settings, nullptr);
+	if (!dummy_source) {
+		std::ostringstream ss;
+		ss << "Could not create source: " << source_id;
+		PRETTY_ERROR_RETURN(ErrorCode::Error, ss.str());
 	}
 
-	auto props = obs_get_source_properties(source_id);
+	auto props = obs_source_properties(dummy_source);
 	if (!props) {
-		obs_data_release(settings);
-		blog(LOG_WARNING, "Could not get source properties for source id: %s", source_id);
-		return;
+		std::ostringstream ss;
+		ss << "Could not get source properties for source id: " << source_id;
+		PRETTY_ERROR_RETURN(ErrorCode::Error, ss.str());
 	}
 
 	auto prop = obs_properties_get(props, property_name);
 	if (!prop) {
-		blog(LOG_WARNING, "Could not get the property [%s] for source id: %s", property_name, source_id);
 		obs_properties_destroy(props);
-		obs_data_release(settings);
-		return;
+		std::ostringstream ss;
+		ss << "Could not get source property " << property_name << " for source id: " << source_id;
+		PRETTY_ERROR_RETURN(ErrorCode::Error, ss.str());
 	}
 
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	size_t items = obs_property_list_item_count(prop);
-	if (rval.size() > 1)
-		rval[1].value_union.ui64 += items;
-	else
-		rval.push_back(ipc::value((uint64_t)items));
+	rval.push_back(ipc::value((uint64_t)items));
 
 	for (size_t idx = 0; idx < items; idx++) {
 		const char *description = obs_property_list_item_name(prop, idx);
@@ -3912,7 +3922,45 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 	}
 
 	obs_properties_destroy(props);
-	obs_data_release(settings);
+}
+
+// Gets the devices from the source using a property list without triggering
+// obs_source_info.get_updates callback.
+void getDevices(const char *source_id, const char *property_name, std::vector<ipc::value> &rval)
+{
+	auto props = obs_get_source_properties(source_id);
+	if (!props) {
+		std::ostringstream ss;
+		ss << "Could not get source properties for source id: " << source_id;
+		PRETTY_ERROR_RETURN(ErrorCode::Error, ss.str());
+	}
+
+	auto prop = obs_properties_get(props, property_name);
+	if (!prop) {
+		obs_properties_destroy(props);
+		std::ostringstream ss;
+		ss << "Could not get source property " << property_name << " for source id: " << source_id;
+		PRETTY_ERROR_RETURN(ErrorCode::Error, ss.str());
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	size_t items = obs_property_list_item_count(prop);
+	rval.push_back(ipc::value((uint64_t)items));
+
+	for (size_t idx = 0; idx < items; idx++) {
+		const char *description = obs_property_list_item_name(prop, idx);
+		const char *device_id = obs_property_list_item_string(prop, idx);
+
+		if (!description || !strcmp(description, "") || !device_id || !strcmp(device_id, "")) {
+			rval[1].value_union.ui64--;
+			continue;
+		}
+
+		rval.push_back(ipc::value(description));
+		rval.push_back(ipc::value(device_id));
+	}
+
+	obs_properties_destroy(props);
 }
 
 #ifdef WIN32
@@ -4049,9 +4097,8 @@ void enumAudioDevices(std::vector<ipc::value> &rval, EDataFlow dataFlow)
 
 void OBS_settings::OBS_settings_getInputAudioDevices(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
 #ifdef WIN32
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint32_t)1));
 	rval.push_back(ipc::value("Default"));
 	rval.push_back(ipc::value("default"));
@@ -4066,9 +4113,8 @@ void OBS_settings::OBS_settings_getInputAudioDevices(void *data, const int64_t i
 
 void OBS_settings::OBS_settings_getOutputAudioDevices(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
 #ifdef WIN32
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint32_t)1));
 	rval.push_back(ipc::value("Default"));
 	rval.push_back(ipc::value("default"));
@@ -4083,15 +4129,12 @@ void OBS_settings::OBS_settings_getOutputAudioDevices(void *data, const int64_t 
 
 void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-
 #ifdef WIN32
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint32_t)0));
 	enumVideoDevices(rval);
 #elif __APPLE__
-	const char *source_id = "macos_avcapture";
-	const char *property_name = "device";
-	getDevices(source_id, property_name, rval);
+	getDevicesUsingDummySource("macos_avcapture", "device", rval);
 #endif
 
 	AUTO_DEBUG;
