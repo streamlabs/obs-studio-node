@@ -17,8 +17,10 @@
 ******************************************************************************/
 
 #include "callback-manager.hpp"
+#include "best-effort-gate.hpp"
 #include "controller.hpp"
 #include "osn-error.hpp"
+#include "polling-pacer.hpp"
 #include "utility-v8.hpp"
 
 #pragma warning(push, 0)
@@ -39,6 +41,7 @@ Napi::ThreadSafeFunction globalCallback::js_transition_callback;
 Napi::ThreadSafeFunction globalCallback::js_volmeter_callback;
 Napi::ThreadSafeFunction globalCallback::js_source_message_callback;
 bool globalCallback::m_all_workers_stop = false;
+std::atomic_bool globalCallback::volmeterCallbackPending = false;
 std::mutex globalCallback::mtx_volmeters;
 std::unordered_set<uint64_t> globalCallback::volmeters;
 
@@ -103,6 +106,7 @@ Napi::Value globalCallback::RegisterVolmeterCallback(const Napi::CallbackInfo &i
 
 Napi::Value globalCallback::RemoveVolmeterCallback(const Napi::CallbackInfo &info)
 {
+	volmeterCallbackPending.store(false, std::memory_order_release);
 	js_volmeter_callback.Release();
 	return info.Env().Undefined();
 }
@@ -226,6 +230,7 @@ void globalCallback::worker()
 		}
 
 		delete dataArray;
+		globalCallback::volmeterCallbackPending.store(false, std::memory_order_release);
 	};
 
 	auto source_message_callback = [](Napi::Env env, Napi::Function jsCallback, SourceMessageInfoData *data) {
@@ -244,6 +249,8 @@ void globalCallback::worker()
 		delete data;
 	};
 
+	PollingPacer pacer(sleepInterval);
+	BestEffortGate volmeterGate(sleepInterval, std::chrono::milliseconds(250));
 	while (!worker_stop && !m_all_workers_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -251,9 +258,10 @@ void globalCallback::worker()
 		if (!conn)
 			return;
 
+		const bool pollVolmeters = volmeterGate.startCycle();
 		size_t volmeters_size = 0;
 		std::vector<char> volmeters_ids;
-		{
+		if (pollVolmeters) {
 			uint32_t index = 0;
 			std::unique_lock lock(globalCallback::mtx_volmeters);
 			volmeters_size = volmeters.size();
@@ -341,37 +349,46 @@ void globalCallback::worker()
 				}
 			}
 
-			auto volmeterDataArray = new VolmeterDataArray;
-			while (volmeters_size--) {
-				VolmeterData *item = new VolmeterData{{}, {}, {}};
+			if (pollVolmeters) {
+				auto volmeterDataArray = new VolmeterDataArray;
+				while (volmeters_size--) {
+					VolmeterData *item = new VolmeterData{{}, {}, {}};
 
-				item->source_name = response[index++].value_str;
+					item->source_name = response[index++].value_str;
 
-				const size_t channels = response[index++].value_union.i32;
-				const bool isMuted = response[index++].value_union.i32;
-				const bool isAudioInput = response[index++].value_union.i32;
+					const size_t channels = response[index++].value_union.i32;
+					const bool isMuted = response[index++].value_union.i32;
+					const bool isAudioInput = response[index++].value_union.i32;
 
-				if (isMuted && !isAudioInput) {
-					continue;
+					if (isMuted && !isAudioInput) {
+						continue;
+					}
+
+					item->magnitude.resize(channels);
+					item->peak.resize(channels);
+					item->input_peak.resize(channels);
+					for (size_t ch = 0; ch < channels; ch++) {
+						item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
+						item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
+						item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
+					}
+
+					index += static_cast<uint32_t>((3 * channels));
+
+					volmeterDataArray->items.emplace_back(item);
 				}
 
-				item->magnitude.resize(channels);
-				item->peak.resize(channels);
-				item->input_peak.resize(channels);
-				for (size_t ch = 0; ch < channels; ch++) {
-					item->magnitude[ch] = response[index + ch * 3 + 0].value_union.fp32;
-					item->peak[ch] = response[index + ch * 3 + 1].value_union.fp32;
-					item->input_peak[ch] = response[index + ch * 3 + 2].value_union.fp32;
-				}
-
-				index += static_cast<uint32_t>((3 * channels));
-
-				volmeterDataArray->items.emplace_back(item);
-			}
-
-			if (js_volmeter_callback) {
-				napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
-				if (status != napi_ok) {
+				if (js_volmeter_callback) {
+					if (!volmeterCallbackPending.exchange(true, std::memory_order_acq_rel)) {
+						napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
+						if (status != napi_ok) {
+							volmeterCallbackPending.store(false, std::memory_order_release);
+							delete volmeterDataArray;
+						}
+					} else {
+						delete volmeterDataArray;
+					}
+				} else {
 					delete volmeterDataArray;
 				}
 			}
@@ -380,9 +397,10 @@ void globalCallback::worker()
 	do_sleep:
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		const auto sleepDuration = sleepInterval - dur;
-		if (sleepDuration > std::chrono::milliseconds(0))
-			std::this_thread::sleep_for(sleepDuration);
+		const bool shouldSleep = pacer.finishCycle(dur);
+		volmeterGate.finishCycle(pacer.congested());
+		if (shouldSleep)
+			std::this_thread::sleep_for(pacer.sleepDuration());
 	}
 	return;
 }

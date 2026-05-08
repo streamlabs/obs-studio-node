@@ -51,6 +51,8 @@ SET(osn-client_SOURCES
     "source/utility.hpp"
     "source/utility-v8.cpp"
     "source/utility-v8.hpp"
+    "source/polling-pacer.hpp"
+    "source/best-effort-gate.hpp"
     "source/controller.cpp"
     "source/controller.hpp"
     "source/fader.cpp"
@@ -160,6 +162,28 @@ endif ()
 add_nodejs_module(
     obs_studio_client
     ${osn-client_SOURCES}
+)
+
+add_executable(
+    polling_pacer_test
+    "tests/polling-pacer-test.cpp"
+)
+
+add_executable(
+    best_effort_gate_test
+    "tests/best-effort-gate-test.cpp"
+)
+
+target_include_directories(
+    polling_pacer_test
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/source"
+)
+
+target_include_directories(
+    best_effort_gate_test
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/source"
 )
 
 set(PROJECT_INCLUDE_PATHS

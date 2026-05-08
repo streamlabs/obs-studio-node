@@ -19,6 +19,7 @@
 #include "nodeobs_service.hpp"
 #include "controller.hpp"
 #include "osn-error.hpp"
+#include "polling-pacer.hpp"
 #include "utility-v8.hpp"
 
 #pragma warning(push, 0)
@@ -305,6 +306,7 @@ void service::worker()
 		data->sent = true;
 	};
 	std::vector<ServiceSignalInfo *> signalsList;
+	PollingPacer pacer(sleepInterval);
 	while (!worker_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -347,9 +349,9 @@ void service::worker()
 
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		const auto sleepDuration = sleepInterval - dur;
-		if (sleepDuration > std::chrono::milliseconds(0))
-			std::this_thread::sleep_for(sleepDuration);
+		const bool shouldSleep = pacer.finishCycle(dur);
+		if (shouldSleep)
+			std::this_thread::sleep_for(pacer.sleepDuration());
 	}
 
 	for (auto &signalData : signalsList) {
