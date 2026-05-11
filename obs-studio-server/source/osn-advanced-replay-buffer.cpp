@@ -79,6 +79,33 @@ void osn::IAdvancedReplayBuffer::Destroy(void *data, const int64_t id, const std
 	AUTO_DEBUG;
 }
 
+void osn::AdvancedReplayBuffer::ClearAudioEncoders()
+{
+	if (GetOutput()) {
+		for (int idx = 0; idx < MAX_AUDIO_MIXES; idx++)
+			obs_output_set_audio_encoder(GetOutput(), nullptr, idx);
+	}
+
+	for (auto *encoder : audioEncoders) {
+		if (!encoder)
+			continue;
+
+		if (obs_encoder_active(encoder)) {
+			blog(LOG_WARNING, "AdvancedReplayBuffer audio encoder is still active during cleanup; releasing owner reference.");
+		}
+
+		obs_encoder_release(encoder);
+	}
+
+	audioEncoders.clear();
+}
+
+osn::AdvancedReplayBuffer::~AdvancedReplayBuffer()
+{
+	DeleteOutput();
+	ClearAudioEncoders();
+}
+
 void osn::IAdvancedReplayBuffer::GetMixer(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	AdvancedReplayBuffer *replayBuffer = static_cast<AdvancedReplayBuffer *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
@@ -127,14 +154,24 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 	if (!replayBuffer->GetOutput())
 		replayBuffer->CreateOutput("replay_buffer", "replay-buffer");
 
-	int idx = 0;
-	for (int i = 0; i < MAX_AUDIO_MIXES; i++) {
-		osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTracks[i];
-		if ((replayBuffer->mixer & (1 << i)) != 0 && audioTrack && audioTrack->audioEnc) {
-			obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
-			obs_output_set_audio_encoder(replayBuffer->GetOutput(), audioTrack->audioEnc, idx);
-			idx++;
-		}
+	replayBuffer->ClearAudioEncoders();
+
+	int outputEncoderIndex = 0;
+	for (int mixerIndex = 0; mixerIndex < MAX_AUDIO_MIXES; mixerIndex++) {
+		if ((replayBuffer->mixer & (1 << mixerIndex)) == 0)
+			continue;
+
+		const uint32_t trackNumber = mixerIndex + 1;
+		std::string encoderName = "audio-encoder-replay-buffer-track";
+		encoderName += std::to_string(trackNumber);
+		obs_encoder_t *audioEncoder = osn::IAudioTrack::CreateEncoderForTrack(trackNumber, encoderName);
+		if (!audioEncoder)
+			continue;
+
+		replayBuffer->audioEncoders.push_back(audioEncoder);
+		obs_encoder_set_audio(audioEncoder, obs_get_audio());
+		obs_output_set_audio_encoder(replayBuffer->GetOutput(), audioEncoder, outputEncoderIndex);
+		outputEncoderIndex++;
 	}
 
 	obs_encoder_t *videoEncoder = nullptr;

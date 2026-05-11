@@ -96,6 +96,33 @@ void osn::IAdvancedRecording::Destroy(void *data, const int64_t id, const std::v
 	AUTO_DEBUG;
 }
 
+void osn::AdvancedRecording::ClearAudioEncoders()
+{
+	if (GetOutput()) {
+		for (int idx = 0; idx < MAX_AUDIO_MIXES; idx++)
+			obs_output_set_audio_encoder(GetOutput(), nullptr, idx);
+	}
+
+	for (auto *encoder : audioEncoders) {
+		if (!encoder)
+			continue;
+
+		if (obs_encoder_active(encoder)) {
+			blog(LOG_WARNING, "AdvancedRecording audio encoder is still active during cleanup; releasing owner reference.");
+		}
+
+		obs_encoder_release(encoder);
+	}
+
+	audioEncoders.clear();
+}
+
+osn::AdvancedRecording::~AdvancedRecording()
+{
+	DeleteOutput();
+	ClearAudioEncoders();
+}
+
 void osn::IAdvancedRecording::GetRescaling(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	AdvancedRecording *recording = static_cast<AdvancedRecording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
@@ -210,16 +237,25 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the recording output.");
 	}
 
-	int idx = 0;
-	for (int i = 0; i < MAX_AUDIO_MIXES; i++) {
-		osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTracks[i];
-		if ((recording->mixer & (1 << i)) != 0 && audioTrack && audioTrack->audioEnc) {
-			obs_encoder_set_audio(audioTrack->audioEnc, obs_get_audio());
-			obs_output_set_audio_encoder(recording->GetOutput(), audioTrack->audioEnc, idx);
+	recording->ClearAudioEncoders();
 
-			obs_encoder_set_video_mix(audioTrack->audioEnc, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
-			idx++;
-		}
+	int outputEncoderIndex = 0;
+	for (int mixerIndex = 0; mixerIndex < MAX_AUDIO_MIXES; mixerIndex++) {
+		if ((recording->mixer & (1 << mixerIndex)) == 0)
+			continue;
+
+		const uint32_t trackNumber = mixerIndex + 1;
+		std::string encoderName = "audio-encoder-recording-track";
+		encoderName += std::to_string(trackNumber);
+		obs_encoder_t *audioEncoder = osn::IAudioTrack::CreateEncoderForTrack(trackNumber, encoderName);
+		if (!audioEncoder)
+			continue;
+
+		recording->audioEncoders.push_back(audioEncoder);
+		obs_encoder_set_audio(audioEncoder, obs_get_audio());
+		obs_output_set_audio_encoder(recording->GetOutput(), audioEncoder, outputEncoderIndex);
+		obs_encoder_set_video_mix(audioEncoder, obs_video_mix_get(recording->GetCanvas(), OBS_RECORDING_VIDEO_RENDERING));
+		outputEncoderIndex++;
 	}
 
 	if (!recording->UpdateEncoders() || !recording->videoEncoder) {

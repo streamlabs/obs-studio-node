@@ -19,9 +19,10 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 
+#include "nodeobs_audio_encoders.h"
 #include "nodeobs_configManager.hpp"
 
-std::array<osn::AudioTrack *, NUM_AUDIO_TRACKS> osn::IAudioTrack::audioTracks = {};
+std::array<osn::AudioTrack *, NUM_AUDIO_TRACKS> osn::IAudioTrack::audioTrackConfigs = {};
 
 void osn::IAudioTrack::Register(ipc::server &srv)
 {
@@ -61,7 +62,7 @@ void osn::IAudioTrack::GetAudioTracks(void *data, const int64_t id, const std::v
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint32_t)NUM_AUDIO_TRACKS));
-	for (const auto &audioTrack : audioTracks) {
+	for (const auto &audioTrack : audioTrackConfigs) {
 		uint64_t uid = UINT64_MAX;
 		if (audioTrack) {
 			uid = osn::IAudioTrack::Manager::GetInstance().find(audioTrack);
@@ -83,7 +84,7 @@ void osn::IAudioTrack::GetAudioBitrates(void *data, const int64_t id, const std:
 
 void osn::IAudioTrack::GetAtIndex(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	AudioTrack *audioTrack = audioTracks[args[0].value_union.ui32 - 1];
+	AudioTrack *audioTrack = GetTrackConfig(args[0].value_union.ui32);
 	if (!audioTrack) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "AudioTrack reference is not valid.");
 	}
@@ -95,16 +96,41 @@ void osn::IAudioTrack::GetAtIndex(void *data, const int64_t id, const std::vecto
 	AUTO_DEBUG;
 }
 
-void osn::IAudioTrack::SetAudioTrack(AudioTrack *track, uint32_t index)
+osn::AudioTrack *osn::IAudioTrack::GetTrackConfig(uint32_t trackNumber)
 {
-	AudioTrack *oldTrack = audioTracks[index];
+	if (trackNumber == 0 || trackNumber > NUM_AUDIO_TRACKS)
+		return nullptr;
+
+	return audioTrackConfigs[trackNumber - 1];
+}
+
+uint32_t osn::IAudioTrack::GetMixerIndex(uint32_t trackNumber)
+{
+	return trackNumber - 1;
+}
+
+obs_encoder_t *osn::IAudioTrack::CreateEncoderForTrack(uint32_t trackNumber, const std::string &name)
+{
+	AudioTrack *track = GetTrackConfig(trackNumber);
+	if (!track)
+		return nullptr;
+
+	const uint32_t mixerIndex = GetMixerIndex(trackNumber);
+	OBSData settings = obs_data_create();
+	obs_data_set_int(settings, "bitrate", track->bitrate);
+	return obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), name.c_str(), settings, mixerIndex, nullptr);
+}
+
+void osn::IAudioTrack::SetTrackConfigAtMixerIndex(AudioTrack *track, uint32_t mixerIndex)
+{
+	if (mixerIndex >= NUM_AUDIO_TRACKS)
+		return;
+
+	AudioTrack *oldTrack = audioTrackConfigs[mixerIndex];
 	if (oldTrack)
 		delete oldTrack;
 
-	OBSData settings = obs_data_create();
-	obs_data_set_int(settings, "bitrate", track->bitrate);
-	track->audioEnc = obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), track->name.c_str(), settings, index, nullptr);
-	audioTracks[index] = track;
+	audioTrackConfigs[mixerIndex] = track;
 }
 
 void osn::IAudioTrack::SetAtIndex(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -114,8 +140,11 @@ void osn::IAudioTrack::SetAtIndex(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "AudioTrack reference is not valid.");
 	}
 	uint32_t index = args[1].value_union.ui32;
+	if (index == 0 || index > NUM_AUDIO_TRACKS) {
+		PRETTY_ERROR_RETURN(ErrorCode::OutOfBounds, "AudioTrack index is invalid.");
+	}
 
-	SetAudioTrack(audioTrack, index - 1);
+	SetTrackConfigAtMixerIndex(audioTrack, index - 1);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -128,14 +157,8 @@ void osn::IAudioTrack::GetBitrate(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "AudioTrack reference is not valid.");
 	}
 
-	uint32_t bitrate = audioTrack->bitrate;
-	if (audioTrack->audioEnc) {
-		OBSData settings = obs_encoder_get_settings(audioTrack->audioEnc);
-		bitrate = static_cast<uint32_t>(obs_data_get_int(settings, "bitrate"));
-	}
-
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(bitrate));
+	rval.push_back(ipc::value(audioTrack->bitrate));
 	AUTO_DEBUG;
 }
 
@@ -147,13 +170,6 @@ void osn::IAudioTrack::SetBitrate(void *data, const int64_t id, const std::vecto
 	}
 
 	audioTrack->bitrate = args[1].value_union.ui32;
-
-	if (audioTrack->audioEnc) {
-		obs_data_t *settings = obs_data_create();
-		obs_data_set_int(settings, "bitrate", audioTrack->bitrate);
-		obs_encoder_update(audioTrack->audioEnc, settings);
-		obs_data_release(settings);
-	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -179,8 +195,6 @@ void osn::IAudioTrack::SetName(void *data, const int64_t id, const std::vector<i
 	}
 
 	audioTrack->name = args[1].value_str;
-	if (audioTrack->audioEnc)
-		obs_encoder_set_name(audioTrack->audioEnc, audioTrack->name.c_str());
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -207,7 +221,7 @@ void osn::IAudioTrack::ImportLegacySettings(void *data, const int64_t id, const 
 			track->bitrate = static_cast<uint32_t>(config_get_uint(ConfigManager::getInstance().getBasic(), "AdvOut", bitrateParam.c_str()));
 			track->name = config_get_string(ConfigManager::getInstance().getBasic(), "AdvOut", nameParam.c_str());
 			if (track->name.size())
-				SetAudioTrack(track, i);
+				SetTrackConfigAtMixerIndex(track, i);
 			else
 				delete track;
 		} else {
@@ -222,15 +236,15 @@ void osn::IAudioTrack::ImportLegacySettings(void *data, const int64_t id, const 
 void osn::IAudioTrack::SaveLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	for (uint32_t i = 0; i < NUM_AUDIO_TRACKS; i++) {
-		if (audioTracks[i]) {
+		if (audioTrackConfigs[i]) {
 			std::string prefix = "Track";
 			prefix += std::to_string(i + 1);
 			std::string bitrateParam = prefix;
 			bitrateParam += "Bitrate";
 			std::string nameParam = prefix;
 			nameParam += "Name";
-			config_set_uint(ConfigManager::getInstance().getBasic(), "AdvOut", bitrateParam.c_str(), audioTracks[i]->bitrate);
-			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", nameParam.c_str(), audioTracks[i]->name.c_str());
+			config_set_uint(ConfigManager::getInstance().getBasic(), "AdvOut", bitrateParam.c_str(), audioTrackConfigs[i]->bitrate);
+			config_set_string(ConfigManager::getInstance().getBasic(), "AdvOut", nameParam.c_str(), audioTrackConfigs[i]->name.c_str());
 		}
 	}
 

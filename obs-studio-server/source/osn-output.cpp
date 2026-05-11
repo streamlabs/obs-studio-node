@@ -84,7 +84,10 @@ void osn::Output::DeleteOutput()
 	if (shouldWaitForStop) {
 		obs_output_stop(m_output);
 		std::unique_lock lock(m_mtxOutputStop);
-		m_cvStop.wait_for(lock, std::chrono::seconds(20), [this] { return m_outputStopped; });
+		const bool stopped = m_cvStop.wait_for(lock, std::chrono::seconds(20), [this] { return m_outputStopped; });
+		if (!stopped) {
+			blog(LOG_WARNING, "Timed out waiting for output stop before release.");
+		}
 	}
 	obs_output_release(m_output);
 	m_output = nullptr;

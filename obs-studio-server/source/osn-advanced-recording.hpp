@@ -22,6 +22,7 @@
 #include "utility.hpp"
 #include "osn-recording.hpp"
 #include "osn-advanced-streaming.hpp"
+#include <vector>
 
 namespace osn {
 class AdvancedRecording : public Recording {
@@ -36,7 +37,7 @@ public:
 		streaming = nullptr;
 		simple = false;
 	}
-	~AdvancedRecording() {}
+	~AdvancedRecording();
 
 public:
 	uint32_t mixer;
@@ -45,8 +46,10 @@ public:
 	uint32_t outputHeight;
 	bool useStreamEncoders;
 	AdvancedStreaming *streaming;
+	std::vector<obs_encoder_t *> audioEncoders;
 
 	bool UpdateEncoders();
+	void ClearAudioEncoders();
 };
 
 class IAdvancedRecording : public IRecording {

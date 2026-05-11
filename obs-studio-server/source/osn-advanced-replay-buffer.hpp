@@ -23,6 +23,7 @@
 #include "osn-replay-buffer.hpp"
 #include "osn-advanced-recording.hpp"
 #include "osn-advanced-streaming.hpp"
+#include <vector>
 
 namespace osn {
 class AdvancedReplayBuffer : public ReplayBuffer {
@@ -33,12 +34,15 @@ public:
 		streaming = nullptr;
 		recording = nullptr;
 	}
-	~AdvancedReplayBuffer() {}
+	~AdvancedReplayBuffer();
 
 public:
 	uint32_t mixer;
 	AdvancedStreaming *streaming;
 	AdvancedRecording *recording;
+	std::vector<obs_encoder_t *> audioEncoders;
+
+	void ClearAudioEncoders();
 };
 
 class IAdvancedReplayBuffer : public IReplayBuffer {
