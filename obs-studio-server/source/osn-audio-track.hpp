@@ -21,28 +21,19 @@
 #include <obs.h>
 #include "utility.hpp"
 #include <array>
-
-#include "nodeobs_audio_encoders.h"
+#include <string>
 
 #define NUM_AUDIO_TRACKS 6
 
 namespace osn {
 class AudioTrack {
 public:
-	AudioTrack(uint32_t bitrate, std::string name) : bitrate(bitrate), name(name), audioEnc(nullptr) {}
-
-	~AudioTrack()
-	{
-		if (audioEnc && !obs_encoder_active(audioEnc)) {
-			obs_encoder_release(audioEnc);
-			audioEnc = nullptr;
-		}
-	}
+	AudioTrack(uint32_t bitrate, std::string name) : bitrate(bitrate), name(name) {}
 
 public:
+	// User-visible advanced audio track settings. Outputs create their own encoders from this config.
 	uint32_t bitrate;
 	std::string name;
-	obs_encoder_t *audioEnc;
 };
 
 class IAudioTrack {
@@ -77,7 +68,10 @@ public:
 	static void ImportLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SaveLegacySettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
-	static void SetAudioTrack(AudioTrack *track, uint32_t index);
-	static std::array<AudioTrack *, NUM_AUDIO_TRACKS> audioTracks;
+	static AudioTrack *GetTrackConfig(uint32_t trackNumber);
+	static uint32_t GetMixerIndex(uint32_t trackNumber);
+	static obs_encoder_t *CreateEncoderForTrack(uint32_t trackNumber, const std::string &name);
+	static void SetTrackConfigAtMixerIndex(AudioTrack *track, uint32_t mixerIndex);
+	static std::array<AudioTrack *, NUM_AUDIO_TRACKS> audioTrackConfigs;
 };
 }

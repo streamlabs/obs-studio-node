@@ -113,7 +113,7 @@ describe(testName, () => {
         }
     }
 
-    it('Start Dual Output with advanced recording', async function() {
+    it('Start Dual Output with advanced recording using the same user audio track', async function() {
         if (obs.isDarwin()) {
             this.skip();
         }
@@ -124,6 +124,7 @@ describe(testName, () => {
         recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-1');
         recording.overwrite = false;
         recording.noSpace = false;
+        recording.mixer = 1;
         recording.video = obs.defaultVideoContext;
         const track1 = osn.AudioTrackFactory.create(160, 'track1');
         osn.AudioTrackFactory.setAtIndex(track1, 1);
@@ -137,8 +138,7 @@ describe(testName, () => {
         recording2.overwrite = false;
         recording2.noSpace = false;
         recording2.video = secondContext;
-        const track2 = osn.AudioTrackFactory.create(160, 'track2');
-        osn.AudioTrackFactory.setAtIndex(track2, 2);
+        recording2.mixer = 1;
         recording2.signalHandler = (signal) => { obs.signals.push(signal) };
 
         recording.start();
@@ -588,6 +588,71 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate, ETestErrorMsg.StreamOutput);
 
         await secondStreamUserPoolHandler.releaseUser();
+    });
+
+    it('Start Dual Output with advanced streaming using the same user audio track', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        const secondStreamUserPoolHandler = new UserPoolHandler(testName + "secondAdvancedStream");
+        let secondStreamKey: string | undefined;
+        const stream = osn.AdvancedStreamingFactory.create();
+        const stream2 = osn.AdvancedStreamingFactory.create();
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+
+        stream.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-streaming-shared-track-1');
+        stream.service = osn.ServiceFactory.legacySettings;
+        stream.video = obs.defaultVideoContext;
+        stream.audioTrack = 1;
+        stream.signalHandler = (signal) => { obs.signals.push(signal) };
+
+        stream2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-streaming-shared-track-2');
+        secondStreamKey = await secondStreamUserPoolHandler.getStreamKey();
+        stream2.service = osn.ServiceFactory.create('rtmp_common', 'advanced-shared-track-second-service', {});
+        stream2.service.update({
+            service: 'Twitch',
+            server: 'auto',
+            key: secondStreamKey,
+        });
+        stream2.video = secondContext;
+        stream2.audioTrack = 1;
+        stream2.signalHandler = (signal) => { obs.signals.push(signal) };
+
+        try {
+            stream.start();
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Starting, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Activate, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Start, ETestErrorMsg.StreamOutput);
+
+            stream2.start();
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Starting, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Activate, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Start, ETestErrorMsg.StreamOutput);
+
+            await sleep(1500);
+
+            stream.stop();
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Stopping, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Stop, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate, ETestErrorMsg.StreamOutput);
+
+            stream2.stop();
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Stopping, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Stop, ETestErrorMsg.StreamOutput);
+            await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate, ETestErrorMsg.StreamOutput);
+        } finally {
+            const streamEncoder = stream.videoEncoder;
+            const stream2Encoder = stream2.videoEncoder;
+            const stream2Service = stream2.service;
+            osn.AdvancedStreamingFactory.destroy(stream);
+            osn.AdvancedStreamingFactory.destroy(stream2);
+            streamEncoder.release();
+            stream2Encoder.release();
+            osn.ServiceFactory.destroy(stream2Service);
+            await secondStreamUserPoolHandler.releaseUser();
+        }
     });
 
     it('Start Dual Output with legacy streaming to two services and audio sources', async function() {

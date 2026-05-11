@@ -31,6 +31,8 @@ public:
 	AdvancedStreaming() : Streaming()
 	{
 		audioTrack = 1;
+		audioEncoder = nullptr;
+		audioEncoderTrack = 0;
 		twitchTrack = 2;
 		rescaling = false;
 		rescaleFilter = OBS_SCALE_DISABLE;
@@ -38,10 +40,12 @@ public:
 		outputHeight = 720;
 		simple = false;
 	}
-	~AdvancedStreaming() {}
+	~AdvancedStreaming();
 
 public:
 	uint32_t audioTrack;
+	obs_encoder_t *audioEncoder;
+	uint32_t audioEncoderTrack;
 	uint32_t twitchTrack;
 	bool rescaling;
 	uint32_t rescaleFilter;

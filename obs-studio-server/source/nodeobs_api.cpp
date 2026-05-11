@@ -1695,17 +1695,6 @@ void OBS_API::destroyOBS_API(void)
 		}
 	});
 
-	// Release all audio track encoders
-	std::vector<osn::AudioTrack *> audioTrackEncoders;
-	// osn::IAudioTrack::Manager::GetInstance().
-	// 	for_each([&audioTrackEncoders](osn::AudioTrack* audioTrackEncoder)
-	for (auto const &audioTrack : osn::IAudioTrack::audioTracks) {
-		if (audioTrack && audioTrack->audioEnc) {
-			obs_encoder_release(audioTrack->audioEnc);
-			audioTrack->audioEnc = nullptr;
-		}
-	};
-
 	// Release all services
 	osn::Service::Manager::GetInstance().for_each([](obs_service_t *service) {
 		if (service) {
