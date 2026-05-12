@@ -51,7 +51,9 @@ SET(osn-client_SOURCES
     "source/utility.hpp"
     "source/utility-v8.cpp"
     "source/utility-v8.hpp"
+    "source/polling-pacer.cpp"
     "source/polling-pacer.hpp"
+    "source/best-effort-gate.cpp"
     "source/best-effort-gate.hpp"
     "source/controller.cpp"
     "source/controller.hpp"
@@ -167,11 +169,13 @@ add_nodejs_module(
 add_executable(
     polling_pacer_test
     "tests/polling-pacer-test.cpp"
+    "source/polling-pacer.cpp"
 )
 
 add_executable(
     best_effort_gate_test
     "tests/best-effort-gate-test.cpp"
+    "source/best-effort-gate.cpp"
 )
 
 target_include_directories(

@@ -3,57 +3,27 @@
 #include <chrono>
 #include <cstdint>
 
-/// Tracks poll loop timing and decides whether the worker should sleep after each cycle.
-/// Overruns are treated as congestion; sustained overruns yield briefly to avoid a tight CPU spin.
+// Tracks poll loop timing and decides whether the worker should sleep after each cycle.
+// Overruns are treated as congestion; sustained overruns yield briefly to avoid a tight CPU spin.
 class PollingPacer {
 public:
-	/// Creates a pacer for a worker that normally polls once every interval.
-	/// yieldAfterConsecutiveOverruns controls how many overrun cycles can run without sleeping.
-	explicit PollingPacer(std::chrono::milliseconds interval,
-			      uint32_t yieldAfterConsecutiveOverruns = 2,
-			      std::chrono::milliseconds sustainedOverrunYield = std::chrono::milliseconds(1))
-		: interval(interval),
-		  yieldAfterConsecutiveOverruns(yieldAfterConsecutiveOverruns),
-		  sustainedOverrunYield(sustainedOverrunYield)
-	{
-	}
+	// Creates a pacer for a worker that normally polls once every interval.
+	// yieldAfterConsecutiveOverruns controls how many overrun cycles can run without sleeping.
+	explicit PollingPacer(std::chrono::milliseconds interval, uint32_t yieldAfterConsecutiveOverruns = 2,
+			      std::chrono::milliseconds sustainedOverrunYield = std::chrono::milliseconds(1));
 
-	/// Records the elapsed duration for one poll cycle and updates the latest pacing state.
-	/// Returns true when the caller should sleep for sleepDuration().
-	bool finishCycle(std::chrono::milliseconds duration)
-	{
-		if (duration < interval) {
-			lastConsecutiveOverruns = 0;
-			lastSleepDuration = interval - duration;
-			lastCongested = false;
-			return true;
-		}
+	// Records the elapsed duration for one poll cycle and updates the latest pacing state.
+	// Returns true when the caller should sleep for sleepDuration().
+	bool finishCycle(std::chrono::milliseconds duration);
 
-		lastConsecutiveOverruns++;
-		lastSleepDuration =
-			lastConsecutiveOverruns > yieldAfterConsecutiveOverruns ? sustainedOverrunYield : std::chrono::milliseconds(0);
-		lastCongested = true;
+	// Returns the sleep duration computed by the most recent finishCycle() call.
+	std::chrono::milliseconds sleepDuration() const;
 
-		return lastSleepDuration > std::chrono::milliseconds(0);
-	}
+	// Returns whether the most recent finishCycle() call detected an interval overrun.
+	bool congested() const;
 
-	/// Returns the sleep duration computed by the most recent finishCycle() call.
-	std::chrono::milliseconds sleepDuration() const
-	{
-		return lastSleepDuration;
-	}
-
-	/// Returns whether the most recent finishCycle() call detected an interval overrun.
-	bool congested() const
-	{
-		return lastCongested;
-	}
-
-	/// Returns the current run length of consecutive overrun cycles.
-	uint32_t consecutiveOverruns() const
-	{
-		return lastConsecutiveOverruns;
-	}
+	// Returns the current run length of consecutive overrun cycles.
+	uint32_t consecutiveOverruns() const;
 
 private:
 	std::chrono::milliseconds interval;
