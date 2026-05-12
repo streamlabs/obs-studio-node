@@ -553,7 +553,7 @@ export class OBSHandler {
 
     isDarwin()
     {
-        // Wrapped this in a function- just incase we want to add more conditions later or disable only within the build agent.
+        // Wrapped this in a function- just in case we want to add more conditions later or disable only within the build agent.
         return this.os === 'darwin';
     }
 

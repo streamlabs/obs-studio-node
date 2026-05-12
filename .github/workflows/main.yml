@@ -151,6 +151,7 @@ jobs:
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: ${{matrix.ReleaseName}}
+          CI: true
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
         if: ${{ always() }}
