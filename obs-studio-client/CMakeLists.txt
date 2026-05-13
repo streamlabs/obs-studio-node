@@ -194,6 +194,16 @@ if(BUILD_TESTING)
             Catch2::Catch2WithMain
     )
 
+    if(APPLE)
+        add_custom_command(
+            TARGET obs_studio_client_unit_tests
+            POST_BUILD
+            COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE:obs_studio_client_unit_tests>"
+            COMMENT "Ad-hoc signing obs_studio_client_unit_tests before Catch2 test discovery"
+            VERBATIM
+        )
+    endif()
+
     catch_discover_tests(
         obs_studio_client_unit_tests
         TEST_PREFIX "obs_studio_client_unit_tests::"
