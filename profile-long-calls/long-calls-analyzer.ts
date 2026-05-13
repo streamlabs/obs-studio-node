@@ -72,16 +72,16 @@ interface ParsedKey {
 }
 
 /**
- * Cache keys are expected to use the format "{isoDate}-{username}.zip".
- * The ISO timestamp portion is always 24 characters
- * ("2024-01-15T10:23:45.123Z"), so the username begins at index 25.
- * Anonymous uploads omit the username suffix.
+ * Cache keys are formatted as "{isoDate}-{username}.zip" (see cache-uploader.ts).
+ * We match with a regex on the full key rather than path.basename so that usernames
+ * containing "/" (e.g. "foo /bar") are captured correctly.
  */
+const KEY_RE = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)-?(.*)\.zip$/;
+
 function parseKey(key: string): ParsedKey {
-  const name = path.basename(key, '.zip');
-  const uploadedAt = new Date(name.substring(0, 24));
-  const username = name.length > 25 ? name.substring(25) : null;
-  return { uploadedAt, username };
+  const m = KEY_RE.exec(key);
+  if (!m) return { uploadedAt: new Date(NaN), username: null };
+  return { uploadedAt: new Date(m[1]), username: m[2] || null };
 }
 
 // ─── Log line parsing ─────────────────────────────────────────────────────────
@@ -253,6 +253,7 @@ async function processKey(key: string, db: DatabaseType, stmts: Stmts): Promise<
   }
 
   const { uploadedAt, username } = parseKey(key);
+  if (isNaN(uploadedAt.getTime())) return 'bad_entry';
   const lines = text.split('\n').filter(Boolean);
 
   db.transaction(() => {
