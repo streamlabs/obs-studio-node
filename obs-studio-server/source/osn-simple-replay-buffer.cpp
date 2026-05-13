@@ -22,6 +22,7 @@
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
 #include "osn-encoders.hpp"
+#include <algorithm>
 
 void osn::ISimpleReplayBuffer::Register(ipc::server &srv)
 {
@@ -78,15 +79,15 @@ void osn::ISimpleReplayBuffer::Destroy(void *data, const int64_t id, const std::
 
 static void remove_reserved_file_characters(std::string &s)
 {
-	replace(s.begin(), s.end(), '/', '_');
-	replace(s.begin(), s.end(), '\\', '_');
-	replace(s.begin(), s.end(), '*', '_');
-	replace(s.begin(), s.end(), '?', '_');
-	replace(s.begin(), s.end(), '"', '_');
-	replace(s.begin(), s.end(), '|', '_');
-	replace(s.begin(), s.end(), ':', '_');
-	replace(s.begin(), s.end(), '>', '_');
-	replace(s.begin(), s.end(), '<', '_');
+	std::replace(s.begin(), s.end(), '/', '_');
+	std::replace(s.begin(), s.end(), '\\', '_');
+	std::replace(s.begin(), s.end(), '*', '_');
+	std::replace(s.begin(), s.end(), '?', '_');
+	std::replace(s.begin(), s.end(), '"', '_');
+	std::replace(s.begin(), s.end(), '|', '_');
+	std::replace(s.begin(), s.end(), ':', '_');
+	std::replace(s.begin(), s.end(), '>', '_');
+	std::replace(s.begin(), s.end(), '<', '_');
 }
 
 void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -105,7 +106,7 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 	if (obs_get_multiple_rendering() && replayBuffer->usesStream) {
 		if (!replayBuffer->streaming)
 			return;
-		replayBuffer->streaming->UpdateEncoders();
+		replayBuffer->streaming->updateEncoders();
 		audioEncoder = replayBuffer->streaming->audioEncoder;
 		videoEncoder = replayBuffer->streaming->videoEncoder;
 	} else {

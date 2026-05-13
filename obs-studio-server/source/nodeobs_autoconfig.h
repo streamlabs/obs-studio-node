@@ -26,7 +26,6 @@
 #include <queue>
 #include <thread>
 #include "nodeobs_api.h"
-#include "nodeobs_service.h"
 
 namespace autoConfig {
 void Register(ipc::server &srv);
@@ -40,6 +39,7 @@ void StartSaveStreamSettings(void *data, const int64_t id, const std::vector<ipc
 void StartSaveSettings(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void TerminateAutoConfig(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+void GetAutoConfigSummary(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 void StopThread();
 void FindIdealHardwareResolution();
@@ -54,4 +54,6 @@ void SetDefaultSettings();
 void TestHardwareEncoding();
 bool CanTestServer(const char *server);
 void WaitPendingTests(double timeout = 10);
+int GetStartingBitrate(const std::string &serviceName);
+void TestBandwidthThreadV2(void);
 } // namespace autoConfig

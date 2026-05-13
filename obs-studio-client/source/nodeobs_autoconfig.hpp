@@ -29,6 +29,10 @@ struct AutoConfigInfo {
 	std::string event;
 	std::string description;
 	double percentage = 0;
+	// Optional JSON payload for new event types (bandwidth_result,
+	// selection_decision, video_decision, encoder_detection). Empty for legacy
+	// events. Surfaced to JS as a "payload" property when non-empty.
+	std::string payload;
 };
 
 extern const char *ac_sem_name;
@@ -62,4 +66,5 @@ Napi::Value StartSetDefaultSettings(const Napi::CallbackInfo &info);
 Napi::Value StartSaveStreamSettings(const Napi::CallbackInfo &info);
 Napi::Value StartSaveSettings(const Napi::CallbackInfo &info);
 Napi::Value TerminateAutoConfig(const Napi::CallbackInfo &info);
+Napi::Value GetAutoConfigSummary(const Napi::CallbackInfo &info);
 }

@@ -23,6 +23,7 @@
 #include "shared.hpp"
 #include "nodeobs_audio_encoders.h"
 #include "osn-encoders.hpp"
+#include "osn-streaming-helpers.hpp"
 
 void osn::ISimpleStreaming::Register(ipc::server &srv)
 {
@@ -262,7 +263,7 @@ void UpdateStreamingSettings_amd(obs_data_t *settings, int bitrate)
 	obs_data_set_int(settings, "bf", 3);
 }
 
-void osn::SimpleStreaming::UpdateEncoders()
+void osn::SimpleStreaming::updateEncoders()
 {
 	if (!videoEncoder || !audioEncoder)
 		return;
@@ -325,6 +326,44 @@ void osn::SimpleStreaming::UpdateEncoders()
 	obs_data_release(audioEncSettings);
 }
 
+void osn::SimpleStreaming::start()
+{
+	updateEncoders();
+	obs_encoder_set_audio(audioEncoder, obs_get_audio());
+	obs_output_set_audio_encoder(GetOutput(), audioEncoder, 0);
+	obs_encoder_set_video_mix(audioEncoder, obs_video_mix_get(GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
+
+	obs_output_set_video_encoder(GetOutput(), videoEncoder);
+
+	if (enableTwitchVOD) {
+		twitchVODSupported = isTwitchVODSupported();
+		if (twitchVODSupported)
+			SetupTwitchSoundtrackAudio(this);
+	}
+
+	obs_output_set_service(GetOutput(), service);
+
+	std::string outputSettingsError;
+	if (!ApplyOutputSettings(GetOutput(), outputSettingsError)) {
+		blog(LOG_ERROR, "Failed to apply streaming output settings: %s", outputSettingsError.c_str());
+		return;
+	}
+
+	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(videoEncoder));
+
+	StartOutput();
+}
+
+void osn::SimpleStreaming::checkOutput()
+{
+	const char *type = osn::streaming_helpers::getStreamOutputType(service);
+	if (!type)
+		type = "rtmp_output";
+
+	if (!GetOutput() || strcmp(obs_output_get_id(GetOutput()), type) != 0)
+		CreateOutput(type, "stream");
+}
+
 void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	SimpleStreaming *streaming = static_cast<SimpleStreaming *>(osn::ISimpleStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
@@ -332,16 +371,22 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple streaming reference is not valid.");
 	}
 
+	// Refuse a normal Start() while the streaming object is in autoconfig test mode —
+	// the test owns the output until CleanTestMode() runs. Note this is the only
+	// guard on regular Start; the testMode flag is cleared in CleanTestMode.
+	if (streaming->testMode) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Service in test mode.");
+	}
+
 	if (!streaming->service) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
-	const char *type = OBS_service::getStreamOutputType(streaming->service);
-	if (!type)
-		type = "rtmp_output";
+	if (!streaming->GetCanvas()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	}
 
-	if (!streaming->GetOutput() || strcmp(obs_output_get_id(streaming->GetOutput()), type) != 0)
-		streaming->CreateOutput(type, "stream");
+	streaming->checkOutput();
 
 	if (!streaming->GetOutput()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the streaming output.");
@@ -355,10 +400,6 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid audio encoder.");
 	}
 
-	if (!streaming->GetCanvas()) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
-	}
-
 	if (!streaming->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING)) {
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Video pipeline not initialized (canvas has no video mix). "
 							      "Graphics device may have been lost during startup. Restart the app.");
@@ -370,29 +411,19 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
 	}
 
-	streaming->UpdateEncoders();
-	obs_encoder_set_audio(streaming->audioEncoder, obs_get_audio());
-	obs_output_set_audio_encoder(streaming->GetOutput(), streaming->audioEncoder, 0);
-	obs_encoder_set_video_mix(streaming->audioEncoder, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
-
-	obs_output_set_video_encoder(streaming->GetOutput(), streaming->videoEncoder);
-
-	if (streaming->enableTwitchVOD) {
-		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
-		if (streaming->twitchVODSupported)
-			SetupTwitchSoundtrackAudio(streaming);
+	if (!streaming->delay) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid delay.");
 	}
 
-	obs_output_set_service(streaming->GetOutput(), streaming->service);
-
-	std::string outputSettingsError;
-	if (!streaming->ApplyOutputSettings(streaming->GetOutput(), outputSettingsError)) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, outputSettingsError.c_str());
+	if (!streaming->reconnect) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid reconnect.");
 	}
 
-	blog(LOG_INFO, "Start Streaming using %s encoder.", obs_encoder_get_id(streaming->videoEncoder));
+	if (!streaming->network) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid network.");
+	}
 
-	streaming->StartOutput();
+	streaming->start();
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

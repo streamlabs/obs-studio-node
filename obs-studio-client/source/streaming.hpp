@@ -65,4 +65,6 @@ protected:
 	void Start(const Napi::CallbackInfo &info);
 	void Stop(const Napi::CallbackInfo &info);
 };
+
+bool TryUnwrapStreamingUid(const Napi::Value &value, uint64_t &out_uid);
 }

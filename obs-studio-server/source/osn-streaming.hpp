@@ -50,6 +50,9 @@ public:
 		lastBytesSent = 0;
 		lastBytesSentTime = 0;
 		simple = true;
+		testMode = false;
+		originalServiceSettings = nullptr;
+		originalEncoderBitrate = 0;
 	}
 	virtual ~Streaming();
 
@@ -70,6 +73,12 @@ public:
 	uint64_t lastBytesSent;
 	uint64_t lastBytesSentTime;
 	bool simple;
+	bool testMode;
+	obs_data_t *originalServiceSettings;
+	// Bitrate the user had on videoEncoder before testBandwidth() bumped it for
+	// the ceiling-search measurement. Restored in CleanTestMode(). 0 = nothing
+	// to restore.
+	int originalEncoderBitrate;
 
 	bool isTwitchVODSupported();
 	bool ApplyOutputSettings(obs_output_t *output, std::string &errorMessage);
@@ -79,6 +88,17 @@ public:
 	void setDelayLegacySettings();
 	void setReconnectLegacySettings();
 	void setNetworkLegacySettings();
+	std::string testQuery();
+
+	// Autoconfig hooks. start() and checkOutput() are subclass-specific (different
+	// pipelines for simple/advanced); testBandwidth() and CleanTestMode() are shared.
+	virtual void start() {}
+	virtual void checkOutput() {}
+	// testBitrate: bitrate to override videoEncoder with for the duration of the
+	// measurement. The user's original bitrate is restored by CleanTestMode().
+	// Pass 0 to leave the encoder untouched.
+	void testBandwidth(bool &gotError, int testBitrate = 0);
+	void CleanTestMode();
 };
 
 class IStreaming {

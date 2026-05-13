@@ -24,6 +24,8 @@
 #include "osn-encoders.hpp"
 //os_gettime_ns
 #include <util/platform.h>
+#include <chrono>
+#include <thread>
 
 osn::Streaming::~Streaming()
 {
@@ -32,6 +34,96 @@ osn::Streaming::~Streaming()
 		obs_encoder_release(streamArchive);
 		streamArchive = nullptr;
 	}
+	if (originalServiceSettings) {
+		obs_data_release(originalServiceSettings);
+		originalServiceSettings = nullptr;
+	}
+}
+
+void osn::Streaming::testBandwidth(bool &gotError, int testBitrate)
+{
+	if (!service || !GetOutput()) {
+		gotError = true;
+		return;
+	}
+
+	// Override the user's encoder bitrate with the ceiling-search target so the
+	// bandwidth measurement isn't capped by whatever the user happens to have
+	// set (often 2500). Restored in CleanTestMode().
+	if (testBitrate > 0 && videoEncoder) {
+		obs_data_t *encSettings = obs_encoder_get_settings(videoEncoder);
+		originalEncoderBitrate = (int)obs_data_get_int(encSettings, "bitrate");
+		obs_data_release(encSettings);
+
+		obs_data_t *override = obs_data_create();
+		obs_data_set_int(override, "bitrate", (long long)testBitrate);
+		obs_encoder_update(videoEncoder, override);
+		obs_data_release(override);
+	}
+
+	if (originalServiceSettings) {
+		obs_data_release(originalServiceSettings);
+	}
+	originalServiceSettings = obs_service_get_settings(service);
+	obs_data_addref(originalServiceSettings);
+
+	obs_data_t *serviceSettings = obs_data_create();
+	obs_data_apply(serviceSettings, originalServiceSettings);
+
+	const char *serviceName = obs_data_get_string(serviceSettings, "service");
+	if (serviceName && strcmp(serviceName, "Twitch") == 0) {
+		std::string key = obs_service_get_connect_info(service, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
+
+		while (!key.empty()) {
+			char ch = key.back();
+			if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')
+				key.pop_back();
+			else
+				break;
+		}
+
+		key += "?bandwidthtest";
+		obs_data_set_string(serviceSettings, "key", key.c_str());
+	}
+
+	obs_service_update(service, serviceSettings);
+	obs_data_release(serviceSettings);
+
+	testMode = true;
+	start();
+}
+
+void osn::Streaming::CleanTestMode()
+{
+	if (GetOutput()) {
+		if (obs_output_active(GetOutput())) {
+			obs_output_stop(GetOutput());
+		}
+		// obs_output_stop is asynchronous: the output stays active until its
+		// internal stop thread finishes flushing. Block here so callers
+		// (autoconfig SaveSettings -> applyResults -> obs_set_video_info)
+		// don't race with OBS_VIDEO_CURRENTLY_ACTIVE (-4).
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+		while (obs_output_active(GetOutput()) && std::chrono::steady_clock::now() < deadline) {
+			std::this_thread::sleep_for(std::chrono::milliseconds(20));
+		}
+	}
+
+	if (service && originalServiceSettings) {
+		obs_service_update(service, originalServiceSettings);
+		obs_data_release(originalServiceSettings);
+		originalServiceSettings = nullptr;
+	}
+
+	if (videoEncoder && originalEncoderBitrate > 0) {
+		obs_data_t *restore = obs_data_create();
+		obs_data_set_int(restore, "bitrate", (long long)originalEncoderBitrate);
+		obs_encoder_update(videoEncoder, restore);
+		obs_data_release(restore);
+		originalEncoderBitrate = 0;
+	}
+
+	testMode = false;
 }
 
 void osn::Streaming::DeleteOutput()
@@ -342,6 +434,13 @@ void osn::IStreaming::Query(void *data, const int64_t id, const std::vector<ipc:
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
 	}
 
+	if (streaming->testMode) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		rval.push_back(ipc::value(true));
+		AUTO_DEBUG;
+		return;
+	}
+
 	auto signalOpt = streaming->PopReceivedSignal();
 	if (!signalOpt.has_value()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -421,6 +520,15 @@ void osn::Streaming::setNetworkLegacySettings()
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "DynamicBitrate", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "NewSocketLoopEnable", network->enableDynamicBitrate);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "Output", "LowLatencyEnable", network->enableDynamicBitrate);
+}
+
+std::string osn::Streaming::testQuery()
+{
+	auto signalOpt = PopReceivedSignal();
+	if (!signalOpt.has_value()) {
+		return "";
+	}
+	return signalOpt.value().signal;
 }
 
 void osn::IStreaming::GetDroppedFrames(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

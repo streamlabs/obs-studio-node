@@ -24,6 +24,7 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-file-output.hpp"
 #include "osn-encoders.hpp"
+#include "osn-streaming-helpers.hpp"
 
 void osn::ISimpleRecording::Register(ipc::server &srv)
 {
@@ -314,7 +315,7 @@ void osn::SimpleRecording::UpdateEncoders()
 	case RecQuality::Stream: {
 		if (!streaming)
 			return;
-		streaming->UpdateEncoders();
+		streaming->updateEncoders();
 		videoEncoder = streaming->videoEncoder;
 		audioEncoder = streaming->audioEncoder;
 		if (obs_get_multiple_rendering()) {
