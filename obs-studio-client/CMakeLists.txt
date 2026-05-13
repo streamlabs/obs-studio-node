@@ -40,7 +40,14 @@ if (APPLE)
     )
 endif ()
 
+SET(OSN_CLIENT_CORE_SOURCES
+    "source/polling-pacer.cpp"
+    "source/best-effort-gate.cpp"
+)
+
 SET(osn-client_SOURCES
+    ${OSN_CLIENT_CORE_SOURCES}
+
     "${CMAKE_SOURCE_DIR}/source/osn-error.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.cpp"
@@ -51,9 +58,7 @@ SET(osn-client_SOURCES
     "source/utility.hpp"
     "source/utility-v8.cpp"
     "source/utility-v8.hpp"
-    "source/polling-pacer.cpp"
     "source/polling-pacer.hpp"
-    "source/best-effort-gate.cpp"
     "source/best-effort-gate.hpp"
     "source/controller.cpp"
     "source/controller.hpp"
@@ -166,29 +171,36 @@ add_nodejs_module(
     ${osn-client_SOURCES}
 )
 
-add_executable(
-    polling_pacer_test
-    "tests/polling-pacer-test.cpp"
-    "source/polling-pacer.cpp"
-)
+if(BUILD_TESTING)
+    include(Catch)
 
-add_executable(
-    best_effort_gate_test
-    "tests/best-effort-gate-test.cpp"
-    "source/best-effort-gate.cpp"
-)
+    add_executable(
+        obs_studio_client_unit_tests
+        "tests/polling-pacer-test.cpp"
+        "tests/best-effort-gate-test.cpp"
+        ${OSN_CLIENT_CORE_SOURCES}
+    )
 
-target_include_directories(
-    polling_pacer_test
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/source"
-)
+    target_include_directories(
+        obs_studio_client_unit_tests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/source"
+    )
 
-target_include_directories(
-    best_effort_gate_test
-    PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/source"
-)
+    target_link_libraries(
+        obs_studio_client_unit_tests
+        PRIVATE
+            Catch2::Catch2WithMain
+    )
+
+    catch_discover_tests(
+        obs_studio_client_unit_tests
+        TEST_PREFIX "obs_studio_client_unit_tests::"
+        DL_PATHS
+            "$<TARGET_FILE_DIR:Catch2::Catch2>"
+            "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+    )
+endif()
 
 set(PROJECT_INCLUDE_PATHS
     "${nlohmannjson_SOURCE_DIR}/single_include"
