@@ -9,9 +9,15 @@ Analyzes the long_calls.txt file produced by obs-studio-node and helps identify 
 ## Requirements
 Node 22, Access to AWS S3 bucket
 
+## Usage
+npx ts-node long-calls-analyzer.ts             # run (resumes previous run)
+npx ts-node long-calls-analyzer.ts --reset     # wipe DB and start fresh
+npx ts-node long-calls-analyzer.ts --age 2w    # last 2 weeks (default)
+npx ts-node long-calls-analyzer.ts --age 1m    # last 1 month
+npx ts-node long-calls-analyzer.ts --age 6h    # last 6 hours
+
 ## How to run
 ```
 yarn install
-yarn build
-node dist/long-calls-analyzer.js --age 1w
+npx ts-node long-calls-analyzer.ts --age 1w
 ```
