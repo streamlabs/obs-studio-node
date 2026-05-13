@@ -296,6 +296,36 @@ interface FreezesRow {
   avg_ms: number;
 }
 
+// ─── Cleanup ──────────────────────────────────────────────────────────────────
+/**
+ * Removes sources (and their long_calls rows) for users who have more than one
+ * cache in the DB, keeping only the most recently uploaded one per username.
+ */
+function cleanOldSources(db: DatabaseType): void {
+    const deleted = db.transaction(() => {
+        db.prepare(`
+            DELETE FROM long_calls WHERE source_id IN (
+                SELECT id FROM sources
+                WHERE username IS NOT NULL
+                  AND uploaded_at < (
+                    SELECT MAX(s2.uploaded_at) FROM sources s2
+                    WHERE s2.username = sources.username
+                  )
+            )
+        `).run();
+        return db.prepare(`
+            DELETE FROM sources
+            WHERE username IS NOT NULL
+              AND uploaded_at < (
+                SELECT MAX(s2.uploaded_at) FROM sources s2
+                WHERE s2.username = sources.username
+              )
+        `).run().changes;
+    })();
+    if (deleted > 0)
+        console.log(`  Pruned ${deleted} older source(s) (kept latest per user).\n`);
+}
+
 function printStats(db: DatabaseType): void {
   const sep = '─'.repeat(100);
   const line = '━'.repeat(100);
@@ -478,6 +508,7 @@ function printStats(db: DatabaseType): void {
   });
 
   console.log('\n');
+  cleanOldSources(db);
   printStats(db);
   db.close();
 })();
