@@ -10,7 +10,6 @@
     "noImplicitAny": true,
     "noImplicitThis": true,
     "removeComments": true,
-    "suppressImplicitAnyIndexErrors": true,
     "allowSyntheticDefaultImports": true,
     "strictNullChecks": false,
     "emitDecoratorMetadata": true

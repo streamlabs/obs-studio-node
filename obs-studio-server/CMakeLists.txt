@@ -368,6 +368,8 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/nodeobs_audio_encoders.h"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_autoconfig.cpp"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_autoconfig.h"
+    "${PROJECT_SOURCE_DIR}/source/nodeobs_autoconfig_resource_sampler.cpp"
+    "${PROJECT_SOURCE_DIR}/source/nodeobs_autoconfig_resource_sampler.h"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_configManager.cpp"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_configManager.hpp"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_display.cpp"

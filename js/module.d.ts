@@ -670,6 +670,7 @@ export interface IVideo {
     destroy(): void;
     readonly skippedFrames: number;
     readonly encodedFrames: number;
+    readonly canvasId: number;
 }
 export interface IVideoFactory {
     create(): IVideo;
@@ -795,7 +796,6 @@ export interface IVideoEncoderFactory {
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;
 }
 export interface IStreaming {
-    // Video encoder value is only ignored in the Enhanced Broadcasting mode, otherwise it should be set
     videoEncoder?: IVideoEncoder;
     service: IService;
     enforceServiceBitrate: boolean;
@@ -806,7 +806,7 @@ export interface IStreaming {
     video: IVideo;
     signalHandler: (signal: EOutputSignal) => void;
     getAvailableEncoders(): IEncoderOption[];
-    start(): void; // throws
+    start(): void;
     stop(force?: boolean): void;
     droppedFrames: number;
     totalFrames: number;
@@ -847,9 +847,7 @@ export interface IAdvancedStreamingFactory {
     legacySettings: IAdvancedStreaming;
 }
 export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
-    additionalVideo?: IVideo,
+    additionalVideo?: IVideo;
 }
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
     create(): IEnhancedBroadcastingAdvancedStreaming;
@@ -857,9 +855,7 @@ export interface IEnhancedBroadcastingAdvancedStreamingFactory {
     legacySettings: IEnhancedBroadcastingAdvancedStreaming;
 }
 export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
-    additionalVideo?: IVideo,
+    additionalVideo?: IVideo;
 }
 export interface IEnhancedBroadcastingSimpleStreamingFactory {
     create(): IEnhancedBroadcastingSimpleStreaming;
@@ -980,6 +976,29 @@ export interface IAudioTrackFactory {
     setAtIndex(audioTrack: IAudioTrack, index: number): void;
     importLegacySettings(): void;
     saveLegacySettings(): void;
+}
+export interface IAutoConfigResourcePercentile {
+    p50: number;
+    p95: number;
+}
+export interface IAutoConfigResourceGpu {
+    available: boolean;
+    vramUsedMB?: IAutoConfigResourcePercentile;
+    vramBudgetMB?: number;
+}
+export type AutoConfigResourcePhase = 'bandwidth' | 'stream_encoder' | 'recording_encoder';
+export interface IAutoConfigResourceUsage {
+    phase: AutoConfigResourcePhase;
+    sampleCount: number;
+    durationMs: number;
+    cpuPct: IAutoConfigResourcePercentile;
+    procRamMB: IAutoConfigResourcePercentile;
+    gpu: IAutoConfigResourceGpu;
+}
+export interface IAutoConfigSummary {
+    complete: boolean;
+    resourceUsage: IAutoConfigResourceUsage[];
+    [key: string]: unknown;
 }
 export declare const enum VCamOutputType {
     Invalid = 0,

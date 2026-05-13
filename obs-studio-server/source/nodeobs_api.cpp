@@ -29,6 +29,7 @@
 #include "util/lexer.h"
 #include "util-crashmanager.h"
 #include "util-metricsprovider.h"
+#include "nodeobs_service.h"
 
 #include "osn-streaming.hpp"
 #include "osn-recording.hpp"

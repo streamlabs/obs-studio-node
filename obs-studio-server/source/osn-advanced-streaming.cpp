@@ -24,6 +24,7 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
 #include "osn-encoders.hpp"
+#include "osn-streaming-helpers.hpp"
 
 void osn::IAdvancedStreaming::Register(ipc::server &srv)
 {
@@ -426,6 +427,43 @@ osn::AdvancedStreaming::~AdvancedStreaming()
 	}
 }
 
+void osn::AdvancedStreaming::checkOutput()
+{
+	const char *type = osn::streaming_helpers::getStreamOutputType(service);
+	if (!type)
+		type = "rtmp_output";
+
+	if (!GetOutput() || strcmp(obs_output_get_id(GetOutput()), type) != 0)
+		CreateOutput(type, "stream");
+}
+
+void osn::AdvancedStreaming::start()
+{
+	UpdateEncoders();
+
+	if (!setAudioEncoder(this))
+		return;
+
+	if (rescaling)
+		obs_encoder_set_scaled_size(videoEncoder, outputWidth, outputHeight);
+
+	obs_output_set_video_encoder(GetOutput(), videoEncoder);
+
+	if (enableTwitchVOD) {
+		twitchVODSupported = isTwitchVODSupported();
+		if (twitchVODSupported)
+			SetupTwitchSoundtrackAudio(this);
+	}
+
+	obs_output_set_service(GetOutput(), service);
+
+	std::string outputSettingsError;
+	if (!ApplyOutputSettings(GetOutput(), outputSettingsError))
+		return;
+
+	StartOutput();
+}
+
 void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	AdvancedStreaming *streaming = static_cast<AdvancedStreaming *>(osn::IAdvancedStreaming::Manager::GetInstance().find(args[0].value_union.ui64));
@@ -447,7 +485,7 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	streaming->UpdateEncoders();
 
-	const char *type = OBS_service::getStreamOutputType(streaming->service);
+	const char *type = osn::streaming_helpers::getStreamOutputType(streaming->service);
 	if (!type)
 		type = "rtmp_output";
 

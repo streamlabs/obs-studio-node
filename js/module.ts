@@ -1465,6 +1465,11 @@ export interface IVideo {
       * Number of total encoded frames
       */
      readonly encodedFrames: number;
+
+     /**
+      * Server-side canvas id. Pass to APIs that reference video contexts by id.
+      */
+     readonly canvasId: number;
 }
 
 export interface IVideoFactory {
@@ -1918,6 +1923,48 @@ export interface IAudioTrackFactory {
 
     importLegacySettings(): void;
     saveLegacySettings(): void;
+}
+
+// ---- Autoconfig resource-usage telemetry ----
+//
+// Shapes for the JSON payload of the autoconfig 'resource_usage' event, and
+// the matching `resourceUsage` array inside GetAutoConfigSummary()'s JSON.
+//
+// p50 is the typical value during the phase; p95 is the sustained ceiling
+// after dropping single-sample spikes from unrelated OS noise. min / max / avg
+// are deliberately not exposed — max overweights one-off background activity
+// and avg is hard to act on.
+
+export interface IAutoConfigResourcePercentile {
+    p50: number;
+    p95: number;
+}
+
+export interface IAutoConfigResourceGpu {
+    available: boolean;
+    vramUsedMB?: IAutoConfigResourcePercentile;
+    vramBudgetMB?: number;
+}
+
+export type AutoConfigResourcePhase = 'bandwidth' | 'stream_encoder' | 'recording_encoder';
+
+export interface IAutoConfigResourceUsage {
+    phase: AutoConfigResourcePhase;
+    sampleCount: number;
+    durationMs: number;
+    cpuPct: IAutoConfigResourcePercentile;
+    procRamMB: IAutoConfigResourcePercentile;
+    gpu: IAutoConfigResourceGpu;
+}
+
+// Parsed shape of NodeObs.GetAutoConfigSummary(). Only the fields the
+// resource-usage feature consumes are typed; other historical fields
+// (encoderDetection, videoDecision, bandwidthTest, selection) are present in
+// the JSON but intentionally left as `unknown` — type them when you need them.
+export interface IAutoConfigSummary {
+    complete: boolean;
+    resourceUsage: IAutoConfigResourceUsage[];
+    [key: string]: unknown;
 }
 
 export const enum VCamOutputType {
