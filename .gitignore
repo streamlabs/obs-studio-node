@@ -27,3 +27,7 @@ docs/
 streamlabs-build.app
 
 tests/osn-tests/*-cache-local.zip
+
+profile-long-calls/dist/
+!profile-long-calls/.vscode
+profile-long-calls/long_calls.db*
