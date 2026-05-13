@@ -82,7 +82,7 @@ protected:
 			data->sent = true;
 		};
 		std::vector<SignalOutput *> signalsList;
-		PollingPacer pacer(sleepInterval);
+		osn::PollingPacer pacer(sleepInterval);
 		while (!workerStop) {
 			auto tp_start = std::chrono::high_resolution_clock::now();
 

@@ -37,7 +37,7 @@ sem_t *ac_sem;
 
 void autoConfig::worker()
 {
-	PollingPacer pacer(sleepInterval);
+	osn::PollingPacer pacer(sleepInterval);
 	while (!worker_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 

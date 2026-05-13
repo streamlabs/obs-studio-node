@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cstdint>
 
+namespace osn {
+
 // Tracks poll loop timing and decides whether the worker should sleep after each cycle.
 // Overruns are treated as congestion; sustained overruns yield briefly to avoid a tight CPU spin.
 class PollingPacer {
@@ -33,3 +35,5 @@ private:
 	bool lastCongested = false;
 	uint32_t lastConsecutiveOverruns = 0;
 };
+
+} // namespace osn

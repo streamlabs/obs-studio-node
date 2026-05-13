@@ -3,6 +3,8 @@
 #include <chrono>
 #include <cstdint>
 
+namespace osn {
+
 // Paces best-effort work during congestion by allowing it only on selected cycles.
 // Healthy cycles reset the gate; congested cycles progressively increase the skip window up to maxInterval.
 class BestEffortGate {
@@ -30,3 +32,5 @@ private:
 	uint32_t skipCyclesRemaining = 0;
 	bool ranBestEffortThisCycle = false;
 };
+
+} // namespace osn

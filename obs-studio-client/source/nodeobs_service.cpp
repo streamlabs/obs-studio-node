@@ -306,7 +306,7 @@ void service::worker()
 		data->sent = true;
 	};
 	std::vector<ServiceSignalInfo *> signalsList;
-	PollingPacer pacer(sleepInterval);
+	osn::PollingPacer pacer(sleepInterval);
 	while (!worker_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 

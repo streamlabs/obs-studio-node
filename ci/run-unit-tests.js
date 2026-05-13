@@ -9,6 +9,7 @@ const buildDirectory =
   "build";
 const buildConfig = process.env.BUILD_CONFIG || process.env.BuildConfig || "RelWithDebInfo";
 const target = "obs_studio_client_unit_tests";
+// Match the TEST_PREFIX passed to catch_discover_tests so ctest only runs this unit-test suite.
 const testPattern = `^${target}::`;
 
 function run(command, args) {

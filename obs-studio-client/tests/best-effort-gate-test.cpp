@@ -5,6 +5,7 @@
 #include <chrono>
 
 using namespace std::chrono_literals;
+using osn::BestEffortGate;
 
 TEST_CASE("BestEffortGate backs off during congestion and resets when healthy")
 {

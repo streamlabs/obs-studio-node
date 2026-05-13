@@ -42,7 +42,9 @@ endif ()
 
 SET(OSN_CLIENT_CORE_SOURCES
     "source/polling-pacer.cpp"
+    "source/polling-pacer.hpp"
     "source/best-effort-gate.cpp"
+    "source/best-effort-gate.hpp"
 )
 
 SET(osn-client_SOURCES
@@ -58,8 +60,6 @@ SET(osn-client_SOURCES
     "source/utility.hpp"
     "source/utility-v8.cpp"
     "source/utility-v8.hpp"
-    "source/polling-pacer.hpp"
-    "source/best-effort-gate.hpp"
     "source/controller.cpp"
     "source/controller.hpp"
     "source/fader.cpp"

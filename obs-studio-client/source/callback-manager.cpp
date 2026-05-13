@@ -106,7 +106,7 @@ Napi::Value globalCallback::RegisterVolmeterCallback(const Napi::CallbackInfo &i
 
 Napi::Value globalCallback::RemoveVolmeterCallback(const Napi::CallbackInfo &info)
 {
-	volmeterCallbackPending.store(false, std::memory_order_release);
+	volmeterCallbackPending.store(false);
 	js_volmeter_callback.Release();
 	return info.Env().Undefined();
 }
@@ -230,7 +230,7 @@ void globalCallback::worker()
 		}
 
 		delete dataArray;
-		globalCallback::volmeterCallbackPending.store(false, std::memory_order_release);
+		globalCallback::volmeterCallbackPending.store(false);
 	};
 
 	auto source_message_callback = [](Napi::Env env, Napi::Function jsCallback, SourceMessageInfoData *data) {
@@ -249,8 +249,8 @@ void globalCallback::worker()
 		delete data;
 	};
 
-	PollingPacer pacer(sleepInterval);
-	BestEffortGate volmeterGate(sleepInterval, std::chrono::milliseconds(250));
+	osn::PollingPacer pacer(sleepInterval);
+	osn::BestEffortGate volmeterGate(sleepInterval, std::chrono::milliseconds(250));
 	while (!worker_stop && !m_all_workers_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -379,10 +379,10 @@ void globalCallback::worker()
 				}
 
 				if (js_volmeter_callback) {
-					if (!volmeterCallbackPending.exchange(true, std::memory_order_acq_rel)) {
+					if (!volmeterCallbackPending.exchange(true)) {
 						napi_status status = js_volmeter_callback.NonBlockingCall(volmeterDataArray, volmeter_callback);
 						if (status != napi_ok) {
-							volmeterCallbackPending.store(false, std::memory_order_release);
+							volmeterCallbackPending.store(false);
 							delete volmeterDataArray;
 						}
 					} else {

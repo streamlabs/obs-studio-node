@@ -5,6 +5,7 @@
 #include <chrono>
 
 using namespace std::chrono_literals;
+using osn::PollingPacer;
 
 TEST_CASE("PollingPacer tracks healthy cycles and congestion")
 {

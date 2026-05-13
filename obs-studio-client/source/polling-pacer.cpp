@@ -1,5 +1,7 @@
 #include "polling-pacer.hpp"
 
+namespace osn {
+
 PollingPacer::PollingPacer(std::chrono::milliseconds interval, uint32_t yieldAfterConsecutiveOverruns, std::chrono::milliseconds sustainedOverrunYield)
 	: interval(interval), yieldAfterConsecutiveOverruns(yieldAfterConsecutiveOverruns), sustainedOverrunYield(sustainedOverrunYield)
 {
@@ -35,3 +37,5 @@ uint32_t PollingPacer::consecutiveOverruns() const
 {
 	return lastConsecutiveOverruns;
 }
+
+} // namespace osn

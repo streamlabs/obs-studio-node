@@ -6,6 +6,8 @@
 #include <chrono>
 
 using namespace std::chrono_literals;
+using osn::BestEffortGate;
+using osn::PollingPacer;
 
 TEST_CASE("PollingPacer congestion drives BestEffortGate backoff and recovery")
 {

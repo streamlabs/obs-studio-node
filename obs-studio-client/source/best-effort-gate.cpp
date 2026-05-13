@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+namespace osn {
+
 BestEffortGate::BestEffortGate(std::chrono::milliseconds baseInterval, std::chrono::milliseconds maxInterval)
 	: baseInterval(baseInterval > std::chrono::milliseconds(0) ? baseInterval : std::chrono::milliseconds(1)),
 	  maxInterval(std::max(maxInterval, this->baseInterval)),
@@ -47,3 +49,5 @@ uint32_t BestEffortGate::skipCyclesFor(std::chrono::milliseconds interval) const
 
 	return cycles > 0 ? static_cast<uint32_t>(cycles - 1) : 0;
 }
+
+} // namespace osn
