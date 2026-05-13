@@ -509,7 +509,10 @@ function printStats(db: DatabaseType): void {
   });
 
   console.log('\n');
-  cleanOldSources(db);
+  const cleanOld : boolean = process.argv.includes('--cleanOldSources');
+  if (cleanOld) {
+    cleanOldSources(db);
+  }
   printStats(db);
   db.close();
 })();
