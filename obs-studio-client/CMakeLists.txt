@@ -178,6 +178,7 @@ if(BUILD_TESTING)
         obs_studio_client_unit_tests
         "tests/polling-pacer-test.cpp"
         "tests/best-effort-gate-test.cpp"
+        "tests/polling-pacer-best-effort-gate-test.cpp"
         ${OSN_CLIENT_CORE_SOURCES}
     )
 
