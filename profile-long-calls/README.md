@@ -1,5 +1,5 @@
 ## About
-Analyzes the long_calls.txt file produced by obs-studio-node and helps identify which methods take the longest.
+Adds a standalone TypeScript utility to download user-cache zips from AWS S3, extract long_calls.txt, ingest the data into a local SQLite DB, and print aggregate “worst offender” IPC-call performance reports.
 
 ## Detailed breakdown
 * Mass download hundreds of latest user caches from AWS bucket streamlabs-obs-user-cache
@@ -15,6 +15,7 @@ npx ts-node long-calls-analyzer.ts --reset     # wipe DB and start fresh
 npx ts-node long-calls-analyzer.ts --age 2w    # last 2 weeks (default)
 npx ts-node long-calls-analyzer.ts --age 1m    # last 1 month
 npx ts-node long-calls-analyzer.ts --age 6h    # last 6 hours
+npx ts-node long-calls-analyzer.ts --cleanOldSources # Clean previous entry from user
 
 ## How to run
 ```
