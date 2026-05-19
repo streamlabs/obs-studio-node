@@ -40,7 +40,7 @@ public:
 		sleepInterval = std::chrono::milliseconds(33);
 		workerThread = nullptr;
 	};
-	~WorkerSignals(){};
+	~WorkerSignals() { stopWorker(); };
 
 protected:
 	bool isWorkerRunning;
@@ -137,8 +137,16 @@ protected:
 
 		workerStop = true;
 		isWorkerRunning = false;
-		if (workerThread->joinable()) {
-			workerThread->join();
+
+		if (jsThread) {
+			jsThread.Abort();
+		}
+
+		if (workerThread) {
+			if (workerThread->joinable())
+				workerThread->join();
+			delete workerThread;
+			workerThread = nullptr;
 		}
 	}
 };
