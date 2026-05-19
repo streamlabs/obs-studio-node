@@ -3402,7 +3402,7 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 		const char *error = obs_output_get_last_error(virtualCam);
 		blog(LOG_ERROR, "StartVirtualCam: output start failed: %s", error ? error : "(null)");
 		DestroyVirtualCamView();
-		PRETTY_ERROR_RETURN(ErrorCode::Error, error);
+		PRETTY_ERROR_RETURN(ErrorCode::Error, error ? error : "Output start failed (no error message)");
 	}
 
 	virtualCamActive = true;
