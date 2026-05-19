@@ -5,10 +5,9 @@ import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
 
-const testName = 'osn-video';
+const testName = 'osn-virtualcam';
 
 describe(testName, function() {
-    this.timeout(80000); // REMOVEME DONT CHECKIN
     let obs: OBSHandler | null = null;
     let hasTestFailed: boolean = false;
 
@@ -34,10 +33,12 @@ describe(testName, function() {
         logEmptyLine();
     });
 
-    it('Attempt to start virtual camera and verify an exception is thrown', async () => {
+    it('Attempt to start virtual camera and verify an exception is thrown', async function() {
         try {
             osn.NodeObs.OBS_service_startVirtualCam();
-            expect.fail('Expected an error to be thrown when starting virtual camera without installing it first.');
+            if (obs?.isCI()) {
+                expect.fail('Expected an error to be thrown when starting virtual camera without a video context.');
+            }
         } catch (error: unknown) {
             expect(error).to.be.instanceOf(Error);
         }
