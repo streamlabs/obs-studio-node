@@ -253,7 +253,7 @@ void osn::Source::GetProperties(void *data, const int64_t id, const std::vector<
 	// Attempt to find the source asked to load. Get a strong reference to help
 	// guarantee the source is not destroyed while we are attempting to retrieve
 	// properties.
-	obs_source_t *src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
+	OBSSource src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (src == nullptr) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Source reference is not valid.");
 	}
