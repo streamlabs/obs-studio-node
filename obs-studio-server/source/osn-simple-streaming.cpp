@@ -312,17 +312,17 @@ void osn::SimpleStreaming::UpdateEncoders()
 		obs_encoder_set_preferred_video_format(videoEncoder, VIDEO_FORMAT_NV12);
 	}
 
-	obs_encoder_update(videoEncoder, videoEncSettings);
-	obs_encoder_update(audioEncoder, audioEncSettings);
-
-	obs_data_release(videoEncSettings);
-	obs_data_release(audioEncSettings);
-
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
+
+	obs_encoder_update(videoEncoder, videoEncSettings);
+	obs_encoder_update(audioEncoder, audioEncSettings);
+
+	obs_data_release(videoEncSettings);
+	obs_data_release(audioEncSettings);
 }
 
 void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
