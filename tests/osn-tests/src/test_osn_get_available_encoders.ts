@@ -4,6 +4,7 @@ import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles } from '../util/general';
+import { EOBSSettingsCategories } from '../util/obs_enums';
 import { ERecordingFormat } from '../osn';
 
 import path = require('path');
@@ -160,6 +161,51 @@ describe(testName, () => {
             "Simple x264 should expose the simple output preset field");
 
         osn.SimpleStreamingFactory.destroy(stream);
+    });
+
+    it('Simple streaming metadata ids create matching concrete encoders in Simple mode', async function() {
+        const originalMode = obs.getSetting(EOBSSettingsCategories.Output, 'Mode');
+        obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
+
+        let stream: osn.ISimpleStreaming | undefined;
+        const createdEncoders: osn.IVideoEncoder[] = [];
+
+        try {
+            stream = osn.SimpleStreamingFactory.create();
+            expect(stream).to.not.equal(
+                undefined, "Error while creating the simple streaming output");
+
+            stream.service = osn.ServiceFactory.legacySettings;
+
+            const encoders = stream.getAvailableEncoders();
+            const encodersWithConcreteIds = encoders.filter(encoder => encoder.name !== encoder.id);
+            expect(encodersWithConcreteIds.length).to.be.greaterThan(0,
+                "Test requires at least one simple encoder whose settings value differs from its concrete OBS id");
+
+            for (const metadata of encodersWithConcreteIds) {
+                const encoder = osn.VideoEncoderFactory.create(
+                    metadata.id,
+                    `video-encoder-metadata-id-${metadata.name}`,
+                    {},
+                );
+                createdEncoders.push(encoder);
+
+                expect(encoder.id).to.equal(metadata.id,
+                    `${metadata.name} metadata id should create ${metadata.id} in Simple mode`);
+            }
+        } finally {
+            for (const encoder of createdEncoders) {
+                encoder.release();
+            }
+
+            if (stream) {
+                osn.SimpleStreamingFactory.destroy(stream);
+            }
+
+            if (originalMode !== undefined) {
+                obs.setSetting(EOBSSettingsCategories.Output, 'Mode', originalMode);
+            }
+        }
     });
 
     it('Get available encoders for simple streaming without service', async () => {
