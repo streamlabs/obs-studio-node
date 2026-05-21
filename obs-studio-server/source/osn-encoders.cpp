@@ -27,8 +27,7 @@ static bool codecListContains(const char **codecs, const char *codec);
 static const char *getStreamOutputType(const obs_service_t *service);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
-static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name,
-					  const std::string &encoderName);
+static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
 static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, bool simpleMode);
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
