@@ -162,11 +162,14 @@ static void transition_stop_handler(void *data, calldata_t *calldata)
 
 void CallbackManager::addSource(obs_source_t *source)
 {
+	if (!source)
+		return;
+
 	uint32_t flags = obs_source_get_output_flags(source);
 	if ((flags & OBS_SOURCE_VIDEO) == 0)
 		return;
 
-	if (!source || obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER || obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE)
+	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_FILTER || obs_source_get_type(source) == OBS_SOURCE_TYPE_SCENE)
 		return;
 
 	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
