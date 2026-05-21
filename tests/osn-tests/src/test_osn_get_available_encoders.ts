@@ -150,9 +150,9 @@ describe(testName, () => {
             expectEncoderMetadata(encoder);
         }
 
-        const x264 = encoders.find(encoder => encoder.name === 'x264');
+        const x264 = encoders.find(encoder => encoder.id === 'obs_x264' && encoder.family === 'x264');
         expect(x264).to.not.equal(undefined,
-            "Simple streaming encoders should include x264");
+            "Simple streaming encoders should include the software x264 encoder");
         expect((x264 as any).id).to.equal('obs_x264',
             "Simple x264 should expose the concrete OBS encoder id");
         expect((x264 as any).family).to.equal('x264',
@@ -163,7 +163,7 @@ describe(testName, () => {
         osn.SimpleStreamingFactory.destroy(stream);
     });
 
-    it('Simple streaming metadata ids create matching concrete encoders in Simple mode', async function() {
+    it('Simple streaming metadata ids create matching encoders in Simple mode', async function() {
         const originalMode = obs.getSetting(EOBSSettingsCategories.Output, 'Mode');
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
 
@@ -178,11 +178,7 @@ describe(testName, () => {
             stream.service = osn.ServiceFactory.legacySettings;
 
             const encoders = stream.getAvailableEncoders();
-            const encodersWithConcreteIds = encoders.filter(encoder => encoder.name !== encoder.id);
-            expect(encodersWithConcreteIds.length).to.be.greaterThan(0,
-                "Test requires at least one simple encoder whose settings value differs from its concrete OBS id");
-
-            for (const metadata of encodersWithConcreteIds) {
+            for (const metadata of encoders) {
                 const encoder = osn.VideoEncoderFactory.create(
                     metadata.id,
                     `video-encoder-metadata-id-${metadata.name}`,
