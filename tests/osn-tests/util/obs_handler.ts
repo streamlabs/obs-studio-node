@@ -527,7 +527,7 @@ export class OBSHandler {
     }
 
     skipSource(inputType: string) {
-        if (process.platform === 'darwin') {
+        if (process.platform === 'darwin' && this.isCI()) {
             if (inputType === 'browser_source' ||
                 inputType === 'window_capture' ||
                 inputType === 'monitor_capture' ||
