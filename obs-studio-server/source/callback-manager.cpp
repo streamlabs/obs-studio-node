@@ -172,18 +172,26 @@ void CallbackManager::addSource(obs_source_t *source)
 	if (obs_source_get_type(source) == OBS_SOURCE_TYPE_TRANSITION) {
 		std::unique_lock<std::mutex> ulock(transitions_mtx);
 
-		blog(LOG_INFO, "addSource - transition!: %s", obs_source_get_name(source));
+		const char *raw_name = obs_source_get_name(source);
+		if (!raw_name)
+			return;
 
-		TransitionInfo *ti = new TransitionInfo;
+		blog(LOG_INFO, "addSource - transition!: %s", raw_name);
+
+		auto ti = std::make_unique<TransitionInfo>();
 		ti->transition = source;
+
+		auto result = transitions.try_emplace(std::string(raw_name), std::move(ti));
+		if (!result.second) {
+			blog(LOG_WARNING, "addSource - transition '%s' is already tracked; skipping", raw_name);
+			return;
+		}
 
 		signal_handler_t *sh = obs_source_get_signal_handler(source);
 		if (sh) {
-			signal_handler_connect(sh, "transition_start", transition_start_handler, ti);
-			signal_handler_connect(sh, "transition_stop", transition_stop_handler, ti);
+			signal_handler_connect(sh, "transition_start", transition_start_handler, result.first->second.get());
+			signal_handler_connect(sh, "transition_stop", transition_stop_handler, result.first->second.get());
 		}
-
-		transitions.emplace(std::make_pair(std::string(obs_source_get_name(source)), ti));
 	} else {
 		// Regular source
 		std::unique_lock<std::mutex> ulock(sources_mtx);
