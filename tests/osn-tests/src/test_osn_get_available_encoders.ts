@@ -25,6 +25,73 @@ function getAv1EncoderNames(encoders: { name: string }[]): string[] {
     return getEncoderNames(encoders).filter(name => av1EncoderNames.has(name));
 }
 
+function expectEncoderMetadataValues(
+    encoders: any[],
+    name: string,
+    expected: { family?: string, preset?: string, id?: string },
+) {
+    const encoder = encoders.find(encoder => encoder.name === name);
+    if (!encoder) return;
+
+    if (expected.family) {
+        expect(encoder.family).to.equal(expected.family,
+            `${name} should expose public family metadata`);
+    }
+
+    if (expected.preset) {
+        expect(encoder.preset).to.equal(expected.preset,
+            `${name} should expose the public preset field metadata`);
+    }
+
+    if (expected.id) {
+        expect(encoder.id).to.equal(expected.id,
+            `${name} should expose the concrete OBS encoder id`);
+    }
+}
+
+function expectEncoderMetadata(encoder: any) {
+    expect(encoder).to.have.property('title');
+    expect(encoder).to.have.property('name');
+    expect(encoder).to.have.property('id');
+    expect(encoder).to.have.property('family');
+    expect(encoder).to.have.property('preset');
+    expect(encoder).to.have.property('codec');
+    expect(encoder).to.have.property('streaming');
+    expect(encoder).to.have.property('recording');
+
+    expect(encoder.title).to.be.a('string',
+        "Encoder title should be a string");
+    expect(encoder.name).to.be.a('string',
+        "Encoder name should be a string");
+    expect(encoder.id).to.be.a('string',
+        "Encoder id should be a string");
+    expect(encoder.family).to.be.a('string',
+        "Encoder family should be a string");
+    expect(encoder.preset).to.be.a('string',
+        "Encoder preset should be a string");
+    expect(encoder.codec).to.be.a('string',
+        "Encoder codec should be a string");
+    expect(encoder.streaming).to.be.a('boolean',
+        "Encoder streaming support should be a boolean");
+    expect(encoder.recording).to.be.a('boolean',
+        "Encoder recording support should be a boolean");
+
+    expect(encoder.title).to.not.equal('',
+        "Encoder title should not be empty");
+    expect(encoder.name).to.not.equal('',
+        "Encoder name should not be empty");
+    expect(encoder.id).to.not.equal('',
+        "Encoder id should not be empty");
+    expect(encoder.family).to.not.equal('',
+        "Encoder family should not be empty");
+    expect(encoder.family).to.not.match(/^family_/,
+        "Encoder family should be public metadata, not an internal backend family constant");
+    expect(encoder.preset).to.not.equal('',
+        "Encoder preset should not be empty");
+    expect(encoder.codec).to.not.equal('',
+        "Encoder codec should not be empty");
+}
+
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
@@ -79,17 +146,18 @@ describe(testName, () => {
             "Should have at least one available encoder");
 
         for (const encoder of encoders) {
-            expect(encoder).to.have.property('title');
-            expect(encoder).to.have.property('name');
-            expect(encoder.title).to.be.a('string',
-                "Encoder title should be a string");
-            expect(encoder.name).to.be.a('string',
-                "Encoder name should be a string");
-            expect(encoder.title).to.not.equal('',
-                "Encoder title should not be empty");
-            expect(encoder.name).to.not.equal('',
-                "Encoder name should not be empty");
+            expectEncoderMetadata(encoder);
         }
+
+        const x264 = encoders.find(encoder => encoder.name === 'x264');
+        expect(x264).to.not.equal(undefined,
+            "Simple streaming encoders should include x264");
+        expect((x264 as any).id).to.equal('obs_x264',
+            "Simple x264 should expose the concrete OBS encoder id");
+        expect((x264 as any).family).to.equal('x264',
+            "Simple x264 should expose public family metadata");
+        expect((x264 as any).preset).to.equal('Preset',
+            "Simple x264 should expose the simple output preset field");
 
         osn.SimpleStreamingFactory.destroy(stream);
     });
@@ -104,8 +172,7 @@ describe(testName, () => {
             "getAvailableEncoders should return an array");
 
         for (const encoder of encoders) {
-            expect(encoder).to.have.property('title');
-            expect(encoder).to.have.property('name');
+            expectEncoderMetadata(encoder);
         }
 
         osn.SimpleStreamingFactory.destroy(stream);
@@ -125,17 +192,23 @@ describe(testName, () => {
             "Should have at least one available encoder");
 
         for (const encoder of encoders) {
-            expect(encoder).to.have.property('title');
-            expect(encoder).to.have.property('name');
-            expect(encoder.title).to.be.a('string',
-                "Encoder title should be a string");
-            expect(encoder.name).to.be.a('string',
-                "Encoder name should be a string");
-            expect(encoder.title).to.not.equal('',
-                "Encoder title should not be empty");
-            expect(encoder.name).to.not.equal('',
-                "Encoder name should not be empty");
+            expectEncoderMetadata(encoder);
+            expect((encoder as any).id).to.equal(encoder.name,
+                "Advanced encoder metadata should expose name as the concrete OBS encoder id");
         }
+
+        expectEncoderMetadataValues(encoders, 'obs_x264', {
+            family: 'x264',
+            preset: 'preset',
+        });
+        expectEncoderMetadataValues(encoders, 'obs_qsv11_v2', {
+            family: 'qsv',
+            preset: 'target_usage',
+        });
+        expectEncoderMetadataValues(encoders, 'h264_texture_amf', {
+            family: 'amd',
+            preset: 'QualityPreset',
+        });
 
         osn.AdvancedStreamingFactory.destroy(stream);
     });
@@ -150,8 +223,7 @@ describe(testName, () => {
             "getAvailableEncoders should return an array");
 
         for (const encoder of encoders) {
-            expect(encoder).to.have.property('title');
-            expect(encoder).to.have.property('name');
+            expectEncoderMetadata(encoder);
         }
 
         osn.AdvancedStreamingFactory.destroy(stream);
@@ -206,16 +278,7 @@ describe(testName, () => {
             "Should have at least one available encoder");
 
         for (const encoder of encoders) {
-            expect(encoder).to.have.property('title');
-            expect(encoder).to.have.property('name');
-            expect(encoder.title).to.be.a('string',
-                "Encoder title should be a string");
-            expect(encoder.name).to.be.a('string',
-                "Encoder name should be a string");
-            expect(encoder.title).to.not.equal('',
-                "Encoder title should not be empty");
-            expect(encoder.name).to.not.equal('',
-                "Encoder name should not be empty");
+            expectEncoderMetadata(encoder);
         }
 
         osn.SimpleRecordingFactory.destroy(recording);
@@ -275,16 +338,9 @@ describe(testName, () => {
             "Should have at least one available encoder");
 
         for (const encoder of encoders) {
-            expect(encoder).to.have.property('title');
-            expect(encoder).to.have.property('name');
-            expect(encoder.title).to.be.a('string',
-                "Encoder title should be a string");
-            expect(encoder.name).to.be.a('string',
-                "Encoder name should be a string");
-            expect(encoder.title).to.not.equal('',
-                "Encoder title should not be empty");
-            expect(encoder.name).to.not.equal('',
-                "Encoder name should not be empty");
+            expectEncoderMetadata(encoder);
+            expect((encoder as any).id).to.equal(encoder.name,
+                "Advanced encoder metadata should expose name as the concrete OBS encoder id");
         }
 
         osn.AdvancedRecordingFactory.destroy(recording);

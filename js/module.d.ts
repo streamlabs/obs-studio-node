@@ -819,9 +819,24 @@ export interface EOutputSignal {
     code: number;
     error: string;
 }
+
 export interface IEncoderOption {
+    // UI display label for the encoder.
     title: string;
+    // Mode-specific option value stored in OBS settings.
     name: string;
+    // Concrete OBS encoder ID passed to VideoEncoderFactory.create().
+    id: string;
+    // Public Desktop encoder profile key, such as x264, qsv, nvenc, or amd.
+    family: string;
+    // OBS settings field that stores this encoder's preset value.
+    preset: string;
+    // OBS codec ID reported by the concrete encoder, such as h264, hevc, or av1.
+    codec: string;
+    // Whether this encoder option is allowed for streaming.
+    streaming: boolean;
+    // Whether this encoder option is allowed for recording.
+    recording: boolean;
 }
 export interface ISimpleStreaming extends IStreaming {
     audioEncoder: IAudioEncoder;
