@@ -591,6 +591,37 @@ describe(testName, () => {
         });
     });
 
+    it('Get properties of browser source while releasing concurrently does not crash', async function() {
+        if (obs.skipSource(EOBSInputTypes.BrowserSource)) { this.skip(); } // Skip if browser source is not supported
+        const iterations = 20;
+        const promises: Promise<void>[] = [];
+
+        for (let i = 0; i < iterations; i++) {
+            const input = osn.InputFactory.create(EOBSInputTypes.BrowserSource, 'browser_concurrent_' + i);
+            expect(input).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.CreateInput, EOBSInputTypes.BrowserSource));
+
+            // Race getProperties against release on separate async ticks
+            const getProps = new Promise<void>(resolve => {
+                setImmediate(() => {
+                    try { input.properties; } catch (_) {}
+                    resolve();
+                });
+            });
+
+            const releaseSource = new Promise<void>(resolve => {
+                setImmediate(() => {
+                    try { input.release(); } catch (_) {}
+                    resolve();
+                });
+            });
+
+            promises.push(getProps, releaseSource);
+        }
+
+        // If the race condition is present, one of these will crash the OBS server process
+        await Promise.all(promises);
+    });
+
     it('Set enabled and get it for all filter types', () => {
         obs.filterTypes.forEach(function(filterType) {
             logInfo(testName, 'Testing filter type: ' + filterType);

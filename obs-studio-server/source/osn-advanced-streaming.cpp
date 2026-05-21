@@ -401,14 +401,14 @@ void osn::AdvancedStreaming::UpdateEncoders()
 		obs_encoder_set_preferred_video_format(videoEncoder, VIDEO_FORMAT_NV12);
 	}
 
-	obs_encoder_update(videoEncoder, settings);
-	obs_data_release(settings);
-
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
+
+	obs_encoder_update(videoEncoder, settings);
+	obs_data_release(settings);
 }
 
 osn::AdvancedStreaming::~AdvancedStreaming()

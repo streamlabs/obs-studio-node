@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #pragma once
+#include <atomic>
 #include <chrono>
 #include <napi.h>
 #include "osn-error.hpp"
@@ -40,11 +41,16 @@ public:
 		sleepInterval = std::chrono::milliseconds(33);
 		workerThread = nullptr;
 	};
-	~WorkerSignals(){};
+	~WorkerSignals() { stopWorker(); };
+
+	WorkerSignals(const WorkerSignals &) = delete;
+	WorkerSignals &operator=(const WorkerSignals &) = delete;
+	WorkerSignals(WorkerSignals &&) = delete;
+	WorkerSignals &operator=(WorkerSignals &&) = delete;
 
 protected:
-	bool isWorkerRunning;
-	bool workerStop;
+	std::atomic<bool> isWorkerRunning;
+	std::atomic<bool> workerStop;
 	std::chrono::milliseconds sleepInterval;
 	std::thread *workerThread;
 	Napi::ThreadSafeFunction jsThread;
@@ -137,8 +143,16 @@ protected:
 
 		workerStop = true;
 		isWorkerRunning = false;
-		if (workerThread->joinable()) {
-			workerThread->join();
+
+		if (jsThread) {
+			jsThread.Abort();
+		}
+
+		if (workerThread) {
+			if (workerThread->joinable())
+				workerThread->join();
+			delete workerThread;
+			workerThread = nullptr;
 		}
 	}
 };
