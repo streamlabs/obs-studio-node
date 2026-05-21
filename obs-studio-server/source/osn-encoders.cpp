@@ -28,7 +28,7 @@ static const char *getStreamOutputType(const obs_service_t *service);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
 static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
-static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, bool simpleMode);
+static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, const std::string &encoderName, bool simpleMode);
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
 
@@ -296,15 +296,17 @@ static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettin
 	return opt.family;
 }
 
-static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, bool simpleMode)
+static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, const std::string &encoderName, bool simpleMode)
 {
 	if (simpleMode)
 		return opt.preset;
 
 	if (opt.family == FAMILY_QSV)
 		return "target_usage";
-	if (opt.family == FAMILY_AMD)
-		return "QualityPreset";
+	if (encoderName == ADVANCED_ENCODER_NVENC)
+		return "preset2";
+	if (opt.family == FAMILY_APPLE)
+		return "profile";
 
 	return "preset";
 }
@@ -325,7 +327,7 @@ void osn::EncoderUtils::getAvailableEncoders(std::vector<ipc::value> &rval, obs_
 			rval.push_back(ipc::value(name));
 			rval.push_back(ipc::value(encoderName));
 			rval.push_back(ipc::value(getPublicEncoderFamily(opt, name, encoderName)));
-			rval.push_back(ipc::value(getPublicEncoderPreset(opt, simpleMode)));
+			rval.push_back(ipc::value(getPublicEncoderPreset(opt, encoderName, simpleMode)));
 			rval.push_back(ipc::value(codec ? codec : ""));
 			rval.push_back(ipc::value(static_cast<uint32_t>(opt.streaming)));
 			rval.push_back(ipc::value(static_cast<uint32_t>(opt.recording)));

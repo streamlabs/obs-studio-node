@@ -253,10 +253,60 @@ describe(testName, () => {
         });
         expectEncoderMetadataValues(encoders, 'h264_texture_amf', {
             family: 'amd',
-            preset: 'QualityPreset',
+            preset: 'preset',
+        });
+        expectEncoderMetadataValues(encoders, 'ffmpeg_nvenc', {
+            family: 'nvenc',
+            preset: 'preset2',
+        });
+        expectEncoderMetadataValues(encoders, 'com.apple.videotoolbox.videoencoder.h264.gva', {
+            family: 'apple',
+            preset: 'profile',
         });
 
         osn.AdvancedStreamingFactory.destroy(stream);
+    });
+
+    it('Advanced streaming preset metadata points at concrete OBS encoder properties', async () => {
+        const stream = osn.AdvancedStreamingFactory.create();
+        expect(stream).to.not.equal(
+            undefined, "Error while creating the advanced streaming output");
+
+        stream.service = osn.ServiceFactory.legacySettings;
+        const createdEncoders: osn.IVideoEncoder[] = [];
+
+        try {
+            const encoders = stream.getAvailableEncoders();
+            expect(encoders).to.be.an('array',
+                "getAvailableEncoders should return an array");
+            expect(encoders.length).to.be.greaterThan(0,
+                "Should have at least one available encoder");
+
+            for (const metadata of encoders) {
+                const encoder = osn.VideoEncoderFactory.create(
+                    metadata.id,
+                    `video-encoder-preset-metadata-${metadata.name}`,
+                    {},
+                );
+                createdEncoders.push(encoder);
+
+                const propertyNames: string[] = [];
+                let prop: any = encoder.properties.first();
+                while (prop) {
+                    propertyNames.push(prop.name);
+                    prop = prop.next();
+                }
+
+                expect(propertyNames).to.include(metadata.preset,
+                    `${metadata.name} preset metadata should reference an OBS encoder property`);
+            }
+        } finally {
+            for (const encoder of createdEncoders) {
+                encoder.release();
+            }
+
+            osn.AdvancedStreamingFactory.destroy(stream);
+        }
     });
 
     it('Get available encoders for advanced streaming without service', async () => {
