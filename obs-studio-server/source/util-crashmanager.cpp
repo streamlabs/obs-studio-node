@@ -718,6 +718,10 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	} catch (...) {
 	}
 
+	// Annotations attached to the Sentry minidump:
+	//   "OBS log general" — rolling tail of the libOBS log (capped at LogReport::MaximumMessages lines)
+	//   "Last actions"    — recent IPC calls received by the server (capped at MaximumActionsRegistered)
+	//   "Server warnings" — server-detected anomalies recorded via AddServerWarning (capped at MaximumServerWarnings)
 	try {
 		annotations.insert({{"OBS log general", RequestOBSLog().dump(4)}});
 		annotations.insert({{"Crash reason", _crashInfo}});
