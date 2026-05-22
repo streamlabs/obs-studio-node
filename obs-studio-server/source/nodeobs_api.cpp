@@ -885,7 +885,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	before attempting to make a file there. */
 	if (os_mkdirs(log_path.c_str()) == MKDIR_ERROR) {
 		std::cerr << "Failed to open log file" << std::endl;
-		util::CrashManager::AddWarning("Error on log file, failed to create path: " + log_path);
+		util::CrashManager::AddServerWarning("Error on log file, failed to create path: " + log_path);
 	}
 
 	/* Delete oldest file in the folder to imitate rotating */
@@ -902,7 +902,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 #endif
 	if (!logParam->logStream.is_open()) {
 		logParam.reset();
-		util::CrashManager::AddWarning("Error on log file, failed to open: " + log_path);
+		util::CrashManager::AddServerWarning("Error on log file, failed to open: " + log_path);
 		std::cerr << "Failed to open log file" << std::endl;
 	}
 	base_set_log_handler(node_obs_log, (logParam) ? logParam.release() : nullptr);
@@ -964,7 +964,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		// when init API supports more return codes.
 #ifdef WIN32
 		std::string userDataPath = std::string(userData.begin(), userData.end());
-		util::CrashManager::AddWarning("Failed to start OBS, locale: " + locale + " user data: " + userDataPath);
+		util::CrashManager::AddServerWarning("Failed to start OBS, locale: " + locale + " user data: " + userDataPath);
 #endif
 	}
 

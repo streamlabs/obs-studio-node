@@ -25,6 +25,7 @@
 #include <fstream>
 #include <iostream>
 #include <locale>
+#include <deque>
 #include <map>
 #include <obs.h>
 #include <queue>
@@ -75,7 +76,8 @@
 //////////////////////
 std::vector<nlohmann::json> breadcrumbs;
 std::queue<std::pair<int, std::string>> lastActions;
-std::vector<std::string> warnings;
+std::deque<std::string> serverWarnings;
+constexpr size_t MaximumServerWarnings = 50;
 std::mutex messageMutex;
 #ifdef WIN32
 // Global/static variables
@@ -723,7 +725,7 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 		annotations.insert({{"Computer name", computerName}});
 		annotations.insert({{"Breadcrumbs", ComputeBreadcrumbs().dump(4)}});
 		annotations.insert({{"Last actions", ComputeActions().dump(4)}});
-		annotations.insert({{"Warnings", ComputeWarnings().dump(4)}});
+		annotations.insert({{"Server warnings", ComputeServerWarnings().dump(4)}});
 	} catch (...) {
 	}
 
@@ -1066,11 +1068,12 @@ nlohmann::json util::CrashManager::ComputeActions()
 	return result;
 }
 
-nlohmann::json util::CrashManager::ComputeWarnings()
+nlohmann::json util::CrashManager::ComputeServerWarnings()
 {
 	nlohmann::json result;
 
-	for (auto &msg : warnings)
+	std::lock_guard<std::mutex> lock(messageMutex);
+	for (auto &msg : serverWarnings)
 		result.push_back(msg);
 
 	return result;
@@ -1229,10 +1232,13 @@ void util::CrashManager::IPCValuesToData(const std::vector<ipc::value> &values, 
 	}
 }
 
-void util::CrashManager::AddWarning(const std::string &warning)
+void util::CrashManager::AddServerWarning(const std::string &warning)
 {
 	std::lock_guard<std::mutex> lock(messageMutex);
-	warnings.push_back(warning);
+	serverWarnings.push_back(warning);
+	if (serverWarnings.size() > MaximumServerWarnings) {
+		serverWarnings.pop_front();
+	}
 }
 
 void RegisterAction(const std::string &message)
@@ -1329,10 +1335,10 @@ void util::CrashManager::ProcessPreServerCall(const std::string &cname, const st
 void util::CrashManager::ProcessPostServerCall(const std::string &cname, const std::string &fname, const std::vector<ipc::value> &args)
 {
 	if (args.size() == 0) {
-		AddWarning(std::string("No return params on method ") + fname + std::string(" for class ") + cname);
+		AddServerWarning(std::string("No return params on method ") + fname + std::string(" for class ") + cname);
 	} else if ((ErrorCode)args[0].value_union.ui64 != ErrorCode::Ok) {
-		AddWarning(std::string("Server call returned error number ") + std::to_string(args[0].value_union.ui64) + " on method " + fname +
-			   std::string(" for class ") + cname);
+		AddServerWarning(std::string("Server call returned error number ") + std::to_string(args[0].value_union.ui64) + " on method " + fname +
+				 std::string(" for class ") + cname);
 	}
 }
 

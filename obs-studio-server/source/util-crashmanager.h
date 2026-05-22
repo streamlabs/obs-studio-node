@@ -46,7 +46,7 @@ public:
 	void OpenConsole();
 
 	static void IPCValuesToData(const std::vector<ipc::value> &, nlohmann::json &);
-	static void AddWarning(const std::string &warning);
+	static void AddServerWarning(const std::string &warning);
 	static void AddBreadcrumb(const nlohmann::json &message);
 	static void AddBreadcrumb(const std::string &message);
 	static void ClearBreadcrumbs();
@@ -84,7 +84,7 @@ private:
 	static nlohmann::json RequestOBSLog();
 	static nlohmann::json ComputeBreadcrumbs();
 	static nlohmann::json ComputeActions();
-	static nlohmann::json ComputeWarnings();
+	static nlohmann::json ComputeServerWarnings();
 	static bool SetupCrashpad();
 	static bool TryHandleCrash(const std::string &format, const std::string &crashMessage);
 	static void HandleExit() noexcept;
