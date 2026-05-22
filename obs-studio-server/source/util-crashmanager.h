@@ -41,9 +41,6 @@ class MetricsProvider;
 
 class CrashManager {
 public:
-	enum OBSLogType { General, Errors, Warnings };
-
-public:
 	bool Initialize(char *path, const std::string &app_state_path);
 	void Configure();
 	void OpenConsole();
@@ -84,7 +81,7 @@ public:
 #endif
 
 private:
-	static nlohmann::json RequestOBSLog(OBSLogType type);
+	static nlohmann::json RequestOBSLog();
 	static nlohmann::json ComputeBreadcrumbs();
 	static nlohmann::json ComputeActions();
 	static nlohmann::json ComputeWarnings();

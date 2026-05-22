@@ -718,7 +718,7 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	}
 
 	try {
-		annotations.insert({{"OBS log general", RequestOBSLog(OBSLogType::General).dump(4)}});
+		annotations.insert({{"OBS log general", RequestOBSLog().dump(4)}});
 		annotations.insert({{"Crash reason", _crashInfo}});
 		annotations.insert({{"Computer name", computerName}});
 		annotations.insert({{"Breadcrumbs", ComputeBreadcrumbs().dump(4)}});
@@ -1021,38 +1021,14 @@ void RewindCallStack()
 	return;
 }
 
-nlohmann::json util::CrashManager::RequestOBSLog(OBSLogType type)
+nlohmann::json util::CrashManager::RequestOBSLog()
 {
 	nlohmann::json result;
 
-	switch (type) {
-	case OBSLogType::Errors: {
-		auto &errors = OBS_API::getOBSLogErrors();
-		while (!errors.empty()) {
-			result.push_back(errors.front());
-			errors.pop_front();
-		}
-		break;
-	}
-
-	case OBSLogType::Warnings: {
-		auto &warnings = OBS_API::getOBSLogWarnings();
-		while (!warnings.empty()) {
-			result.push_back(warnings.front());
-			warnings.pop_front();
-		}
-		break;
-	}
-
-	case OBSLogType::General: {
-		auto &general = OBS_API::getOBSLogGeneral();
-		while (!general.empty()) {
-			result.push_back(general.front());
-			general.pop_front();
-		}
-
-		break;
-	}
+	auto &general = OBS_API::getOBSLogGeneral();
+	while (!general.empty()) {
+		result.push_back(general.front());
+		general.pop_front();
 	}
 
 	std::reverse(result.begin(), result.end());

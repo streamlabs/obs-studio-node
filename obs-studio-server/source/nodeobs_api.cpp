@@ -543,7 +543,7 @@ static void node_obs_log(int log_level, const char *msg, va_list args, void *par
 			}
 
 			// Internal Log
-			logReport.push(newmsg, log_level);
+			logReport.push(newmsg);
 
 			// Std Out / Std Err
 			/// Why fwrite and not std::cout and std::cerr?
@@ -2046,16 +2046,6 @@ std::string OBS_API::getDiskSpaceAvailable()
 double OBS_API::getMemoryUsage()
 {
 	return (double)os_get_proc_resident_size() / (1024.0 * 1024.0);
-}
-
-std::deque<std::string> &OBS_API::getOBSLogErrors()
-{
-	return logReport.errors;
-}
-
-std::deque<std::string> &OBS_API::getOBSLogWarnings()
-{
-	return logReport.warnings;
 }
 
 std::deque<std::string> &OBS_API::getOBSLogGeneral()
