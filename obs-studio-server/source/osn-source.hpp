@@ -19,6 +19,7 @@
 #pragma once
 #include <ipc-server.hpp>
 #include <obs.h>
+#include <obs.hpp>
 #include "utility.hpp"
 #undef strtoll
 #include "nlohmann/json.hpp"
@@ -39,6 +40,18 @@ public:
 
 	public:
 		static Manager &GetInstance();
+
+		// Atomically finds the source and acquires a strong reference under the
+		// manager lock, preventing destruction between find() and obs_source_get_ref().
+		// Returns null (as OBSSourceAutoRelease) if not found or already destroyed.
+		OBSSourceAutoRelease findAndRef(utility::unique_id::id_t id)
+		{
+			std::lock_guard<std::recursive_mutex> lock(internal_mutex);
+			auto iter = object_map.find(id);
+			if (iter == object_map.end())
+				return nullptr;
+			return obs_source_get_ref(iter->second);
+		}
 	};
 
 	static void initialize_global_signals();
