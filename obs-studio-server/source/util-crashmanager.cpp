@@ -74,7 +74,6 @@
 //////////////////////
 // STATIC VARIABLES //
 //////////////////////
-std::vector<nlohmann::json> breadcrumbs;
 std::queue<std::pair<int, std::string>> lastActions;
 std::deque<std::string> serverWarnings;
 constexpr size_t MaximumServerWarnings = 50;
@@ -723,7 +722,6 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 		annotations.insert({{"OBS log general", RequestOBSLog().dump(4)}});
 		annotations.insert({{"Crash reason", _crashInfo}});
 		annotations.insert({{"Computer name", computerName}});
-		annotations.insert({{"Breadcrumbs", ComputeBreadcrumbs().dump(4)}});
 		annotations.insert({{"Last actions", ComputeActions().dump(4)}});
 		annotations.insert({{"Server warnings", ComputeServerWarnings().dump(4)}});
 	} catch (...) {
@@ -1038,16 +1036,6 @@ nlohmann::json util::CrashManager::RequestOBSLog()
 	return result;
 }
 
-nlohmann::json util::CrashManager::ComputeBreadcrumbs()
-{
-	nlohmann::json result = nlohmann::json::array();
-
-	for (auto &msg : breadcrumbs)
-		result.push_back(msg);
-
-	return result;
-}
-
 nlohmann::json util::CrashManager::ComputeActions()
 {
 	nlohmann::json result = nlohmann::json::array();
@@ -1255,27 +1243,6 @@ void RegisterAction(const std::string &message)
 			lastActions.pop();
 		}
 	}
-}
-
-void util::CrashManager::AddBreadcrumb(const nlohmann::json &message)
-{
-	std::lock_guard<std::mutex> lock(messageMutex);
-	breadcrumbs.push_back(message);
-}
-
-void util::CrashManager::AddBreadcrumb(const std::string &message)
-{
-	nlohmann::json j = nlohmann::json::array();
-	j.push_back({{message}});
-
-	std::lock_guard<std::mutex> lock(messageMutex);
-	breadcrumbs.push_back(j);
-}
-
-void util::CrashManager::ClearBreadcrumbs()
-{
-	std::lock_guard<std::mutex> lock(messageMutex);
-	breadcrumbs.clear();
 }
 
 void util::CrashManager::setAppState(const std::string &newState)
