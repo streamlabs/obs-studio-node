@@ -299,10 +299,8 @@ void osn::SimpleStreaming::UpdateEncoders()
 		obs_data_set_int(audioEncSettings, "bitrate", aBitrate);
 	}
 
-	obs_core_video_mix_t *mix = obs_video_mix_get(
-		this->GetCanvas(),
-		obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING);
-	video_t *video = obs_video_mix_get_video(mix);
+	video_t *video = this->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING
+									  : OBS_MAIN_VIDEO_RENDERING);
 	enum video_format format = video ? video_output_get_format(video) : VIDEO_FORMAT_NV12;
 
 	switch (format) {
@@ -362,15 +360,10 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
 	}
 
-	{
-		obs_core_video_mix_t *startMix = obs_video_mix_get(
-			streaming->GetCanvas(),
-			obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING);
-		if (!obs_video_mix_get_video(startMix)) {
-			PRETTY_ERROR_RETURN(ErrorCode::CriticalError,
-					    "Video pipeline not initialized (canvas has no video mix). "
-					    "Graphics device may have been lost during startup. Restart the app.");
-		}
+	if (!streaming->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError,
+				    "Video pipeline not initialized (canvas has no video mix). "
+				    "Graphics device may have been lost during startup. Restart the app.");
 	}
 
 	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
