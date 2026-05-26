@@ -424,9 +424,39 @@ elseif(WIN32)
     )
 endif ()
 
+set(OSN_SERVER_CORE_SOURCES ${osn-server_SOURCES})
+list(REMOVE_ITEM OSN_SERVER_CORE_SOURCES "${PROJECT_SOURCE_DIR}/source/main.cpp")
+
+add_library(
+    obs-studio-server-lib STATIC
+    ${OSN_SERVER_CORE_SOURCES}
+)
+
+IF(WIN32)
+    target_compile_definitions(
+        obs-studio-server-lib
+        PUBLIC
+            WIN32_LEAN_AND_MEAN
+            NOMINMAX
+            UNICODE
+            _UNICODE
+    )
+ENDIF()
+
+target_include_directories(obs-studio-server-lib PUBLIC ${PROJECT_INCLUDE_PATHS})
+
+if(WIN32)
+    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} optimized crashpad strmiids StackWalker)
+else()
+    target_include_directories(obs-studio-server-lib PUBLIC ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
+    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
+endif()
+
+target_link_libraries(obs-studio-server-lib PUBLIC libcurl)
+
 add_executable(
     ${PROJECT_NAME}
-    ${osn-server_SOURCES}
+    "${PROJECT_SOURCE_DIR}/source/main.cpp"
 )
 
 if(WIN32)
@@ -436,16 +466,7 @@ if(WIN32)
     target_sources(${PROJECT_NAME} PUBLIC "${PROJECT_BINARY_DIR}/version.rc")
 endif()
 
-#target_link_libraries(${PROJECT_NAME} CURL::libcurl)
-target_link_libraries(${PROJECT_NAME} libcurl)
-
-if(WIN32)
-    target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE_PATHS})
-    target_link_libraries(${PROJECT_NAME} ${PROJECT_LIBRARIES} optimized crashpad strmiids)
-else()
-    target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDE_PATHS} ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
-    target_link_libraries(${PROJECT_NAME} ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
-endif()
+target_link_libraries(${PROJECT_NAME} obs-studio-server-lib)
 
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
@@ -480,17 +501,6 @@ else()
         APPEND
         PROPERTY INSTALL_RPATH
         "@loader_path/" "@executable_path/"
-    )
-ENDIF()
-
-IF(WIN32)
-    target_compile_definitions(
-        ${PROJECT_NAME}
-        PRIVATE
-            WIN32_LEAN_AND_MEAN
-            NOMINMAX
-            UNICODE
-            _UNICODE
     )
 ENDIF()
 
@@ -596,5 +606,51 @@ if (APPLE)
     install(
         DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks/obs64 Helper.app"
         DESTINATION "../../Contents/Frameworks" USE_SOURCE_PERMISSIONS
+    )
+endif()
+
+
+
+if(BUILD_TESTING)
+    include(Catch)
+
+    add_executable(
+        obs_studio_server_unit_tests
+        "tests/test-osn-source.cpp"
+        "tests/test-helper.cpp"
+        "tests/test-helper.hpp"
+    )
+
+    target_compile_definitions(
+        obs_studio_server_unit_tests
+        PRIVATE
+            OSN_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    )
+
+    target_link_libraries(
+        obs_studio_server_unit_tests
+        PRIVATE
+            Catch2::Catch2WithMain
+            obs-studio-server-lib
+    )
+
+    if(APPLE)
+        add_custom_command(
+            TARGET obs_studio_server_unit_tests
+            POST_BUILD
+            COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE:obs_studio_server_unit_tests>"
+            COMMENT "Ad-hoc signing obs_studio_server_unit_tests before Catch2 test discovery"
+            VERBATIM
+        )
+    endif()
+
+    catch_discover_tests(
+        obs_studio_server_unit_tests
+        TEST_PREFIX "obs_studio_server_unit_tests::"
+        DL_PATHS
+            "$<TARGET_FILE_DIR:Catch2::Catch2>"
+            "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+            "${libobs_SOURCE_DIR}/bin/64bit"
+            "$<TARGET_FILE_DIR:libcurl>"
     )
 endif()
