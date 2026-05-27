@@ -645,13 +645,23 @@ if(BUILD_TESTING)
         )
     endif()
 
-    catch_discover_tests(
-        obs_studio_server_unit_tests
-        TEST_PREFIX "obs_studio_server_unit_tests::"
-        DL_PATHS
-            "$<TARGET_FILE_DIR:Catch2::Catch2>"
-            "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
-            "${libobs_SOURCE_DIR}/bin/64bit"
-            "$<TARGET_FILE_DIR:libcurl>"
-    )
+    if(APPLE)
+        catch_discover_tests(
+            obs_studio_server_unit_tests
+            TEST_PREFIX "obs_studio_server_unit_tests::"
+            DL_PATHS
+                "$<TARGET_FILE_DIR:Catch2::Catch2>"
+                "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+        )
+    elseif(WIN32)
+        catch_discover_tests(
+            obs_studio_server_unit_tests
+            TEST_PREFIX "obs_studio_server_unit_tests::"
+            DL_PATHS
+                "$<TARGET_FILE_DIR:Catch2::Catch2>"
+                "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+                "${libobs_SOURCE_DIR}/bin/64bit"
+                "$<TARGET_FILE_DIR:libcurl>"
+        )
+    endif()
 endif()
