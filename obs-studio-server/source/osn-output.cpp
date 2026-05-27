@@ -193,7 +193,10 @@ const obs_video_info *osn::Output::GetCanvas() const
 
 video_t *osn::Output::GetCanvasVideo(obs_video_rendering_mode mode)
 {
-	return obs_video_mix_get_video(obs_video_mix_get(m_canvas, mode));
+	obs_core_video_mix_t *mix = obs_video_mix_get(m_canvas, mode);
+	if (!mix)
+		return nullptr;
+	return obs_video_mix_get_video(mix);
 }
 
 obs_output_t *osn::Output::GetOutput()
