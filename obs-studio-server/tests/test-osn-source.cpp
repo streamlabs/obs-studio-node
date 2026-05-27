@@ -13,7 +13,7 @@
 
 TEST_CASE("Run osn::source tests")
 {
-	osn::tests::TestHelper::initializeOBS();
+	osn::tests::TestHelper helper;
 
 	SECTION("Get properties of browser source while releasing concurrently does not crash")
 	{
@@ -74,6 +74,4 @@ TEST_CASE("Run osn::source tests")
 			CHECK(expectedErrorCode);
 		}
 	}
-
-	osn::tests::TestHelper::finalizeOBS();
 }

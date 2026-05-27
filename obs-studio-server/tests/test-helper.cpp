@@ -10,35 +10,6 @@
 
 namespace osn::tests {
 
-// Reads the `wd` export from tests/osn-tests/osn/index.ts.
-// The line has the form: const wd: string = "...";
-static std::string parseWdFromIndexTs()
-{
-	const std::string indexTsPath = std::string(OSN_SOURCE_DIR) + "/tests/osn-tests/osn/index.ts";
-
-	std::ifstream file(indexTsPath);
-	INFO("Could not open " + indexTsPath);
-	REQUIRE(file.is_open());
-
-	std::string line;
-	while (std::getline(file, line)) {
-		const std::string prefix = "const wd";
-		if (line.find(prefix) == std::string::npos)
-			continue;
-
-		auto first = line.find('"');
-		auto last = line.rfind('"');
-		INFO("Could not parse wd value from: " + line);
-		REQUIRE(first != std::string::npos);
-		REQUIRE(last != first);
-
-		return line.substr(first + 1, last - first - 1);
-	}
-
-	FAIL("wd declaration not found in " + indexTsPath);
-	return {};
-}
-
 void setWorkingFolder(const std::string &wd)
 {
 	std::vector<ipc::value> args = {ipc::value(wd)};
@@ -69,14 +40,13 @@ void setupApi()
 	CHECK(error == ErrorCode::Ok);
 }
 
-void TestHelper::initializeOBS()
+TestHelper::TestHelper()
 {
-	const std::string wd = parseWdFromIndexTs();
-	setWorkingFolder(wd);
+	setWorkingFolder(OSN_TEST_WD);
 	setupApi();
 }
 
-void TestHelper::finalizeOBS()
+TestHelper::~TestHelper()
 {
 	std::vector<ipc::value> args = {};
 	std::vector<ipc::value> response;
