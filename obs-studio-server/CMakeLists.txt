@@ -652,6 +652,7 @@ if(BUILD_TESTING)
             DL_PATHS
                 "$<TARGET_FILE_DIR:Catch2::Catch2>"
                 "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+                "$<TARGET_FILE_DIR:libcurl>"
         )
     elseif(WIN32)
         catch_discover_tests(
