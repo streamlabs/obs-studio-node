@@ -52,6 +52,11 @@ public:
 	obs_video_info *GetCanvas();
 	const obs_video_info *GetCanvas() const;
 
+	// Returns the libobs video output bound to this output's canvas for the
+	// given rendering mode, or NULL if the canvas video mix is not ready
+	// (e.g. obs_reset_video failed at startup due to a lost GPU device).
+	video_t *GetCanvasVideo(obs_video_rendering_mode mode);
+
 	obs_output_t *GetOutput();
 	const obs_output_t *GetOutput() const;
 
