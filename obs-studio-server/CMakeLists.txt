@@ -653,6 +653,7 @@ if(BUILD_TESTING)
                 "$<TARGET_FILE_DIR:Catch2::Catch2>"
                 "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
                 "$<TARGET_FILE_DIR:libcurl>"
+                "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
         )
     elseif(WIN32)
         catch_discover_tests(
