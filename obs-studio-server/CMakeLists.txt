@@ -625,7 +625,7 @@ if(BUILD_TESTING)
         obs_studio_server_unit_tests
         PRIVATE
             OSN_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-            OSN_TEST_WD="${libobs_SOURCE_DIR}"
+            OSN_TEST_WD="${CMAKE_INSTALL_PREFIX}"
     )
 
     target_link_libraries(
