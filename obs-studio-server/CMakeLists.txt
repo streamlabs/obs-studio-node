@@ -448,7 +448,6 @@ target_include_directories(obs-studio-server-lib PUBLIC ${PROJECT_INCLUDE_PATHS}
 if(WIN32)
     target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} optimized crashpad strmiids StackWalker)
 else()
-    target_include_directories(obs-studio-server-lib PUBLIC ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
     target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
 endif()
 
