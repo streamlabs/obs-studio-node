@@ -17,6 +17,7 @@ TEST_CASE("Run osn::source tests")
 
 	SECTION("Get properties of browser source while releasing concurrently does not crash")
 	{
+        auto sourceCount = osn::Source::Manager::GetInstance().size();
 		const int iterations = 20;
 		std::vector<std::thread> workers;
 		std::vector<uint8_t> releaseOk(iterations, 0);
@@ -44,20 +45,12 @@ TEST_CASE("Run osn::source tests")
 			}));
 
 			workers.push_back(std::thread([sourceId, i, &releaseOk]() {
-				std::vector<ipc::value> propArgs = {ipc::value(sourceId)};
-				std::vector<ipc::value> propResponse;
-				osn::Source::Release(nullptr, 0, propArgs, propResponse);
-#if defined(TRIGGER_CRASH)
-				// Also release the refcount to trigger actual private data destruction
+				// Release the refcount to trigger actual private data destruction
 				obs_source_t *src = osn::Source::Manager::GetInstance().find(sourceId); // may be null already
-				if (src)
-					obs_source_release(src);
-#endif
-
-				// Capture result for checking on the main thread after join.
-				if (propResponse.size() >= 1) {
-					releaseOk[i] = ((ErrorCode)propResponse[0].value_union.ui64 == ErrorCode::Ok);
-				}
+                if (src) {
+                    obs_source_release(src);
+                    releaseOk[i] = true;
+                }
 			}));
 		}
 
@@ -73,5 +66,6 @@ TEST_CASE("Run osn::source tests")
 			bool expectedErrorCode = getPropertiesCode[i] == ErrorCode::Ok || getPropertiesCode[i] == ErrorCode::InvalidReference;
 			CHECK(expectedErrorCode);
 		}
+        CHECK(sourceCount == osn::Source::Manager::GetInstance().size()); // Check to see if all objects released.
 	}
 }
