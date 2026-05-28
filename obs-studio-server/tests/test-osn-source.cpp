@@ -7,13 +7,13 @@
 #include <obs.h>
 #include "shared.hpp"
 #include <string>
-#include "test-helper.hpp"
+#include "obs-setup.hpp"
 #include <thread>
 #include <vector>
 
 TEST_CASE("Run osn::source tests")
 {
-	osn::tests::TestHelper helper;
+	osn::tests::ObsSetup setupOBS;
 
 	SECTION("Get properties of browser source while releasing concurrently does not crash")
 	{

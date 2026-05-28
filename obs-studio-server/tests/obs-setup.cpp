@@ -5,7 +5,7 @@
 #include <obs.h>
 #include "shared.hpp"
 #include <string>
-#include "test-helper.hpp"
+#include "obs-setup.hpp"
 #include <vector>
 
 namespace osn::tests {
@@ -40,13 +40,13 @@ void setupApi()
 	CHECK(error == ErrorCode::Ok);
 }
 
-TestHelper::TestHelper()
+ObsSetup::ObsSetup()
 {
 	setWorkingFolder(OSN_TEST_WD);
 	setupApi();
 }
 
-TestHelper::~TestHelper()
+ObsSetup::~ObsSetup()
 {
 	std::vector<ipc::value> args = {};
 	std::vector<ipc::value> response;

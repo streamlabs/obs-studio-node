@@ -617,8 +617,8 @@ if(BUILD_TESTING)
     add_executable(
         obs_studio_server_unit_tests
         "tests/test-osn-source.cpp"
-        "tests/test-helper.cpp"
-        "tests/test-helper.hpp"
+        "tests/obs-setup.cpp"
+        "tests/obs-setup.hpp"
     )
 
     target_compile_definitions(

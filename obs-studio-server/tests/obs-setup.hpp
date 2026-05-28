@@ -1,9 +1,9 @@
 #pragma once
 
 namespace osn::tests {
-class TestHelper {
+class ObsSetup {
 public:
-	TestHelper();
-	~TestHelper();
+	ObsSetup();
+	~ObsSetup();
 };
 } // namespace osn::tests
