@@ -17,7 +17,7 @@ TEST_CASE("Run osn::source tests")
 
 	SECTION("Get properties of browser source while releasing concurrently does not crash")
 	{
-        auto sourceCount = osn::Source::Manager::GetInstance().size();
+		auto sourceCount = osn::Source::Manager::GetInstance().size();
 		const int iterations = 20;
 		std::vector<std::thread> workers;
 		std::vector<uint8_t> releaseOk(iterations, 0);
@@ -45,24 +45,24 @@ TEST_CASE("Run osn::source tests")
 			}));
 
 			workers.push_back(std::thread([sourceId, i, &releaseOk]() {
-                
+
 #if defined(TRIGGER_CRASH)
-                // Enable this code block once staging (commit cc4a0431) is merged.
-                // Release the refcount to trigger actual private data destruction
-                obs_source_t *src = osn::Source::Manager::GetInstance().find(sourceId); // may be null already
-                if (src) {
-                    obs_source_release(src);
-                    releaseOk[i] = true;
-                }
+				// Enable this code block once staging (commit cc4a0431) is merged.
+				// Release the refcount to trigger actual private data destruction
+				obs_source_t *src = osn::Source::Manager::GetInstance().find(sourceId); // may be null already
+				if (src) {
+					obs_source_release(src);
+					releaseOk[i] = true;
+				}
 #else
-                // delete this block after staging (commit cc4a0431) is merged.
+				// delete this block after staging (commit cc4a0431) is merged.
 				std::vector<ipc::value> propArgs = {ipc::value(sourceId)};
 				std::vector<ipc::value> propResponse;
 				osn::Source::Release(nullptr, 0, propArgs, propResponse);
-                // Capture result for checking on the main thread after join.
-                if (propResponse.size() >= 1) {
-                    releaseOk[i] = ((ErrorCode)propResponse[0].value_union.ui64 == ErrorCode::Ok);
-                }
+				// Capture result for checking on the main thread after join.
+				if (propResponse.size() >= 1) {
+					releaseOk[i] = ((ErrorCode)propResponse[0].value_union.ui64 == ErrorCode::Ok);
+				}
 #endif
 			}));
 		}
@@ -79,6 +79,6 @@ TEST_CASE("Run osn::source tests")
 			bool expectedErrorCode = getPropertiesCode[i] == ErrorCode::Ok || getPropertiesCode[i] == ErrorCode::InvalidReference;
 			CHECK(expectedErrorCode);
 		}
-        CHECK(sourceCount == osn::Source::Manager::GetInstance().size()); // Check to see if all objects released.
+		CHECK(sourceCount == osn::Source::Manager::GetInstance().size()); // Check to see if all objects released.
 	}
 }
