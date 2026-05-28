@@ -118,7 +118,19 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
-	auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD) ? std::optional{streaming->twitchTrack} : std::nullopt;
+	// twitchVODSupported is computed lazily at stream start (depends on the
+	// current service). The regular AdvancedStreaming::Start does this same
+	// check before SetupTwitchSoundtrackAudio; mirror it here so the VOD
+	// encoder is actually requested when the user enables VOD Track.
+	if (streaming->enableTwitchVOD) {
+		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
+	}
+
+	// streaming->twitchTrack is a 1-based track number; the multitrack output
+	// expects a 0-based mixer index for vod_track_mixer.
+	auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD)
+				       ? std::optional<size_t>{osn::IAudioTrack::GetMixerIndex(streaming->twitchTrack)}
+				       : std::nullopt;
 	try {
 		streaming->StartEnhancedBroadcastingStream(vod_track_mixer);
 	} catch (const std::exception &error) {
