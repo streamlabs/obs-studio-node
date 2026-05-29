@@ -126,12 +126,9 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
 	}
 
-	// Mirror SetupTwitchSoundtrackAudio's bail on an unconfigured track slot
-	// so EB silently skips VOD instead of underflowing twitchTrack=0 into a
-	// UINT32_MAX mixer index. twitchTrack is 1-based; GetMixerIndex returns 0-based.
+	// Bail like SetupTwitchSoundtrackAudio; GetMixerIndex would underflow on twitchTrack=0.
 	std::optional<size_t> vod_track_mixer = std::nullopt;
-	if (streaming->twitchVODSupported && streaming->enableTwitchVOD &&
-	    osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack)) {
+	if (streaming->twitchVODSupported && streaming->enableTwitchVOD && osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack)) {
 		vod_track_mixer = osn::IAudioTrack::GetMixerIndex(streaming->twitchTrack);
 	}
 	try {
