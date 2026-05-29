@@ -118,15 +118,11 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
-	// twitchVODSupported is computed lazily at stream start (depends on the
-	// current service). The regular AdvancedStreaming::Start does this same
-	// check before SetupTwitchSoundtrackAudio; mirror it here so the VOD
-	// encoder is actually requested when the user enables VOD Track.
+	// mirror AdvancedStreaming::Start; field defaults false and would silently disable VOD
 	if (streaming->enableTwitchVOD) {
 		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
 	}
 
-	// Bail like SetupTwitchSoundtrackAudio; GetMixerIndex would underflow on twitchTrack=0.
 	std::optional<size_t> vod_track_mixer = std::nullopt;
 	if (streaming->twitchVODSupported && streaming->enableTwitchVOD && osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack)) {
 		vod_track_mixer = osn::IAudioTrack::GetMixerIndex(streaming->twitchTrack);

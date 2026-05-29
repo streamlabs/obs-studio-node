@@ -296,17 +296,10 @@ static bool setAudioEncoder(osn::AdvancedStreaming *streaming)
 	return true;
 }
 
-// Index of the secondary audio encoder slot on the streaming output.
-// Slot 0 is the main stream audio; slot 1 is the Twitch VOD-only track.
 static constexpr int kVodEncoderSlot = 1;
 
 static void SetupTwitchSoundtrackAudio(osn::AdvancedStreaming *streaming)
 {
-	// streaming->twitchTrack is a 1-based track number (matches the user's UI
-	// selection, the AdvancedStreaming constructor defaults, and the
-	// GetTrackConfig/GetMixerIndex helper contract). Look up the track's
-	// bitrate config and 0-based mixer index via the helpers; bail if the
-	// user picked a track slot with no configured AudioTrack.
 	osn::AudioTrack *audioTrack = osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack);
 	if (!audioTrack)
 		return;
@@ -316,8 +309,7 @@ static void SetupTwitchSoundtrackAudio(osn::AdvancedStreaming *streaming)
 	if (streaming->streamArchive && obs_encoder_active(streaming->streamArchive))
 		return;
 
-	// The encoder's mixer index is fixed at creation time; recreate if the
-	// user changed the VOD track between streams.
+	// mixer is fixed at create time; recreate when track changed
 	if (streaming->streamArchive) {
 		obs_encoder_release(streaming->streamArchive);
 		streaming->streamArchive = nullptr;
@@ -531,10 +523,7 @@ void osn::IAdvancedStreaming::GetLegacySettings(void *data, const int64_t id, co
 	streaming->videoEncoder = obs_video_encoder_create(encId, "video-encoder", newSettings, nullptr);
 	osn::VideoEncoder::Manager::GetInstance().allocate(streaming->videoEncoder);
 
-	// audioTrack and twitchTrack are stored as 1-based track numbers
-	// (matches AdvancedStreaming defaults and the GetTrackConfig/GetMixerIndex
-	// helper contract). VodTrackIndex/TrackIndex in basic.ini are also 1-based,
-	// so store them as-is.
+	// basic.ini stores TrackIndex/VodTrackIndex 1-based; keep in-memory 1-based too
 	streaming->audioTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex"));
 	streaming->enableTwitchVOD = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackEnabled");
 	streaming->twitchTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex"));
