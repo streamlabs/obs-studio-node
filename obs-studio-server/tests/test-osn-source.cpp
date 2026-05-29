@@ -80,7 +80,7 @@ TEST_CASE("Run osn::source tests")
 			CHECK(expectedErrorCode);
 		}
 #if defined(TRIGGER_CRASH)
-        // Enable this code block once staging (commit cc4a0431) is merged.
+		// Enable this code block once staging (commit cc4a0431) is merged.
 		CHECK(sourceCount == osn::Source::Manager::GetInstance().size()); // Check to see if all objects released.
 #endif
 	}
