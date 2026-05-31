@@ -63,7 +63,21 @@ public:
 private:
 	friend void OutputSignalCallback(void *data, calldata_t *params);
 
+	// One per connected signal; carries the signal name and owner so the
+	// forwarding callback can identify them. Heap-allocated in ConnectSignals
+	// and freed in DisconnectSignals.
+	struct CallbackData {
+		std::string signal;
+		osn::Output *outputClass = nullptr;
+	};
+
 	void InitOutput(obs_output_t *output);
+
+	// Disconnects every handler ConnectSignals/InitOutput wired up and frees
+	// the CallbackData. Must run while m_output is still valid.
+	void DisconnectSignals();
+
+	static void OnStopped(void *data, calldata_t *params);
 
 	obs_video_info *m_canvas = nullptr;
 	obs_output_t *m_output = nullptr;
@@ -76,6 +90,7 @@ private:
 	bool m_outputStopped = false;
 
 	const std::vector<std::string> m_signals;
+	std::vector<CallbackData *> m_signalCallbackData;
 };
 
 }
