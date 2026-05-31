@@ -56,8 +56,12 @@ void osn::Volmeter::Register(ipc::server &srv)
 
 void osn::Volmeter::ClearVolmeters()
 {
-	Manager::GetInstance().for_each(
-		[](const std::shared_ptr<osn::Volmeter> &volmeter) { obs_volmeter_remove_callback(volmeter->self, OBSCallback, &volmeter->id); });
+	// Remove callbacks outside for_each: holding the manager lock across callback_mutex deadlocks OBSCallback.
+	std::vector<std::shared_ptr<osn::Volmeter>> meters;
+	Manager::GetInstance().for_each([&](const std::shared_ptr<osn::Volmeter> &volmeter) { meters.push_back(volmeter); });
+
+	for (const auto &meter : meters)
+		obs_volmeter_remove_callback(meter->self, OBSCallback, &meter->id);
 
 	Manager::GetInstance().clear();
 }
@@ -151,7 +155,12 @@ void osn::Volmeter::Detach(void *data, const int64_t id, const std::vector<ipc::
 void osn::Volmeter::OBSCallback(void *param, const float magnitude[MAX_AUDIO_CHANNELS], const float peak[MAX_AUDIO_CHANNELS],
 				const float input_peak[MAX_AUDIO_CHANNELS])
 {
-	std::unique_lock<std::mutex> ulockMutex(mtx);
+	// Runs under callback_mutex; block-waiting on mtx would deadlock teardown, so drop the frame if mtx is busy.
+	std::unique_lock<std::mutex> ulockMutex(mtx, std::try_to_lock);
+	if (!ulockMutex.owns_lock()) {
+		return;
+	}
+
 	auto meter = Manager::GetInstance().find(*reinterpret_cast<uint64_t *>(param));
 	if (!meter) {
 		return;
