@@ -116,7 +116,7 @@ void osn::Volmeter::Attach(void *data, const int64_t id, const std::vector<ipc::
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Meter reference.");
 	}
 
-	auto source = osn::Source::Manager::GetInstance().find(uid_source);
+	OBSSourceAutoRelease source = osn::Source::Manager::GetInstance().findAndRef(uid_source);
 	if (!source) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Source reference.");
 	}
@@ -126,6 +126,7 @@ void osn::Volmeter::Attach(void *data, const int64_t id, const std::vector<ipc::
 	}
 
 	meter->uid_source = uid_source;
+	meter->source_ref = std::move(source);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -143,6 +144,7 @@ void osn::Volmeter::Detach(void *data, const int64_t id, const std::vector<ipc::
 
 	meter->uid_source = INVALID_ID;
 	obs_volmeter_detach_source(meter->self);
+	meter->source_ref = nullptr; // release after detach, so the weak-ref upgrade inside detach still succeeds
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
