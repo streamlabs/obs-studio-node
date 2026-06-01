@@ -383,16 +383,12 @@ var EInteractionFlags;
     EInteractionFlags[EInteractionFlags["IsLeft"] = 1024] = "IsLeft";
     EInteractionFlags[EInteractionFlags["IsRight"] = 2048] = "IsRight";
 })(EInteractionFlags || (exports.EInteractionFlags = EInteractionFlags = {}));
-;
 var EMouseButtonType;
 (function (EMouseButtonType) {
     EMouseButtonType[EMouseButtonType["Left"] = 0] = "Left";
     EMouseButtonType[EMouseButtonType["Middle"] = 1] = "Middle";
     EMouseButtonType[EMouseButtonType["Right"] = 2] = "Right";
 })(EMouseButtonType || (exports.EMouseButtonType = EMouseButtonType = {}));
-;
-;
-;
 function addItems(scene, sceneItems) {
     const items = [];
     if (Array.isArray(sceneItems)) {
@@ -502,7 +498,6 @@ var VCamOutputType;
     VCamOutputType[VCamOutputType["ProgramView"] = 3] = "ProgramView";
     VCamOutputType[VCamOutputType["PreviewOutput"] = 4] = "PreviewOutput";
 })(VCamOutputType || (exports.VCamOutputType = VCamOutputType = {}));
-;
 const appleBinaryFolder = hasDeveloperApp
     ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
     : path.join(__dirname, 'bin');

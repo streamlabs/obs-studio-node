@@ -697,19 +697,16 @@ export interface IProperty {
     readonly value: any;
 
     /**
-     * Uses the current object to obtain the next
-     * property in the properties list.
-     *
-     * @returns If it's successful, returns true.
-     * Otherwise or if end of the list, returns false.
+     * Uses the current object to obtain the next property in the list.
+     * @returns The next property, or undefined at the end of the list.
      */
-    next(): IProperty;
+    next(): IProperty | undefined;
 
     /**
      * Uses the current object to obtain the previous property in the list.
-     * Returns undefined when the current property is the first.
+     * @returns The previous property, or undefined when the current property is the first.
      */
-    previous(): IProperty;
+    previous(): IProperty | undefined;
 
     /** True when this property is the first in the list. */
     is_first(): boolean;
@@ -728,20 +725,20 @@ export interface IProperty {
  */
 export interface IProperties {
 
-    /** Obtains the first property in the list. */
-    first(): IProperty;
+    /** Obtains the first property in the list, or undefined when the list is empty. */
+    first(): IProperty | undefined;
 
-    /** Obtains the last property in the list. */
-    last(): IProperty;
+    /** Obtains the last property in the list, or undefined when the list is empty. */
+    last(): IProperty | undefined;
 
     count(): number;
 
     /**
      * Obtains property matching name.
      * @param name The name of the property to fetch.
-     * @returns - The property instance or null if not found
+     * @returns - The property instance, or undefined if not found
      */
-    get(name: string): IProperty;
+    get(name: string): IProperty | undefined;
 }
 
 export interface IFactoryTypes {
@@ -819,19 +816,19 @@ export enum EInteractionFlags {
 	IsKeyPad     = 1 << 9,
 	IsLeft       = 1 << 10,
 	IsRight      = 1 << 11
-};
+}
 
 export enum EMouseButtonType {
 	Left,
 	Middle,
 	Right
-};
+}
 
 export interface IMouseEvent {
 	modifiers: EInteractionFlags;
 	x: number;
 	y: number;
-};
+}
 
 export interface IKeyEvent {
 	modifiers: EInteractionFlags;
@@ -839,7 +836,7 @@ export interface IKeyEvent {
 	nativeModifiers: number;
 	nativeScancode: number;
 	nativeVkey: number;
-};
+}
 
 export interface ISceneItemInfo {
     name: string,
@@ -976,9 +973,9 @@ export interface IInput extends ISource {
     getMediaState(): number;
 
     /**
-     * Re-trigger the source's load step (re-reads serialized state on the server).
+     * Forward a serializable message to the underlying source plugin.
      */
-    load(): void;
+    sendMessage(message: ISettings): void;
 }
 
 export interface ISceneFactory {
@@ -1073,11 +1070,6 @@ export interface IScene extends ISource {
      * @param toIndex - Inclusive end index.
      */
     getItemsInRange(fromIndex: number, toIndex: number): ISceneItem[];
-
-    /**
-     * Re-trigger the scene's load step on the server.
-     */
-    load(): void;
 
     sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
     sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
@@ -1241,11 +1233,6 @@ export interface ITransition extends ISource {
      */
     start(ms: number, input: ISource): void;
 
-    /**
-     * Re-trigger the transition's load step on the server.
-     */
-    load(): void;
-
     sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
     sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
     sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
@@ -1295,11 +1282,9 @@ export interface ISource extends IConfigurable, IReleasable {
     save(): void;
 
     /**
-     * Forward a serializable message to the underlying source plugin.
-     * Note: only registered on input sources on the native side; calling on
-     * a filter, scene, or transition will throw at runtime.
+     * Re-trigger the source's load step on the server.
      */
-    sendMessage(message: ISettings): void;
+    load(): void;
 
     /**
      * The validity of the source
@@ -1498,11 +1483,11 @@ export interface IAudioFactory {
 
 export interface IModuleFactory {
     open(binPath: string, dataPath: string): IModule;
-    modules(): String[];
+    modules(): string[];
 }
 
 export interface IModule {
-    initialize(): void;
+    initialize(): boolean;
     readonly fileName: string;
     readonly name: string;
     readonly author: string;
@@ -1927,7 +1912,7 @@ export enum VCamOutputType {
 	SourceOutput,
 	ProgramView,
 	PreviewOutput,
-};
+}
 
 // Initialization and other stuff which needs local data.
 const appleBinaryFolder = hasDeveloperApp

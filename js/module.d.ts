@@ -426,17 +426,17 @@ export interface IProperty {
     readonly visible: boolean;
     readonly type: EPropertyType;
     readonly value: any;
-    next(): IProperty;
-    previous(): IProperty;
+    next(): IProperty | undefined;
+    previous(): IProperty | undefined;
     is_first(): boolean;
     is_last(): boolean;
     modified(): boolean;
 }
 export interface IProperties {
-    first(): IProperty;
-    last(): IProperty;
+    first(): IProperty | undefined;
+    last(): IProperty | undefined;
     count(): number;
-    get(name: string): IProperty;
+    get(name: string): IProperty | undefined;
 }
 export interface IFactoryTypes {
     types(): string[];
@@ -531,7 +531,7 @@ export interface IInput extends ISource {
     restart(): void;
     stop(): void;
     getMediaState(): number;
-    load(): void;
+    sendMessage(message: ISettings): void;
 }
 export interface ISceneFactory {
     create(name: string): IScene;
@@ -548,7 +548,6 @@ export interface IScene extends ISource {
     getItemAtIdx(idx: number): ISceneItem;
     getItems(): ISceneItem[];
     getItemsInRange(fromIndex: number, toIndex: number): ISceneItem[];
-    load(): void;
     sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
     sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
     sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
@@ -595,7 +594,6 @@ export interface ITransition extends ISource {
     clear(): void;
     set(input: ISource): void;
     start(ms: number, input: ISource): void;
-    load(): void;
     sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
     sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
     sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
@@ -611,7 +609,7 @@ export interface IConfigurable {
 export interface ISource extends IConfigurable, IReleasable {
     remove(): void;
     save(): void;
-    sendMessage(message: ISettings): void;
+    load(): void;
     readonly status: number;
     readonly type: ESourceType;
     readonly id: string;
@@ -686,10 +684,10 @@ export interface IAudioFactory {
 }
 export interface IModuleFactory {
     open(binPath: string, dataPath: string): IModule;
-    modules(): String[];
+    modules(): string[];
 }
 export interface IModule {
-    initialize(): void;
+    initialize(): boolean;
     readonly fileName: string;
     readonly name: string;
     readonly author: string;
