@@ -39,7 +39,6 @@ public:
 	Output(const std::vector<std::string> &signals);
 	virtual ~Output();
 
-	void ConnectSignals();
 	void CreateOutput(const std::string &type, const std::string &name);
 	void SetOutput(obs_output_t *output);
 	virtual void DeleteOutput();
@@ -72,6 +71,8 @@ private:
 	};
 
 	void InitOutput(obs_output_t *output);
+
+	void ConnectSignals();
 
 	// Disconnects every handler ConnectSignals/InitOutput wired up and frees
 	// the CallbackData. Must run while m_output is still valid.
