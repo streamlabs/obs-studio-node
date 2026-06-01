@@ -2048,9 +2048,15 @@ double OBS_API::getMemoryUsage()
 	return (double)os_get_proc_resident_size() / (1024.0 * 1024.0);
 }
 
-std::deque<std::string> &OBS_API::getOBSLogGeneral()
+std::deque<std::string> OBS_API::snapshotOBSLogGeneral()
 {
-	return logReport.general;
+	std::unique_lock<std::mutex> lock(logMutex, std::try_to_lock);
+	if (!lock.owns_lock())
+		return {};
+
+	std::deque<std::string> snapshot = std::move(logReport.general);
+	logReport.general.clear();
+	return snapshot;
 }
 
 std::string OBS_API::getCurrentVersion()

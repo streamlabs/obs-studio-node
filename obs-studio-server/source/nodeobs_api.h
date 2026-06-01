@@ -120,7 +120,10 @@ public:
 	static double getMemoryUsage();
 	static void getCurrentOutputStats(obs_output_t *output, OBS_API::OutputStats &outputStats);
 
-	static std::deque<std::string> &getOBSLogGeneral();
+	// Snapshot (and clear) the general log tail under logMutex. Uses try_lock — the crash
+	// handler calls this and must never block on the logging thread. Returns oldest-first,
+	// empty if the lock can't be acquired.
+	static std::deque<std::string> snapshotOBSLogGeneral();
 
 	static std::string getCurrentVersion();
 	static std::string getUsername();

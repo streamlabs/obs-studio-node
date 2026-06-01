@@ -19,6 +19,7 @@
 #include "util-crashmanager.h"
 #include "util-metricsprovider.h"
 
+#include <algorithm>
 #include <chrono>
 #include <codecvt>
 #include <filesystem>
@@ -1029,13 +1030,10 @@ nlohmann::json util::CrashManager::RequestOBSLog()
 {
 	nlohmann::json result;
 
-	auto &general = OBS_API::getOBSLogGeneral();
-	while (!general.empty()) {
-		result.push_back(general.front());
-		general.pop_front();
-	}
-
-	std::reverse(result.begin(), result.end());
+	// snapshotOBSLogGeneral returns oldest-first under logMutex; emit newest-first.
+	std::deque<std::string> general = OBS_API::snapshotOBSLogGeneral();
+	for (auto it = general.rbegin(); it != general.rend(); ++it)
+		result.push_back(*it);
 
 	return result;
 }
@@ -1064,7 +1062,12 @@ nlohmann::json util::CrashManager::ComputeServerWarnings()
 {
 	nlohmann::json result;
 
-	std::lock_guard<std::mutex> lock(messageMutex);
+	// try_lock — the crashing thread may already hold messageMutex (e.g. it crashed inside
+	// AddServerWarning/RegisterAction); a blocking lock would hang crash reporting.
+	std::unique_lock<std::mutex> lock(messageMutex, std::try_to_lock);
+	if (!lock.owns_lock())
+		return result;
+
 	for (auto &msg : serverWarnings)
 		result.push_back(msg);
 
@@ -1243,7 +1246,7 @@ void RegisterAction(const std::string &message)
 		lastActions.back().first++;
 	} else {
 		lastActions.push({0, message});
-		if (lastActions.size() >= MaximumActionsRegistered) {
+		if (lastActions.size() > MaximumActionsRegistered) {
 			lastActions.pop();
 		}
 	}
