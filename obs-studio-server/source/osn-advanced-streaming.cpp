@@ -296,54 +296,30 @@ static bool setAudioEncoder(osn::AdvancedStreaming *streaming)
 	return true;
 }
 
-static constexpr int kSoundtrackArchiveEncoderIdx = 1;
-static constexpr int kSoundtrackArchiveTrackIdx = 5;
-
-static uint32_t setMixer(obs_source_t *source, const int mixerIdx, const bool checked)
-{
-	uint32_t mixers = obs_source_get_audio_mixers(source);
-	uint32_t new_mixers = mixers;
-	if (checked) {
-		new_mixers |= (1 << mixerIdx);
-	} else {
-		new_mixers &= ~(1 << mixerIdx);
-	}
-	obs_source_set_audio_mixers(source, new_mixers);
-	return mixers;
-}
+static constexpr int kVodEncoderSlot = 1;
 
 static void SetupTwitchSoundtrackAudio(osn::AdvancedStreaming *streaming)
 {
-	// These are magic ints provided by OBS for default sources:
-	// 0 is the main scene/transition which you'd see on the main preview,
-	// 1-2 are desktop audio 1 and 2 as you'd see in audio settings,
-	// 2-4 are mic/aux 1-3 as you'd see in audio settings
-	auto desktopSource1 = obs_get_output_source(1);
-	auto desktopSource2 = obs_get_output_source(2);
+	osn::AudioTrack *audioTrack = osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack);
+	if (!audioTrack)
+		return;
 
-	// Since our plugin duplicates all of the desktop sources, we want to ensure that both of the
-	// default desktop sources, provided by OBS, are not set to mix on our custom encoder track.
-	streaming->oldMixer_desktopSource1 = setMixer(desktopSource1, kSoundtrackArchiveTrackIdx, false);
-	streaming->oldMixer_desktopSource2 = setMixer(desktopSource2, kSoundtrackArchiveTrackIdx, false);
-
-	obs_source_release(desktopSource1);
-	obs_source_release(desktopSource2);
+	const uint32_t vodMixer = osn::IAudioTrack::GetMixerIndex(streaming->twitchTrack);
 
 	if (streaming->streamArchive && obs_encoder_active(streaming->streamArchive))
 		return;
 
-	if (!streaming->streamArchive) {
-		streaming->streamArchive =
-			obs_audio_encoder_create("ffmpeg_aac", "Soundtrack by Twitch Archive Encoder", nullptr, kSoundtrackArchiveTrackIdx, nullptr);
-		obs_encoder_set_audio(streaming->streamArchive, obs_get_audio());
+	// mixer is fixed at create time; recreate when track changed
+	if (streaming->streamArchive) {
+		obs_encoder_release(streaming->streamArchive);
+		streaming->streamArchive = nullptr;
 	}
 
-	obs_output_set_audio_encoder(streaming->GetOutput(), streaming->streamArchive, kSoundtrackArchiveEncoderIdx);
-	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
+	streaming->streamArchive = obs_audio_encoder_create("ffmpeg_aac", "Twitch VOD Track Encoder", nullptr, vodMixer, nullptr);
+	obs_encoder_set_audio(streaming->streamArchive, obs_get_audio());
 
-	osn::AudioTrack *audioTrack = osn::IAudioTrack::audioTrackConfigs[streaming->twitchTrack];
-	if (!audioTrack)
-		return;
+	obs_output_set_audio_encoder(streaming->GetOutput(), streaming->streamArchive, kVodEncoderSlot);
+	obs_encoder_set_video_mix(streaming->streamArchive, obs_video_mix_get(streaming->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_int(settings, "bitrate", audioTrack->bitrate);
@@ -357,15 +333,6 @@ static void StopTwitchSoundtrackAudio(osn::Streaming *streaming)
 		obs_encoder_release(streaming->streamArchive);
 		streaming->streamArchive = nullptr;
 	}
-
-	auto desktopSource1 = obs_get_output_source(1);
-	auto desktopSource2 = obs_get_output_source(2);
-
-	obs_source_set_audio_mixers(desktopSource1, streaming->oldMixer_desktopSource1);
-	obs_source_set_audio_mixers(desktopSource2, streaming->oldMixer_desktopSource2);
-
-	obs_source_release(desktopSource1);
-	obs_source_release(desktopSource2);
 }
 
 void osn::AdvancedStreaming::UpdateEncoders()
@@ -388,8 +355,8 @@ void osn::AdvancedStreaming::UpdateEncoders()
 			obs_data_set_int(settings, "keyint_sec", keyint_sec);
 	}
 
-	video_t *video = obs_get_video();
-	enum video_format format = video_output_get_format(video);
+	video_t *video = this->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING);
+	enum video_format format = video ? video_output_get_format(video) : VIDEO_FORMAT_NV12;
 
 	switch (format) {
 	case VIDEO_FORMAT_I420:
@@ -401,14 +368,14 @@ void osn::AdvancedStreaming::UpdateEncoders()
 		obs_encoder_set_preferred_video_format(videoEncoder, VIDEO_FORMAT_NV12);
 	}
 
-	obs_encoder_update(videoEncoder, settings);
-	obs_data_release(settings);
-
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
+
+	obs_encoder_update(videoEncoder, settings);
+	obs_data_release(settings);
 }
 
 osn::AdvancedStreaming::~AdvancedStreaming()
@@ -443,6 +410,11 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	if (!streaming->GetCanvas()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	}
+
+	if (!streaming->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Video pipeline not initialized (canvas has no video mix). "
+							      "Graphics device may have been lost during startup. Restart the app.");
 	}
 
 	streaming->UpdateEncoders();
@@ -551,9 +523,10 @@ void osn::IAdvancedStreaming::GetLegacySettings(void *data, const int64_t id, co
 	streaming->videoEncoder = obs_video_encoder_create(encId, "video-encoder", newSettings, nullptr);
 	osn::VideoEncoder::Manager::GetInstance().allocate(streaming->videoEncoder);
 
-	streaming->audioTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex") - 1);
+	// basic.ini stores TrackIndex/VodTrackIndex 1-based; keep in-memory 1-based too
+	streaming->audioTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex"));
 	streaming->enableTwitchVOD = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackEnabled");
-	streaming->twitchTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex") - 1);
+	streaming->twitchTrack = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex"));
 	streaming->enforceServiceBitrate = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "ApplyServiceSettings");
 
 	streaming->rescaleFilter = static_cast<uint32_t>(config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RescaleFilter"));
@@ -602,8 +575,8 @@ void osn::IAdvancedStreaming::SetLegacySettings(void *data, const int64_t id, co
 
 	config_set_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackEnabled", streaming->enableTwitchVOD);
 	config_set_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "ApplyServiceSettings", streaming->enforceServiceBitrate);
-	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex", streaming->audioTrack + 1);
-	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex", streaming->twitchTrack + 1);
+	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "TrackIndex", streaming->audioTrack);
+	config_set_int(ConfigManager::getInstance().getBasic(), "AdvOut", "VodTrackIndex", streaming->twitchTrack);
 
 	streaming->rescaling = streaming->rescaleFilter != OBS_SCALE_DISABLE;
 	config_set_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "Rescale", streaming->rescaling);

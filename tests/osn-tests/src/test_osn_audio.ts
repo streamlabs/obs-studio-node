@@ -70,7 +70,10 @@ describe(testName, () => {
                 foundDefaultDevice = true;
             }
         }
-        if (!obs.isDarwin()) { // On virtual mac the default output device is not included in the list of output devices
+        // On Darwin CI, skip the default-device assertion only when there are no audio devices.
+        // mac-coreaudio only returns the default device when there is at least one audio device, but on CI there may be no audio devices, so the default device is not returned.
+        const shouldSkipDefaultDeviceAssertion = obs.isDarwin() && obs.isCI() && devices.length === 0;
+        if (!shouldSkipDefaultDeviceAssertion) {
             expect(foundDefaultDevice).to.equal(true, GetErrorMessage(ETestErrorMsg.DefaultDeviceNotFound));
         }
     });
