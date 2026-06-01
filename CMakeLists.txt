@@ -81,6 +81,9 @@ include(ExternalProject)
 include(DownloadProject)
 include(FetchContent)
 
+option(BUILD_TESTING "Build C++ unit tests" ON)
+include(CTest)
+
 if(MSVC)
 	add_definitions(/MP)
 	add_link_options(/debug:fastlink)
@@ -116,6 +119,21 @@ FetchContent_Declare(
 FetchContent_GetProperties(nlohmannjson)
 if(NOT nlohmannjson_POPULATED)
   FetchContent_Populate(nlohmannjson)
+endif()
+
+if(BUILD_TESTING)
+  FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG        v3.11.0
+  )
+
+  set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
+  set(CATCH_INSTALL_EXTRAS ON CACHE BOOL "" FORCE)
+  set(CATCH_DEVELOPMENT_BUILD OFF CACHE BOOL "" FORCE)
+
+  FetchContent_MakeAvailable(Catch2)
+  list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 endif()
 
 FetchContent_Declare(
