@@ -1,13 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NodeObs = exports.getSourcesSize = exports.createSources = exports.addItems = exports.AdvancedReplayBufferFactory = exports.SimpleReplayBufferFactory = exports.AudioEncoderFactory = exports.AdvancedRecordingFactory = exports.SimpleRecordingFactory = exports.AudioTrackFactory = exports.NetworkFactory = exports.ReconnectFactory = exports.DelayFactory = exports.AdvancedStreamingFactory = exports.EnhancedBroadcastingSimpleStreamingFactory = exports.EnhancedBroadcastingAdvancedStreamingFactory = exports.SimpleStreamingFactory = exports.ServiceFactory = exports.VideoEncoderFactory = exports.IPC = exports.ModuleFactory = exports.AudioFactory = exports.Audio = exports.FaderFactory = exports.VolmeterFactory = exports.DisplayFactory = exports.TransitionFactory = exports.FilterFactory = exports.SceneFactory = exports.InputFactory = exports.VideoFactory = exports.Video = exports.Global = exports.DefaultPluginPathMac = exports.DefaultPluginDataPath = exports.DefaultPluginPath = exports.DefaultDataPath = exports.DefaultBinPath = exports.DefaultDrawPluginPath = exports.DefaultOpenGLPath = exports.DefaultD3D11Path = void 0;
+exports.NodeObs = exports.AdvancedReplayBufferFactory = exports.SimpleReplayBufferFactory = exports.AudioEncoderFactory = exports.AdvancedRecordingFactory = exports.SimpleRecordingFactory = exports.AudioTrackFactory = exports.NetworkFactory = exports.ReconnectFactory = exports.DelayFactory = exports.EnhancedBroadcastingSimpleStreamingFactory = exports.EnhancedBroadcastingAdvancedStreamingFactory = exports.AdvancedStreamingFactory = exports.SimpleStreamingFactory = exports.ServiceFactory = exports.VideoEncoderFactory = exports.IPC = exports.ModuleFactory = exports.AudioFactory = exports.Audio = exports.FaderFactory = exports.VolmeterFactory = exports.TransitionFactory = exports.FilterFactory = exports.SceneFactory = exports.InputFactory = exports.VideoFactory = exports.Video = exports.Global = exports.DefaultPluginPathMac = exports.DefaultPluginDataPath = exports.DefaultPluginPath = exports.DefaultDataPath = exports.DefaultBinPath = exports.DefaultDrawPluginPath = exports.DefaultOpenGLPath = exports.DefaultD3D11Path = void 0;
+exports.addItems = addItems;
+exports.createSources = createSources;
+exports.getSourcesSize = getSourcesSize;
 const path = require("path");
 const fs = require("fs");
-// Mac- search for optional OSN.app bundle (Chromium requires an app bundle to find obs64 helper apps)
 const hasDeveloperApp = process.platform === 'darwin' && fs.existsSync(path.join(__dirname, 'OSN.app'));
 const obs = hasDeveloperApp
-  ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
-  : require('./obs_studio_client.node');
+    ? require('./OSN.app/distribute/obs-studio-node/obs_studio_client.node')
+    : require('./obs_studio_client.node');
 exports.DefaultD3D11Path = path.resolve(__dirname, `libobs-d3d11.dll`);
 exports.DefaultOpenGLPath = path.resolve(__dirname, `libobs-opengl.dll`);
 exports.DefaultDrawPluginPath = path.resolve(__dirname, `simple_draw.dll`);
@@ -23,7 +25,6 @@ exports.InputFactory = obs.Input;
 exports.SceneFactory = obs.Scene;
 exports.FilterFactory = obs.Filter;
 exports.TransitionFactory = obs.Transition;
-exports.DisplayFactory = obs.Display;
 exports.VolmeterFactory = obs.Volmeter;
 exports.FaderFactory = obs.Fader;
 exports.Audio = obs.Audio;
@@ -60,7 +61,6 @@ function addItems(scene, sceneItems) {
     }
     return items;
 }
-exports.addItems = addItems;
 function createSources(sources) {
     const items = [];
     if (Array.isArray(sources)) {
@@ -68,11 +68,11 @@ function createSources(sources) {
             let newSource = null;
             try {
                 newSource = obs.Input.create(source.type, source.name, source.settings);
-            } catch (error) {
-                console.error(`[OSN] Failed to create input for source "${source.name}":`, error instanceof Error ? error.message : error);
-                return; // Skip the rest of this iteration if input creation fails
             }
-
+            catch (error) {
+                console.error(`[OSN] Failed to create input for source "${source.name}":`, error instanceof Error ? error.message : error);
+                return;
+            }
             if (newSource) {
                 if (newSource.audioMixers) {
                     newSource.muted = source.muted ?? false;
@@ -82,17 +82,16 @@ function createSources(sources) {
                 newSource.deinterlaceMode = source.deinterlaceMode;
                 newSource.deinterlaceFieldOrder = source.deinterlaceFieldOrder;
                 items.push(newSource);
-
                 const filters = source.filters;
                 if (Array.isArray(filters)) {
                     filters.forEach(function (filter) {
                         let ObsFilter = null;
                         try {
                             ObsFilter = obs.Filter.create(filter.type, filter.name, filter.settings);
-                        } catch (filterError) {
+                        }
+                        catch (filterError) {
                             console.error(`[OSN] Failed to create filter "${filter.name}" for source "${source.name}":`, filterError instanceof Error ? filterError.message : filterError);
                         }
-
                         if (ObsFilter) {
                             ObsFilter.enabled = filter.enabled ?? true;
                             newSource.addFilter(ObsFilter);
@@ -100,16 +99,17 @@ function createSources(sources) {
                         }
                     });
                 }
-            } else {
+            }
+            else {
                 console.warn(`[OSN] Input creation failed for source: ${source.name}`);
             }
         });
-    } else {
+    }
+    else {
         console.error(`[OSN] Invalid sources array provided:`, sources);
     }
     return items;
 }
-exports.createSources = createSources;
 function getSourcesSize(sourcesNames) {
     const sourcesSize = [];
     if (Array.isArray(sourcesNames)) {
@@ -122,10 +122,10 @@ function getSourcesSize(sourcesNames) {
     }
     return sourcesSize;
 }
-exports.getSourcesSize = getSourcesSize;
+;
 const appleBinaryFolder = hasDeveloperApp
-  ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
-  : path.join(__dirname, 'bin');
+    ? path.join(__dirname, 'OSN.app', 'distribute', 'obs-studio-node', 'bin')
+    : path.join(__dirname, 'bin');
 if (fs.existsSync(path.resolve(appleBinaryFolder, 'obs64').replace('app.asar', 'app.asar.unpacked'))) {
     obs.IPC.setServerPath(path.resolve(appleBinaryFolder, `obs64`).replace('app.asar', 'app.asar.unpacked'), path.resolve(appleBinaryFolder).replace('app.asar', 'app.asar.unpacked'));
 }

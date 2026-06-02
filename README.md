@@ -104,6 +104,10 @@ scan-build --keep-empty -internal-stats -stats -v -v -v -o check ninja.exe
 ```
 Step with `"fixing"` errors is important as code base and especially third-party code are not ready to be build with clang. And files which failed to compile will not be scanned for errors.
 
+#### Generated JS surface (`js/module.{js,d.ts}`)
+
+`js/module.ts` is the source of truth. `js/module.js` and `js/module.d.ts` (and the `index.*` / `type_check.*` siblings) are tsc outputs of `js/tsconfig.json` — the npm package ships them as-is, so they're committed. Regenerate with `yarn build:javascript`. `yarn local:build` already chains it. CI rejects stale outputs via `.github/workflows/check-js-generated.yml` (`ci/check-js-generated.sh`).
+
 ### Tests
 
 The tests for obs studio node are written in Typescript and use Mocha as test framework, with electron-mocha pacakage to make Mocha run in Electron, and Chai as assertion framework.
