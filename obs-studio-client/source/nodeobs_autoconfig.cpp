@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_autoconfig.hpp"
+#include "polling-pacer.hpp"
 #include "shared.hpp"
 #include "streaming.hpp"
 #include <cstring>
@@ -38,6 +39,7 @@ sem_t *ac_sem;
 
 void autoConfig::worker()
 {
+	osn::PollingPacer pacer(sleepInterval);
 	while (!worker_stop) {
 		auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -70,9 +72,9 @@ void autoConfig::worker()
 	do_sleep:
 		auto tp_end = std::chrono::high_resolution_clock::now();
 		auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-		const auto sleepDuration = sleepInterval - dur;
-		if (sleepDuration > std::chrono::milliseconds(0))
-			std::this_thread::sleep_for(sleepDuration);
+		const bool shouldSleep = pacer.finishCycle(dur);
+		if (shouldSleep)
+			std::this_thread::sleep_for(pacer.sleepDuration());
 	}
 	return;
 }

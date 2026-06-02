@@ -2,7 +2,7 @@
   "compileOnSave": true,
   "compilerOptions": {
     "declaration": true,
-    "target": "es6",
+    "target": "es2020",
     "module": "commonjs",
     "moduleResolution": "node",
     "isolatedModules": false,

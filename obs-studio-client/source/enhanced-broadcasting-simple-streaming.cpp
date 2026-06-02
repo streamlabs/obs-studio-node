@@ -43,8 +43,6 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 				  &osn::EnhancedBroadcastingSimpleStreaming::SetEnforceServiceBirate),
 		 InstanceAccessor("enableTwitchVOD", &osn::EnhancedBroadcastingSimpleStreaming::GetEnableTwitchVOD,
 				  &osn::EnhancedBroadcastingSimpleStreaming::SetEnableTwitchVOD),
-		 InstanceAccessor("audioEncoder", &osn::EnhancedBroadcastingSimpleStreaming::GetAudioEncoder,
-				  &osn::EnhancedBroadcastingSimpleStreaming::SetAudioEncoder),
 		 InstanceAccessor("useAdvanced", &osn::EnhancedBroadcastingSimpleStreaming::GetUseAdvanced,
 				  &osn::EnhancedBroadcastingSimpleStreaming::SetUseAdvanced),
 		 InstanceAccessor("customEncSettings", &osn::EnhancedBroadcastingSimpleStreaming::GetCustomEncSettings,

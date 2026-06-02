@@ -1203,7 +1203,7 @@ void OBS_service::setupRecordingAudioEncoder(void)
 					nameStream.str().c_str(), i)) {
 			std::ostringstream errorStream;
 			errorStream << "audio encoder failed id: " << id << nameStream.str();
-			util::CrashManager::AddWarning(errorStream.str());
+			util::CrashManager::AddServerWarning(errorStream.str());
 			throw std::runtime_error("Failed to create audio encoder (advanced output)");
 		}
 		obs_encoder_set_audio(AdvancedRecordingAudioTracks[i], obs_get_audio());
@@ -3402,7 +3402,7 @@ void OBS_service::StartVirtualCam(std::vector<ipc::value> &rval)
 		const char *error = obs_output_get_last_error(virtualCam);
 		blog(LOG_ERROR, "StartVirtualCam: output start failed: %s", error ? error : "(null)");
 		DestroyVirtualCamView();
-		PRETTY_ERROR_RETURN(ErrorCode::Error, error);
+		PRETTY_ERROR_RETURN(ErrorCode::Error, error ? error : "Output start failed (no error message)");
 	}
 
 	virtualCamActive = true;
@@ -3577,7 +3577,7 @@ void WaitForAllOutputsToStop()
 			const std::string crashMessage = "Timed out waiting for outputs to stop during shutdown: " + busyOutputs;
 
 			blog(LOG_ERROR, "%s", crashMessage.c_str());
-			util::CrashManager::AddWarning(crashMessage);
+			util::CrashManager::AddServerWarning(crashMessage);
 #ifdef WIN32
 			util::CrashManager::GetMetricsProvider()->BlameServer();
 #endif

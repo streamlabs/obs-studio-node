@@ -296,7 +296,6 @@ export declare const InputFactory: IInputFactory;
 export declare const SceneFactory: ISceneFactory;
 export declare const FilterFactory: IFilterFactory;
 export declare const TransitionFactory: ITransitionFactory;
-export declare const DisplayFactory: IDisplayFactory;
 export declare const VolmeterFactory: IVolmeterFactory;
 export declare const FaderFactory: IFaderFactory;
 export declare const Audio: IAudio;
@@ -351,8 +350,6 @@ export interface IIPC {
     disconnect(): void;
 }
 export interface IGlobal {
-    startup(locale: string, path?: string): void;
-    shutdown(): void;
     getOutputFlagsFromId(id: string): number;
     setOutputSource(channel: number, input: ISource): void;
     getOutputSource(channel: number): ISource;
@@ -360,10 +357,8 @@ export interface IGlobal {
     removeSceneFromBackstage(input: ISource): void;
     readonly totalFrames: number;
     readonly laggedFrames: number;
-    readonly initialized: boolean;
     locale: string;
     multipleRendering: boolean;
-    readonly version: number;
     readonly cpuPercentage: number;
     readonly currentFrameRate: number;
     readonly averageFrameRenderTime: number;
@@ -424,7 +419,6 @@ export interface INumberDetails {
     readonly step: number;
 }
 export interface IProperty {
-    readonly status: number;
     readonly name: string;
     readonly description: string;
     readonly longDescription: string;
@@ -433,11 +427,14 @@ export interface IProperty {
     readonly type: EPropertyType;
     readonly value: any;
     next(): IProperty;
+    previous(): IProperty;
+    is_first(): boolean;
+    is_last(): boolean;
     modified(): boolean;
 }
 export interface IProperties {
-    readonly status: number;
     first(): IProperty;
+    last(): IProperty;
     count(): number;
     get(name: string): IProperty;
 }
@@ -522,8 +519,9 @@ export interface IInput extends ISource {
     sendFocus(focus: boolean): void;
     sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
     setFilterOrder(filter: IFilter, movement: EOrderMovement): void;
-    setFilterOrder(filter: IFilter, movement: EOrderMovement): void;
+    copyFilters(other: IInput): boolean;
     readonly filters: IFilter[];
+    readonly active: boolean;
     readonly width: number;
     readonly height: number;
     getDuration(): number;
@@ -532,6 +530,8 @@ export interface IInput extends ISource {
     pause(): void;
     restart(): void;
     stop(): void;
+    getMediaState(): number;
+    load(): void;
 }
 export interface ISceneFactory {
     create(name: string): IScene;
@@ -547,6 +547,13 @@ export interface IScene extends ISource {
     findItem(id: string | number): ISceneItem;
     getItemAtIdx(idx: number): ISceneItem;
     getItems(): ISceneItem[];
+    getItemsInRange(fromIndex: number, toIndex: number): ISceneItem[];
+    load(): void;
+    sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
+    sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
+    sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
+    sendFocus(focus: boolean): void;
+    sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
 }
 export interface ISceneItem {
     readonly source: IInput;
@@ -588,6 +595,12 @@ export interface ITransition extends ISource {
     clear(): void;
     set(input: ISource): void;
     start(ms: number, input: ISource): void;
+    load(): void;
+    sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
+    sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
+    sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
+    sendFocus(focus: boolean): void;
+    sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
 }
 export interface IConfigurable {
     update(settings: ISettings): void;
@@ -631,26 +644,6 @@ export interface IVolmeter {
 }
 export interface ICallbackData {
 }
-export interface IDisplayFactory {
-    create(source?: IInput): IDisplay;
-}
-export interface IDisplay {
-    destroy(): void;
-    setPosition(x: number, y: number): void;
-    getPosition(): IVec2;
-    setSize(x: number, y: number): void;
-    getSize(): IVec2;
-    getPreviewOffset(): IVec2;
-    getPreviewSize(x: number, y: number): void;
-    shouldDrawUI: boolean;
-    paddingSize: number;
-    setPaddingColor(r: number, g: number, b: number, a: number): void;
-    setBackgroundColor(r: number, g: number, b: number, a: number): void;
-    setOutlineColor(r: number, g: number, b: number, a: number): void;
-    setGuidelineColor(r: number, g: number, b: number, a: number): void;
-    setResizeBoxOuterColor(r: number, g: number, b: number, a: number): void;
-    setResizeBoxInnerColor(r: number, g: number, b: number, a: number): void;
-}
 export interface IVideoInfo {
     fpsNum: number;
     fpsDen: number;
@@ -692,22 +685,18 @@ export interface IAudioFactory {
     disableAudioDucking: boolean;
     disableAudioDuckingLegacy: boolean;
 }
-export interface IModuleFactory extends IFactoryTypes {
+export interface IModuleFactory {
     open(binPath: string, dataPath: string): IModule;
-    loadAll(): void;
-    addPath(path: string, dataPath: string): void;
-    logLoaded(): void;
     modules(): String[];
 }
 export interface IModule {
     initialize(): void;
-    filename(): string;
-    name(): string;
-    author(): string;
-    description(): string;
-    binPath(): string;
-    dataPath(): string;
-    status(): number;
+    readonly fileName: string;
+    readonly name: string;
+    readonly author: string;
+    readonly description: string;
+    readonly binaryPath: string;
+    readonly dataPath: string;
 }
 export declare function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[];
 export interface FilterInfo {

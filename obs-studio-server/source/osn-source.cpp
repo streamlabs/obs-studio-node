@@ -250,9 +250,10 @@ void osn::Source::IsConfigurable(void *data, const int64_t id, const std::vector
 
 void osn::Source::GetProperties(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	// Attempt to find the source asked to load.
-	obs_source_t *src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
-	if (src == nullptr) {
+	// Atomically find and acquire a strong reference under the manager lock,
+	// preventing the source from being destroyed between find() and obs_source_get_ref().
+	OBSSourceAutoRelease src = osn::Source::Manager::GetInstance().findAndRef(args[0].value_union.ui64);
+	if (!src) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Source reference is not valid.");
 	}
 

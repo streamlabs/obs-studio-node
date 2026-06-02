@@ -56,8 +56,12 @@ void osn::Volmeter::Register(ipc::server &srv)
 
 void osn::Volmeter::ClearVolmeters()
 {
-	Manager::GetInstance().for_each(
-		[](const std::shared_ptr<osn::Volmeter> &volmeter) { obs_volmeter_remove_callback(volmeter->self, OBSCallback, &volmeter->id); });
+	// Remove callbacks outside for_each: holding the manager lock across callback_mutex deadlocks OBSCallback.
+	std::vector<std::shared_ptr<osn::Volmeter>> meters;
+	Manager::GetInstance().for_each([&](const std::shared_ptr<osn::Volmeter> &volmeter) { meters.push_back(volmeter); });
+
+	for (const auto &meter : meters)
+		obs_volmeter_remove_callback(meter->self, OBSCallback, &meter->id);
 
 	Manager::GetInstance().clear();
 }
@@ -116,7 +120,7 @@ void osn::Volmeter::Attach(void *data, const int64_t id, const std::vector<ipc::
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Meter reference.");
 	}
 
-	auto source = osn::Source::Manager::GetInstance().find(uid_source);
+	OBSSourceAutoRelease source = osn::Source::Manager::GetInstance().findAndRef(uid_source);
 	if (!source) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Source reference.");
 	}
@@ -126,6 +130,7 @@ void osn::Volmeter::Attach(void *data, const int64_t id, const std::vector<ipc::
 	}
 
 	meter->uid_source = uid_source;
+	meter->source_ref = std::move(source);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -135,14 +140,25 @@ void osn::Volmeter::Detach(void *data, const int64_t id, const std::vector<ipc::
 {
 	auto uid = args[0].value_union.ui64;
 
-	std::unique_lock<std::mutex> ulock(mtx);
-	auto meter = Manager::GetInstance().find(uid);
-	if (!meter) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Meter reference.");
+	// Detach must run without mtx held: obs_volmeter_detach_source takes the source's
+	// audio_cb_mutex, while the audio thread takes audio_cb_mutex then mtx in OBSCallback.
+	// Holding mtx across detach would deadlock. Keep the meter (shared_ptr) and source alive
+	// past the lock so detach stays safe.
+	std::shared_ptr<Volmeter> meter;
+	OBSSourceAutoRelease source_ref;
+	{
+		std::unique_lock<std::mutex> ulock(mtx);
+		meter = Manager::GetInstance().find(uid);
+		if (!meter) {
+			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid Meter reference.");
+		}
+
+		meter->uid_source = INVALID_ID;
+		source_ref = std::move(meter->source_ref);
 	}
 
-	meter->uid_source = INVALID_ID;
 	obs_volmeter_detach_source(meter->self);
+	source_ref = nullptr; // release after detach, so the weak-ref upgrade inside detach still succeeds
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -151,7 +167,12 @@ void osn::Volmeter::Detach(void *data, const int64_t id, const std::vector<ipc::
 void osn::Volmeter::OBSCallback(void *param, const float magnitude[MAX_AUDIO_CHANNELS], const float peak[MAX_AUDIO_CHANNELS],
 				const float input_peak[MAX_AUDIO_CHANNELS])
 {
-	std::unique_lock<std::mutex> ulockMutex(mtx);
+	// Runs under callback_mutex; block-waiting on mtx would deadlock teardown, so drop the frame if mtx is busy.
+	std::unique_lock<std::mutex> ulockMutex(mtx, std::try_to_lock);
+	if (!ulockMutex.owns_lock()) {
+		return;
+	}
+
 	auto meter = Manager::GetInstance().find(*reinterpret_cast<uint64_t *>(param));
 	if (!meter) {
 		return;

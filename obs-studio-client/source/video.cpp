@@ -183,6 +183,9 @@ void osn::Video::set(const Napi::CallbackInfo &info, const Napi::Value &value)
 	args.push_back(this->canvasId);
 
 	auto response = conn->call_synchronous_helper("Video", "SetVideoContext", args);
+
+	if (!ValidateResponse(info, response))
+		return;
 }
 
 Napi::Value osn::Video::GetLegacySettings(const Napi::CallbackInfo &info)

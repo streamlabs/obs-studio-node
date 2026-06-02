@@ -16,6 +16,7 @@
 
 ******************************************************************************/
 
+#include <atomic>
 #include <chrono>
 #include <mutex>
 #include <napi.h>
@@ -68,6 +69,7 @@ extern Napi::ThreadSafeFunction js_transition_callback;
 extern Napi::ThreadSafeFunction js_volmeter_callback;
 extern Napi::ThreadSafeFunction js_source_message_callback;
 extern bool m_all_workers_stop;
+extern std::atomic_bool volmeterCallbackPending;
 
 extern std::mutex mtx_volmeters;
 extern std::unordered_set<uint64_t> volmeters;

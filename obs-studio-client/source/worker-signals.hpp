@@ -17,9 +17,11 @@
 ******************************************************************************/
 
 #pragma once
+#include <atomic>
 #include <chrono>
 #include <napi.h>
 #include "osn-error.hpp"
+#include "polling-pacer.hpp"
 #include "utility.hpp"
 
 struct SignalOutput {
@@ -40,11 +42,16 @@ public:
 		sleepInterval = std::chrono::milliseconds(33);
 		workerThread = nullptr;
 	};
-	~WorkerSignals(){};
+	~WorkerSignals() { stopWorker(); };
+
+	WorkerSignals(const WorkerSignals &) = delete;
+	WorkerSignals &operator=(const WorkerSignals &) = delete;
+	WorkerSignals(WorkerSignals &&) = delete;
+	WorkerSignals &operator=(WorkerSignals &&) = delete;
 
 protected:
-	bool isWorkerRunning;
-	bool workerStop;
+	std::atomic<bool> isWorkerRunning;
+	std::atomic<bool> workerStop;
 	std::chrono::milliseconds sleepInterval;
 	std::thread *workerThread;
 	Napi::ThreadSafeFunction jsThread;
@@ -81,6 +88,7 @@ protected:
 			data->sent = true;
 		};
 		std::vector<SignalOutput *> signalsList;
+		osn::PollingPacer pacer(sleepInterval);
 		while (!workerStop) {
 			auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -122,9 +130,9 @@ protected:
 
 			auto tp_end = std::chrono::high_resolution_clock::now();
 			auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-			const auto sleepDuration = sleepInterval - dur;
-			if (sleepDuration > std::chrono::milliseconds(0))
-				std::this_thread::sleep_for(sleepDuration);
+			const bool shouldSleep = pacer.finishCycle(dur);
+			if (shouldSleep)
+				std::this_thread::sleep_for(pacer.sleepDuration());
 		}
 
 		return;
@@ -137,8 +145,16 @@ protected:
 
 		workerStop = true;
 		isWorkerRunning = false;
-		if (workerThread->joinable()) {
-			workerThread->join();
+
+		if (jsThread) {
+			jsThread.Abort();
+		}
+
+		if (workerThread) {
+			if (workerThread->joinable())
+				workerThread->join();
+			delete workerThread;
+			workerThread = nullptr;
 		}
 	}
 };

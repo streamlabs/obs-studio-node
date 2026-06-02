@@ -300,8 +300,8 @@ void osn::SimpleStreaming::updateEncoders()
 		obs_data_set_int(audioEncSettings, "bitrate", aBitrate);
 	}
 
-	video_t *video = obs_get_video();
-	enum video_format format = video_output_get_format(video);
+	video_t *video = this->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING);
+	enum video_format format = video ? video_output_get_format(video) : VIDEO_FORMAT_NV12;
 
 	switch (format) {
 	case VIDEO_FORMAT_I420:
@@ -313,17 +313,17 @@ void osn::SimpleStreaming::updateEncoders()
 		obs_encoder_set_preferred_video_format(videoEncoder, VIDEO_FORMAT_NV12);
 	}
 
-	obs_encoder_update(videoEncoder, videoEncSettings);
-	obs_encoder_update(audioEncoder, audioEncSettings);
-
-	obs_data_release(videoEncSettings);
-	obs_data_release(audioEncSettings);
-
 	if (obs_get_multiple_rendering()) {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_STREAMING_VIDEO_RENDERING));
 	} else {
 		obs_encoder_set_video_mix(videoEncoder, obs_video_mix_get(this->GetCanvas(), OBS_MAIN_VIDEO_RENDERING));
 	}
+
+	obs_encoder_update(videoEncoder, videoEncSettings);
+	obs_encoder_update(audioEncoder, audioEncSettings);
+
+	obs_data_release(videoEncSettings);
+	obs_data_release(audioEncSettings);
 }
 
 void osn::SimpleStreaming::start()
@@ -411,6 +411,17 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	if (!streaming->reconnect) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid reconnect.");
+	}
+
+	if (!streaming->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Video pipeline not initialized (canvas has no video mix). "
+							      "Graphics device may have been lost during startup. Restart the app.");
+	}
+
+	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings
+	const char *encID = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder"));
+	if (!osn::EncoderUtils::isEncoderCompatibleStreaming(streaming->service, encID, streaming->simple)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The provided encoder is not valid for the current service.");
 	}
 
 	if (!streaming->network) {
