@@ -28,7 +28,7 @@
 #include <string.h>
 #include <string>
 #include <vector>
-#include <queue>
+#include <deque>
 #include "nodeobs_configManager.hpp"
 #include "nodeobs_service.h"
 #include "util-osx.hpp"
@@ -44,27 +44,17 @@ class OBS_API {
 
 public:
 	struct LogReport {
-		static const int MaximumGeneralMessages = 150;
+		static const int MaximumMessages = 150;
 
-		void push(std::string message, int logLevel)
+		void push(std::string message)
 		{
-			general.push(message);
-			if (general.size() >= MaximumGeneralMessages) {
-				general.pop();
-			}
-
-			if (logLevel == LOG_ERROR) {
-				errors.push_back(message);
-			}
-
-			if (logLevel == LOG_WARNING) {
-				warnings.push_back(message);
+			general.push_back(message);
+			if (general.size() > MaximumMessages) {
+				general.pop_front();
 			}
 		}
 
-		std::vector<std::string> errors;
-		std::vector<std::string> warnings;
-		std::queue<std::string> general;
+		std::deque<std::string> general;
 	};
 
 	struct OutputStats {
@@ -130,9 +120,10 @@ public:
 	static double getMemoryUsage();
 	static void getCurrentOutputStats(obs_output_t *output, OBS_API::OutputStats &outputStats);
 
-	static const std::vector<std::string> &getOBSLogErrors();
-	static const std::vector<std::string> &getOBSLogWarnings();
-	static std::queue<std::string> &getOBSLogGeneral();
+	// Snapshot (and clear) the general log tail under logMutex. Uses try_lock — the crash
+	// handler calls this and must never block on the logging thread. Returns oldest-first,
+	// empty if the lock can't be acquired.
+	static std::deque<std::string> snapshotOBSLogGeneral();
 
 	static std::string getCurrentVersion();
 	static std::string getUsername();

@@ -41,18 +41,12 @@ class MetricsProvider;
 
 class CrashManager {
 public:
-	enum OBSLogType { General, Errors, Warnings };
-
-public:
 	bool Initialize(char *path, const std::string &app_state_path);
 	void Configure();
 	void OpenConsole();
 
 	static void IPCValuesToData(const std::vector<ipc::value> &, nlohmann::json &);
-	static void AddWarning(const std::string &warning);
-	static void AddBreadcrumb(const nlohmann::json &message);
-	static void AddBreadcrumb(const std::string &message);
-	static void ClearBreadcrumbs();
+	static void AddServerWarning(const std::string &warning);
 	static void DisableReports();
 	static void setAppState(const std::string &newState);
 	static std::string getAppState();
@@ -84,10 +78,9 @@ public:
 #endif
 
 private:
-	static nlohmann::json RequestOBSLog(OBSLogType type);
-	static nlohmann::json ComputeBreadcrumbs();
+	static nlohmann::json RequestOBSLog();
 	static nlohmann::json ComputeActions();
-	static nlohmann::json ComputeWarnings();
+	static nlohmann::json ComputeServerWarnings();
 	static bool SetupCrashpad();
 	static bool TryHandleCrash(const std::string &format, const std::string &crashMessage);
 	static void HandleExit() noexcept;
