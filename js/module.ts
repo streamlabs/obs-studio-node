@@ -34,30 +34,30 @@ export const DefaultPluginPathMac: string =
 /**
  * To be passed to Input.flags
  */
-export enum ESourceFlags {
+export const enum ESourceFlags {
     Unbuffered = (1 << 0),
     ForceMono = (1 << 1)
 }
 
-export enum EMonitoringType {
+export const enum EMonitoringType {
     None,
     MonitoringOnly,
     MonitoringAndOutput
 }
 
-export enum EOrderMovement {
+export const enum EOrderMovement {
     Up,
     Down,
     Top,
     Bottom
 }
 
-export enum EDeinterlaceFieldOrder {
+export const enum EDeinterlaceFieldOrder {
     Top,
     Bottom
 }
 
-export enum EVideoCodes {
+export const enum EVideoCodes {
 	Success = 0,
 	Fail = -1,
 	NotSupported = -2,
@@ -66,7 +66,7 @@ export enum EVideoCodes {
 	ModuleNotFound = -5
 }
 
-export enum EHotkeyObjectType {
+export const enum EHotkeyObjectType {
 	Frontend = 0,
 	Source = 1,
 	Output = 2,
@@ -74,7 +74,7 @@ export enum EHotkeyObjectType {
 	Service = 4
 }
 
-export enum EDeinterlaceMode {
+export const enum EDeinterlaceMode {
     Disable,
     Discard,
     Retro,
@@ -86,12 +86,12 @@ export enum EDeinterlaceMode {
     Yadif2X
 }
 
-export enum EBlendingMethod {
+export const enum EBlendingMethod {
     Default,
     SrgbOff
 }
 
-export enum EBlendingMode {
+export const enum EBlendingMode {
     Normal,
     Additive,
     Substract,
@@ -101,7 +101,7 @@ export enum EBlendingMode {
     Darken
 }
 
-export enum EFontStyle {
+export const enum EFontStyle {
   Bold = (1<<0),
   Italic = (1<<1),
   Underline = (1<<2),
@@ -111,7 +111,7 @@ export enum EFontStyle {
 /**
  * Enumeration describing the type of a property
  */
-export enum EPropertyType {
+export const enum EPropertyType {
     Invalid,
     Boolean,
     Int,
@@ -129,39 +129,39 @@ export enum EPropertyType {
     Capture,
 }
 
-export enum EListFormat {
+export const enum EListFormat {
     Invalid,
     Int,
     Float,
     String
 }
 
-export enum EEditableListType {
+export const enum EEditableListType {
     Strings,
     Files,
     FilesAndUrls
 }
 
-export enum EPathType {
+export const enum EPathType {
     File,
     FileSave,
     Directory
 }
 
-export enum ETextType {
+export const enum ETextType {
     Default,
     Password,
     Multiline,
     TextInfo
 }
 
-export enum ETextInfoType {
+export const enum ETextInfoType {
 	Normal,
 	Warning,
 	Error,
 }
 
-export enum ENumberType {
+export const enum ENumberType {
     Scroller,
     Slider
 }
@@ -169,7 +169,7 @@ export enum ENumberType {
 /**
  * A binary flag representing alignment
  */
-export enum EAlignment {
+export const enum EAlignment {
     Center = 0,
     Left = (1 << 0),
     Right = (1 << 1),
@@ -185,7 +185,7 @@ export enum EAlignment {
  * A binary flag representing output capabilities
  * Apparently you can't fetch these for now (???)
  */
-export enum EOutputFlags {
+export const enum EOutputFlags {
     Video = (1<<0),
     Audio = (1<<1),
     AV = (Video | Audio),
@@ -197,7 +197,7 @@ export enum EOutputFlags {
 /**
  * A binary flag representing source output capabilities
  */
-export enum ESourceOutputFlags {
+export const enum ESourceOutputFlags {
     Video = (1 << 0),
     Audio = (1 << 1),
     Async = (1 << 2),
@@ -212,7 +212,7 @@ export enum ESourceOutputFlags {
     ForceUiRefresh = (1 << 30),
 }
 
-export enum ESceneDupType {
+export const enum ESceneDupType {
     Refs,
     Copy,
     PrivateRefs,
@@ -222,7 +222,7 @@ export enum ESceneDupType {
 /**
  * Describes the type of source
  */
-export enum ESourceType {
+export const enum ESourceType {
     Input,
     Filter,
     Transition,
@@ -232,13 +232,13 @@ export enum ESourceType {
 /**
  * Describes algorithm type to use for volume representation.
  */
-export enum EFaderType {
+export const enum EFaderType {
     Cubic,
     IEC /* IEC 60-268-18 */,
     Log /* Logarithmic */
 }
 
-export enum EColorFormat {
+export const enum EColorFormat {
 	Unknown,
 	A8,
 	R8,
@@ -259,7 +259,7 @@ export enum EColorFormat {
 	DXT5
 }
 
-export enum EScaleType {
+export const enum EScaleType {
     Disable,
     Point,
     Bicubic,
@@ -268,19 +268,19 @@ export enum EScaleType {
     Area
 }
 
-export enum EFPSType {
+export const enum EFPSType {
     Common,
     Integer,
     Fractional
 }
 
-export enum ERangeType {
+export const enum ERangeType {
     Default,
     Partial,
     Full
 }
 
-export enum EVideoFormat {
+export const enum EVideoFormat {
     None,
     I420,
     NV12,
@@ -300,7 +300,7 @@ export enum EVideoFormat {
     AYUV
 }
 
-export enum EBoundsType {
+export const enum EBoundsType {
     None,
     Stretch,
     ScaleInner,
@@ -310,7 +310,7 @@ export enum EBoundsType {
     MaxOnly
 }
 
-export enum EColorSpace {
+export const enum EColorSpace {
     Default,
     CS601,
     CS709,
@@ -319,7 +319,7 @@ export enum EColorSpace {
     CS2100HLG
 }
 
-export enum ESpeakerLayout {
+export const enum ESpeakerLayout {
     Unknown,
     Mono,
     Stereo,
@@ -330,7 +330,7 @@ export enum ESpeakerLayout {
     SevenOne = 8
 }
 
-export enum EOutputCode {
+export const enum EOutputCode {
     Success = 0,
     BadPath = -1,
     ConnectFailed = -2,
@@ -343,18 +343,18 @@ export enum EOutputCode {
     OutdatedDriver = -65,
 }
 
-export enum ECategoryTypes {
+export const enum ECategoryTypes {
     NODEOBS_CATEGORY_LIST = 0,
 	NODEOBS_CATEGORY_TAB = 1
 }
 
-export enum ERenderingMode {
+export const enum ERenderingMode {
     OBS_MAIN_RENDERING = 0,
 	OBS_STREAMING_RENDERING = 1,
 	OBS_RECORDING_RENDERING = 2
 }
 
-export enum EIPCError {
+export const enum EIPCError {
     STILL_RUNNING = 259,
     VERSION_MISMATCH = 252,
     OTHER_ERROR = 253,
@@ -362,13 +362,13 @@ export enum EIPCError {
     NORMAL_EXIT = 0,
 }
 
-export enum EVcamInstalledStatus {
+export const enum EVcamInstalledStatus {
     NotInstalled = 0,
     LegacyInstalled = 1,
     Installed = 2
 }
 
-export enum ERecSplitType {
+export const enum ERecSplitType {
     Time = 0,
     Size = 1,
     Manual = 2
@@ -802,7 +802,7 @@ export interface IInputFactory extends IFactoryTypes {
 }
 
 
-export enum EInteractionFlags {
+export const enum EInteractionFlags {
 	None         = 0,
 	CapsKey      = 1,
 	ShiftKey     = 1 << 1,
@@ -818,7 +818,7 @@ export enum EInteractionFlags {
 	IsRight      = 1 << 11
 }
 
-export enum EMouseButtonType {
+export const enum EMouseButtonType {
 	Left,
 	Middle,
 	Right
@@ -1635,7 +1635,7 @@ export interface IService {
     update(settings: ISettings): void;
 }
 
-export enum ERecordingFormat {
+export const enum ERecordingFormat {
     MP4 = 'mp4',
     FLV = 'flv',
     MOV = 'mov',
@@ -1644,19 +1644,19 @@ export enum ERecordingFormat {
     HLS = 'm3u8'
 }
 
-export enum ERecordingQuality {
+export const enum ERecordingQuality {
     Stream,
     HighQuality,
     HigherQuality,
     Lossless
 }
 
-export enum EVideoEncoderType {
+export const enum EVideoEncoderType {
     Audio,
     Video
 }
 
-export enum EProcessPriority {
+export const enum EProcessPriority {
     High = 'High',
     AboveNormal = 'AboveNormal',
     Normal = 'Normal',
@@ -1906,7 +1906,7 @@ export interface IAudioTrackFactory {
     saveLegacySettings(): void;
 }
 
-export enum VCamOutputType {
+export const enum VCamOutputType {
 	Invalid,
 	SceneOutput,
 	SourceOutput,

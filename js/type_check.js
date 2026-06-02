@@ -11,45 +11,44 @@ exports.isColorProperty = isColorProperty;
 exports.isCaptureProperty = isCaptureProperty;
 exports.isFontProperty = isFontProperty;
 exports.isEmptyProperty = isEmptyProperty;
-const obs = require("./module");
 function isNumberProperty(property) {
-    return property.type === obs.EPropertyType.Int ||
-        property.type === obs.EPropertyType.Float;
+    return property.type === 2 ||
+        property.type === 3;
 }
 function isTextProperty(property) {
-    return property.type === obs.EPropertyType.Text;
+    return property.type === 4;
 }
 function isPathProperty(property) {
-    return property.type === obs.EPropertyType.Path;
+    return property.type === 5;
 }
 function isListProperty(property) {
-    return property.type === obs.EPropertyType.List;
+    return property.type === 6;
 }
 function isEditableListProperty(property) {
-    return property.type === obs.EPropertyType.EditableList;
+    return property.type === 10;
 }
 function isBooleanProperty(property) {
-    return property.type === obs.EPropertyType.Boolean;
+    return property.type === 1;
 }
 function isButtonProperty(property) {
-    return property.type === obs.EPropertyType.Button;
+    return property.type === 8;
 }
 function isColorProperty(property) {
-    return property.type === obs.EPropertyType.Color;
+    return property.type === 7;
 }
 function isCaptureProperty(property) {
-    return property.type === obs.EPropertyType.Capture;
+    return property.type === 14;
 }
 function isFontProperty(property) {
-    return property.type === obs.EPropertyType.Font;
+    return property.type === 9;
 }
 function isEmptyProperty(property) {
     switch (property.type) {
-        case obs.EPropertyType.Boolean:
-        case obs.EPropertyType.Button:
-        case obs.EPropertyType.Color:
-        case obs.EPropertyType.Font:
-        case obs.EPropertyType.Invalid:
+        case 1:
+        case 8:
+        case 7:
+        case 9:
+        case 0:
             return true;
     }
     return false;
