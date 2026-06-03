@@ -110,8 +110,7 @@ void autoConfig::stop_worker()
 Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 {
 	if (info.Length() < 2 || !info[0].IsArray() || !info[1].IsFunction()) {
-		Napi::TypeError::New(info.Env(), "InitializeAutoConfig expects (streamings: IStreaming[], callback)")
-			.ThrowAsJavaScriptException();
+		Napi::TypeError::New(info.Env(), "InitializeAutoConfig expects (streamings: IStreaming[], callback)").ThrowAsJavaScriptException();
 		return info.Env().Undefined();
 	}
 
@@ -119,8 +118,7 @@ Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 	std::vector<uint64_t> uids(array.Length());
 	for (uint32_t i = 0; i < array.Length(); i++) {
 		if (!osn::TryUnwrapStreamingUid(array.Get(i), uids[i])) {
-			Napi::TypeError::New(info.Env(), "InitializeAutoConfig: streamings[i] is not an IStreaming instance")
-				.ThrowAsJavaScriptException();
+			Napi::TypeError::New(info.Env(), "InitializeAutoConfig: streamings[i] is not an IStreaming instance").ThrowAsJavaScriptException();
 			return info.Env().Undefined();
 		}
 	}

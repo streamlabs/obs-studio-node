@@ -204,7 +204,8 @@ void autoConfig::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("AutoConfig");
 
-	cls->register_function(std::make_shared<ipc::function>("InitializeAutoConfig", std::vector<ipc::type>{ipc::type::Binary}, autoConfig::InitializeAutoConfig));
+	cls->register_function(
+		std::make_shared<ipc::function>("InitializeAutoConfig", std::vector<ipc::type>{ipc::type::Binary}, autoConfig::InitializeAutoConfig));
 	cls->register_function(std::make_shared<ipc::function>("StartBandwidthTest", std::vector<ipc::type>{}, autoConfig::StartBandwidthTest));
 	cls->register_function(std::make_shared<ipc::function>("StartStreamEncoderTest", std::vector<ipc::type>{}, autoConfig::StartStreamEncoderTest));
 	cls->register_function(std::make_shared<ipc::function>("StartRecordingEncoderTest", std::vector<ipc::type>{}, autoConfig::StartRecordingEncoderTest));
