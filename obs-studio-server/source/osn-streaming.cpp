@@ -64,8 +64,9 @@ void osn::Streaming::testBandwidth(bool &gotError, int testBitrate)
 	if (originalServiceSettings) {
 		obs_data_release(originalServiceSettings);
 	}
+	// obs_service_get_settings() returns an owned reference; CleanTestMode() and the
+	// destructor each release it once, so don't take an extra ref (was a leak).
 	originalServiceSettings = obs_service_get_settings(service);
-	obs_data_addref(originalServiceSettings);
 
 	obs_data_t *serviceSettings = obs_data_create();
 	obs_data_apply(serviceSettings, originalServiceSettings);

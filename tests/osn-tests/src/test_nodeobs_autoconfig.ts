@@ -15,9 +15,10 @@ import { deleteConfigFiles } from '../util/general';
 //   - assertions via obs.getSetting('Output', 'VBitrate') etc.
 //
 // Both halves of that contract are gone after the autoconfig-v2 port:
-//   1. obs.startAutoconfig() is now zero-arg — the server auto-discovers all
-//      registered streaming targets via the IStreaming manager. The bandwidth
-//      test emits 'no_streaming_target_provided' if zero targets are registered.
+//   1. obs.startAutoconfig() now requires an explicit osn.IStreaming[] — the
+//      frontend passes the targets to test (see startAutoconfig in obs_handler.ts);
+//      the server no longer discovers or persists them. The bandwidth test emits
+//      'no_streaming_targets_provided' if the array is empty.
 //   2. SaveStreamSettings / SaveSettings no longer write to basic.ini — Phase 2
 //      replaced them with applyResults() which mutates live osn objects via
 //      obs_service_update / obs_encoder_update / obs_set_video_info. The
