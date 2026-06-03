@@ -257,8 +257,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	const std::string version = GET_OSN_VERSION;
 
 	std::stringstream commandLine;
-	commandLine << "\"" << serverBinaryPath << "\""
-		    << " " << uri << " " << version;
+	commandLine << "\"" << serverBinaryPath << "\"" << " " << uri << " " << version;
 
 	std::string workingDirectory;
 
