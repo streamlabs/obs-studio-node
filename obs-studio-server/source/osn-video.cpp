@@ -21,10 +21,27 @@
 #include <obs.h>
 #include "osn-error.hpp"
 #include "shared.hpp"
+#include "osn-streaming.hpp"
 
 // DELETE ME WHEN REMOVING NODEOBS
 #include "nodeobs_configManager.hpp"
 #include "nodeobs_api.h"
+
+namespace {
+// APIv2 replacement for the legacy OBS_service::stopConnectingOutputs() guard.
+// obs_set_video_info / obs_remove_video_info must not run while a streaming output
+// is still connecting, or libobs races on the video pointer.
+void stopConnectingStreamingOutputs()
+{
+	osn::IStreaming::Manager::GetInstance().for_each([](osn::Streaming *streaming) {
+		if (!streaming)
+			return;
+		obs_output_t *output = streaming->GetOutput();
+		if (output && obs_output_connecting(output))
+			obs_output_force_stop(output);
+	});
+}
+} // namespace
 
 void osn::Video::Register(ipc::server &srv)
 {
@@ -341,9 +358,8 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 
 	int ret = OBS_VIDEO_FAIL;
 	try {
-		// Cannot disrupt video ptr inside obs while outputs are connecting
-		// TODO APIv2 have to deprecate OBS_service and replace this call with APIv2 equivalent
-		//OBS_service::stopConnectingOutputs();
+		// Cannot disrupt video ptr inside obs while outputs are connecting.
+		stopConnectingStreamingOutputs();
 		ret = obs_set_video_info(canvas, &video);
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Failed to set video context %s", error);
@@ -402,10 +418,8 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 
 	int ret = OBS_VIDEO_FAIL;
 	try {
-		// Cannot disrupt video ptr inside obs while outputs are connecting
-		// TODO APIv2 have to deprecate OBS_service and replace this call with APIv2 equivalent
-		//OBS_service::stopConnectingOutputs();
-
+		// Cannot disrupt video ptr inside obs while outputs are connecting.
+		stopConnectingStreamingOutputs();
 		ret = obs_remove_video_info(canvas);
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Error occurred while removing video %s", error);

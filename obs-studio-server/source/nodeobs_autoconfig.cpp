@@ -910,15 +910,20 @@ void autoConfig::TestBandwidthThreadV2(void)
 				allConnected = true;
 
 				for (auto *streaming : testingServices) {
-					std::string signal = streaming->testQuery();
-
-					if (signal == "error") {
+					// Surface a connection failure immediately; drained signals are
+					// only supplemental to the real output state checked below.
+					if (streaming->testQuery() == "error") {
 						gotError = true;
 						break;
-					} else if (signal == "start" || signal == "starting" || signal == "activate" || signal == "reconnect" ||
-						   signal == "reconnect_success") {
-						allConnected = false;
 					}
+
+					// Primary readiness check: a target counts as connected only once
+					// libobs reports the output active. Keying off drained signals alone
+					// would treat a target that hasn't emitted one yet as ready, exit
+					// the wait early, and measure totalBytes == 0.
+					obs_output_t *output = streaming->GetOutput();
+					if (!output || !obs_output_active(output))
+						allConnected = false;
 				}
 
 				std::unique_lock<std::mutex> ul(m);
@@ -2130,6 +2135,19 @@ static void applyResults()
 	for (auto &st : streamingTargets) {
 		if (st.streaming->GetOutput() && obs_output_active(st.streaming->GetOutput()))
 			obs_output_stop(st.streaming->GetOutput());
+	}
+
+	// obs_output_stop() is asynchronous; wait for outputs to fully deactivate
+	// before mutating the video context, or obs_set_video_info() below can return
+	// OBS_VIDEO_CURRENTLY_ACTIVE (the same race Streaming::CleanTestMode guards).
+	{
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+		for (auto &st : streamingTargets) {
+			obs_output_t *output = st.streaming->GetOutput();
+			while (output && obs_output_active(output) && std::chrono::steady_clock::now() < deadline) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(20));
+			}
+		}
 	}
 
 	// 1. Resolution / FPS — applied to each video context referenced by a streaming
