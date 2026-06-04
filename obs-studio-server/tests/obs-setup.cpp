@@ -33,7 +33,6 @@ void setupApi()
 	g_util_osx->nextState();
 	CHECK(g_util_osx->hasInitApi());
 #endif
-#endif
 	const std::string appPath = std::string(OSN_SOURCE_DIR) + "/tests/osn-tests/osnData/slobs-client";
 	std::vector<ipc::value> args = {ipc::value(appPath), ipc::value("en-US"), ipc::value("0.00.00-preview.0"), ipc::value("")};
 	std::vector<ipc::value> response;
