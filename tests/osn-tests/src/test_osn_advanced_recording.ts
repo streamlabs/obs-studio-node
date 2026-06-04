@@ -7,6 +7,8 @@ import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
+import * as inputSettings from '../util/input_settings';
+import { getMeanVolumeDb } from '../util/media_probe';
 import path = require('path');
 const fs = require('fs');
 
@@ -462,6 +464,97 @@ describe(testName, () => {
             const videoEncoder = recording.videoEncoder;
             osn.AdvancedRecordingFactory.destroy(recording);
             videoEncoder.release();
+        }
+    });
+
+    // Regression for streamlabs/obs-studio-node#1493: audio worked when a source
+    // was the output source directly, but went silent once wrapped in a scene.
+    // Root cause was in libobs scene_audio_render_do, which dropped a scene item
+    // whose canvas is NULL (the default for scene.add() without setting
+    // sceneItem.video). We deliberately do NOT set sceneItem.video here, so the
+    // item canvas stays NULL — exactly the case that regressed — and assert the
+    // recorded audio is not silent.
+    it('Scene-wrapped source keeps audio when scene item canvas is unset (regression #1493)', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        const mediaPath = path.join(path.normalize(__dirname), '..', 'media', 'bigbuckbunny.mp4');
+        const settings: osn.ISettings = Object.assign({}, inputSettings.ffmpegSource);
+        settings['local_file'] = mediaPath;
+        settings['looping'] = true;
+        const source = osn.InputFactory.create(EOBSInputTypes.FFMPEGSource, 'regression-1493-source', settings);
+
+        const scene = osn.SceneFactory.create('regression-1493-scene');
+        const sceneItem = scene.add(source); // intentionally leave sceneItem.video unset -> item canvas stays NULL
+        osn.Global.setOutputSource(1, scene);
+
+        const recording = osn.AdvancedRecordingFactory.create();
+        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+        recording.format = ERecordingFormat.MP4;
+        recording.useStreamEncoders = false;
+        recording.videoEncoder =
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-regression-1493');
+        recording.overwrite = false;
+        recording.noSpace = false;
+        recording.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        recording.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        try {
+            recording.start();
+
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Start);
+
+            if (signalInfo.signal == EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            // Let the looping media play long enough for a meaningful measurement.
+            await sleep(3000);
+
+            recording.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stop);
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Wrote);
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            const recordedFile = recording.lastFile();
+            const meanVolumeDb = getMeanVolumeDb(recordedFile);
+            logInfo(testName, `Scene-wrapped recording mean volume: ${meanVolumeDb} dB (${recordedFile})`);
+
+            // Digital silence is ~ -91 dB / -inf; real audio sits well above -40 dB.
+            expect(meanVolumeDb).to.be.greaterThan(
+                -80,
+                `Scene-wrapped source recorded silent audio (mean ${meanVolumeDb} dB) - ` +
+                `regression of #1493 (NULL scene-item canvas dropped in scene_audio_render_do)`);
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
+            videoEncoder.release();
+            scene.release();
+            source.release();
         }
     });
 });
