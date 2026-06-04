@@ -5,9 +5,11 @@
 #include "osn-source.hpp"
 #include <obs.h>
 #include "shared.hpp"
+#include <cstdint>
 #include <string>
 #include "obs-setup.hpp"
 #include <thread>
+#include <utility>
 #include <vector>
 
 // Since we do not use C++ 20 (std::jthread), defining a scoped thread.
