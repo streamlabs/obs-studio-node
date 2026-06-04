@@ -912,7 +912,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 #endif
 
 #ifdef ENABLE_CRASHREPORT
-	util::CrashManager crashManager;
+	static util::CrashManager crashManager;
 	crashManager.SetVersionName(currentVersion);
 	crashManager.SetReportServerUrl(args[3].value_str);
 	char *path = g_moduleDirectory.data();
