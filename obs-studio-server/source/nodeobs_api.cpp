@@ -931,11 +931,10 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 			},
 			nullptr);
 		g_server->set_post_callback(
-			[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-				util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-				crashManager.ProcessPostServerCall(cname, fname, args);
+			[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *) {
+				util::CrashManager::ProcessPostServerCall(cname, fname, args);
 			},
-			&crashManager);
+			nullptr);
 	}
 
 #endif
