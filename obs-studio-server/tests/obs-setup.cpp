@@ -55,6 +55,5 @@ ObsSetup::~ObsSetup()
 		CHECK(error == ErrorCode::Ok);
 	}
 }
-}
 
 } // namespace osn::tests
