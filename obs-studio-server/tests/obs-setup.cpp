@@ -49,9 +49,12 @@ ObsSetup::~ObsSetup()
 	std::vector<ipc::value> args = {};
 	std::vector<ipc::value> response;
 	OBS_API::OBS_API_destroyOBS_API(nullptr, 0, args, response);
-	REQUIRE(response.size() >= 1);
-	ErrorCode error = (ErrorCode)response[0].value_union.ui64;
-	CHECK(error == ErrorCode::Ok);
+	CHECK(response.size() >= 1);
+	if (response.size() >= 1) {
+		ErrorCode error = (ErrorCode)response[0].value_union.ui64;
+		CHECK(error == ErrorCode::Ok);
+	}
+}
 }
 
 } // namespace osn::tests
