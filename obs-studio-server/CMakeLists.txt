@@ -642,17 +642,22 @@ if(BUILD_TESTING)
         )
     endif()
 
+    set(_osn_server_test_dl_paths
+        "$<TARGET_FILE_DIR:Catch2::Catch2>"
+        "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+        "$<TARGET_FILE_DIR:libcurl>"
+    )
+
+    if(APPLE)
+        list(APPEND _osn_server_test_dl_paths "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks")
+    elseif(WIN32)
+        list(APPEND _osn_server_test_dl_paths "${libobs_SOURCE_DIR}/bin/64bit")
+    endif()
+
     catch_discover_tests(
         obs_studio_server_unit_tests
         TEST_PREFIX "obs_studio_server_unit_tests::"
         DL_PATHS
-            "$<TARGET_FILE_DIR:Catch2::Catch2>"
-            "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
-            "$<TARGET_FILE_DIR:libcurl>"
+            ${_osn_server_test_dl_paths}
     )
-  if(APPLE)
-    list(APPEND DL_PATHS "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks")
-  elseif(WIN32)
-    list(APPEND DL_PATHS "${libobs_SOURCE_DIR}/bin/64bit")
-  endif()
 endif()
