@@ -618,11 +618,14 @@ if(BUILD_TESTING)
         "tests/obs-setup.hpp"
     )
 
+    file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}" OSN_SOURCE_DIR_PATH)
+    file(TO_CMAKE_PATH "${CMAKE_INSTALL_PREFIX}" OSN_TEST_WD_PATH)
+
     target_compile_definitions(
         obs_studio_server_unit_tests
         PRIVATE
-            OSN_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
-            OSN_TEST_WD="${CMAKE_INSTALL_PREFIX}"
+            OSN_SOURCE_DIR="${OSN_SOURCE_DIR_PATH}"
+            OSN_TEST_WD="${OSN_TEST_WD_PATH}"
     )
 
     target_link_libraries(
