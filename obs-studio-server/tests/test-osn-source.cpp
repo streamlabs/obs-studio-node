@@ -1,5 +1,4 @@
 #include <catch2/catch_test_macros.hpp>
-#include <mutex>
 #include "nodeobs_api.h"
 #include "osn-error.hpp"
 #include "osn-input.hpp"
