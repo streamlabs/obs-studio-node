@@ -459,9 +459,6 @@ add_executable(
 )
 
 if(WIN32)
-    # Include/link crash manager dependencies
-    target_link_libraries(${PROJECT_NAME} StackWalker)
-
     target_sources(${PROJECT_NAME} PUBLIC "${PROJECT_BINARY_DIR}/version.rc")
 endif()
 
