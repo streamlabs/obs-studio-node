@@ -923,19 +923,15 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		}
 	}
 
-	// Register the pre and post server callbacks to log the data into the crashmanager
-	g_server->set_pre_callback(
-		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-			util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-			crashManager.ProcessPreServerCall(cname, fname, args);
-		},
-		&crashManager);
-	g_server->set_post_callback(
-		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-			util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-			crashManager.ProcessPostServerCall(cname, fname, args);
-		},
-		&crashManager);
+	if (g_server) {
+		// Register the pre and post server callbacks to log the data into the crashmanager
+		g_server->set_pre_callback([](std::string cname, std::string fname, const std::vector<ipc::value> &args,
+					      void *) { util::CrashManager::ProcessPreServerCall(cname, fname, args); },
+					   nullptr);
+		g_server->set_post_callback([](std::string cname, std::string fname, const std::vector<ipc::value> &args,
+					       void *) { util::CrashManager::ProcessPostServerCall(cname, fname, args); },
+					    nullptr);
+	}
 
 #endif
 
