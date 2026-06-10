@@ -281,8 +281,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 			cy = recording->outputHeight;
 		}
 		obs_encoder_set_scaled_size(recording->videoEncoder, cx, cy);
-		obs_encoder_set_gpu_scale_type(recording->videoEncoder,
-			recording->rescaling ? OBS_SCALE_BILINEAR : OBS_SCALE_DISABLE);
+		obs_encoder_set_gpu_scale_type(recording->videoEncoder, recording->rescaling ? OBS_SCALE_BILINEAR : OBS_SCALE_DISABLE);
 	}
 
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
