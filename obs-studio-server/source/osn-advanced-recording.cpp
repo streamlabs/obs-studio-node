@@ -269,9 +269,6 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
 
-	// Only apply scaling to encoders we own. When useStreamEncoders is true and
-	// multiple rendering is disabled, videoEncoder == streaming->videoEncoder (shared,
-	// not duplicated). Mutating it here would change the live stream's scale/filter.
 	const char *encoderId = obs_encoder_get_id(recording->videoEncoder);
 	const bool encoderIsOwned = !recording->useStreamEncoders || obs_get_multiple_rendering();
 	const bool encoderSupportsScaling = encoderId && strcmp(encoderId, ENCODER_NVENC_H264_TEX) != 0;
