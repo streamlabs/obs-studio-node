@@ -268,16 +268,15 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The specified video encoder is not valid for recording.");
 	}
-	if (recording->rescaling) {
-		uint32_t cx = 0;
-		uint32_t cy = 0;
-		if (recording->outputWidth > 0 && recording->outputHeight > 0) {
-			cx = recording->outputWidth;
-			cy = recording->outputHeight;
-		}
-		obs_encoder_set_scaled_size(recording->videoEncoder, cx, cy);
-		obs_encoder_set_gpu_scale_type(recording->videoEncoder, recording->rescaling ? OBS_SCALE_BILINEAR : OBS_SCALE_DISABLE);
+
+	uint32_t cx = 0;
+	uint32_t cy = 0;
+	if (recording->rescaling && recording->outputWidth > 0 && recording->outputHeight > 0) {
+		cx = recording->outputWidth;
+		cy = recording->outputHeight;
 	}
+	obs_encoder_set_scaled_size(recording->videoEncoder, cx, cy);
+	obs_encoder_set_gpu_scale_type(recording->videoEncoder, recording->rescaling ? OBS_SCALE_BILINEAR : OBS_SCALE_DISABLE);
 
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 
