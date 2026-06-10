@@ -118,7 +118,15 @@ void osn::IEnhancedBroadcastingAdvancedStreaming::Start(void *data, const int64_
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid service.");
 	}
 
-	auto vod_track_mixer = (streaming->twitchVODSupported && streaming->enableTwitchVOD) ? std::optional{streaming->twitchTrack} : std::nullopt;
+	// mirror AdvancedStreaming::Start; field defaults false and would silently disable VOD
+	if (streaming->enableTwitchVOD) {
+		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
+	}
+
+	std::optional<size_t> vod_track_mixer = std::nullopt;
+	if (streaming->twitchVODSupported && streaming->enableTwitchVOD && osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack)) {
+		vod_track_mixer = osn::IAudioTrack::GetMixerIndex(streaming->twitchTrack);
+	}
 	try {
 		streaming->StartEnhancedBroadcastingStream(vod_track_mixer);
 	} catch (const std::exception &error) {

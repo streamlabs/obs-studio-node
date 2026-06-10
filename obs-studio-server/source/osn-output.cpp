@@ -20,15 +20,6 @@
 
 #include "nodeobs_api.h"
 
-namespace {
-
-struct CallbackData {
-	std::string signal;
-	osn::Output *outputClass;
-};
-
-} // namespace
-
 osn::Output::Output(const std::vector<std::string> &signals) : m_signals(signals) {}
 
 osn::Output::~Output() {}
@@ -40,17 +31,18 @@ void osn::Output::InitOutput(obs_output_t *output)
 		m_outputStopped = false;
 	}
 
-	auto onStopped = [](void *data, calldata_t *) {
-		osn::Output *context = reinterpret_cast<osn::Output *>(data);
-		std::unique_lock lock(context->m_mtxOutputStop);
-		context->m_outputStopped = true;
-		context->m_cvStop.notify_one();
-	};
-
 	signal_handler *sh = obs_output_get_signal_handler(output);
-	signal_handler_connect(sh, "stop", onStopped, this);
+	signal_handler_connect(sh, "stop", osn::Output::OnStopped, this);
 
 	ConnectSignals();
+}
+
+void osn::Output::OnStopped(void *data, calldata_t *)
+{
+	osn::Output *context = reinterpret_cast<osn::Output *>(data);
+	std::unique_lock lock(context->m_mtxOutputStop);
+	context->m_outputStopped = true;
+	context->m_cvStop.notify_one();
 }
 
 void osn::Output::CreateOutput(const std::string &type, const std::string &name)
@@ -89,13 +81,19 @@ void osn::Output::DeleteOutput()
 			blog(LOG_WARNING, "Timed out waiting for output stop before release.");
 		}
 	}
+
+	// Disconnect before release: the obs_output_t can outlive this object
+	// (delay buffer, reconnect, or a shared ref), and a later signal firing
+	// into freed CallbackData/this would crash in signal_handler_signal.
+	DisconnectSignals();
+
 	obs_output_release(m_output);
 	m_output = nullptr;
 }
 
 void osn::OutputSignalCallback(void *data, calldata_t *params)
 {
-	auto info = reinterpret_cast<CallbackData *>(data);
+	auto info = reinterpret_cast<osn::Output::CallbackData *>(data);
 
 	if (!info)
 		return;
@@ -122,8 +120,26 @@ void osn::Output::ConnectSignals()
 		auto *cd = new CallbackData();
 		cd->signal = signal;
 		cd->outputClass = this;
+		m_signalCallbackData.push_back(cd);
 		signal_handler_connect(handler, signal.c_str(), osn::OutputSignalCallback, cd);
 	}
+}
+
+void osn::Output::DisconnectSignals()
+{
+	if (!m_output)
+		return;
+
+	signal_handler *handler = obs_output_get_signal_handler(m_output);
+	if (handler) {
+		signal_handler_disconnect(handler, "stop", osn::Output::OnStopped, this);
+		for (auto *cd : m_signalCallbackData)
+			signal_handler_disconnect(handler, cd->signal.c_str(), osn::OutputSignalCallback, cd);
+	}
+
+	for (auto *cd : m_signalCallbackData)
+		delete cd;
+	m_signalCallbackData.clear();
 }
 
 void osn::Output::StartOutput()
@@ -189,6 +205,14 @@ obs_video_info *osn::Output::GetCanvas()
 const obs_video_info *osn::Output::GetCanvas() const
 {
 	return m_canvas;
+}
+
+video_t *osn::Output::GetCanvasVideo(obs_video_rendering_mode mode)
+{
+	obs_core_video_mix_t *mix = obs_video_mix_get(m_canvas, mode);
+	if (!mix)
+		return nullptr;
+	return obs_video_mix_get_video(mix);
 }
 
 obs_output_t *osn::Output::GetOutput()

@@ -299,8 +299,8 @@ void osn::SimpleStreaming::UpdateEncoders()
 		obs_data_set_int(audioEncSettings, "bitrate", aBitrate);
 	}
 
-	video_t *video = obs_get_video();
-	enum video_format format = video_output_get_format(video);
+	video_t *video = this->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING);
+	enum video_format format = video ? video_output_get_format(video) : VIDEO_FORMAT_NV12;
 
 	switch (format) {
 	case VIDEO_FORMAT_I420:
@@ -357,6 +357,11 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	if (!streaming->GetCanvas()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid main canvas.");
+	}
+
+	if (!streaming->GetCanvasVideo(obs_get_multiple_rendering() ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING)) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Video pipeline not initialized (canvas has no video mix). "
+							      "Graphics device may have been lost during startup. Restart the app.");
 	}
 
 	//verify the encoder is compatible before setting it - need config ID for simple mode in order to find correct settings

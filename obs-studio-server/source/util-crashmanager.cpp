@@ -19,12 +19,14 @@
 #include "util-crashmanager.h"
 #include "util-metricsprovider.h"
 
+#include <algorithm>
 #include <chrono>
 #include <codecvt>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <locale>
+#include <deque>
 #include <map>
 #include <obs.h>
 #include <queue>
@@ -73,9 +75,9 @@
 //////////////////////
 // STATIC VARIABLES //
 //////////////////////
-std::vector<nlohmann::json> breadcrumbs;
 std::queue<std::pair<int, std::string>> lastActions;
-std::vector<std::string> warnings;
+std::deque<std::string> serverWarnings;
+constexpr size_t MaximumServerWarnings = 50;
 std::mutex messageMutex;
 #ifdef WIN32
 // Global/static variables
@@ -717,13 +719,16 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	} catch (...) {
 	}
 
+	// Annotations attached to the Sentry minidump:
+	//   "OBS log general" — rolling tail of the libOBS log (capped at LogReport::MaximumMessages lines)
+	//   "Last actions"    — recent IPC calls received by the server (capped at MaximumActionsRegistered)
+	//   "Server warnings" — server-detected anomalies recorded via AddServerWarning (capped at MaximumServerWarnings)
 	try {
-		annotations.insert({{"OBS log general", RequestOBSLog(OBSLogType::General).dump(4)}});
+		annotations.insert({{"OBS log general", RequestOBSLog().dump(4)}});
 		annotations.insert({{"Crash reason", _crashInfo}});
 		annotations.insert({{"Computer name", computerName}});
-		annotations.insert({{"Breadcrumbs", ComputeBreadcrumbs().dump(4)}});
 		annotations.insert({{"Last actions", ComputeActions().dump(4)}});
-		annotations.insert({{"Warnings", ComputeWarnings().dump(4)}});
+		annotations.insert({{"Server warnings", ComputeServerWarnings().dump(4)}});
 	} catch (...) {
 	}
 
@@ -1021,47 +1026,14 @@ void RewindCallStack()
 	return;
 }
 
-nlohmann::json util::CrashManager::RequestOBSLog(OBSLogType type)
+nlohmann::json util::CrashManager::RequestOBSLog()
 {
 	nlohmann::json result;
 
-	switch (type) {
-	case OBSLogType::Errors: {
-		auto &errors = OBS_API::getOBSLogErrors();
-		for (auto &msg : errors)
-			result.push_back(msg);
-		break;
-	}
-
-	case OBSLogType::Warnings: {
-		auto &warnings = OBS_API::getOBSLogWarnings();
-		for (auto &msg : warnings)
-			result.push_back(msg);
-		break;
-	}
-
-	case OBSLogType::General: {
-		auto &general = OBS_API::getOBSLogGeneral();
-		while (!general.empty()) {
-			result.push_back(general.front());
-			general.pop();
-		}
-
-		break;
-	}
-	}
-
-	std::reverse(result.begin(), result.end());
-
-	return result;
-}
-
-nlohmann::json util::CrashManager::ComputeBreadcrumbs()
-{
-	nlohmann::json result = nlohmann::json::array();
-
-	for (auto &msg : breadcrumbs)
-		result.push_back(msg);
+	// snapshotOBSLogGeneral returns oldest-first under logMutex; emit newest-first.
+	std::deque<std::string> general = OBS_API::snapshotOBSLogGeneral();
+	for (auto it = general.rbegin(); it != general.rend(); ++it)
+		result.push_back(*it);
 
 	return result;
 }
@@ -1086,11 +1058,17 @@ nlohmann::json util::CrashManager::ComputeActions()
 	return result;
 }
 
-nlohmann::json util::CrashManager::ComputeWarnings()
+nlohmann::json util::CrashManager::ComputeServerWarnings()
 {
 	nlohmann::json result;
 
-	for (auto &msg : warnings)
+	// try_lock — the crashing thread may already hold messageMutex (e.g. it crashed inside
+	// AddServerWarning/RegisterAction); a blocking lock would hang crash reporting.
+	std::unique_lock<std::mutex> lock(messageMutex, std::try_to_lock);
+	if (!lock.owns_lock())
+		return result;
+
+	for (auto &msg : serverWarnings)
 		result.push_back(msg);
 
 	return result;
@@ -1249,10 +1227,13 @@ void util::CrashManager::IPCValuesToData(const std::vector<ipc::value> &values, 
 	}
 }
 
-void util::CrashManager::AddWarning(const std::string &warning)
+void util::CrashManager::AddServerWarning(const std::string &warning)
 {
 	std::lock_guard<std::mutex> lock(messageMutex);
-	warnings.push_back(warning);
+	serverWarnings.push_back(warning);
+	if (serverWarnings.size() > MaximumServerWarnings) {
+		serverWarnings.pop_front();
+	}
 }
 
 void RegisterAction(const std::string &message)
@@ -1265,31 +1246,10 @@ void RegisterAction(const std::string &message)
 		lastActions.back().first++;
 	} else {
 		lastActions.push({0, message});
-		if (lastActions.size() >= MaximumActionsRegistered) {
+		if (lastActions.size() > MaximumActionsRegistered) {
 			lastActions.pop();
 		}
 	}
-}
-
-void util::CrashManager::AddBreadcrumb(const nlohmann::json &message)
-{
-	std::lock_guard<std::mutex> lock(messageMutex);
-	breadcrumbs.push_back(message);
-}
-
-void util::CrashManager::AddBreadcrumb(const std::string &message)
-{
-	nlohmann::json j = nlohmann::json::array();
-	j.push_back({{message}});
-
-	std::lock_guard<std::mutex> lock(messageMutex);
-	breadcrumbs.push_back(j);
-}
-
-void util::CrashManager::ClearBreadcrumbs()
-{
-	std::lock_guard<std::mutex> lock(messageMutex);
-	breadcrumbs.clear();
 }
 
 void util::CrashManager::setAppState(const std::string &newState)
@@ -1349,10 +1309,10 @@ void util::CrashManager::ProcessPreServerCall(const std::string &cname, const st
 void util::CrashManager::ProcessPostServerCall(const std::string &cname, const std::string &fname, const std::vector<ipc::value> &args)
 {
 	if (args.size() == 0) {
-		AddWarning(std::string("No return params on method ") + fname + std::string(" for class ") + cname);
+		AddServerWarning(std::string("No return params on method ") + fname + std::string(" for class ") + cname);
 	} else if ((ErrorCode)args[0].value_union.ui64 != ErrorCode::Ok) {
-		AddWarning(std::string("Server call returned error number ") + std::to_string(args[0].value_union.ui64) + " on method " + fname +
-			   std::string(" for class ") + cname);
+		AddServerWarning(std::string("Server call returned error number ") + std::to_string(args[0].value_union.ui64) + " on method " + fname +
+				 std::string(" for class ") + cname);
 	}
 }
 

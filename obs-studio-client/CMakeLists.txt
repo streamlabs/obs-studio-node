@@ -40,7 +40,16 @@ if (APPLE)
     )
 endif ()
 
+SET(OSN_CLIENT_CORE_SOURCES
+    "source/polling-pacer.cpp"
+    "source/polling-pacer.hpp"
+    "source/best-effort-gate.cpp"
+    "source/best-effort-gate.hpp"
+)
+
 SET(osn-client_SOURCES
+    ${OSN_CLIENT_CORE_SOURCES}
+
     "${CMAKE_SOURCE_DIR}/source/osn-error.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.cpp"
@@ -161,6 +170,48 @@ add_nodejs_module(
     obs_studio_client
     ${osn-client_SOURCES}
 )
+
+if(BUILD_TESTING)
+    include(Catch)
+
+    add_executable(
+        obs_studio_client_unit_tests
+        "tests/polling-pacer-test.cpp"
+        "tests/best-effort-gate-test.cpp"
+        "tests/polling-pacer-best-effort-gate-test.cpp"
+        ${OSN_CLIENT_CORE_SOURCES}
+    )
+
+    target_include_directories(
+        obs_studio_client_unit_tests
+        PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/source"
+    )
+
+    target_link_libraries(
+        obs_studio_client_unit_tests
+        PRIVATE
+            Catch2::Catch2WithMain
+    )
+
+    if(APPLE)
+        add_custom_command(
+            TARGET obs_studio_client_unit_tests
+            POST_BUILD
+            COMMAND /usr/bin/codesign --force --sign - "$<TARGET_FILE:obs_studio_client_unit_tests>"
+            COMMENT "Ad-hoc signing obs_studio_client_unit_tests before Catch2 test discovery"
+            VERBATIM
+        )
+    endif()
+
+    catch_discover_tests(
+        obs_studio_client_unit_tests
+        TEST_PREFIX "obs_studio_client_unit_tests::"
+        DL_PATHS
+            "$<TARGET_FILE_DIR:Catch2::Catch2>"
+            "$<TARGET_FILE_DIR:Catch2::Catch2WithMain>"
+    )
+endif()
 
 set(PROJECT_INCLUDE_PATHS
     "${nlohmannjson_SOURCE_DIR}/single_include"

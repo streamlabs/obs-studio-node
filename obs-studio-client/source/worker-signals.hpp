@@ -21,6 +21,7 @@
 #include <chrono>
 #include <napi.h>
 #include "osn-error.hpp"
+#include "polling-pacer.hpp"
 #include "utility.hpp"
 
 struct SignalOutput {
@@ -87,6 +88,7 @@ protected:
 			data->sent = true;
 		};
 		std::vector<SignalOutput *> signalsList;
+		osn::PollingPacer pacer(sleepInterval);
 		while (!workerStop) {
 			auto tp_start = std::chrono::high_resolution_clock::now();
 
@@ -128,9 +130,9 @@ protected:
 
 			auto tp_end = std::chrono::high_resolution_clock::now();
 			auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(tp_end - tp_start);
-			const auto sleepDuration = sleepInterval - dur;
-			if (sleepDuration > std::chrono::milliseconds(0))
-				std::this_thread::sleep_for(sleepDuration);
+			const bool shouldSleep = pacer.finishCycle(dur);
+			if (shouldSleep)
+				std::this_thread::sleep_for(pacer.sleepDuration());
 		}
 
 		return;

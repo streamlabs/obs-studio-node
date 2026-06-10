@@ -39,7 +39,6 @@ public:
 	Output(const std::vector<std::string> &signals);
 	virtual ~Output();
 
-	void ConnectSignals();
 	void CreateOutput(const std::string &type, const std::string &name);
 	void SetOutput(obs_output_t *output);
 	virtual void DeleteOutput();
@@ -52,13 +51,34 @@ public:
 	obs_video_info *GetCanvas();
 	const obs_video_info *GetCanvas() const;
 
+	// Returns the libobs video output bound to this output's canvas for the
+	// given rendering mode, or NULL if the canvas video mix is not ready
+	// (e.g. obs_reset_video failed at startup due to a lost GPU device).
+	video_t *GetCanvasVideo(obs_video_rendering_mode mode);
+
 	obs_output_t *GetOutput();
 	const obs_output_t *GetOutput() const;
 
 private:
 	friend void OutputSignalCallback(void *data, calldata_t *params);
 
+	// One per connected signal; carries the signal name and owner so the
+	// forwarding callback can identify them. Heap-allocated in ConnectSignals
+	// and freed in DisconnectSignals.
+	struct CallbackData {
+		std::string signal;
+		osn::Output *outputClass = nullptr;
+	};
+
 	void InitOutput(obs_output_t *output);
+
+	void ConnectSignals();
+
+	// Disconnects every handler ConnectSignals/InitOutput wired up and frees
+	// the CallbackData. Must run while m_output is still valid.
+	void DisconnectSignals();
+
+	static void OnStopped(void *data, calldata_t *params);
 
 	obs_video_info *m_canvas = nullptr;
 	obs_output_t *m_output = nullptr;
@@ -71,6 +91,7 @@ private:
 	bool m_outputStopped = false;
 
 	const std::vector<std::string> m_signals;
+	std::vector<CallbackData *> m_signalCallbackData;
 };
 
 }

@@ -184,6 +184,9 @@ void osn::Video::set(const Napi::CallbackInfo &info, const Napi::Value &value)
 
 	lastVideo.resize(0);
 	isLastVideoValid = false;
+
+	if (!ValidateResponse(info, response))
+		return;
 }
 
 Napi::Value osn::Video::GetLegacySettings(const Napi::CallbackInfo &info)

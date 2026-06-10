@@ -543,7 +543,7 @@ static void node_obs_log(int log_level, const char *msg, va_list args, void *par
 			}
 
 			// Internal Log
-			logReport.push(newmsg, log_level);
+			logReport.push(newmsg);
 
 			// Std Out / Std Err
 			/// Why fwrite and not std::cout and std::cerr?
@@ -885,7 +885,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	before attempting to make a file there. */
 	if (os_mkdirs(log_path.c_str()) == MKDIR_ERROR) {
 		std::cerr << "Failed to open log file" << std::endl;
-		util::CrashManager::AddWarning("Error on log file, failed to create path: " + log_path);
+		util::CrashManager::AddServerWarning("Error on log file, failed to create path: " + log_path);
 	}
 
 	/* Delete oldest file in the folder to imitate rotating */
@@ -902,7 +902,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 #endif
 	if (!logParam->logStream.is_open()) {
 		logParam.reset();
-		util::CrashManager::AddWarning("Error on log file, failed to open: " + log_path);
+		util::CrashManager::AddServerWarning("Error on log file, failed to open: " + log_path);
 		std::cerr << "Failed to open log file" << std::endl;
 	}
 	base_set_log_handler(node_obs_log, (logParam) ? logParam.release() : nullptr);
@@ -923,19 +923,15 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		}
 	}
 
-	// Register the pre and post server callbacks to log the data into the crashmanager
-	g_server->set_pre_callback(
-		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-			util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-			crashManager.ProcessPreServerCall(cname, fname, args);
-		},
-		&crashManager);
-	g_server->set_post_callback(
-		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-			util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-			crashManager.ProcessPostServerCall(cname, fname, args);
-		},
-		&crashManager);
+	if (g_server) {
+		// Register the pre and post server callbacks to log the data into the crashmanager
+		g_server->set_pre_callback([](std::string cname, std::string fname, const std::vector<ipc::value> &args,
+					      void *) { util::CrashManager::ProcessPreServerCall(cname, fname, args); },
+					   nullptr);
+		g_server->set_post_callback([](std::string cname, std::string fname, const std::vector<ipc::value> &args,
+					       void *) { util::CrashManager::ProcessPostServerCall(cname, fname, args); },
+					    nullptr);
+	}
 
 #endif
 
@@ -964,7 +960,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		// when init API supports more return codes.
 #ifdef WIN32
 		std::string userDataPath = std::string(userData.begin(), userData.end());
-		util::CrashManager::AddWarning("Failed to start OBS, locale: " + locale + " user data: " + userDataPath);
+		util::CrashManager::AddServerWarning("Failed to start OBS, locale: " + locale + " user data: " + userDataPath);
 #endif
 	}
 
@@ -2048,19 +2044,15 @@ double OBS_API::getMemoryUsage()
 	return (double)os_get_proc_resident_size() / (1024.0 * 1024.0);
 }
 
-const std::vector<std::string> &OBS_API::getOBSLogErrors()
+std::deque<std::string> OBS_API::snapshotOBSLogGeneral()
 {
-	return logReport.errors;
-}
+	std::unique_lock<std::mutex> lock(logMutex, std::try_to_lock);
+	if (!lock.owns_lock())
+		return {};
 
-const std::vector<std::string> &OBS_API::getOBSLogWarnings()
-{
-	return logReport.warnings;
-}
-
-std::queue<std::string> &OBS_API::getOBSLogGeneral()
-{
-	return logReport.general;
+	std::deque<std::string> snapshot = std::move(logReport.general);
+	logReport.general.clear();
+	return snapshot;
 }
 
 std::string OBS_API::getCurrentVersion()
