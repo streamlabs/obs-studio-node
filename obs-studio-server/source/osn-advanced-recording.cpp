@@ -272,16 +272,15 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	// Only apply scaling to encoders we own. When useStreamEncoders is true and
 	// multiple rendering is disabled, videoEncoder == streaming->videoEncoder (shared,
 	// not duplicated). Mutating it here would change the live stream's scale/filter.
+	const char *encoderId = obs_encoder_get_id(recording->videoEncoder);
 	const bool encoderIsOwned = !recording->useStreamEncoders || obs_get_multiple_rendering();
-	if (encoderIsOwned) {
-		uint32_t cx = 0;
-		uint32_t cy = 0;
-		if (recording->rescaling && recording->outputWidth > 0 && recording->outputHeight > 0) {
-			cx = recording->outputWidth;
-			cy = recording->outputHeight;
-		}
+	const bool encoderSupportsScaling = encoderId && strcmp(encoderId, ENCODER_NVENC_H264_TEX) != 0;
+	if (encoderIsOwned && encoderSupportsScaling) {
+		const bool applyRescale = recording->rescaling && recording->outputWidth > 0 && recording->outputHeight > 0;
+		const uint32_t cx = applyRescale ? recording->outputWidth : 0;
+		const uint32_t cy = applyRescale ? recording->outputHeight : 0;
 		obs_encoder_set_scaled_size(recording->videoEncoder, cx, cy);
-		obs_encoder_set_gpu_scale_type(recording->videoEncoder, recording->rescaling ? OBS_SCALE_BILINEAR : OBS_SCALE_DISABLE);
+		obs_encoder_set_gpu_scale_type(recording->videoEncoder, applyRescale ? OBS_SCALE_BILINEAR : OBS_SCALE_DISABLE);
 	}
 
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
