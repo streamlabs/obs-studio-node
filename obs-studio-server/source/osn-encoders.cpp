@@ -212,6 +212,9 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 		}
 		if (!containerSupportsCodec(container, codec))
 			return false;
+		if (container == "flv" && videoEncoderOptions[checkIndex].family == FAMILY_APPLE) {
+			return false;
+		}
 	}
 
 	return true;
