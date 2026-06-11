@@ -68,7 +68,7 @@ const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEn
 	 APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// get_simple_output_encoder had Apple HEVC so add it here, never used with an advanced name but follow the pattern of M1 above
 	{"Apple VT HEVC Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "Hardware (Apple, HEVC)", SIMPLE_ENCODER_APPLE_HEVC,
-	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, true, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// AMD HW H.264
 	{"AMD HW H.264", ADVANCED_ENCODER_AMD, "Hardware (AMD, H.264)", SIMPLE_ENCODER_AMD, ADVANCED_ENCODER_AMD, "", true, true, true, false, true, false,
 	 PRESET_AMD, FAMILY_AMD},
@@ -212,6 +212,9 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 		}
 		if (!containerSupportsCodec(container, codec))
 			return false;
+		if (container == "flv" && videoEncoderOptions[checkIndex].family == FAMILY_APPLE) {
+			return false;
+		}
 	}
 
 	return true;
