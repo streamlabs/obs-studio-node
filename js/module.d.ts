@@ -810,6 +810,12 @@ export interface EOutputSignal {
 export interface IEncoderOption {
     title: string;
     name: string;
+    id: string;
+    family: string;
+    preset: string;
+    codec: string;
+    streaming: boolean;
+    recording: boolean;
 }
 export interface ISimpleStreaming extends IStreaming {
     audioEncoder: IAudioEncoder;
