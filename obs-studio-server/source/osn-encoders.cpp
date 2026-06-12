@@ -206,6 +206,15 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 			return false;
 	}
 
+	bool usesFlvContainer = container == "flv";
+	if (!recording && service) {
+		const char *outputType = getStreamOutputType(service);
+		usesFlvContainer = outputType && strcmp(outputType, "rtmp_output") == 0;
+	}
+
+	if (usesFlvContainer && videoEncoderOptions[checkIndex].family == FAMILY_APPLE)
+		return false;
+
 	if (recording && videoEncoderOptions[checkIndex].check_availability_format) {
 		const char *codec = obs_get_encoder_codec(encoderName.c_str());
 		if (!codec) {
@@ -214,9 +223,6 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 		}
 		if (!containerSupportsCodec(container, codec))
 			return false;
-		if (container == "flv" && videoEncoderOptions[checkIndex].family == FAMILY_APPLE) {
-			return false;
-		}
 	}
 
 	return true;
