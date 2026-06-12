@@ -19,6 +19,8 @@
 #include "nodeobs_autoconfig.hpp"
 #include "polling-pacer.hpp"
 #include "shared.hpp"
+#include "streaming.hpp"
+#include <cstring>
 
 bool autoConfig::isWorkerRunning = false;
 bool autoConfig::worker_stop = true;
@@ -59,6 +61,10 @@ void autoConfig::worker()
 				data->event = response[1].value_str;
 				data->description = response[2].value_str;
 				data->percentage = response[3].value_union.fp64;
+				// Optional 5th payload field (added for the POC UI). Older
+				// servers won't include it — guard the read.
+				if (response.size() >= 5)
+					data->payload = response[4].value_str;
 				ac_queue_task_workers.push_back(new std::thread(&autoConfig::queueTask, data));
 			}
 		}
@@ -103,19 +109,36 @@ void autoConfig::stop_worker()
 
 Napi::Value autoConfig::InitializeAutoConfig(const Napi::CallbackInfo &info)
 {
-	Napi::Function async_callback = info[0].As<Napi::Function>();
-	Napi::Object serverInfo = info[1].ToObject();
-	std::string continent = serverInfo.Get("continent").ToString().Utf8Value();
-	std::string service = serverInfo.Get("service_name").ToString().Utf8Value();
+	if (info.Length() < 2 || !info[0].IsArray() || !info[1].IsFunction()) {
+		Napi::TypeError::New(info.Env(), "InitializeAutoConfig expects (streamings: IStreaming[], callback)").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	Napi::Array array = info[0].As<Napi::Array>();
+	std::vector<uint64_t> uids(array.Length());
+	for (uint32_t i = 0; i < array.Length(); i++) {
+		if (!osn::TryUnwrapStreamingUid(array.Get(i), uids[i])) {
+			Napi::TypeError::New(info.Env(), "InitializeAutoConfig: streamings[i] is not an IStreaming instance").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+	}
+	std::vector<char> uidsBin(uids.size() * sizeof(uint64_t));
+	if (!uids.empty())
+		memcpy(uidsBin.data(), uids.data(), uidsBin.size());
+
+	Napi::Function async_callback = info[1].As<Napi::Function>();
 
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "InitializeAutoConfig", {continent, service});
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "InitializeAutoConfig", {ipc::value(uidsBin)});
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
+
+	if (isWorkerRunning)
+		stop_worker();
 
 	js_thread = Napi::ThreadSafeFunction::New(info.Env(), async_callback, "AutoConfig", 0, 1, [](Napi::Env) {});
 
@@ -177,6 +200,9 @@ void autoConfig::queueTask(AutoConfigInfo *data)
 
 			if (event_data->event.compare("error") != 0) {
 				result.Set(Napi::String::New(env, "percentage"), Napi::Number::New(env, event_data->percentage));
+			}
+			if (!event_data->payload.empty()) {
+				result.Set(Napi::String::New(env, "payload"), Napi::String::New(env, event_data->payload));
 			}
 			result.Set(Napi::String::New(env, "continent"), Napi::String::New(env, ""));
 
@@ -265,6 +291,23 @@ Napi::Value autoConfig::StartSaveSettings(const Napi::CallbackInfo &info)
 	return info.Env().Undefined();
 }
 
+Napi::Value autoConfig::GetAutoConfigSummary(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "GetAutoConfigSummary", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	if (response.size() < 2)
+		return info.Env().Undefined();
+
+	return Napi::String::New(info.Env(), response[1].value_str);
+}
+
 Napi::Value autoConfig::TerminateAutoConfig(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -293,4 +336,5 @@ void autoConfig::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "StartSaveStreamSettings"), Napi::Function::New(env, autoConfig::StartSaveStreamSettings));
 	exports.Set(Napi::String::New(env, "StartSaveSettings"), Napi::Function::New(env, autoConfig::StartSaveSettings));
 	exports.Set(Napi::String::New(env, "TerminateAutoConfig"), Napi::Function::New(env, autoConfig::TerminateAutoConfig));
+	exports.Set(Napi::String::New(env, "GetAutoConfigSummary"), Napi::Function::New(env, autoConfig::GetAutoConfigSummary));
 }

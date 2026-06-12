@@ -26,11 +26,6 @@ public:
 	uint64_t canvasId = 0;
 	constexpr static uint64_t nonCavasId = std::numeric_limits<uint64_t>::max();
 
-private:
-	std::vector<ipc::value> lastVideo;
-	bool isLastVideoValid = false;
-
-public:
 	static Napi::FunctionReference constructor;
 	static Napi::Object Init(Napi::Env env, Napi::Object exports);
 	Video(const Napi::CallbackInfo &info);
@@ -46,5 +41,10 @@ public:
 
 	Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
 	void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
+
+	// Read-only accessor exposing the server-side canvas id (the same value the
+	// server's osn::Video::Manager keys this object by). Required so the frontend
+	// can refer to a canvas in APIs like autoconfig that take ids.
+	Napi::Value GetCanvasId(const Napi::CallbackInfo &info);
 };
 }

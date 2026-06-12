@@ -663,6 +663,7 @@ export interface IVideo {
     destroy(): void;
     readonly skippedFrames: number;
     readonly encodedFrames: number;
+    readonly canvasId: number;
 }
 export interface IVideoFactory {
     create(): IVideo;
@@ -970,6 +971,29 @@ export interface IAudioTrackFactory {
     setAtIndex(audioTrack: IAudioTrack, index: number): void;
     importLegacySettings(): void;
     saveLegacySettings(): void;
+}
+export interface IAutoConfigResourcePercentile {
+    p50: number;
+    p95: number;
+}
+export interface IAutoConfigResourceGpu {
+    available: boolean;
+    vramUsedMB?: IAutoConfigResourcePercentile;
+    vramBudgetMB?: number;
+}
+export type AutoConfigResourcePhase = 'bandwidth' | 'stream_encoder' | 'recording_encoder';
+export interface IAutoConfigResourceUsage {
+    phase: AutoConfigResourcePhase;
+    sampleCount: number;
+    durationMs: number;
+    cpuPct: IAutoConfigResourcePercentile;
+    procRamMB: IAutoConfigResourcePercentile;
+    gpu: IAutoConfigResourceGpu;
+}
+export interface IAutoConfigSummary {
+    complete: boolean;
+    resourceUsage: IAutoConfigResourceUsage[];
+    [key: string]: unknown;
 }
 export declare const enum VCamOutputType {
     Invalid = 0,

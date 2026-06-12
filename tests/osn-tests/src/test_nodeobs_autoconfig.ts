@@ -6,9 +6,32 @@ import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler, IConfigProgress } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
 
+// =============================================================================
+// DEPRECATED — replaced by tests/osn-tests/src/test_osn_autoconfig_v2.ts
+// =============================================================================
+// This file exercises the legacy autoconfig contract:
+//   - obs.startAutoconfig() with no target ids
+//   - server-side persistence via basic config file (config_set_int / config_set_string)
+//   - assertions via obs.getSetting('Output', 'VBitrate') etc.
+//
+// Both halves of that contract are gone after the autoconfig-v2 port:
+//   1. obs.startAutoconfig() now requires an explicit osn.IStreaming[] — the
+//      frontend passes the targets to test (see startAutoconfig in obs_handler.ts);
+//      the server no longer discovers or persists them. The bandwidth test emits
+//      'no_streaming_targets_provided' if the array is empty.
+//   2. SaveStreamSettings / SaveSettings no longer write to basic.ini — Phase 2
+//      replaced them with applyResults() which mutates live osn objects via
+//      obs_service_update / obs_encoder_update / obs_set_video_info. The
+//      obs.getSetting(...) assertions below would never see the autoconfig output
+//      again because that path simply doesn't exist.
+//
+// The suite is skipped wholesale rather than deleted so the historical contract
+// stays grep-able. Once the legacy nodeobs_autoconfig.cpp ifdef block and dead
+// code are removed in Phase 5 cleanup, drop this file too.
+// =============================================================================
 const testName = 'nodeobs_autoconfig';
 
-describe(testName, function() {
+describe.skip(testName + ' (DEPRECATED — see test_osn_autoconfig_v2.ts)', function() {
     this.timeout(30000)
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
@@ -57,7 +80,7 @@ describe(testName, function() {
         let progressInfo: IConfigProgress;
 	    let settingValue: any;
 
-        obs.startAutoconfig();
+        obs.startAutoconfig([]);
 
         osn.NodeObs.StartBandwidthTest();
 

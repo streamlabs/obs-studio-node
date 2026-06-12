@@ -60,6 +60,7 @@
 #endif
 
 #include "nodeobs_api.h"
+#include "nodeobs_service.h"
 #include "osn-error.hpp"
 #include "shared.hpp"
 

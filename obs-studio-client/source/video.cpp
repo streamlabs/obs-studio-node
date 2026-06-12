@@ -38,6 +38,7 @@ Napi::Object osn::Video::Init(Napi::Env env, Napi::Object exports)
 
 						  InstanceAccessor("skippedFrames", &osn::Video::GetSkippedFrames, nullptr),
 						  InstanceAccessor("encodedFrames", &osn::Video::GetEncodedFrames, nullptr),
+						  InstanceAccessor("canvasId", &osn::Video::GetCanvasId, nullptr),
 					  });
 	exports.Set("Video", func);
 	osn::Video::constructor = Napi::Persistent(func);
@@ -105,8 +106,12 @@ void osn::Video::Destroy(const Napi::CallbackInfo &info)
 
 	auto response = conn->call_synchronous_helper("Video", "RemoveVideoContext", {ipc::value((uint64_t)(this->canvasId))});
 	ValidateResponse(info, response);
-	isLastVideoValid = false;
 	return;
+}
+
+Napi::Value osn::Video::GetCanvasId(const Napi::CallbackInfo &info)
+{
+	return Napi::Number::New(info.Env(), (double)this->canvasId);
 }
 
 inline void CreateVideo(const Napi::CallbackInfo &info, const std::vector<ipc::value> &response, Napi::Object &video, uint32_t index)
@@ -146,19 +151,16 @@ Napi::Value osn::Video::get(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
-	if (!isLastVideoValid) {
-		lastVideo = conn->call_synchronous_helper("Video", "GetVideoContext", {ipc::value((uint64_t)this->canvasId)});
+	auto response = conn->call_synchronous_helper("Video", "GetVideoContext", {ipc::value((uint64_t)this->canvasId)});
 
-		if (!ValidateResponse(info, lastVideo))
-			return info.Env().Undefined();
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
 
-		if (!(lastVideo.size() == 11 || lastVideo.size() == 12))
-			return info.Env().Undefined();
-		isLastVideoValid = true;
-	}
+	if (!(response.size() == 11 || response.size() == 12))
+		return info.Env().Undefined();
 
 	Napi::Object video = Napi::Object::New(info.Env());
-	CreateVideo(info, lastVideo, video, 1);
+	CreateVideo(info, response, video, 1);
 
 	return video;
 }
@@ -181,9 +183,6 @@ void osn::Video::set(const Napi::CallbackInfo &info, const Napi::Value &value)
 	args.push_back(this->canvasId);
 
 	auto response = conn->call_synchronous_helper("Video", "SetVideoContext", args);
-
-	lastVideo.resize(0);
-	isLastVideoValid = false;
 
 	if (!ValidateResponse(info, response))
 		return;
