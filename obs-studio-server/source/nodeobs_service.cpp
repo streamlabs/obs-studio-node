@@ -133,15 +133,13 @@ void OBS_service::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startStreaming", std::vector<ipc::type>{}, OBS_service_startStreaming));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startRecording", std::vector<ipc::type>{}, OBS_service_startRecording));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startReplayBuffer", std::vector<ipc::type>{}, OBS_service_startReplayBuffer));
-	cls->register_function(
-		std::make_shared<ipc::function>("OBS_service_stopStreaming", std::vector<ipc::type>{ipc::type::Int32}, OBS_service_stopStreaming));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopStreaming", std::vector<ipc::type>{ipc::type::Int32}, OBS_service_stopStreaming));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopRecording", std::vector<ipc::type>{}, OBS_service_stopRecording));
-	cls->register_function(
-		std::make_shared<ipc::function>("OBS_service_stopReplayBuffer", std::vector<ipc::type>{ipc::type::Int32}, OBS_service_stopReplayBuffer));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopRecordingForce", std::vector<ipc::type>{}, OBS_service_stopRecordingForce));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopReplayBuffer", std::vector<ipc::type>{ipc::type::Int32}, OBS_service_stopReplayBuffer));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_connectOutputSignals", std::vector<ipc::type>{}, OBS_service_connectOutputSignals));
 	cls->register_function(std::make_shared<ipc::function>("Query", std::vector<ipc::type>{}, Query));
-	cls->register_function(
-		std::make_shared<ipc::function>("OBS_service_processReplayBufferHotkey", std::vector<ipc::type>{}, OBS_service_processReplayBufferHotkey));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_processReplayBufferHotkey", std::vector<ipc::type>{}, OBS_service_processReplayBufferHotkey));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_splitFile", std::vector<ipc::type>{}, OBS_service_splitFile));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastReplay", std::vector<ipc::type>{}, OBS_service_getLastReplay));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_getLastRecording", std::vector<ipc::type>{}, OBS_service_getLastRecording));
@@ -149,8 +147,7 @@ void OBS_service::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_createVirtualCam", std::vector<ipc::type>{}, OBS_service_createVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_startVirtualCam", std::vector<ipc::type>{}, OBS_service_startVirtualCam));
 	cls->register_function(std::make_shared<ipc::function>("OBS_service_stopVirtualCam", std::vector<ipc::type>{}, OBS_service_stopVirtualCam));
-	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String},
-							       OBS_service_updateVirtualCam));
+	cls->register_function(std::make_shared<ipc::function>("OBS_service_updateVirtualCam", std::vector<ipc::type>{ipc::type::Int32, ipc::type::String}, OBS_service_updateVirtualCam));
 
 	srv.register_collection(cls);
 }
@@ -275,6 +272,18 @@ void OBS_service::OBS_service_stopStreaming(void *data, const int64_t id, const 
 void OBS_service::OBS_service_stopRecording(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	stopRecording();
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+
+#if !defined(_WIN32)
+	util::CrashManager::UpdateBriefCrashInfoAppState();
+#endif
+
+	AUTO_DEBUG;
+}
+
+void OBS_service::OBS_service_stopRecordingForce(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	stopRecordingForce();
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
 #if !defined(_WIN32)
@@ -1882,6 +1891,16 @@ void OBS_service::stopRecording(void)
 {
 	blog(LOG_WARNING, "stopRecording with %s", obs_output_active(recordingOutput) ? "recordingOutput active" : "recordingOutput not active");
 	obs_output_stop(recordingOutput);
+	isRecording = false;
+}
+
+void OBS_service::stopRecordingForce(void)
+{
+	blog(LOG_WARNING, "stopRecordingForce called");
+
+  if (recordingOutput && obs_output_active(recordingOutput))
+		obs_output_force_stop(recordingOutput);
+
 	isRecording = false;
 }
 
