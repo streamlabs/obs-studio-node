@@ -1511,6 +1511,15 @@ export interface IModule {
     readonly dataPath: string;
 }
 
+export const NDI_RUNTIME_VERSION_MISMATCH = 'NDI_RUNTIME_VERSION_MISMATCH';
+export const NDI_RUNTIME_NOT_FOUND = 'NDI_RUNTIME_NOT_FOUND';
+
+export interface IObsModuleLoadFailure {
+    module: string;
+    code: string;
+    message: string;
+}
+
 export function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[] {
     const items: ISceneItem[] = [];
     if (Array.isArray(sceneItems)) {
