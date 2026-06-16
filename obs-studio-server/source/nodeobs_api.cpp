@@ -1025,8 +1025,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	if (!moduleLoadFailures.empty()) {
 		for (const ModuleLoadFailure &failure : moduleLoadFailures) {
 			if (!failure.code.empty() || !failure.message.empty()) {
-				blog(LOG_ERROR, "Failed to load plugin: %s (%s): %s", failure.module.c_str(), failure.code.c_str(),
-				     failure.message.c_str());
+				blog(LOG_ERROR, "Failed to load plugin: %s (%s): %s", failure.module.c_str(), failure.code.c_str(), failure.message.c_str());
 			} else {
 				blog(LOG_ERROR, "Failed to load plugin: %s", failure.module.c_str());
 			}
