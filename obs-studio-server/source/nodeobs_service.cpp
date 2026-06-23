@@ -1193,6 +1193,10 @@ void OBS_service::setupRecordingAudioEncoder(void)
 	}
 
 	const char *codec = obs_get_encoder_codec(id.c_str());
+	if (!codec) {
+		blog(LOG_ERROR, "Recording audio encoder '%s' is not registered; skipping audio encoder setup", id.c_str());
+		return;
+	}
 
 	for (int i = 0; i < MAX_AUDIO_MIXES; i++) {
 		std::ostringstream nameStream;
@@ -1546,7 +1550,11 @@ void OBS_service::updateAudioRecordingEncoder(bool isSimpleMode)
 		if (audioEncoder)
 			audioSimpleRecEncID = "";
 
-		const char *codec = obs_get_encoder_codec(audioEncoder);
+		const char *codec = audioEncoder ? obs_get_encoder_codec(audioEncoder) : nullptr;
+		if (!codec) {
+			blog(LOG_ERROR, "Simple recording audio encoder '%s' not registered; skipping setup", audioEncoder ? audioEncoder : "(null)");
+			return;
+		}
 		std::string name = "simple_audio_recording_" + std::string(codec);
 
 		if (!createAudioEncoder(&audioSimpleRecordingEncoder, audioSimpleRecEncID, std::string(audioEncoder), 192, name.c_str(), 0))
