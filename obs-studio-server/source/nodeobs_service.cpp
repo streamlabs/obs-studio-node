@@ -1217,8 +1217,10 @@ void OBS_service::setupRecordingAudioEncoder(void)
 void OBS_service::clearRecordingAudioEncoder(void)
 {
 	for (int i = 0; i < MAX_AUDIO_MIXES; i++) {
-		if (AdvancedRecordingAudioTracks[i])
+		if (AdvancedRecordingAudioTracks[i]) {
 			obs_encoder_release(AdvancedRecordingAudioTracks[i]);
+			AdvancedRecordingAudioTracks[i] = nullptr;
+		}
 	}
 }
 
