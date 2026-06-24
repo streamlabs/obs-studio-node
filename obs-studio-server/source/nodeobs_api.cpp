@@ -163,6 +163,53 @@ static void copyModuleLoadFailures(const obs_module_failure_info &mfi)
 	}
 }
 
+static bool isServiceRegistered(const char *id)
+{
+	const char *type = nullptr;
+	for (size_t i = 0; obs_enum_service_types(i, &type); i++) {
+		if (type && strcmp(type, id) == 0)
+			return true;
+	}
+	return false;
+}
+
+// A module that is missing on disk or fails to expose its OBS exports is skipped silently by libobs
+// (MODULE_FILE_NOT_FOUND / MODULE_MISSING_EXPORTS), so it never appears in mfi.failures. Verify the
+// capabilities we depend on are actually registered and surface the gaps through moduleLoadFailures.
+static void reportMissingEssentialModules()
+{
+	struct EssentialModule {
+		const char *module;
+		const char *message;
+		bool present;
+	};
+
+	const EssentialModule essentials[] = {
+		{"obs-ffmpeg", "AAC audio encoder (ffmpeg_aac) is unavailable", obs_get_encoder_codec("ffmpeg_aac") != nullptr},
+		{"obs-x264", "x264 video encoder (obs_x264) is unavailable", obs_get_encoder_codec("obs_x264") != nullptr},
+		{"obs-outputs", "RTMP output (rtmp_output) is unavailable", obs_get_output_flags("rtmp_output") != 0},
+		{"rtmp-services", "RTMP service (rtmp_common) is unavailable", isServiceRegistered("rtmp_common")},
+	};
+
+	for (const EssentialModule &essential : essentials) {
+		if (essential.present)
+			continue;
+
+		bool alreadyReported = false;
+		for (const ModuleLoadFailure &failure : moduleLoadFailures) {
+			if (failure.module == essential.module) {
+				alreadyReported = true;
+				break;
+			}
+		}
+		if (alreadyReported)
+			continue;
+
+		blog(LOG_ERROR, "Essential module missing: %s - %s", essential.module, essential.message);
+		moduleLoadFailures.push_back({essential.module, "ESSENTIAL_MODULE_MISSING", essential.message});
+	}
+}
+
 void OBS_API::Register(ipc::server &srv)
 {
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("API");
@@ -1032,6 +1079,8 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		}
 	}
 	obs_module_failure_info_free(&mfi);
+
+	reportMissingEssentialModules();
 
 	OBS_service::createService(StreamServiceId::Main);
 	OBS_service::createService(StreamServiceId::Second);
