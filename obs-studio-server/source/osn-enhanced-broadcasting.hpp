@@ -178,7 +178,7 @@ public:
 			auto output = this->GetOutput();
 			if (output && enhancedBroadcastingContext && enhancedBroadcastingContext->displayStatsTracker) {
 				obs_output_remove_packet_callback(output, enhanced_broadcasting_display_stats_callback,
-								enhancedBroadcastingContext->displayStatsTracker.get());
+								  enhancedBroadcastingContext->displayStatsTracker.get());
 			}
 		}
 		BaseStreaming::DeleteOutput();
