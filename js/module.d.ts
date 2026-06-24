@@ -801,6 +801,14 @@ export interface IStreaming {
     kbitsPerSec: number;
     dataOutput: number;
 }
+export interface IStreamingDisplayStats {
+    kbitsPerSec: number;
+    dataOutput: number;
+}
+export interface IStreamingPerDisplayStats {
+    horizontal: IStreamingDisplayStats;
+    vertical: IStreamingDisplayStats;
+}
 export interface EOutputSignal {
     type: string;
     signal: string;
@@ -842,6 +850,7 @@ export interface IAdvancedStreamingFactory {
 }
 export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
     additionalVideo?: IVideo;
+    displayStats: IStreamingPerDisplayStats;
 }
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
     create(): IEnhancedBroadcastingAdvancedStreaming;
@@ -850,6 +859,7 @@ export interface IEnhancedBroadcastingAdvancedStreamingFactory {
 }
 export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
     additionalVideo?: IVideo;
+    displayStats: IStreamingPerDisplayStats;
 }
 export interface IEnhancedBroadcastingSimpleStreamingFactory {
     create(): IEnhancedBroadcastingSimpleStreaming;

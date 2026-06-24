@@ -54,6 +54,7 @@ Napi::Object osn::EnhancedBroadcastingAdvancedStreaming::Init(Napi::Env env, Nap
 		 InstanceAccessor("totalFrames", &osn::EnhancedBroadcastingAdvancedStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::EnhancedBroadcastingAdvancedStreaming::GetKBitsPerSec, nullptr),
 		 InstanceAccessor("dataOutput", &osn::EnhancedBroadcastingAdvancedStreaming::GetDataOutput, nullptr),
+		 InstanceAccessor("displayStats", &osn::EnhancedBroadcastingAdvancedStreaming::GetDisplayStats, nullptr),
 
 		 InstanceAccessor("audioTrack", &osn::EnhancedBroadcastingAdvancedStreaming::GetAudioTrack,
 				  &osn::EnhancedBroadcastingAdvancedStreaming::SetAudioTrack),

@@ -1722,6 +1722,16 @@ export interface IStreaming {
     dataOutput: number;
 }
 
+export interface IStreamingDisplayStats {
+    kbitsPerSec: number;
+    dataOutput: number;
+}
+
+export interface IStreamingPerDisplayStats {
+    horizontal: IStreamingDisplayStats;
+    vertical: IStreamingDisplayStats;
+}
+
 export interface EOutputSignal {
     type: string,
     signal: string,
@@ -1779,6 +1789,7 @@ export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreami
     // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
     // This value should be initialized before the stream start.
     additionalVideo?: IVideo,
+    displayStats: IStreamingPerDisplayStats,
 }
 
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
@@ -1791,6 +1802,7 @@ export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
     // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
     // This value should be initialized before the stream start.
     additionalVideo?: IVideo,
+    displayStats: IStreamingPerDisplayStats,
 }
 
 export interface IEnhancedBroadcastingSimpleStreamingFactory {

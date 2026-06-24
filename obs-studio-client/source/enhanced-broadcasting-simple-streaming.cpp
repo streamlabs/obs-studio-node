@@ -60,6 +60,7 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 		 InstanceAccessor("totalFrames", &osn::EnhancedBroadcastingSimpleStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::EnhancedBroadcastingSimpleStreaming::GetKBitsPerSec, nullptr),
 		 InstanceAccessor("dataOutput", &osn::EnhancedBroadcastingSimpleStreaming::GetDataOutput, nullptr),
+		 InstanceAccessor("displayStats", &osn::EnhancedBroadcastingSimpleStreaming::GetDisplayStats, nullptr),
 
 		 InstanceMethod("start", &osn::EnhancedBroadcastingSimpleStreaming::Start),
 		 InstanceMethod("stop", &osn::EnhancedBroadcastingSimpleStreaming::Stop),
