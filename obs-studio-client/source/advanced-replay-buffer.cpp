@@ -21,6 +21,7 @@
 #include "audio-encoder.hpp"
 #include "advanced-streaming.hpp"
 #include "advanced-recording.hpp"
+#include "enhanced-broadcasting-advanced-streaming.hpp"
 
 Napi::FunctionReference osn::AdvancedReplayBuffer::constructor;
 
@@ -209,18 +210,40 @@ void osn::AdvancedReplayBuffer::SetStreaming(const Napi::CallbackInfo &info, con
 		return;
 	}
 
-	Napi::Object obj = value.As<Napi::Object>();
-	if (!obj.InstanceOf(osn::AdvancedStreaming::constructor.Value()))
+	if (!value.IsObject()) {
 		Napi::TypeError::New(info.Env(), "Object is not a valid Streaming").ThrowAsJavaScriptException();
+		return;
+	}
 
-	osn::AdvancedStreaming *streaming = Napi::ObjectWrap<osn::AdvancedStreaming>::Unwrap(value.ToObject());
+	Napi::Object obj = value.As<Napi::Object>();
+	uint64_t streamingUid = UINT64_MAX;
+	if (obj.InstanceOf(osn::AdvancedStreaming::constructor.Value())) {
+		osn::AdvancedStreaming *streaming = Napi::ObjectWrap<osn::AdvancedStreaming>::Unwrap(obj);
+		if (!streaming) {
+			Napi::TypeError::New(info.Env(), "Invalid streaming argument").ThrowAsJavaScriptException();
+			return;
+		}
 
-	if (!streaming) {
+		streamingUid = streaming->uid;
+	} else if (obj.InstanceOf(osn::EnhancedBroadcastingAdvancedStreaming::constructor.Value())) {
+		osn::EnhancedBroadcastingAdvancedStreaming *streaming = Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>::Unwrap(obj);
+		if (!streaming) {
+			Napi::TypeError::New(info.Env(), "Invalid streaming argument").ThrowAsJavaScriptException();
+			return;
+		}
+
+		streamingUid = streaming->uid;
+	} else {
+		Napi::TypeError::New(info.Env(), "Object is not a valid Streaming").ThrowAsJavaScriptException();
+		return;
+	}
+
+	if (streamingUid == UINT64_MAX) {
 		Napi::TypeError::New(info.Env(), "Invalid streaming argument").ThrowAsJavaScriptException();
 		return;
 	}
 
-	auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streaming->uid)});
+	auto response = conn->call_synchronous_helper(className, "SetStreaming", {ipc::value(this->uid), ipc::value(streamingUid)});
 	if (!ValidateResponse(info, response))
 		return;
 
