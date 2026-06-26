@@ -17,6 +17,11 @@
 ******************************************************************************/
 
 #pragma once
+#include "osn-enhanced-broadcasting-display-stats-tracker.hpp"
+#include "osn-error.hpp"
+#include "shared.hpp"
+#include "utility.hpp"
+
 #include <obs.h>
 
 #include <optional>
@@ -86,6 +91,7 @@ public:
 		if (!output) {
 			throw std::runtime_error("startStreaming - failed to create multitrack output");
 		}
+		auto display_stats_tracker = std::make_shared<EnhancedBroadcastingDisplayStatsTracker>(go_live_config.value());
 
 		// Stream key is defined by config from Twitch
 		auto multitrack_video_service = osn::create_service(*go_live_config, std::nullopt, "");
@@ -103,6 +109,7 @@ public:
 
 		// Register the BPM (Broadcast Performance Metrics) callback
 		obs_output_add_packet_callback(output, bpm_inject, NULL);
+		obs_output_add_packet_callback(output, enhanced_broadcasting_display_stats_callback, display_stats_tracker.get());
 
 		this->StartOutput();
 
@@ -111,6 +118,7 @@ public:
 			video_encoder_group,
 			std::move(audio_encoders),
 			std::move(multitrack_video_service),
+			display_stats_tracker,
 		});
 	}
 
@@ -125,7 +133,39 @@ public:
 		}
 
 		obs_output_remove_packet_callback(output, bpm_inject, NULL);
+		if (enhancedBroadcastingContext && enhancedBroadcastingContext->displayStatsTracker) {
+			obs_output_remove_packet_callback(output, enhanced_broadcasting_display_stats_callback,
+							  enhancedBroadcastingContext->displayStatsTracker.get());
+		}
 		bpm_destroy(output);
+	}
+
+	EnhancedBroadcastingPerDisplayStats GetPerDisplayStats()
+	{
+		if (!enhancedBroadcastingContext || !enhancedBroadcastingContext->displayStatsTracker)
+			return {};
+
+		return enhancedBroadcastingContext->displayStatsTracker->CalculateStats();
+	}
+
+	template<typename StreamingType, typename InterfaceType>
+	static void GetDisplayStats(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+	{
+		using Manager = typename InterfaceType::Manager;
+
+		StreamingType *streaming = static_cast<StreamingType *>(Manager::GetInstance().find(args[0].value_union.ui64));
+		if (!streaming) {
+			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Streaming reference is not valid.");
+		}
+
+		const auto stats = streaming->GetPerDisplayStats();
+
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		rval.push_back(ipc::value(stats.horizontal.kbitsPerSec));
+		rval.push_back(ipc::value(stats.horizontal.dataOutput));
+		rval.push_back(ipc::value(stats.vertical.kbitsPerSec));
+		rval.push_back(ipc::value(stats.vertical.dataOutput));
+		AUTO_DEBUG;
 	}
 
 	obs_video_info *GetAdditionalVideoCanvas() { return additionalVideoContext; }
@@ -134,6 +174,13 @@ public:
 
 	void DeleteOutput() override
 	{
+		{
+			auto output = this->GetOutput();
+			if (output && enhancedBroadcastingContext && enhancedBroadcastingContext->displayStatsTracker) {
+				obs_output_remove_packet_callback(output, enhanced_broadcasting_display_stats_callback,
+								  enhancedBroadcastingContext->displayStatsTracker.get());
+			}
+		}
 		BaseStreaming::DeleteOutput();
 		enhancedBroadcastingContext.reset();
 	}

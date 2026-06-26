@@ -323,6 +323,8 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-simple-streaming.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-advanced-streaming.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-advanced-streaming.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-display-stats-tracker.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-display-stats-tracker.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-advanced-streaming.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-advanced-streaming.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-simple-streaming.cpp"

@@ -54,6 +54,7 @@ Napi::Object osn::EnhancedBroadcastingAdvancedStreaming::Init(Napi::Env env, Nap
 		 InstanceAccessor("totalFrames", &osn::EnhancedBroadcastingAdvancedStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::EnhancedBroadcastingAdvancedStreaming::GetKBitsPerSec, nullptr),
 		 InstanceAccessor("dataOutput", &osn::EnhancedBroadcastingAdvancedStreaming::GetDataOutput, nullptr),
+		 InstanceAccessor("displayStats", &osn::EnhancedBroadcastingAdvancedStreaming::GetDisplayStats, nullptr),
 
 		 InstanceAccessor("audioTrack", &osn::EnhancedBroadcastingAdvancedStreaming::GetAudioTrack,
 				  &osn::EnhancedBroadcastingAdvancedStreaming::SetAudioTrack),
@@ -166,6 +167,31 @@ void osn::EnhancedBroadcastingAdvancedStreaming::SetAdditionalCanvas(const Napi:
 
 	auto response = conn->call_synchronous_helper(className, "SetAdditionalVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
 	ValidateResponse(info, response);
+}
+
+Napi::Value osn::EnhancedBroadcastingAdvancedStreaming::GetDisplayStats(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper(className, "GetDisplayStats", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response) || response.size() < 5)
+		return info.Env().Undefined();
+
+	Napi::Object horizontal = Napi::Object::New(info.Env());
+	horizontal.Set("kbitsPerSec", Napi::Number::New(info.Env(), response[1].value_union.fp64));
+	horizontal.Set("dataOutput", Napi::Number::New(info.Env(), response[2].value_union.fp64));
+
+	Napi::Object vertical = Napi::Object::New(info.Env());
+	vertical.Set("kbitsPerSec", Napi::Number::New(info.Env(), response[3].value_union.fp64));
+	vertical.Set("dataOutput", Napi::Number::New(info.Env(), response[4].value_union.fp64));
+
+	Napi::Object stats = Napi::Object::New(info.Env());
+	stats.Set("horizontal", horizontal);
+	stats.Set("vertical", vertical);
+	return stats;
 }
 
 Napi::Value osn::EnhancedBroadcastingAdvancedStreaming::GetLegacySettings(const Napi::CallbackInfo &info)

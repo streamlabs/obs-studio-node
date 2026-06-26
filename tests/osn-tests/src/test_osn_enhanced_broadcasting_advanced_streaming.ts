@@ -186,6 +186,11 @@ describe(testName, () => {
         expect(stream.totalFrames).to.not.equal(undefined, "Undefined totalFrames");
         expect(stream.kbitsPerSec).to.not.equal(undefined, "Undefined kbitsPerSec");
         expect(stream.dataOutput).to.not.equal(undefined, "Undefined dataOutput");
+        expect(stream.displayStats).to.not.equal(undefined, "Undefined displayStats");
+        expect(stream.displayStats.horizontal.kbitsPerSec).to.not.equal(undefined, "Undefined horizontal display kbitsPerSec");
+        expect(stream.displayStats.horizontal.dataOutput).to.not.equal(undefined, "Undefined horizontal display dataOutput");
+        expect(stream.displayStats.vertical.kbitsPerSec).to.not.equal(undefined, "Undefined vertical display kbitsPerSec");
+        expect(stream.displayStats.vertical.dataOutput).to.not.equal(undefined, "Undefined vertical display dataOutput");
 
         stream.stop();
 
@@ -293,6 +298,11 @@ describe(testName, () => {
         expect(stream.totalFrames).to.not.equal(undefined, "Undefined totalFrames");
         expect(stream.kbitsPerSec).to.not.equal(undefined, "Undefined kbitsPerSec");
         expect(stream.dataOutput).to.not.equal(undefined, "Undefined dataOutput");
+        expect(stream.displayStats).to.not.equal(undefined, "Undefined displayStats");
+        expect(stream.displayStats.horizontal.kbitsPerSec).to.not.equal(undefined, "Undefined horizontal display kbitsPerSec");
+        expect(stream.displayStats.horizontal.dataOutput).to.not.equal(undefined, "Undefined horizontal display dataOutput");
+        expect(stream.displayStats.vertical.kbitsPerSec).to.not.equal(undefined, "Undefined vertical display kbitsPerSec");
+        expect(stream.displayStats.vertical.dataOutput).to.not.equal(undefined, "Undefined vertical display dataOutput");
 
         stream.stop();
 

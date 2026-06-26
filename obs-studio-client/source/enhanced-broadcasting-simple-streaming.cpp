@@ -60,6 +60,7 @@ Napi::Object osn::EnhancedBroadcastingSimpleStreaming::Init(Napi::Env env, Napi:
 		 InstanceAccessor("totalFrames", &osn::EnhancedBroadcastingSimpleStreaming::GetTotalFrames, nullptr),
 		 InstanceAccessor("kbitsPerSec", &osn::EnhancedBroadcastingSimpleStreaming::GetKBitsPerSec, nullptr),
 		 InstanceAccessor("dataOutput", &osn::EnhancedBroadcastingSimpleStreaming::GetDataOutput, nullptr),
+		 InstanceAccessor("displayStats", &osn::EnhancedBroadcastingSimpleStreaming::GetDisplayStats, nullptr),
 
 		 InstanceMethod("start", &osn::EnhancedBroadcastingSimpleStreaming::Start),
 		 InstanceMethod("stop", &osn::EnhancedBroadcastingSimpleStreaming::Stop),
@@ -159,6 +160,31 @@ void osn::EnhancedBroadcastingSimpleStreaming::SetAdditionalCanvas(const Napi::C
 
 	auto response = conn->call_synchronous_helper(className, "SetAdditionalVideoCanvas", {ipc::value(this->uid), ipc::value(canvas->canvasId)});
 	ValidateResponse(info, response);
+}
+
+Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetDisplayStats(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper(className, "GetDisplayStats", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response) || response.size() < 5)
+		return info.Env().Undefined();
+
+	Napi::Object horizontal = Napi::Object::New(info.Env());
+	horizontal.Set("kbitsPerSec", Napi::Number::New(info.Env(), response[1].value_union.fp64));
+	horizontal.Set("dataOutput", Napi::Number::New(info.Env(), response[2].value_union.fp64));
+
+	Napi::Object vertical = Napi::Object::New(info.Env());
+	vertical.Set("kbitsPerSec", Napi::Number::New(info.Env(), response[3].value_union.fp64));
+	vertical.Set("dataOutput", Napi::Number::New(info.Env(), response[4].value_union.fp64));
+
+	Napi::Object stats = Napi::Object::New(info.Env());
+	stats.Set("horizontal", horizontal);
+	stats.Set("vertical", vertical);
+	return stats;
 }
 
 Napi::Value osn::EnhancedBroadcastingSimpleStreaming::GetLegacySettings(const Napi::CallbackInfo &info)
