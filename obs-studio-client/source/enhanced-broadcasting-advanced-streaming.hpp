@@ -32,6 +32,7 @@ public:
 
 	Napi::Value GetAdditionalCanvas(const Napi::CallbackInfo &info);
 	void SetAdditionalCanvas(const Napi::CallbackInfo &info, const Napi::Value &value);
+	Napi::Value GetDisplayStats(const Napi::CallbackInfo &info);
 
 	static Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
 	static void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
