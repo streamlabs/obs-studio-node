@@ -697,6 +697,13 @@ export interface IModule {
     readonly binaryPath: string;
     readonly dataPath: string;
 }
+export declare const NDI_RUNTIME_VERSION_MISMATCH = "NDI_RUNTIME_VERSION_MISMATCH";
+export declare const NDI_RUNTIME_NOT_FOUND = "NDI_RUNTIME_NOT_FOUND";
+export interface IObsModuleLoadFailure {
+    module: string;
+    code: string;
+    message: string;
+}
 export declare function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[];
 export interface FilterInfo {
     name: string;

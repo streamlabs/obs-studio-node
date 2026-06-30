@@ -82,6 +82,43 @@ Napi::Value api::OBS_API_destroyOBS_API(const Napi::CallbackInfo &info)
 	return info.Env().Undefined();
 }
 
+Napi::Value api::OBS_API_getModuleLoadFailures(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("API", "OBS_API_getModuleLoadFailures", {});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	if (response.size() < 2) {
+		Napi::Error::New(info.Env(), "Malformed module load failure response.").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	const uint32_t count = response[1].value_union.ui32;
+	const size_t expectedSize = 2 + static_cast<size_t>(count) * 3;
+	if (response.size() < expectedSize) {
+		Napi::Error::New(info.Env(), "Malformed module load failure response.").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	Napi::Array failures = Napi::Array::New(info.Env(), count);
+	size_t responseIndex = 2;
+
+	for (uint32_t i = 0; i < count; i++) {
+		Napi::Object failure = Napi::Object::New(info.Env());
+		failure.Set("module", Napi::String::New(info.Env(), response[responseIndex++].value_str));
+		failure.Set("code", Napi::String::New(info.Env(), response[responseIndex++].value_str));
+		failure.Set("message", Napi::String::New(info.Env(), response[responseIndex++].value_str));
+		failures.Set(i, failure);
+	}
+
+	return failures;
+}
+
 Napi::Value api::OBS_API_getPerformanceStatistics(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -560,6 +597,7 @@ void api::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_API_initAPI"), Napi::Function::New(env, api::OBS_API_initAPI));
 	exports.Set(Napi::String::New(env, "OBS_API_destroyOBS_API"), Napi::Function::New(env, api::OBS_API_destroyOBS_API));
 	exports.Set(Napi::String::New(env, "OBS_API_getPerformanceStatistics"), Napi::Function::New(env, api::OBS_API_getPerformanceStatistics));
+	exports.Set(Napi::String::New(env, "OBS_API_getModuleLoadFailures"), Napi::Function::New(env, api::OBS_API_getModuleLoadFailures));
 	exports.Set(Napi::String::New(env, "SetWorkingDirectory"), Napi::Function::New(env, api::SetWorkingDirectory));
 	exports.Set(Napi::String::New(env, "InitShutdownSequence"), Napi::Function::New(env, api::InitShutdownSequence));
 	exports.Set(Napi::String::New(env, "OBS_API_QueryHotkeys"), Napi::Function::New(env, api::OBS_API_QueryHotkeys));
