@@ -69,6 +69,34 @@ describe(testName, () => {
         hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
     });
 
+    it('Can be used as the parent stream for simple recording', function() {
+        const stream = osn.EnhancedBroadcastingSimpleStreamingFactory.create();
+        const recording = osn.SimpleRecordingFactory.create();
+
+        try {
+            recording.streaming = stream;
+
+            expect(recording.streaming).to.equal(stream);
+        } finally {
+            osn.SimpleRecordingFactory.destroy(recording);
+            osn.EnhancedBroadcastingSimpleStreamingFactory.destroy(stream);
+        }
+    });
+
+    it('Can be used as the parent stream for simple replay buffer', function() {
+        const stream = osn.EnhancedBroadcastingSimpleStreamingFactory.create();
+        const replayBuffer = osn.SimpleReplayBufferFactory.create();
+
+        try {
+            replayBuffer.streaming = stream;
+
+            expect(replayBuffer.streaming).to.equal(stream);
+        } finally {
+            osn.SimpleReplayBufferFactory.destroy(replayBuffer);
+            osn.EnhancedBroadcastingSimpleStreamingFactory.destroy(stream);
+        }
+    });
+
     it('Enhanced Broadcasting Simple Streaming honors stream delay', async function() {
         if (obs.isDarwin()) {
             this.skip();

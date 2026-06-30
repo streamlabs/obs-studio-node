@@ -120,6 +120,34 @@ describe(testName, () => {
         }
     });
 
+    it('Can be used as the parent stream for advanced recording', function() {
+        const stream = osn.EnhancedBroadcastingAdvancedStreamingFactory.create();
+        const recording = osn.AdvancedRecordingFactory.create();
+
+        try {
+            recording.streaming = stream;
+
+            expect(recording.streaming).to.equal(stream);
+        } finally {
+            osn.AdvancedRecordingFactory.destroy(recording);
+            osn.EnhancedBroadcastingAdvancedStreamingFactory.destroy(stream);
+        }
+    });
+
+    it('Can be used as the parent stream for advanced replay buffer', function() {
+        const stream = osn.EnhancedBroadcastingAdvancedStreamingFactory.create();
+        const replayBuffer = osn.AdvancedReplayBufferFactory.create();
+
+        try {
+            replayBuffer.streaming = stream;
+
+            expect(replayBuffer.streaming).to.equal(stream);
+        } finally {
+            osn.AdvancedReplayBufferFactory.destroy(replayBuffer);
+            osn.EnhancedBroadcastingAdvancedStreamingFactory.destroy(stream);
+        }
+    });
+
     it('Enhanced Broadcasting Advanced Streaming Single Canvas', async function() {
         if (obs.isDarwin()) {
             this.skip();
