@@ -9,9 +9,47 @@ import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_en
 import { ERecordingFormat, ERecordingQuality } from '../osn';
 import path = require('path');
 const fs = require('fs');
+const childProcess = require('child_process');
 
 const testName = 'osn-advanced-recording';
 const customFilenamePattern = '%CCYY-%MM-%DD_%hh-%mm-%ss-%s-%%';
+
+function getFfprobePath() {
+    const executable = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
+    const bundledFfprobe = path.join(
+        path.normalize(__dirname),
+        '..',
+        '..',
+        '..',
+        'build',
+        'libobs-src',
+        'bin',
+        process.arch === 'x64' ? '64bit' : '32bit',
+        executable,
+    );
+
+    return fs.existsSync(bundledFfprobe) ? bundledFfprobe : executable;
+}
+
+function getAudioStreamTitles(filePath: string): string[] {
+    const output = childProcess.execFileSync(
+        getFfprobePath(),
+        [
+            '-v',
+            'error',
+            '-select_streams',
+            'a',
+            '-show_entries',
+            'stream_tags=title',
+            '-of',
+            'json',
+            filePath,
+        ],
+        { encoding: 'utf8' },
+    );
+    const probe = JSON.parse(output);
+    return (probe.streams || []).map((stream: { tags?: { title?: string } }) => stream.tags?.title || '');
+}
 
 describe(testName, () => {
     let obs: OBSHandler;
@@ -332,6 +370,93 @@ describe(testName, () => {
         const videoEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
         videoEncoder.release();
+    });
+
+    it('Advanced recording writes configured audio track names into file metadata', async function () {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        const recording = osn.AdvancedRecordingFactory.create();
+        const track1Name = 'Track1 - custom name';
+        const track2Name = 'Track2 - custom name';
+
+        recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
+        recording.format = ERecordingFormat.MKV;
+        recording.fileFormat = `audio-track-title-${Date.now()}`;
+        recording.useStreamEncoders = false;
+        recording.videoEncoder =
+            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-adv-recording-track-title');
+        recording.overwrite = true;
+        recording.noSpace = false;
+        recording.video = obs.defaultVideoContext;
+        recording.mixer = 3;
+        recording.signalHandler = (signal) => {obs.signals.push(signal)};
+
+        const track1 = osn.AudioTrackFactory.create(160, track1Name);
+        const track2 = osn.AudioTrackFactory.create(160, track2Name);
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        osn.AudioTrackFactory.setAtIndex(track2, 2);
+
+        try {
+            recording.start();
+
+            let signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Start);
+
+            if (signalInfo.signal == EOBSOutputSignal.Stop) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            await sleep(500);
+
+            recording.stop();
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Stop);
+
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            signalInfo = await obs.getNextSignalInfo(
+                EOBSOutputType.Recording, EOBSOutputSignal.Wrote);
+
+            if (signalInfo.code != 0) {
+                throw Error(GetErrorMessage(
+                    ETestErrorMsg.RecordOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
+            }
+
+            expect(signalInfo.type).to.equal(
+                EOBSOutputType.Recording, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+            expect(signalInfo.signal).to.equal(
+                EOBSOutputSignal.Wrote, GetErrorMessage(ETestErrorMsg.RecordingOutput));
+
+            expect(getAudioStreamTitles(recording.lastFile())).to.deep.equal([track1Name, track2Name]);
+        } finally {
+            const videoEncoder = recording.videoEncoder;
+            osn.AdvancedRecordingFactory.destroy(recording);
+            videoEncoder.release();
+        }
     });
 
     it('Audio track uses configured bitrate after binding to an OBS encoder', function () {
