@@ -16,6 +16,7 @@ const customFilenamePattern = '%CCYY-%MM-%DD_%hh-%mm-%ss-%s-%%';
 
 function getFfprobePath() {
     const executable = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
+    const packagedFfprobe = path.join(path.normalize(osn.wd), executable);
     const bundledFfprobe = path.join(
         path.normalize(__dirname),
         '..',
@@ -28,7 +29,7 @@ function getFfprobePath() {
         executable,
     );
 
-    return fs.existsSync(bundledFfprobe) ? bundledFfprobe : executable;
+    return [packagedFfprobe, bundledFfprobe].find(ffprobePath => fs.existsSync(ffprobePath)) || executable;
 }
 
 function getAudioStreamTitles(filePath: string): string[] {
