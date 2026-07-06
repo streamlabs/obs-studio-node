@@ -80,6 +80,9 @@ public:
 		if (!go_live_config.has_value()) {
 			throw std::runtime_error("startStreaming - go live config is empty");
 		}
+		if (auto payload = osn::EnhancedBroadcastingResolutionChangeSignalPayload(go_live_post, go_live_config.value())) {
+			this->PushReceivedSignal(ENHANCED_BROADCASTING_RESOLUTION_CHANGE_SIGNAL, 0, *payload);
+		}
 
 		const auto audio_bitrate = osn::GetMultitrackAudioBitrate();
 		const auto audio_encoder_id = osn::GetSimpleAACEncoderForBitrate(audio_bitrate);
