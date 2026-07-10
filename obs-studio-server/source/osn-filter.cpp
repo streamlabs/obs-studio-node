@@ -39,7 +39,17 @@ void osn::Filter::Types(void *data, const int64_t id, const std::vector<ipc::val
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	const char *typeId = nullptr;
 	for (size_t idx = 0; obs_enum_filter_types(idx, &typeId); idx++) {
-		rval.push_back(ipc::value(typeId ? typeId : ""));
+		if (!typeId)
+			continue;
+		uint32_t caps = obs_get_source_output_flags(typeId);
+		if ((caps & OBS_SOURCE_DEPRECATED) != 0)
+			continue;
+		if ((caps & OBS_SOURCE_CAP_DISABLED) != 0)
+			continue;
+		if ((caps & OBS_SOURCE_CAP_OBSOLETE) != 0)
+			continue;
+
+		rval.push_back(ipc::value(typeId));
 	}
 	AUTO_DEBUG;
 }
