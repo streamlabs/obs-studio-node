@@ -195,4 +195,21 @@ describe(testName, () => {
             filter.release();
         });
     });
+
+    it('Verify obsolete filters are not returned to the caller', () => {
+        // These v1 filters are superseded by v2 equivalents and marked OBS_SOURCE_CAP_OBSOLETE.
+        const knownObsoleteFilters = [
+            'color_filter',
+            'color_key_filter',
+            'chroma_key_filter',
+            'sharpness_filter',
+            'mask_filter',
+            'luma_key_filter',
+            'noise_suppress_filter',
+        ];
+
+        knownObsoleteFilters.forEach(function(id) {
+            expect(obs.filterTypes).to.not.include(id, `Obsolete filter '${id}' should not be returned to the caller`);
+        });
+    });
 });
