@@ -134,6 +134,14 @@ std::chrono::high_resolution_clock::time_point start_wait_acknowledge;
 
 ipc::server *g_server = nullptr;
 
+struct ModuleLoadFailure {
+	std::string module;
+	std::string code;
+	std::string message;
+};
+
+static std::vector<ModuleLoadFailure> moduleLoadFailures;
+
 static bool browserAccel = true;
 static bool mediaFileCaching = true;
 static uint32_t sdrWhiteLevel = 300;
@@ -141,6 +149,19 @@ static uint32_t hdrNominalPeakLevel = 1000;
 static bool lowLatencyAudioBuffering = false;
 static bool forceGPURendering = true;
 static std::string processPriority = "Normal";
+
+static void copyModuleLoadFailures(const obs_module_failure_info &mfi)
+{
+	moduleLoadFailures.clear();
+
+	if (mfi.failures) {
+		for (size_t i = 0; i < mfi.count; i++) {
+			const obs_module_load_failure &failure = mfi.failures[i];
+			moduleLoadFailures.push_back(
+				{failure.module ? failure.module : "", failure.code ? failure.code : "", failure.message ? failure.message : ""});
+		}
+	}
+}
 
 void OBS_API::Register(ipc::server &srv)
 {
@@ -150,6 +171,7 @@ void OBS_API::Register(ipc::server &srv)
 		"OBS_API_initAPI", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String, ipc::type::String}, OBS_API_initAPI));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_destroyOBS_API", std::vector<ipc::type>{}, OBS_API_destroyOBS_API));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_getPerformanceStatistics", std::vector<ipc::type>{}, OBS_API_getPerformanceStatistics));
+	cls->register_function(std::make_shared<ipc::function>("OBS_API_getModuleLoadFailures", std::vector<ipc::type>{}, OBS_API_getModuleLoadFailures));
 	cls->register_function(std::make_shared<ipc::function>("SetWorkingDirectory", std::vector<ipc::type>{ipc::type::String}, SetWorkingDirectory));
 	cls->register_function(std::make_shared<ipc::function>("StopCrashHandler", std::vector<ipc::type>{}, StopCrashHandler));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_QueryHotkeys", std::vector<ipc::type>{}, QueryHotkeys));
@@ -543,7 +565,7 @@ static void node_obs_log(int log_level, const char *msg, va_list args, void *par
 			}
 
 			// Internal Log
-			logReport.push(newmsg, log_level);
+			logReport.push(newmsg);
 
 			// Std Out / Std Err
 			/// Why fwrite and not std::cout and std::cerr?
@@ -885,7 +907,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	before attempting to make a file there. */
 	if (os_mkdirs(log_path.c_str()) == MKDIR_ERROR) {
 		std::cerr << "Failed to open log file" << std::endl;
-		util::CrashManager::AddWarning("Error on log file, failed to create path: " + log_path);
+		util::CrashManager::AddServerWarning("Error on log file, failed to create path: " + log_path);
 	}
 
 	/* Delete oldest file in the folder to imitate rotating */
@@ -902,7 +924,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 #endif
 	if (!logParam->logStream.is_open()) {
 		logParam.reset();
-		util::CrashManager::AddWarning("Error on log file, failed to open: " + log_path);
+		util::CrashManager::AddServerWarning("Error on log file, failed to open: " + log_path);
 		std::cerr << "Failed to open log file" << std::endl;
 	}
 	base_set_log_handler(node_obs_log, (logParam) ? logParam.release() : nullptr);
@@ -923,19 +945,15 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		}
 	}
 
-	// Register the pre and post server callbacks to log the data into the crashmanager
-	g_server->set_pre_callback(
-		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-			util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-			crashManager.ProcessPreServerCall(cname, fname, args);
-		},
-		&crashManager);
-	g_server->set_post_callback(
-		[](std::string cname, std::string fname, const std::vector<ipc::value> &args, void *data) {
-			util::CrashManager &crashManager = *static_cast<util::CrashManager *>(data);
-			crashManager.ProcessPostServerCall(cname, fname, args);
-		},
-		&crashManager);
+	if (g_server) {
+		// Register the pre and post server callbacks to log the data into the crashmanager
+		g_server->set_pre_callback([](std::string cname, std::string fname, const std::vector<ipc::value> &args,
+					      void *) { util::CrashManager::ProcessPreServerCall(cname, fname, args); },
+					   nullptr);
+		g_server->set_post_callback([](std::string cname, std::string fname, const std::vector<ipc::value> &args,
+					       void *) { util::CrashManager::ProcessPostServerCall(cname, fname, args); },
+					    nullptr);
+	}
 
 #endif
 
@@ -964,7 +982,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		// when init API supports more return codes.
 #ifdef WIN32
 		std::string userDataPath = std::string(userData.begin(), userData.end());
-		util::CrashManager::AddWarning("Failed to start OBS, locale: " + locale + " user data: " + userDataPath);
+		util::CrashManager::AddServerWarning("Failed to start OBS, locale: " + locale + " user data: " + userDataPath);
 #endif
 	}
 
@@ -998,18 +1016,22 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	obs_data_release(private_settings);
 
 	addModulePaths();
-	struct obs_module_failure_info mfi;
+	struct obs_module_failure_info mfi = {};
 	obs_load_all_modules2(&mfi);
+	copyModuleLoadFailures(mfi);
 	obs_log_loaded_modules();
 	obs_post_load_modules();
 
-	if (mfi.count) {
-		char **plugin = mfi.failed_modules;
-		while (*plugin) {
-			blog(LOG_ERROR, "Failed to load plugin: %s", *plugin);
-			plugin++;
+	if (!moduleLoadFailures.empty()) {
+		for (const ModuleLoadFailure &failure : moduleLoadFailures) {
+			if (!failure.code.empty() || !failure.message.empty()) {
+				blog(LOG_ERROR, "Failed to load plugin: %s (%s): %s", failure.module.c_str(), failure.code.c_str(), failure.message.c_str());
+			} else {
+				blog(LOG_ERROR, "Failed to load plugin: %s", failure.module.c_str());
+			}
 		}
 	}
+	obs_module_failure_info_free(&mfi);
 
 	OBS_service::createService(StreamServiceId::Main);
 	OBS_service::createService(StreamServiceId::Second);
@@ -1070,6 +1092,20 @@ void OBS_API::OBS_API_destroyOBS_API(void *data, const int64_t id, const std::ve
 	/* END INJECT osn::Source::Manager */
 	destroyOBS_API();
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void OBS_API::OBS_API_getModuleLoadFailures(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value((uint32_t)moduleLoadFailures.size()));
+
+	for (const ModuleLoadFailure &failure : moduleLoadFailures) {
+		rval.push_back(ipc::value(failure.module));
+		rval.push_back(ipc::value(failure.code));
+		rval.push_back(ipc::value(failure.message));
+	}
+
 	AUTO_DEBUG;
 }
 
@@ -2048,19 +2084,15 @@ double OBS_API::getMemoryUsage()
 	return (double)os_get_proc_resident_size() / (1024.0 * 1024.0);
 }
 
-const std::vector<std::string> &OBS_API::getOBSLogErrors()
+std::deque<std::string> OBS_API::snapshotOBSLogGeneral()
 {
-	return logReport.errors;
-}
+	std::unique_lock<std::mutex> lock(logMutex, std::try_to_lock);
+	if (!lock.owns_lock())
+		return {};
 
-const std::vector<std::string> &OBS_API::getOBSLogWarnings()
-{
-	return logReport.warnings;
-}
-
-std::queue<std::string> &OBS_API::getOBSLogGeneral()
-{
-	return logReport.general;
+	std::deque<std::string> snapshot = std::move(logReport.general);
+	logReport.general.clear();
+	return snapshot;
 }
 
 std::string OBS_API::getCurrentVersion()

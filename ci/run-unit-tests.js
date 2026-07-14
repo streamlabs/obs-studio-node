@@ -10,12 +10,14 @@ const buildDirectory =
   process.env.BUILD_DIRECTORY ||
   "build";
 const buildConfig = process.env.BUILD_CONFIG || process.env.BuildConfig || "RelWithDebInfo";
-const target = "obs_studio_client_unit_tests";
-// Match the TEST_PREFIX passed to catch_discover_tests so ctest only runs this unit-test suite.
-const testPattern = `^${target}::`;
 
-function hasDiscoveredTests() {
-  const testsDirectory = path.join(buildDirectory, "obs-studio-client");
+const testSuites = [
+  { target: "obs_studio_client_unit_tests", sourceDir: "obs-studio-client" },
+  { target: "obs_studio_server_unit_tests", sourceDir: "obs-studio-server" },
+];
+
+function hasDiscoveredTests(target, sourceDir) {
+  const testsDirectory = path.join(buildDirectory, sourceDir);
 
   try {
     return fs
@@ -39,16 +41,18 @@ function run(command, args) {
   }
 }
 
-const skipBuild =
-  process.env.OSN_SKIP_UNIT_TEST_BUILD === "1" ||
-  // Test jobs run from uploaded build artifacts. Building again can force CMake
-  // to reconfigure FetchContent checkouts whose hidden .git directories were not uploaded.
-  (process.env.GITHUB_ACTIONS === "true" && hasDiscoveredTests());
+for (const { target, sourceDir } of testSuites) {
+  const testPattern = `^${target}::`;
 
-if (skipBuild) {
-  console.log("Skipping unit-test build; discovered CTest tests are already present.");
-} else {
-  run("cmake", ["--build", buildDirectory, "--config", buildConfig, "--target", target]);
+  const skipBuild =
+    process.env.OSN_SKIP_UNIT_TEST_BUILD === "1" ||
+    (process.env.GITHUB_ACTIONS === "true" && hasDiscoveredTests(target, sourceDir));
+
+  if (skipBuild) {
+    console.log(`Skipping build for ${target}; discovered CTest tests are already present.`);
+  } else {
+    run("cmake", ["--build", buildDirectory, "--config", buildConfig, "--target", target]);
+  }
+
+  run("ctest", ["--test-dir", buildDirectory, "-C", buildConfig, "--output-on-failure", "-R", testPattern]);
 }
-
-run("ctest", ["--test-dir", buildDirectory, "-C", buildConfig, "--output-on-failure", "-R", testPattern]);

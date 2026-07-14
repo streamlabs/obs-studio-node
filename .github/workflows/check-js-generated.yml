@@ -1,0 +1,36 @@
+name: Check Generated JS
+
+on:
+  push:
+    paths-ignore: ['**.md']
+    branches-ignore: [staging]
+  pull_request:
+    paths-ignore: ['**.md']
+    branches-ignore: [staging]
+
+permissions:
+  contents: read
+
+jobs:
+  check-js-generated:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          corepack prepare yarn@4.14.1 --activate
+          yarn install --immutable
+
+      - name: Regenerate js/ outputs
+        run: yarn run build:javascript
+
+      - name: Fail if generated files are stale
+        run: ./ci/check-js-generated.sh

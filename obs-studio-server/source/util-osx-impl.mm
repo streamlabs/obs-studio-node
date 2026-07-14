@@ -62,7 +62,7 @@ void UtilObjCInt::wait_terminate(void)
 
 @implementation UtilImplObj
 
-UtilObjCInt::UtilObjCInt(void) : self(NULL) {}
+UtilObjCInt::UtilObjCInt(void) : self(NULL), state(EState::Idle), worker(nullptr) {}
 
 UtilObjCInt::~UtilObjCInt(void)
 {

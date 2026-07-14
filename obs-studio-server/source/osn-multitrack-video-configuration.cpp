@@ -212,6 +212,57 @@ Config DownloadGoLiveConfig(std::string url, const PostData &post_data)
 	return {};
 }
 
+static const char *EnhancedBroadcastingCanvasName(size_t canvas_index)
+{
+	switch (canvas_index) {
+	case 0:
+		return "horizontal";
+	case 1:
+		return "vertical";
+	default:
+		return nullptr;
+	}
+}
+
+std::optional<std::string> EnhancedBroadcastingResolutionChangeSignalPayload(const PostData &post_data, const Config &config)
+{
+	const auto &canvases = post_data.preferences.canvases;
+	if (canvases.empty() || config.encoder_configurations.empty())
+		return std::nullopt;
+
+	std::vector<const VideoEncoderConfiguration *> top_configs(canvases.size(), nullptr);
+	for (const auto &encoder_config : config.encoder_configurations) {
+		if (encoder_config.canvas_index >= canvases.size())
+			continue;
+
+		auto &top_config = top_configs[encoder_config.canvas_index];
+		if (!top_config)
+			top_config = &encoder_config;
+	}
+
+	nlohmann::json resolution_changes = nlohmann::json::array();
+	for (size_t canvas_index = 0; canvas_index < canvases.size(); canvas_index++) {
+		const char *canvas_name = EnhancedBroadcastingCanvasName(canvas_index);
+		if (!canvas_name || !top_configs[canvas_index])
+			continue;
+
+		const auto &canvas = canvases[canvas_index];
+		const auto &top_config = *top_configs[canvas_index];
+		if (top_config.width == 0 || top_config.height == 0)
+			continue;
+
+		if (canvas.width == top_config.width && canvas.height == top_config.height)
+			continue;
+
+		resolution_changes.push_back({{"canvas", canvas_name}, {"width", top_config.width}, {"height", top_config.height}});
+	}
+
+	if (resolution_changes.empty())
+		return std::nullopt;
+
+	return nlohmann::json{{"resolution_changes", resolution_changes}}.dump();
+}
+
 std::string MultitrackVideoAutoConfigURL(obs_service_t *service)
 {
 	OBSDataAutoRelease settings = obs_service_get_settings(service);

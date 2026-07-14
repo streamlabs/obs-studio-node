@@ -51,10 +51,11 @@ void osn::VideoEncoder::Create(void *data, const int64_t id, const std::vector<i
 		settingsJson = "{}";
 	obs_data_t *settings = obs_data_create_from_json(settingsJson.c_str());
 
-	//for simple need to get internal name
+	// Simple settings may store aliases like qsv/amd/nvenc, but getAvailableEncoders()
+	// returns concrete OBS ids. Preserve registered concrete ids and only translate aliases.
 	std::string convertedEncoderId = encoderId;
 	const char *mode = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode"));
-	if (strcmp(mode, "Simple") == 0) {
+	if (strcmp(mode, "Simple") == 0 && !osn::EncoderUtils::isEncoderRegistered(encoderId)) {
 		convertedEncoderId = osn::EncoderUtils::getInternalEncoderFromSimple(encoderId.c_str());
 	}
 

@@ -10,7 +10,7 @@ on:
 
 jobs:
   clang-format-check:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,7 +19,8 @@ jobs:
 
       - name: Install clang format
         run: |
-          sudo apt-get install -y clang-format-13
+          sudo apt-get update
+          sudo apt-get install -y clang-format-18
 
       - name: 'Run clang-format'
         run: |

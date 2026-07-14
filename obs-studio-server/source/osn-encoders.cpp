@@ -27,6 +27,8 @@ static bool codecListContains(const char **codecs, const char *codec);
 static const char *getStreamOutputType(const obs_service_t *service);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
+static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
+static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, const std::string &encoderName, bool simpleMode);
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
 
@@ -68,7 +70,7 @@ const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEn
 	 APPLE_HARDWARE_VIDEO_ENCODER_M1, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// get_simple_output_encoder had Apple HEVC so add it here, never used with an advanced name but follow the pattern of M1 above
 	{"Apple VT HEVC Hardware Encoder", APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "Hardware (Apple, HEVC)", SIMPLE_ENCODER_APPLE_HEVC,
-	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, false, true, false, PRESET_APPLE, FAMILY_APPLE},
+	 APPLE_HARDWARE_VIDEO_ENCODER_HEVC, "", true, true, true, true, true, false, PRESET_APPLE, FAMILY_APPLE},
 	// AMD HW H.264
 	{"AMD HW H.264", ADVANCED_ENCODER_AMD, "Hardware (AMD, H.264)", SIMPLE_ENCODER_AMD, ADVANCED_ENCODER_AMD, "", true, true, true, false, true, false,
 	 PRESET_AMD, FAMILY_AMD},
@@ -212,6 +214,9 @@ bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service
 		}
 		if (!containerSupportsCodec(container, codec))
 			return false;
+		if (container == "flv" && videoEncoderOptions[checkIndex].family == FAMILY_APPLE) {
+			return false;
+		}
 	}
 
 	return true;
@@ -264,6 +269,51 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 	return validEncoder;
 }
 
+static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName)
+{
+	if (opt.family == FAMILY_OBS)
+		return "x264";
+	if (opt.family == FAMILY_QSV)
+		return "qsv";
+	if (opt.family == FAMILY_AMD)
+		return "amd";
+	if (opt.family == FAMILY_APPLE)
+		return "apple";
+	if (opt.family == FAMILY_NVENC_HEVC)
+		return ENCODER_NVENC_HEVC_TEX;
+	if (opt.family == FAMILY_FFMPEG) {
+		if (encoderName == ENCODER_AV1_AOM_FFMPEG || encoderName == ENCODER_AV1_SVT_FFMPEG)
+			return encoderName;
+		return "ffmpeg";
+	}
+	if (opt.family == FAMILY_NVENC) {
+		if (name == SIMPLE_ENCODER_NVENC || encoderName == ADVANCED_ENCODER_NVENC)
+			return "nvenc";
+		if (encoderName == ENCODER_JIM_NVENC)
+			return "jim_nvenc";
+		if (encoderName == ENCODER_NVENC_H264_TEX || encoderName == ENCODER_NVENC_AV1_TEX)
+			return encoderName;
+		return "nvenc";
+	}
+
+	return opt.family;
+}
+
+static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, const std::string &encoderName, bool simpleMode)
+{
+	if (simpleMode)
+		return opt.preset;
+
+	if (opt.family == FAMILY_QSV)
+		return "target_usage";
+	if (encoderName == ADVANCED_ENCODER_NVENC)
+		return "preset2";
+	if (opt.family == FAMILY_APPLE)
+		return "profile";
+
+	return "preset";
+}
+
 void osn::EncoderUtils::getAvailableEncoders(std::vector<ipc::value> &rval, obs_service_t *service, bool simpleMode, bool recording,
 					     const std::string &container)
 {
@@ -275,8 +325,15 @@ void osn::EncoderUtils::getAvailableEncoders(std::vector<ipc::value> &rval, obs_
 			continue;
 		std::string encoderName = simpleMode ? opt.getSimpleName() : opt.advanced_name;
 		if (isEncoderCompatible(encoderName, service, simpleMode, recording, container, i)) {
+			const char *codec = obs_get_encoder_codec(encoderName.c_str());
 			rval.push_back(ipc::value(title));
 			rval.push_back(ipc::value(name));
+			rval.push_back(ipc::value(encoderName));
+			rval.push_back(ipc::value(getPublicEncoderFamily(opt, name, encoderName)));
+			rval.push_back(ipc::value(getPublicEncoderPreset(opt, encoderName, simpleMode)));
+			rval.push_back(ipc::value(codec ? codec : ""));
+			rval.push_back(ipc::value(static_cast<uint32_t>(opt.streaming)));
+			rval.push_back(ipc::value(static_cast<uint32_t>(opt.recording)));
 		}
 	}
 }

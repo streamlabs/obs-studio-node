@@ -381,7 +381,6 @@ export const InputFactory: IInputFactory = obs.Input;
 export const SceneFactory: ISceneFactory = obs.Scene;
 export const FilterFactory: IFilterFactory = obs.Filter;
 export const TransitionFactory: ITransitionFactory = obs.Transition;
-export const DisplayFactory: IDisplayFactory = obs.Display;
 export const VolmeterFactory: IVolmeterFactory = obs.Volmeter;
 export const FaderFactory: IFaderFactory = obs.Fader;
 export const Audio: IAudio = obs.Audio;
@@ -492,18 +491,6 @@ export interface IIPC {
 
 export interface IGlobal {
     /**
-     * Initializes libobs global context
-     * @param locale - Locale to be used within libobs
-     * @param path - Data path of libobs
-     */
-    startup(locale: string, path?: string): void;
-
-    /**
-     * Uninitializes libobs global context
-     */
-    shutdown(): void;
-
-    /**
      * @param id - String ID of the source
      * @returns - The output flags (capabilities) of the source type
      */
@@ -559,11 +546,6 @@ export interface IGlobal {
     readonly laggedFrames: number;
 
     /**
-     * Current status of the global libobs context
-     */
-    readonly initialized: boolean;
-
-    /**
      * Current locale of current libobs context
      */
     locale: string;
@@ -572,15 +554,6 @@ export interface IGlobal {
      * Rendering of current libobs context
      */
     multipleRendering: boolean;
-
-    /**
-     * Version of current libobs context.
-     * Represented as a 32-bit unsigned integer.
-     * First 2 bytes are major.
-     * Second 2 bytes are minor.
-     * Last 4 bytes are patch.
-     */
-    readonly version: number;
 
     /**
      * Percentage of CPU being used
@@ -697,9 +670,6 @@ export interface INumberDetails {
  * Class representing an entry in a properties list (Properties).
  */
 export interface IProperty {
-    /** The validity of the current property instance */
-    readonly status: number;
-
     /**
      * The name associated with the property
      * You can use this name to fetch from the source
@@ -734,6 +704,19 @@ export interface IProperty {
      * Otherwise or if end of the list, returns false.
      */
     next(): IProperty;
+
+    /**
+     * Uses the current object to obtain the previous property in the list.
+     * Returns undefined when the current property is the first.
+     */
+    previous(): IProperty;
+
+    /** True when this property is the first in the list. */
+    is_first(): boolean;
+
+    /** True when this property is the last in the list. */
+    is_last(): boolean;
+
     modified(): boolean;
 }
 
@@ -745,11 +728,11 @@ export interface IProperty {
  */
 export interface IProperties {
 
-    /** Obtains the status of the list */
-    readonly status: number;
-
     /** Obtains the first property in the list. */
     first(): IProperty;
+
+    /** Obtains the last property in the list. */
+    last(): IProperty;
 
     count(): number;
 
@@ -931,17 +914,21 @@ export interface IInput extends ISource {
     setFilterOrder(filter: IFilter, movement: EOrderMovement): void;
 
     /**
-     * Move a filter up, down, top, or bottom in the filter list.
-     * @param filter - The filter to move within the input source.
-     * @param movement - The movement to make within the list.
+     * Copy all filters from this input source onto another.
+     * @param other - Destination input that will receive copies of this source's filters.
+     * @returns - True on success, false if the IPC call failed.
      */
-    setFilterOrder(filter: IFilter, movement: EOrderMovement): void;
-
+    copyFilters(other: IInput): boolean;
 
     /**
      * Obtain a list of all filters associated with the input source
      */
     readonly filters: IFilter[];
+
+    /**
+     * Whether the input is currently active (rendering / producing data).
+     */
+    readonly active: boolean;
 
     /**
      * Width of the underlying source
@@ -982,6 +969,16 @@ export interface IInput extends ISource {
      * stop media source
      */
     stop(): void;
+
+    /**
+     * Get the current media playback state of the source.
+     */
+    getMediaState(): number;
+
+    /**
+     * Re-trigger the source's load step (re-reads serialized state on the server).
+     */
+    load(): void;
 }
 
 export interface ISceneFactory {
@@ -1069,6 +1066,24 @@ export interface IScene extends ISource {
      * @returns - The array of item instances
      */
     getItems(): ISceneItem[];
+
+    /**
+     * Fetch a contiguous range of items within the scene.
+     * @param fromIndex - Inclusive start index.
+     * @param toIndex - Inclusive end index.
+     */
+    getItemsInRange(fromIndex: number, toIndex: number): ISceneItem[];
+
+    /**
+     * Re-trigger the scene's load step on the server.
+     */
+    load(): void;
+
+    sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
+    sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
+    sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
+    sendFocus(focus: boolean): void;
+    sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
 }
 
 /**
@@ -1225,6 +1240,17 @@ export interface ITransition extends ISource {
      * @param input - Source to transition to
      */
     start(ms: number, input: ISource): void;
+
+    /**
+     * Re-trigger the transition's load step on the server.
+     */
+    load(): void;
+
+    sendMouseClick(eventData: IMouseEvent, type: EMouseButtonType, mouseUp: boolean, clickCount: number): void;
+    sendMouseMove(eventData: IMouseEvent, mouseLeave: boolean): void;
+    sendMouseWheel(eventData: IMouseEvent, x_delta: number, y_delta: number): void;
+    sendFocus(focus: boolean): void;
+    sendKeyClick(eventData: IKeyEvent, keyUp: boolean): void;
 }
 
 export interface IConfigurable {
@@ -1268,7 +1294,13 @@ export interface ISource extends IConfigurable, IReleasable {
      */
     save(): void;
 
+    /**
+     * Forward a serializable message to the underlying source plugin.
+     * Note: only registered on input sources on the native side; calling on
+     * a filter, scene, or transition will throw at runtime.
+     */
     sendMessage(message: ISettings): void;
+
     /**
      * The validity of the source
      */
@@ -1408,33 +1440,6 @@ export interface IVolmeter {
 export interface ICallbackData {
 }
 
-export interface IDisplayFactory {
-    create(source?: IInput): IDisplay;
-}
-
-export interface IDisplay {
-    destroy(): void;
-
-    setPosition(x: number, y: number): void;
-    getPosition(): IVec2;
-
-    setSize(x: number, y: number): void;
-    getSize(): IVec2;
-
-    getPreviewOffset(): IVec2;
-    getPreviewSize(x: number, y: number): void;
-
-    shouldDrawUI: boolean;
-    paddingSize: number;
-
-    setPaddingColor(r: number, g: number, b: number, a: number): void;
-    setBackgroundColor(r: number, g: number, b: number, a: number): void;
-    setOutlineColor(r: number, g: number, b: number, a: number): void;
-    setGuidelineColor(r: number, g: number, b: number, a: number): void;
-    setResizeBoxOuterColor(r: number, g: number, b: number, a: number): void;
-    setResizeBoxInnerColor(r: number, g: number, b: number, a: number): void;
-}
-
 /**
  * This represents a obs_video_info structure from within libobs
  */
@@ -1491,23 +1496,28 @@ export interface IAudioFactory {
     disableAudioDuckingLegacy: boolean; // Windows only
 }
 
-export interface IModuleFactory extends IFactoryTypes {
+export interface IModuleFactory {
     open(binPath: string, dataPath: string): IModule;
-    loadAll(): void;
-    addPath(path: string, dataPath: string): void;
-    logLoaded(): void;
     modules(): String[];
 }
 
 export interface IModule {
     initialize(): void;
-    filename(): string;
-    name(): string;
-    author(): string;
-    description(): string;
-    binPath(): string;
-    dataPath(): string;
-    status(): number;
+    readonly fileName: string;
+    readonly name: string;
+    readonly author: string;
+    readonly description: string;
+    readonly binaryPath: string;
+    readonly dataPath: string;
+}
+
+export const NDI_RUNTIME_VERSION_MISMATCH = 'NDI_RUNTIME_VERSION_MISMATCH';
+export const NDI_RUNTIME_NOT_FOUND = 'NDI_RUNTIME_NOT_FOUND';
+
+export interface IObsModuleLoadFailure {
+    module: string;
+    code: string;
+    message: string;
 }
 
 export function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[] {
@@ -1721,6 +1731,16 @@ export interface IStreaming {
     dataOutput: number;
 }
 
+export interface IEnhancedBroadcastingDisplayStats {
+    kbitsPerSec: number;
+    dataOutput: number;
+}
+
+export interface IEnhancedBroadcastingPerDisplayStats {
+    horizontal: IEnhancedBroadcastingDisplayStats;
+    vertical: IEnhancedBroadcastingDisplayStats;
+}
+
 export interface EOutputSignal {
     type: string,
     signal: string,
@@ -1729,8 +1749,22 @@ export interface EOutputSignal {
 }
 
 export interface IEncoderOption {
+    // UI display label for the encoder.
     title: string,
-    name: string
+    // Mode-specific option value stored in OBS settings.
+    name: string,
+    // Concrete OBS encoder ID passed to VideoEncoderFactory.create().
+    id: string,
+    // Public Desktop encoder profile key, such as x264, qsv, nvenc, or amd.
+    family: string,
+    // OBS settings field that stores this encoder's preset value.
+    preset: string,
+    // OBS codec ID reported by the concrete encoder, such as h264, hevc, or av1.
+    codec: string,
+    // Whether this encoder option is allowed for streaming.
+    streaming: boolean,
+    // Whether this encoder option is allowed for recording.
+    recording: boolean
 }
 
 export interface ISimpleStreaming extends IStreaming {
@@ -1764,6 +1798,7 @@ export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreami
     // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
     // This value should be initialized before the stream start.
     additionalVideo?: IVideo,
+    displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
 
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
@@ -1776,6 +1811,7 @@ export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
     // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
     // This value should be initialized before the stream start.
     additionalVideo?: IVideo,
+    displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
 
 export interface IEnhancedBroadcastingSimpleStreamingFactory {

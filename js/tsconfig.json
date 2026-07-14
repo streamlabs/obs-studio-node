@@ -2,7 +2,7 @@
   "compileOnSave": true,
   "compilerOptions": {
     "declaration": true,
-    "target": "es6",
+    "target": "es2020",
     "module": "commonjs",
     "moduleResolution": "node",
     "isolatedModules": false,
@@ -10,7 +10,6 @@
     "noImplicitAny": true,
     "noImplicitThis": true,
     "removeComments": true,
-    "suppressImplicitAnyIndexErrors": true,
     "allowSyntheticDefaultImports": true,
     "strictNullChecks": false,
     "emitDecoratorMetadata": true

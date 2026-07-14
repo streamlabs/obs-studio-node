@@ -22,6 +22,7 @@
 #include <queue>
 #include <array>
 #include "obs.h"
+#include <obs.hpp>
 #include "utility.hpp"
 
 extern std::mutex mtx;
@@ -51,6 +52,9 @@ private:
 	obs_volmeter_t *self = nullptr;
 	utility::unique_id::id_t id = INVALID_ID;
 	utility::unique_id::id_t uid_source = INVALID_ID;
+
+	// Kept alive while attached so detach can always remove the audio capture callback before the volmeter is freed.
+	OBSSourceAutoRelease source_ref;
 
 	struct AudioData {
 		std::array<float, MAX_AUDIO_CHANNELS> magnitude{};

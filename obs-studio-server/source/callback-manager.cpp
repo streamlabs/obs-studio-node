@@ -115,7 +115,7 @@ void CallbackManager::GlobalQuery(void *data, const int64_t id, const std::vecto
 					obs_data_t *msg = obs_data_array_item(messages, idx);
 					rval.push_back(ipc::value(obs_source_get_name(si->source)));
 					rval.push_back(ipc::value(obs_data_get_string(msg, "message")));
-					blog(LOG_INFO, "[BrowserMessage] %s message: %s", obs_source_get_name(si->source), obs_data_get_string(msg, "message"));
+					blog(LOG_INFO, "[osn-source] %s message: %s", obs_source_get_name(si->source), obs_data_get_string(msg, "message"));
 					size++;
 				}
 				obs_data_array_release(messages);

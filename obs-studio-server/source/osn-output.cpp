@@ -106,8 +106,7 @@ void osn::OutputSignalCallback(void *data, calldata_t *params)
 
 	const char *error = obs_output_get_last_error(outputClass->m_output);
 
-	std::unique_lock ulock(outputClass->m_signalsMtx);
-	outputClass->m_signalsReceived.push({signal, (int)calldata_int(params, "code"), error ? std::string(error) : ""});
+	outputClass->PushReceivedSignal(signal, (int)calldata_int(params, "code"), error ? std::string(error) : "");
 }
 
 void osn::Output::ConnectSignals()
@@ -175,8 +174,7 @@ void osn::Output::StartOutput()
 		code = OBS_OUTPUT_ERROR;
 	}
 
-	std::unique_lock ulock(m_signalsMtx);
-	m_signalsReceived.push({"stop", code, errorMessage});
+	PushReceivedSignal("stop", code, errorMessage);
 }
 
 std::optional<osn::Output::SignalInfo> osn::Output::PopReceivedSignal()
@@ -190,6 +188,12 @@ std::optional<osn::Output::SignalInfo> osn::Output::PopReceivedSignal()
 	const auto result = m_signalsReceived.front();
 	m_signalsReceived.pop();
 	return result;
+}
+
+void osn::Output::PushReceivedSignal(const std::string &signal, int code, const std::string &errorMessage)
+{
+	std::unique_lock ulock(m_signalsMtx);
+	m_signalsReceived.push({signal, code, errorMessage});
 }
 
 void osn::Output::SetCanvas(obs_video_info *canvas)
