@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "controller.hpp"
+#include "nodeobs_autoconfig.hpp"
 #include <codecvt>
 #include <fstream>
 #include <sstream>
@@ -380,6 +381,11 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 
 void Controller::disconnect()
 {
+	// AutoConfig owns a polling thread and a Node ThreadSafeFunction. Tear them
+	// down before dropping IPC so an abandoned session cannot keep the renderer
+	// environment or addon alive.
+	autoConfig::Shutdown();
+
 	if (m_isServer) {
 		m_connection->call_synchronous_helper("System", "Shutdown", {});
 		m_isServer = false;

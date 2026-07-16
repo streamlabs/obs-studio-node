@@ -16,55 +16,14 @@
 
 ******************************************************************************/
 #pragma once
-#include <chrono>
+
 #include <napi.h>
-#include "utility-v8.hpp"
-#ifdef WIN32
-#include <windows.h>
-#else
-#include <semaphore.h>
-#endif
-
-struct AutoConfigInfo {
-	std::string event;
-	std::string description;
-	double percentage = 0;
-	// Optional JSON payload for new event types (bandwidth_result,
-	// selection_decision, video_decision, encoder_detection). Empty for legacy
-	// events. Surfaced to JS as a "payload" property when non-empty.
-	std::string payload;
-};
-
-extern const char *ac_sem_name;
-#ifdef WIN32
-extern HANDLE ac_sem;
-#else
-extern sem_t *ac_sem;
-#endif
 
 namespace autoConfig {
-extern bool isWorkerRunning;
-extern bool worker_stop;
-extern std::chrono::milliseconds sleepInterval;
-extern Napi::ThreadSafeFunction js_thread;
-extern std::thread *worker_thread;
-extern std::vector<std::thread *> ac_queue_task_workers;
-
-void worker(void);
-void start_worker(void);
-void stop_worker(void);
-void queueTask(AutoConfigInfo *data);
-
 void Init(Napi::Env env, Napi::Object exports);
 
-Napi::Value InitializeAutoConfig(const Napi::CallbackInfo &info);
-Napi::Value StartBandwidthTest(const Napi::CallbackInfo &info);
-Napi::Value StartStreamEncoderTest(const Napi::CallbackInfo &info);
-Napi::Value StartRecordingEncoderTest(const Napi::CallbackInfo &info);
-Napi::Value StartCheckSettings(const Napi::CallbackInfo &info);
-Napi::Value StartSetDefaultSettings(const Napi::CallbackInfo &info);
-Napi::Value StartSaveStreamSettings(const Napi::CallbackInfo &info);
-Napi::Value StartSaveSettings(const Napi::CallbackInfo &info);
-Napi::Value TerminateAutoConfig(const Napi::CallbackInfo &info);
-Napi::Value GetAutoConfigSummary(const Napi::CallbackInfo &info);
+// Stops client-side polling and releases the callback. If a session is active,
+// its server-side cancellation/close is attempted while IPC is still usable.
+// This is idempotent and safe to call from disconnect and environment cleanup.
+void Shutdown();
 }

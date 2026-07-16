@@ -34,14 +34,6 @@ export interface IOBSOutputSignalInfo {
     service: string;
 }
 
-export interface IConfigProgress {
-    event: TConfigEvent;
-    description: string;
-    percentage?: number;
-    continent?: string;
-    payload?: string;
-}
-
 export interface IVec2 {
     x: number;
     y: number;
@@ -67,18 +59,6 @@ export type TOBSHotkey = {
     HotkeyId: number;
 };
 
-export type TConfigEvent =
-    | 'starting_step'
-    | 'progress'
-    | 'stopping_step'
-    | 'error'
-    | 'done'
-    | 'bandwidth_result'
-    | 'selection_decision'
-    | 'video_decision'
-    | 'encoder_detection'
-    | 'resource_usage';
-
 // OBSHandler class
 export class OBSHandler {
     private path = require('path');
@@ -97,7 +77,6 @@ export class OBSHandler {
     private hasUserFromPool: boolean = false;
     private osnTestName: string;
     signals = new WaitQueue();
-    private progress = new WaitQueue();
     inputTypes: string[];
     filterTypes: string[];
     transitionTypes: string[];
@@ -489,31 +468,6 @@ export class OBSHandler {
         }
 
         throw new Error(timeoutMessage);
-    }
-
-    startAutoconfig(streamings: osn.IStreaming[]) {
-        // Drop any progress events left over from a prior run so the next drain
-        // sees only this run's events.
-        this.progress = new WaitQueue();
-
-        osn.NodeObs.InitializeAutoConfig(streamings, (progressInfo: IConfigProgress) => {
-            if (progressInfo.event === 'stopping_step' || progressInfo.event === 'done'
-                || progressInfo.event === 'error' || (progressInfo.event as string) === 'applied'
-                || progressInfo.event === 'resource_usage') {
-                this.progress.push(progressInfo);
-            }
-        });
-    }
-
-    getNextProgressInfo(autoconfigStep: string): Promise<IConfigProgress> {
-        return new Promise((resolve, reject) => {
-            this.progress.shift().then(
-                function (progressInfo) {
-                    resolve(progressInfo)
-                }
-            );
-            setTimeout(() => reject(new Error(autoconfigStep + ' step timeout')), 50000);
-        });
     }
 
     createDefaultVideoContext() {

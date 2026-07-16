@@ -989,28 +989,120 @@ export interface IAudioTrackFactory {
     importLegacySettings(): void;
     saveLegacySettings(): void;
 }
-export interface IAutoConfigResourcePercentile {
-    p50: number;
-    p95: number;
+export interface IAutoConfigCapabilities {
+    apiVersion: 2;
+    resultSchemaVersion: 1;
+    previewApplySplit: true;
+    awaitableCancel: true;
+    perUploadLegResults: true;
+    desktopOwnedApply: true;
+    bandwidthModes: ['twitch-standard-active', 'estimate'];
 }
-export interface IAutoConfigResourceGpu {
-    available: boolean;
-    vramUsedMB?: IAutoConfigResourcePercentile;
-    vramBudgetMB?: number;
+export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'stream-shift' | 'mixed';
+export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
+export type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
+export type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'stream_shift' | 'mixed_topology' | 'probe_disabled';
+export interface IAutoConfigDestination {
+    platform: AutoConfigPlatform;
 }
-export type AutoConfigResourcePhase = 'bandwidth' | 'stream_encoder' | 'recording_encoder';
-export interface IAutoConfigResourceUsage {
-    phase: AutoConfigResourcePhase;
-    sampleCount: number;
-    durationMs: number;
-    cpuPct: IAutoConfigResourcePercentile;
-    procRamMB: IAutoConfigResourcePercentile;
-    gpu: IAutoConfigResourceGpu;
+export interface IAutoConfigCurrentSettings {
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+    bitrateKbps: number;
+    encoderId: string;
+    codec: string;
+    preset?: string;
 }
-export interface IAutoConfigSummary {
-    complete: boolean;
-    resourceUsage: IAutoConfigResourceUsage[];
-    [key: string]: unknown;
+export interface IAutoConfigLimits {
+    maxBitrateKbps?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    maxFpsNum?: number;
+    maxFpsDen?: number;
+}
+export interface IAutoConfigLegRequest {
+    legId: string;
+    display: AutoConfigDisplay;
+    destinations: IAutoConfigDestination[];
+    current: IAutoConfigCurrentSettings;
+    limits?: IAutoConfigLimits;
+    estimateReason?: AutoConfigEstimateReason;
+}
+export interface IAutoConfigActiveProbe {
+    kind: 'twitch-standard-v1';
+    legId: string;
+    serviceName: 'Twitch';
+    server: string;
+    streamKey: string;
+}
+export interface IAutoConfigRequest {
+    schemaVersion: 1;
+    topology: AutoConfigTopology;
+    legs: IAutoConfigLegRequest[];
+    activeProbe?: IAutoConfigActiveProbe;
+}
+export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
+export type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
+export type AutoConfigMeasurementMode = 'active' | 'estimated';
+export interface IAutoConfigEvent {
+    schemaVersion: 1;
+    sessionId: string;
+    sequence: number;
+    type: AutoConfigEventType;
+    phase: AutoConfigPhase;
+    progress: number;
+    code?: string;
+    legId?: string;
+    measurementMode?: AutoConfigMeasurementMode;
+}
+export interface IAutoConfigMeasurement {
+    mode: AutoConfigMeasurementMode;
+    confidence: 'high' | 'medium' | 'low';
+    reason?: string;
+}
+export interface IAutoConfigRecommendation {
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+    bitrateKbps: number;
+    encoderId: string;
+    codec: string;
+    preset?: string;
+}
+export interface IAutoConfigResultDestination {
+    platform: string;
+}
+export interface IAutoConfigLegResult {
+    legId: string;
+    display: AutoConfigDisplay;
+    destinations: IAutoConfigResultDestination[];
+    measurement: IAutoConfigMeasurement;
+    recommendation: IAutoConfigRecommendation;
+    limits?: IAutoConfigLimits;
+}
+export interface IAutoConfigError {
+    code: string;
+}
+export interface IAutoConfigResult {
+    schemaVersion: 1;
+    sessionId: string;
+    status: 'complete' | 'partial' | 'cancelled' | 'failed';
+    error?: IAutoConfigError;
+    legs: IAutoConfigLegResult[];
+}
+export interface IAutoConfigNativeApi {
+    GetAutoConfigCapabilities(): string;
+    CreateAutoConfigSession(requestJson: string, callback: (event: IAutoConfigEvent) => void): string;
+    StartAutoConfigSession(sessionId: string): void;
+    GetAutoConfigResult(sessionId: string): string;
+    CancelAutoConfigSession(sessionId: string): void;
+    CloseAutoConfigSession(sessionId: string): void;
+}
+export interface INodeObsApi extends IAutoConfigNativeApi {
+    [key: string]: any;
 }
 export declare const enum VCamOutputType {
     Invalid = 0,
@@ -1019,4 +1111,4 @@ export declare const enum VCamOutputType {
     ProgramView = 3,
     PreviewOutput = 4
 }
-export declare const NodeObs: any;
+export declare const NodeObs: INodeObsApi;
