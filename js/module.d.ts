@@ -1069,7 +1069,6 @@ export interface IAutoConfigEvent {
     measurementMode?: AutoConfigMeasurementMode;
     probeId?: string;
     provider?: 'twitch' | 'youtube';
-    /** Applied video bitrate for the active probe substep; audio is additional. */
     targetBitrateKbps?: number;
 }
 export interface IAutoConfigProbeMeasurement {
