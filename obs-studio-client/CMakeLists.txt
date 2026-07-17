@@ -179,6 +179,7 @@ if(BUILD_TESTING)
         "tests/polling-pacer-test.cpp"
         "tests/best-effort-gate-test.cpp"
         "tests/polling-pacer-best-effort-gate-test.cpp"
+        "tests/autoconfig-probe-policy-test.cpp"
         ${OSN_CLIENT_CORE_SOURCES}
     )
 
@@ -186,6 +187,7 @@ if(BUILD_TESTING)
         obs_studio_client_unit_tests
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/source"
+            "${CMAKE_SOURCE_DIR}/source"
     )
 
     target_link_libraries(

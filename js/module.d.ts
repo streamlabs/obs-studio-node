@@ -996,7 +996,8 @@ export interface IAutoConfigCapabilities {
     awaitableCancel: true;
     perUploadLegResults: true;
     desktopOwnedApply: true;
-    bandwidthModes: ['twitch-standard-active', 'estimate'];
+    multipleActiveProbes: true;
+    bandwidthModes: ['twitch-standard-active', 'youtube-unbound-active', 'estimate'];
 }
 export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'stream-shift' | 'mixed';
 export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
@@ -1030,18 +1031,28 @@ export interface IAutoConfigLegRequest {
     limits?: IAutoConfigLimits;
     estimateReason?: AutoConfigEstimateReason;
 }
-export interface IAutoConfigActiveProbe {
+export interface IAutoConfigTwitchActiveProbe {
+    probeId: string;
     kind: 'twitch-standard-v1';
     legId: string;
     serviceName: 'Twitch';
     server: string;
     streamKey: string;
 }
+export interface IAutoConfigYoutubeActiveProbe {
+    probeId: string;
+    kind: 'youtube-unbound-v1';
+    legId: string;
+    serviceName: 'YouTube - RTMPS';
+    server: string;
+    streamKey: string;
+}
+export type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigYoutubeActiveProbe;
 export interface IAutoConfigRequest {
     schemaVersion: 1;
     topology: AutoConfigTopology;
     legs: IAutoConfigLegRequest[];
-    activeProbe?: IAutoConfigActiveProbe;
+    activeProbes?: IAutoConfigActiveProbe[];
 }
 export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
 export type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
@@ -1056,11 +1067,25 @@ export interface IAutoConfigEvent {
     code?: string;
     legId?: string;
     measurementMode?: AutoConfigMeasurementMode;
+    probeId?: string;
+    provider?: 'twitch' | 'youtube';
+    /** Applied video bitrate for the active probe substep; audio is additional. */
+    targetBitrateKbps?: number;
+}
+export interface IAutoConfigProbeMeasurement {
+    provider: 'twitch' | 'youtube';
+    method: 'twitch-bandwidth-test-v1' | 'youtube-unbound-ramp-v1';
+    success: boolean;
+    measuredKbps?: number;
+    safeKbps?: number;
+    headroomPercent?: number;
+    ceilingReached: boolean;
 }
 export interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
+    probes?: IAutoConfigProbeMeasurement[];
 }
 export interface IAutoConfigRecommendation {
     width: number;
@@ -1097,6 +1122,7 @@ export interface IAutoConfigNativeApi {
     GetAutoConfigCapabilities(): string;
     CreateAutoConfigSession(requestJson: string, callback: (event: IAutoConfigEvent) => void): string;
     StartAutoConfigSession(sessionId: string): void;
+    ConfirmAutoConfigProbeIngest(sessionId: string, probeId: string, received: boolean): void;
     GetAutoConfigResult(sessionId: string): string;
     CancelAutoConfigSession(sessionId: string): void;
     CloseAutoConfigSession(sessionId: string): void;

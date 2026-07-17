@@ -1970,7 +1970,8 @@ export interface IAutoConfigCapabilities {
     awaitableCancel: true;
     perUploadLegResults: true;
     desktopOwnedApply: true;
-    bandwidthModes: ['twitch-standard-active', 'estimate'];
+    multipleActiveProbes: true;
+    bandwidthModes: ['twitch-standard-active', 'youtube-unbound-active', 'estimate'];
 }
 
 export type AutoConfigTopology =
@@ -2035,7 +2036,8 @@ export interface IAutoConfigLegRequest {
     estimateReason?: AutoConfigEstimateReason;
 }
 
-export interface IAutoConfigActiveProbe {
+export interface IAutoConfigTwitchActiveProbe {
+    probeId: string;
     kind: 'twitch-standard-v1';
     legId: string;
     serviceName: 'Twitch';
@@ -2043,11 +2045,29 @@ export interface IAutoConfigActiveProbe {
     streamKey: string;
 }
 
+export interface IAutoConfigYoutubeActiveProbe {
+    /**
+     * Security contract: Desktop's trusted worker must create an exact-marked,
+     * reusable-but-unbound liveStream and status-confirm that same resource.
+     * Native validates the official RTMPS endpoint but cannot query YouTube
+     * resource ownership or binding. Desktop must close the native session
+     * before deleting the liveStream through the YouTube API.
+     */
+    probeId: string;
+    kind: 'youtube-unbound-v1';
+    legId: string;
+    serviceName: 'YouTube - RTMPS';
+    server: string;
+    streamKey: string;
+}
+
+export type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigYoutubeActiveProbe;
+
 export interface IAutoConfigRequest {
     schemaVersion: 1;
     topology: AutoConfigTopology;
     legs: IAutoConfigLegRequest[];
-    activeProbe?: IAutoConfigActiveProbe;
+    activeProbes?: IAutoConfigActiveProbe[];
 }
 
 export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
@@ -2064,12 +2084,29 @@ export interface IAutoConfigEvent {
     code?: string;
     legId?: string;
     measurementMode?: AutoConfigMeasurementMode;
+    probeId?: string;
+    provider?: 'twitch' | 'youtube';
+    /** Applied video bitrate for the active probe substep; audio is additional. */
+    targetBitrateKbps?: number;
+}
+
+export interface IAutoConfigProbeMeasurement {
+    provider: 'twitch' | 'youtube';
+    method: 'twitch-bandwidth-test-v1' | 'youtube-unbound-ramp-v1';
+    success: boolean;
+    /** Observed aggregate RTMP throughput, including audio. */
+    measuredKbps?: number;
+    /** Safe video bitrate after headroom and the probe audio reserve. */
+    safeKbps?: number;
+    headroomPercent?: number;
+    ceilingReached: boolean;
 }
 
 export interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
+    probes?: IAutoConfigProbeMeasurement[];
 }
 
 export interface IAutoConfigRecommendation {
@@ -2113,6 +2150,7 @@ export interface IAutoConfigNativeApi {
     GetAutoConfigCapabilities(): string;
     CreateAutoConfigSession(requestJson: string, callback: (event: IAutoConfigEvent) => void): string;
     StartAutoConfigSession(sessionId: string): void;
+    ConfirmAutoConfigProbeIngest(sessionId: string, probeId: string, received: boolean): void;
     GetAutoConfigResult(sessionId: string): string;
     CancelAutoConfigSession(sessionId: string): void;
     CloseAutoConfigSession(sessionId: string): void;

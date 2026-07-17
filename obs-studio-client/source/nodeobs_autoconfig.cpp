@@ -38,6 +38,9 @@ struct AutoConfigEvent {
 	std::string code;
 	std::string legId;
 	std::string measurementMode;
+	std::string probeId;
+	std::string provider;
+	uint32_t targetBitrateKbps = 0;
 };
 
 std::atomic<bool> workerStop{true};
@@ -133,6 +136,12 @@ void DispatchEvent(AutoConfigEvent *event)
 				result.Set("legId", Napi::String::New(env, eventData->legId));
 			if (!eventData->measurementMode.empty())
 				result.Set("measurementMode", Napi::String::New(env, eventData->measurementMode));
+			if (!eventData->probeId.empty())
+				result.Set("probeId", Napi::String::New(env, eventData->probeId));
+			if (!eventData->provider.empty())
+				result.Set("provider", Napi::String::New(env, eventData->provider));
+			if (eventData->targetBitrateKbps > 0)
+				result.Set("targetBitrateKbps", Napi::Number::New(env, eventData->targetBitrateKbps));
 
 			jsCallback.Call({result});
 		} catch (...) {
@@ -157,7 +166,7 @@ void Worker()
 			if (conn && !sessionId.empty()) {
 				std::vector<ipc::value> response =
 					conn->call_synchronous_helper("AutoConfig", "QueryAutoConfigSession", {ipc::value(sessionId)});
-				if (response.size() >= 10 && static_cast<ErrorCode>(response[0].value_union.ui64) == ErrorCode::Ok) {
+				if (response.size() >= 12 && static_cast<ErrorCode>(response[0].value_union.ui64) == ErrorCode::Ok) {
 					auto *event = new AutoConfigEvent;
 					event->schemaVersion = static_cast<uint32_t>(ReadUnsigned(response[1]));
 					event->sessionId = response[2].value_str;
@@ -168,6 +177,10 @@ void Worker()
 					event->code = response[7].value_str;
 					event->legId = response[8].value_str;
 					event->measurementMode = response[9].value_str;
+					event->probeId = response[10].value_str;
+					event->provider = response[11].value_str;
+					if (response.size() >= 13)
+						event->targetBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[12]));
 
 					if (event->sessionId == sessionId)
 						DispatchEvent(event);
@@ -312,6 +325,30 @@ Napi::Value StartAutoConfigSession(const Napi::CallbackInfo &info)
 	return info.Env().Undefined();
 }
 
+Napi::Value ConfirmAutoConfigProbeIngest(const Napi::CallbackInfo &info)
+{
+	if (info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsBoolean()) {
+		Napi::TypeError::New(info.Env(), "ConfirmAutoConfigProbeIngest expects (sessionId: string, probeId: string, received: boolean)")
+			.ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+	const std::string sessionId = info[0].As<Napi::String>().Utf8Value();
+	const std::string probeId = info[1].As<Napi::String>().Utf8Value();
+	if (sessionId.empty() || probeId.empty()) {
+		Napi::TypeError::New(info.Env(), "ConfirmAutoConfigProbeIngest expects non-empty sessionId and probeId").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "ConfirmAutoConfigProbeIngest",
+									 {ipc::value(sessionId), ipc::value(probeId),
+									  ipc::value((uint32_t)(info[2].As<Napi::Boolean>().Value() ? 1 : 0))});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+	return info.Env().Undefined();
+}
+
 Napi::Value GetAutoConfigResult(const Napi::CallbackInfo &info)
 {
 	std::string sessionId;
@@ -406,6 +443,7 @@ void autoConfig::Init(Napi::Env env, Napi::Object exports)
 	exports.Set("GetAutoConfigCapabilities", Napi::Function::New(env, GetAutoConfigCapabilities));
 	exports.Set("CreateAutoConfigSession", Napi::Function::New(env, CreateAutoConfigSession));
 	exports.Set("StartAutoConfigSession", Napi::Function::New(env, StartAutoConfigSession));
+	exports.Set("ConfirmAutoConfigProbeIngest", Napi::Function::New(env, ConfirmAutoConfigProbeIngest));
 	exports.Set("GetAutoConfigResult", Napi::Function::New(env, GetAutoConfigResult));
 	exports.Set("CancelAutoConfigSession", Napi::Function::New(env, CancelAutoConfigSession));
 	exports.Set("CloseAutoConfigSession", Napi::Function::New(env, CloseAutoConfigSession));

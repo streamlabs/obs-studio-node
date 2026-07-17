@@ -9,6 +9,7 @@
 
 #include "nodeobs_autoconfig.h"
 
+#include "autoconfig-probe-policy.hpp"
 #include "osn-encoders.hpp"
 #include "osn-error.hpp"
 #include "shared.hpp"
@@ -24,8 +25,10 @@
 #include <chrono>
 #include <cctype>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
 #include <future>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -42,9 +45,20 @@ constexpr int kProbeConnectTimeoutMs = 8000;
 constexpr int kProbeWarmupMs = 750;
 constexpr int kProbeSampleMs = 5000;
 constexpr int kProbeStopTimeoutMs = 3000;
+constexpr int kYoutubeIngestConfirmationTimeoutMs = 15000;
 constexpr int kCancelTimeoutMs = 8000;
 constexpr uint64_t kProbeMaxBytes = 25ULL * 1024ULL * 1024ULL;
+constexpr uint64_t kYoutubeProbeMaxBytes = 64ULL * 1024ULL * 1024ULL;
 constexpr int kProbeMaximumBitrateKbps = 10000;
+constexpr int kYoutubeProbeMaximumBitrateKbps = 12000;
+constexpr int kYoutubeProbeInitialBitrateKbps = 1000;
+constexpr int kYoutubeProbeSettleMs = 500;
+constexpr int kYoutubeProbeSampleMs = 5000;
+constexpr int kYoutubeProbeTotalTimeoutMs = 100000;
+constexpr int kTwitchProbeSafeMultiplierPercent = 70;
+constexpr int kYoutubeProbeSafeMultiplierPercent = 80;
+constexpr int kTwitchProbeAudioBitrateKbps = 32;
+constexpr int kYoutubeProbeAudioBitrateKbps = 128;
 constexpr int kDefaultEstimatedBitrateKbps = 2500;
 constexpr int kHardwareWarmupMs = 500;
 constexpr int kHardwareSampleMs = 1500;
@@ -104,12 +118,25 @@ struct LegRequest {
 };
 
 struct ProbeRequest {
-	bool present = false;
+	std::string probeId;
 	std::string kind;
 	std::string legId;
 	std::string serviceName;
 	std::string server;
 	std::string streamKey;
+	std::string provider;
+	bool eligible = false;
+	std::string denialReason;
+};
+
+struct MeasurementProvenance {
+	std::string provider;
+	std::string method;
+	uint64_t measuredKbps = 0;
+	uint64_t safeKbps = 0;
+	int headroomPercent = 0;
+	bool success = false;
+	bool ceilingReached = false;
 };
 
 struct Recommendation {
@@ -121,6 +148,7 @@ struct Recommendation {
 	std::string confidence = "medium";
 	std::string reason;
 	CurrentSettings value;
+	std::vector<MeasurementProvenance> probes;
 };
 
 struct SessionEvent {
@@ -131,15 +159,16 @@ struct SessionEvent {
 	std::string code;
 	std::string legId;
 	std::string measurementMode;
+	std::string probeId;
+	std::string provider;
+	uint32_t targetBitrateKbps = 0;
 };
 
 struct Session : std::enable_shared_from_this<Session> {
 	std::string id;
 	std::string topology;
 	std::vector<LegRequest> legs;
-	ProbeRequest probe;
-	bool activeProbeEligible = false;
-	std::string activeProbeDenialReason;
+	std::vector<ProbeRequest> probes;
 
 	std::atomic<SessionState> state{SessionState::Created};
 	std::atomic<bool> cancelRequested{false};
@@ -158,6 +187,12 @@ struct Session : std::enable_shared_from_this<Session> {
 	// mutex, so it can request a force-stop without racing release.
 	std::mutex probeMutex;
 	obs_output_t *activeProbeOutput = nullptr;
+	std::mutex probeConfirmationMutex;
+	std::condition_variable probeConfirmationCondition;
+	// 0 = pending, 1 = accepted, -1 = rejected. Only YouTube probes use
+	// this gate; Twitch retains its bandwidth-test-key behavior.
+	std::map<std::string, int> probeConfirmations;
+	std::string activeConfirmationProbeId;
 };
 
 std::mutex sessionsMutex;
@@ -199,6 +234,52 @@ static bool isOfficialTwitchServer(const std::string &server)
 		return false;
 
 	return host == "live.twitch.tv" || hasSuffix(host, ".twitch.tv") || host == "live-video.net" || hasSuffix(host, ".live-video.net");
+}
+
+static bool containsWhitespaceOrControl(const std::string &value)
+{
+	return std::any_of(value.begin(), value.end(), [](unsigned char ch) { return std::isspace(ch) || std::iscntrl(ch); });
+}
+
+static bool isBoundedTwitchKey(const std::string &key)
+{
+	return !key.empty() && key.size() <= 4096 && !containsWhitespaceOrControl(key);
+}
+
+static bool isBoundedYoutubeKey(const std::string &key)
+{
+	if (key.empty() || key.size() > 1024 || containsWhitespaceOrControl(key))
+		return false;
+	return key.find_first_of("/\\?#@:") == std::string::npos;
+}
+
+static bool isOfficialYoutubeRtmpsServer(const std::string &server)
+{
+	if (server.empty() || server.size() > 2048 || containsWhitespaceOrControl(server))
+		return false;
+
+	const std::string value = lowerCopy(server);
+	constexpr const char *scheme = "rtmps://";
+	if (value.compare(0, std::strlen(scheme), scheme) != 0 || value.find_first_of("?#") != std::string::npos)
+		return false;
+
+	const size_t authorityStart = std::strlen(scheme);
+	const size_t pathStart = value.find('/', authorityStart);
+	if (pathStart == std::string::npos || value.substr(pathStart) != "/live2")
+		return false;
+
+	const std::string authority = value.substr(authorityStart, pathStart - authorityStart);
+	if (authority.empty() || authority.find('@') != std::string::npos)
+		return false;
+
+	std::string host = authority;
+	const size_t portSeparator = authority.find(':');
+	if (portSeparator != std::string::npos) {
+		if (authority.find(':', portSeparator + 1) != std::string::npos || authority.substr(portSeparator + 1) != "443")
+			return false;
+		host = authority.substr(0, portSeparator);
+	}
+	return host == "a.rtmps.youtube.com";
 }
 
 static void trim(std::string &value)
@@ -383,40 +464,106 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	if (legs)
 		obs_data_array_release(legs);
 
-	obs_data_t *probe = obs_data_get_obj(root, "activeProbe");
-	if (valid && probe) {
-		session.probe.present = true;
-		session.probe.kind = obs_data_get_string(probe, "kind");
-		session.probe.legId = obs_data_get_string(probe, "legId");
-		session.probe.serviceName = obs_data_get_string(probe, "serviceName");
-		session.probe.server = obs_data_get_string(probe, "server");
-		session.probe.streamKey = obs_data_get_string(probe, "streamKey");
+	obs_data_array_t *probes = obs_data_get_array(root, "activeProbes");
+	const size_t probeCount = probes ? obs_data_array_count(probes) : 0;
+	if (valid && probeCount > 16) {
+		error = "invalid_autoconfig_active_probes";
+		valid = false;
 	}
-	if (probe)
-		obs_data_release(probe);
+	std::set<std::string> probeIds;
+	for (size_t i = 0; valid && i < probeCount; i++) {
+		obs_data_t *item = obs_data_array_item(probes, i);
+		ProbeRequest probe;
+		probe.probeId = obs_data_get_string(item, "probeId");
+		probe.kind = obs_data_get_string(item, "kind");
+		probe.legId = obs_data_get_string(item, "legId");
+		probe.serviceName = obs_data_get_string(item, "serviceName");
+		probe.server = obs_data_get_string(item, "server");
+		probe.streamKey = obs_data_get_string(item, "streamKey");
+		obs_data_release(item);
+
+		if (probe.probeId.empty() || probe.probeId.size() > 128 || probe.legId.empty() || probe.legId.size() > 128 ||
+		    !probeIds.insert(probe.probeId).second) {
+			error = "invalid_autoconfig_probe_identity";
+			valid = false;
+			break;
+		}
+		if (probe.kind == "twitch-standard-v1")
+			probe.provider = "twitch";
+		else if (probe.kind == "youtube-unbound-v1")
+			probe.provider = "youtube";
+		session.probes.push_back(std::move(probe));
+	}
+	if (probes)
+		obs_data_array_release(probes);
 	obs_data_release(root);
 
 	if (!valid)
 		return false;
 
-	// Active probing is deliberately default-deny. A request that does not meet
-	// every invariant remains usable, but all legs are estimated and the secret
-	// is discarded before any network object can be created.
-	session.activeProbeEligible =
-		session.probe.present && session.topology == "direct-single" && session.legs.size() == 1 && session.legs[0].destinations.size() == 1 &&
-		session.legs[0].destinations[0].platform == "twitch" && session.probe.kind == "twitch-standard-v1" && session.probe.serviceName == "Twitch" &&
-		session.probe.legId == session.legs[0].legId && !session.probe.streamKey.empty() && isOfficialTwitchServer(session.probe.server);
-	if (session.probe.present && !session.activeProbeEligible) {
-		session.activeProbeDenialReason = "active_probe_not_eligible";
-		session.probe.streamKey.clear();
-		session.probe.server.clear();
+	// Active probing is deliberately default-deny. Credentials survive parsing
+	// only when the probe, upload leg, topology, and destination all agree.
+	const bool multipleDualOutputLegs = session.topology == "dual-output" && session.legs.size() > 1;
+	std::map<std::string, size_t> probePairCounts;
+	for (const auto &probe : session.probes)
+		probePairCounts[probe.legId + "\n" + probe.provider]++;
+
+	for (auto &probe : session.probes) {
+		const auto legIt = std::find_if(session.legs.begin(), session.legs.end(), [&](const LegRequest &leg) { return leg.legId == probe.legId; });
+		const bool legFound = legIt != session.legs.end();
+		const bool destinationFound = legFound && std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
+								      [&](const Destination &destination) { return destination.platform == probe.provider; });
+		const bool directEligible = session.topology == "direct-single" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
+		const bool dualEligible = session.topology == "dual-output" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
+		const bool cloudEligible = session.topology == "cloud-multistream" && session.legs.size() == 1 && legFound;
+		const bool providerValid = (probe.provider == "twitch" && probe.serviceName == "Twitch" && isOfficialTwitchServer(probe.server) &&
+					    isBoundedTwitchKey(probe.streamKey)) ||
+					   (probe.provider == "youtube" && probe.serviceName == "YouTube - RTMPS" &&
+					    isOfficialYoutubeRtmpsServer(probe.server) && isBoundedYoutubeKey(probe.streamKey));
+
+		probe.eligible = !probe.provider.empty() && destinationFound && (directEligible || dualEligible || cloudEligible) && providerValid &&
+				 probePairCounts[probe.legId + "\n" + probe.provider] == 1;
+		if (!probe.eligible) {
+			probe.denialReason = multipleDualOutputLegs ? "dual_output_multiple_active_legs" : "active_probe_not_eligible";
+			probe.streamKey.clear();
+			probe.server.clear();
+		}
+		if (probe.eligible && probe.provider == "youtube")
+			session.probeConfirmations.emplace(probe.probeId, 0);
+	}
+
+	// A shared cloud upload is active-measured only when every Twitch/YouTube
+	// destination has exactly one eligible probe. Otherwise a partial provider
+	// sample could recommend a bitrate that is unsafe for the unmeasured peer.
+	if (session.topology == "cloud-multistream" && session.legs.size() == 1) {
+		const LegRequest &leg = session.legs.front();
+		bool completeProviderSet = true;
+		for (const auto &destination : leg.destinations) {
+			if (destination.platform != "twitch" && destination.platform != "youtube")
+				continue;
+			const size_t eligibleCount = std::count_if(session.probes.begin(), session.probes.end(), [&](const ProbeRequest &probe) {
+				return probe.eligible && probe.legId == leg.legId && probe.provider == destination.platform;
+			});
+			completeProviderSet = completeProviderSet && eligibleCount == 1;
+		}
+		if (!completeProviderSet) {
+			for (auto &probe : session.probes) {
+				if (probe.legId == leg.legId) {
+					probe.eligible = false;
+					probe.denialReason = "active_probe_set_incomplete";
+					probe.streamKey.clear();
+					probe.server.clear();
+				}
+			}
+		}
 	}
 
 	return true;
 }
 
 static void pushEvent(const std::shared_ptr<Session> &session, const char *type, const char *phase, double progress, const std::string &code = {},
-		      const std::string &legId = {}, const std::string &measurementMode = {})
+		      const std::string &legId = {}, const std::string &measurementMode = {}, const std::string &probeId = {}, const std::string &provider = {},
+		      uint32_t targetBitrateKbps = 0)
 {
 	std::lock_guard<std::mutex> lock(session->mutex);
 	SessionEvent event;
@@ -427,6 +574,9 @@ static void pushEvent(const std::shared_ptr<Session> &session, const char *type,
 	event.code = code;
 	event.legId = legId;
 	event.measurementMode = measurementMode;
+	event.probeId = probeId;
+	event.provider = provider;
+	event.targetBitrateKbps = targetBitrateKbps;
 	session->events.push(std::move(event));
 }
 
@@ -678,6 +828,26 @@ static std::string serializeResult(const Session &session, const char *status, c
 		obs_data_set_string(measurement, "confidence", recommendation.confidence.c_str());
 		if (!recommendation.reason.empty())
 			obs_data_set_string(measurement, "reason", recommendation.reason.c_str());
+		if (!recommendation.probes.empty()) {
+			obs_data_array_t *probes = obs_data_array_create();
+			for (const auto &provenance : recommendation.probes) {
+				obs_data_t *probe = obs_data_create();
+				obs_data_set_string(probe, "provider", provenance.provider.c_str());
+				obs_data_set_string(probe, "method", provenance.method.c_str());
+				obs_data_set_bool(probe, "success", provenance.success);
+				if (probePolicy::hasProbeThroughputMetrics(provenance.success, provenance.measuredKbps)) {
+					obs_data_set_int(probe, "measuredKbps", (long long)provenance.measuredKbps);
+					obs_data_set_int(probe, "safeKbps", (long long)provenance.safeKbps);
+				}
+				if (provenance.success || provenance.headroomPercent > 0)
+					obs_data_set_int(probe, "headroomPercent", provenance.headroomPercent);
+				obs_data_set_bool(probe, "ceilingReached", provenance.ceilingReached);
+				obs_data_array_push_back(probes, probe);
+				obs_data_release(probe);
+			}
+			obs_data_set_array(measurement, "probes", probes);
+			obs_data_array_release(probes);
+		}
 		obs_data_set_obj(leg, "measurement", measurement);
 		obs_data_release(measurement);
 
@@ -710,13 +880,52 @@ struct ProbeResult {
 	bool success = false;
 	bool cancelled = false;
 	uint64_t measuredKbps = 0;
+	uint64_t safeKbps = 0;
 	int platformCapKbps = 0;
+	int headroomPercent = 0;
+	bool ceilingReached = false;
+	std::string provider;
+	std::string method;
+	std::string legId;
 	std::string errorCode;
 };
 
 static bool silentAudioCallback(void *, uint64_t startTimestamp, uint64_t, uint64_t *outputTimestamp, uint32_t, struct audio_data_mixes_outputs *)
 {
 	*outputTimestamp = startTimestamp;
+	return true;
+}
+
+static float nextAudioNoiseSample(uint32_t &state)
+{
+	state ^= state << 13;
+	state ^= state >> 17;
+	state ^= state << 5;
+	return ((float)(state & 0xffffU) / 32767.5f - 1.0f) * 0.25f;
+}
+
+static bool noiseAudioCallback(void *param, uint64_t startTimestamp, uint64_t, uint64_t *outputTimestamp, uint32_t activeMixers,
+			       struct audio_data_mixes_outputs *mixes)
+{
+	*outputTimestamp = startTimestamp;
+	if (!param || !mixes)
+		return false;
+
+	uint32_t &state = *static_cast<uint32_t *>(param);
+	for (size_t canvas = 0; canvas < mixes->outputs.num; canvas++) {
+		for (size_t mix = 0; mix < MAX_AUDIO_MIXES; mix++) {
+			if (!(activeMixers & (1U << mix)))
+				continue;
+
+			for (size_t channel = 0; channel < 2; channel++) {
+				float *plane = mixes->outputs.array[canvas].output[mix].data[channel];
+				if (!plane)
+					continue;
+				for (size_t frame = 0; frame < AUDIO_OUTPUT_FRAMES; frame++)
+					plane[frame] = nextAudioNoiseSample(state);
+			}
+		}
+	}
 	return true;
 }
 
@@ -749,6 +958,7 @@ public:
 	std::thread feeder;
 	std::vector<uint8_t> framePatternA;
 	std::vector<uint8_t> framePatternB;
+	uint32_t audioNoiseState = 0xa341316cU;
 
 	bool createSyntheticVideo(uint32_t width, uint32_t height, uint32_t fpsNum, uint32_t fpsDen, bool useCoreVideoMix = false)
 	{
@@ -819,14 +1029,15 @@ public:
 		return true;
 	}
 
-	bool createSyntheticAudio()
+	bool createSyntheticAudio(bool useNoise = false)
 	{
 		audio_output_info info{};
 		info.name = "auto_optimizer_synthetic_audio";
 		info.samples_per_sec = 48000;
 		info.format = AUDIO_FORMAT_FLOAT_PLANAR;
 		info.speakers = SPEAKERS_STEREO;
-		info.input_callback = silentAudioCallback;
+		info.input_callback = useNoise ? noiseAudioCallback : silentAudioCallback;
+		info.input_param = useNoise ? &audioNoiseState : nullptr;
 		return audio_output_open(&syntheticAudio, &info) == AUDIO_OUTPUT_SUCCESS;
 	}
 
@@ -1263,78 +1474,142 @@ static HardwareAssessment assessHardware(const std::shared_ptr<Session> &session
 	return assessment;
 }
 
-static ProbeResult runTwitchProbe(const std::shared_ptr<Session> &session, const LegRequest &leg)
+static bool waitForProbeInterval(const std::shared_ptr<Session> &session, obs_output_t *output, std::chrono::steady_clock::time_point deadline,
+				 ProbeResult &result)
+{
+	while (std::chrono::steady_clock::now() < deadline) {
+		if (session->cancelRequested.load()) {
+			result.cancelled = true;
+			obs_output_force_stop(output);
+			return false;
+		}
+		if (!obs_output_active(output)) {
+			result.errorCode = result.provider + "_probe_disconnected";
+			return false;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+	return true;
+}
+
+static bool waitForYoutubeIngestConfirmation(const std::shared_ptr<Session> &session, const ProbeRequest &probe, obs_output_t *output,
+					     std::chrono::steady_clock::time_point deadline, double progress, ProbeResult &result)
+{
+	{
+		std::lock_guard<std::mutex> lock(session->probeConfirmationMutex);
+		session->activeConfirmationProbeId = probe.probeId;
+	}
+	pushEvent(session, "progress", "bandwidth", progress, "youtube_probe_waiting_for_ingest", probe.legId, "active", probe.probeId, probe.provider);
+	std::unique_lock<std::mutex> lock(session->probeConfirmationMutex);
+	const bool signalled = session->probeConfirmationCondition.wait_until(lock, deadline, [&]() {
+		const auto found = session->probeConfirmations.find(probe.probeId);
+		return session->cancelRequested.load() || found == session->probeConfirmations.end() || found->second != 0;
+	});
+	if (session->cancelRequested.load()) {
+		result.cancelled = true;
+		lock.unlock();
+		obs_output_force_stop(output);
+		return false;
+	}
+	const auto found = session->probeConfirmations.find(probe.probeId);
+	if (!signalled || found == session->probeConfirmations.end() || found->second == 0) {
+		result.errorCode = "youtube_probe_ingest_confirmation_timeout";
+		return false;
+	}
+	if (found->second < 0) {
+		result.errorCode = "youtube_probe_ingest_not_received";
+		return false;
+	}
+	return true;
+}
+
+static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
+				double slotEndProgress)
 {
 	ProbeResult result;
+	result.provider = probe.provider;
+	result.legId = probe.legId;
+	result.method = probe.provider == "youtube" ? "youtube-unbound-ramp-v1" : "twitch-bandwidth-test-v1";
+	result.headroomPercent = 100 - (probe.provider == "youtube" ? kYoutubeProbeSafeMultiplierPercent : kTwitchProbeSafeMultiplierPercent);
 	ScratchResources resources(*session);
 
 	obs_data_t *serviceSettings = obs_data_create();
-	obs_data_set_string(serviceSettings, "service", "Twitch");
-	obs_data_set_string(serviceSettings, "server", session->probe.server.c_str());
-	const std::string bandwidthKey = normalizeTwitchBandwidthKey(session->probe.streamKey);
-	obs_data_set_string(serviceSettings, "key", bandwidthKey.c_str());
-	resources.service = obs_service_create_private("rtmp_common", "auto_optimizer_twitch_probe_service", serviceSettings);
+	obs_data_set_string(serviceSettings, "service", probe.provider == "youtube" ? "YouTube - RTMPS" : "Twitch");
+	obs_data_set_string(serviceSettings, "server", probe.server.c_str());
+	std::string serviceKey = probe.provider == "youtube" ? probe.streamKey : normalizeTwitchBandwidthKey(probe.streamKey);
+	obs_data_set_string(serviceSettings, "key", serviceKey.c_str());
+	resources.service = obs_service_create_private("rtmp_common", "auto_optimizer_probe_service", serviceSettings);
 	obs_data_release(serviceSettings);
 
-	// Drop the only application-owned copy as soon as the disposable service has
-	// consumed it. It is never included in events, result JSON, or logs.
-	session->probe.streamKey.clear();
+	// Drop the only application-owned copies as soon as the disposable service
+	// has consumed them. Neither value is emitted, serialized, or logged.
+	probe.streamKey.clear();
+	probe.server.clear();
+	serviceKey.clear();
 	if (!resources.service) {
-		result.errorCode = "twitch_probe_service_create_failed";
+		result.errorCode = result.provider + "_probe_service_create_failed";
 		return result;
 	}
 
+	const int maximumBitrate = probe.provider == "youtube" ? kYoutubeProbeMaximumBitrateKbps : kProbeMaximumBitrateKbps;
+	const int requested = probe.provider == "youtube" ? kYoutubeProbeInitialBitrateKbps
+							  : std::clamp(std::max(leg.current.bitrateKbps, 6000), 500, maximumBitrate);
+	obs_data_t *platformProbe = obs_data_create();
+	obs_data_set_int(platformProbe, "bitrate", maximumBitrate);
+	obs_service_apply_encoder_settings(resources.service, platformProbe, nullptr);
+	const int platformReturned = (int)obs_data_get_int(platformProbe, "bitrate");
+	if (platformReturned > 0 && platformReturned < maximumBitrate)
+		result.platformCapKbps = platformReturned;
+	obs_data_release(platformProbe);
+
+	int initialBitrate = requested;
+	if (result.platformCapKbps > 0)
+		initialBitrate = std::min(initialBitrate, result.platformCapKbps);
+	if (leg.limits.maxBitrateKbps > 0)
+		initialBitrate = std::min(initialBitrate, leg.limits.maxBitrateKbps);
 	obs_data_t *encoderSettings = obs_data_create();
-	const int requested = std::clamp(std::max(leg.current.bitrateKbps, 6000), 500, kProbeMaximumBitrateKbps);
-	obs_data_set_int(encoderSettings, "bitrate", requested);
+	obs_data_set_int(encoderSettings, "bitrate", initialBitrate);
 	obs_data_set_string(encoderSettings, "rate_control", "CBR");
 	obs_data_set_string(encoderSettings, "preset", "veryfast");
 	obs_data_set_int(encoderSettings, "keyint_sec", 2);
-
-	obs_data_t *platformProbe = obs_data_create();
-	obs_data_set_int(platformProbe, "bitrate", kProbeMaximumBitrateKbps);
-	obs_service_apply_encoder_settings(resources.service, platformProbe, nullptr);
-	const int platformReturned = (int)obs_data_get_int(platformProbe, "bitrate");
-	if (platformReturned > 0 && platformReturned < kProbeMaximumBitrateKbps)
-		result.platformCapKbps = platformReturned;
-	obs_data_release(platformProbe);
-	if (result.platformCapKbps > 0)
-		obs_data_set_int(encoderSettings, "bitrate", std::min(requested, result.platformCapKbps));
 	obs_service_apply_encoder_settings(resources.service, encoderSettings, nullptr);
+	initialBitrate = (int)obs_data_get_int(encoderSettings, "bitrate");
 
-	if (!resources.createSyntheticVideo(128, 128, 30, 1)) {
+	const uint32_t width = probe.provider == "youtube" ? 640 : 128;
+	const uint32_t height = probe.provider == "youtube" ? 360 : 128;
+	if (!resources.createSyntheticVideo(width, height, 30, 1)) {
 		obs_data_release(encoderSettings);
-		result.errorCode = "twitch_probe_video_create_failed";
+		result.errorCode = result.provider + "_probe_video_create_failed";
 		return result;
 	}
-	if (!resources.createSyntheticAudio()) {
+	if (!resources.createSyntheticAudio(probe.provider == "youtube")) {
 		obs_data_release(encoderSettings);
-		result.errorCode = "twitch_probe_audio_create_failed";
+		result.errorCode = result.provider + "_probe_audio_create_failed";
 		return result;
 	}
 
-	resources.videoEncoder = obs_video_encoder_create(ADVANCED_ENCODER_X264, "auto_optimizer_twitch_probe_encoder", encoderSettings, nullptr);
+	resources.videoEncoder = obs_video_encoder_create(ADVANCED_ENCODER_X264, "auto_optimizer_probe_encoder", encoderSettings, nullptr);
 	obs_data_release(encoderSettings);
 	if (!resources.videoEncoder) {
-		result.errorCode = "twitch_probe_encoder_create_failed";
+		result.errorCode = result.provider + "_probe_encoder_create_failed";
 		return result;
 	}
-
 	obs_encoder_set_video(resources.videoEncoder, resources.syntheticVideo);
+
 	obs_data_t *audioEncoderSettings = obs_data_create();
-	obs_data_set_int(audioEncoderSettings, "bitrate", 32);
-	resources.audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "auto_optimizer_twitch_probe_audio_encoder", audioEncoderSettings, 0, nullptr);
+	obs_data_set_int(audioEncoderSettings, "bitrate", probe.provider == "youtube" ? kYoutubeProbeAudioBitrateKbps : kTwitchProbeAudioBitrateKbps);
+	resources.audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "auto_optimizer_probe_audio_encoder", audioEncoderSettings, 0, nullptr);
 	obs_data_release(audioEncoderSettings);
 	if (!resources.audioEncoder) {
-		result.errorCode = "twitch_probe_audio_encoder_create_failed";
+		result.errorCode = result.provider + "_probe_audio_encoder_create_failed";
 		return result;
 	}
 	obs_encoder_set_audio(resources.audioEncoder, resources.syntheticAudio);
 	resources.startFeeder();
 
-	resources.output = obs_output_create("rtmp_output", "auto_optimizer_twitch_probe_output", nullptr, nullptr);
+	resources.output = obs_output_create("rtmp_output", "auto_optimizer_probe_output", nullptr, nullptr);
 	if (!resources.output) {
-		result.errorCode = "twitch_probe_output_create_failed";
+		result.errorCode = result.provider + "_probe_output_create_failed";
 		return result;
 	}
 	obs_output_set_reconnect_settings(resources.output, 0, 0);
@@ -1347,12 +1622,14 @@ static ProbeResult runTwitchProbe(const std::shared_ptr<Session> &session, const
 		result.cancelled = true;
 		return result;
 	}
+	const auto probeStarted = std::chrono::steady_clock::now();
+	const auto youtubeDeadline = probeStarted + std::chrono::milliseconds(kYoutubeProbeTotalTimeoutMs);
 	if (!obs_output_start(resources.output)) {
-		result.errorCode = "twitch_probe_start_failed";
+		result.errorCode = result.provider + "_probe_start_failed";
 		return result;
 	}
 
-	const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kProbeConnectTimeoutMs);
+	const auto connectDeadline = std::min(probeStarted + std::chrono::milliseconds(kProbeConnectTimeoutMs), youtubeDeadline);
 	while (!obs_output_active(resources.output) && std::chrono::steady_clock::now() < connectDeadline) {
 		if (session->cancelRequested.load()) {
 			result.cancelled = true;
@@ -1362,69 +1639,231 @@ static ProbeResult runTwitchProbe(const std::shared_ptr<Session> &session, const
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 	if (!obs_output_active(resources.output)) {
-		result.errorCode = "twitch_probe_connect_failed";
+		result.errorCode = result.provider + "_probe_connect_failed";
 		return result;
 	}
 
-	const auto warmupDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kProbeWarmupMs);
-	while (std::chrono::steady_clock::now() < warmupDeadline) {
-		if (session->cancelRequested.load()) {
-			result.cancelled = true;
-			obs_output_force_stop(resources.output);
+	if (probe.provider == "youtube") {
+		blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] RTMP output is active; waiting for ingest confirmation");
+		const auto confirmationDeadline =
+			std::min(std::chrono::steady_clock::now() + std::chrono::milliseconds(kYoutubeIngestConfirmationTimeoutMs), youtubeDeadline);
+		const double confirmationProgress = std::min(slotStartProgress + 2.0, slotEndProgress);
+		if (!waitForYoutubeIngestConfirmation(session, probe, resources.output, confirmationDeadline, confirmationProgress, result)) {
+			blog(LOG_WARNING, "[Auto Optimizer][YouTube Probe] Ingest confirmation failed: reason=%s, output_active=%s",
+			     result.errorCode.empty() ? (result.cancelled ? "cancelled" : "unknown") : result.errorCode.c_str(),
+			     obs_output_active(resources.output) ? "true" : "false");
 			return result;
 		}
-		if (!obs_output_active(resources.output)) {
-			result.errorCode = "twitch_probe_disconnected";
-			return result;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] Ingest confirmed; starting bandwidth ladder");
 	}
 
-	const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
-	const auto sampleStart = std::chrono::steady_clock::now();
-	const auto sampleDeadline = sampleStart + std::chrono::milliseconds(kProbeSampleMs);
-	while (std::chrono::steady_clock::now() < sampleDeadline) {
-		if (session->cancelRequested.load()) {
-			result.cancelled = true;
-			obs_output_force_stop(resources.output);
+	if (probe.provider == "twitch") {
+		pushEvent(session, "progress", "bandwidth", probePolicy::probeSubstepProgress(slotStartProgress, slotEndProgress, 0, 1),
+			  "twitch_probe_measuring", probe.legId, "active", probe.probeId, probe.provider, (uint32_t)std::max(0, initialBitrate));
+		if (!waitForProbeInterval(session, resources.output, std::chrono::steady_clock::now() + std::chrono::milliseconds(kProbeWarmupMs), result))
+			return result;
+		const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
+		const auto sampleStart = std::chrono::steady_clock::now();
+		const auto sampleDeadline = sampleStart + std::chrono::milliseconds(kProbeSampleMs);
+		while (std::chrono::steady_clock::now() < sampleDeadline && obs_output_get_total_bytes(resources.output) - startBytes < kProbeMaxBytes) {
+			if (!waitForProbeInterval(session, resources.output, std::chrono::steady_clock::now() + std::chrono::milliseconds(50), result))
+				return result;
+		}
+		const auto sampleEnd = std::chrono::steady_clock::now();
+		const uint64_t endBytes = obs_output_get_total_bytes(resources.output);
+		const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(sampleEnd - sampleStart).count();
+		if (endBytes <= startBytes || elapsedNs == 0) {
+			result.errorCode = "twitch_probe_no_data";
 			return result;
 		}
-		if (!obs_output_active(resources.output)) {
-			result.errorCode = "twitch_probe_disconnected";
+		result.measuredKbps = ((endBytes - startBytes) * 8ULL * 1000000000ULL) / elapsedNs / 1000ULL;
+		result.safeKbps = probePolicy::safeVideoKbps(result.measuredKbps, kTwitchProbeSafeMultiplierPercent, kTwitchProbeAudioBitrateKbps);
+		if (result.platformCapKbps > 0)
+			result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)result.platformCapKbps);
+		result.success = result.measuredKbps > 0;
+	} else {
+		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
+		uint64_t totalProbeBytes = 0;
+		probePolicy::YoutubeRampEvidence rampEvidence;
+		const int effectiveCeilingKbps =
+			probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, leg.limits.maxBitrateKbps);
+		std::vector<std::pair<int, int>> plannedTargets;
+		int lastPlannedTarget = 0;
+		for (int ladderTarget : ladder) {
+			const int plannedTarget = std::min(ladderTarget, effectiveCeilingKbps);
+			if (plannedTarget > lastPlannedTarget) {
+				plannedTargets.emplace_back(ladderTarget, plannedTarget);
+				lastPlannedTarget = plannedTarget;
+			}
+		}
+		int lastTarget = 0;
+		size_t emittedRungCount = 0;
+		std::string terminationReason = "ladder_exhausted";
+		const auto rampStarted = std::chrono::steady_clock::now();
+		const auto probeElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(rampStarted - probeStarted).count();
+		const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(youtubeDeadline - rampStarted).count();
+		blog(LOG_INFO,
+		     "[Auto Optimizer][YouTube Probe] Ladder configuration: effective_video_ceiling=%d Kbps, settle=%d ms, sample=%d ms, "
+		     "total_timeout=%d ms, probe_elapsed=%lld ms, remaining=%lld ms, byte_budget=%llu",
+		     effectiveCeilingKbps, kYoutubeProbeSettleMs, kYoutubeProbeSampleMs, kYoutubeProbeTotalTimeoutMs, (long long)probeElapsedMs,
+		     (long long)remainingMs, (unsigned long long)kYoutubeProbeMaxBytes);
+		for (const auto &[ladderTarget, plannedTarget] : plannedTargets) {
+			const auto rungCheckTime = std::chrono::steady_clock::now();
+			if (rungCheckTime + std::chrono::milliseconds(kYoutubeProbeSettleMs + kYoutubeProbeSampleMs) >= youtubeDeadline) {
+				terminationReason = "total_deadline_before_next_rung";
+				const auto rungRemainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(youtubeDeadline - rungCheckTime).count();
+				blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] Skipping ladder target %d Kbps: remaining=%lld ms, required=%d ms",
+				     ladderTarget, (long long)rungRemainingMs, kYoutubeProbeSettleMs + kYoutubeProbeSampleMs);
+				break;
+			}
+			int target = plannedTarget;
+			if (target <= 0 || target <= lastTarget)
+				continue;
+
+			obs_data_t *updatedSettings = obs_data_create();
+			obs_data_set_int(updatedSettings, "bitrate", target);
+			obs_data_set_string(updatedSettings, "rate_control", "CBR");
+			obs_data_set_string(updatedSettings, "preset", "veryfast");
+			obs_data_set_int(updatedSettings, "keyint_sec", 2);
+			obs_service_apply_encoder_settings(resources.service, updatedSettings, nullptr);
+			target = (int)obs_data_get_int(updatedSettings, "bitrate");
+			obs_encoder_update(resources.videoEncoder, updatedSettings);
+			obs_data_release(updatedSettings);
+			if (target <= lastTarget)
+				continue;
+			lastTarget = target;
+			const double rungProgress =
+				probePolicy::probeSubstepProgress(slotStartProgress, slotEndProgress, emittedRungCount, plannedTargets.size());
+			emittedRungCount++;
+			pushEvent(session, "progress", "bandwidth", rungProgress, "youtube_probe_measuring", probe.legId, "active", probe.probeId,
+				  probe.provider, (uint32_t)target);
+			blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] Starting rung: ladder_target=%d Kbps, applied_video_target=%d Kbps", ladderTarget,
+			     target);
+
+			if (!waitForProbeInterval(session, resources.output,
+						  std::chrono::steady_clock::now() + std::chrono::milliseconds(kYoutubeProbeSettleMs), result)) {
+				blog(LOG_WARNING, "[Auto Optimizer][YouTube Probe] Rung %d Kbps stopped during settle: %s", target,
+				     result.errorCode.empty() ? (result.cancelled ? "cancelled" : "unknown") : result.errorCode.c_str());
+				return result;
+			}
+			const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
+			const uint32_t startDropped = obs_output_get_frames_dropped(resources.output);
+			const uint32_t startFrames = obs_output_get_total_frames(resources.output);
+			float maximumCongestion = 0.0f;
+			const auto sampleStart = std::chrono::steady_clock::now();
+			const auto sampleDeadline = std::min(sampleStart + std::chrono::milliseconds(kYoutubeProbeSampleMs), youtubeDeadline);
+			while (std::chrono::steady_clock::now() < sampleDeadline) {
+				maximumCongestion = std::max(maximumCongestion, obs_output_get_congestion(resources.output));
+				if (!waitForProbeInterval(session, resources.output, std::chrono::steady_clock::now() + std::chrono::milliseconds(50),
+							  result)) {
+					blog(LOG_WARNING, "[Auto Optimizer][YouTube Probe] Rung %d Kbps stopped during measurement: %s", target,
+					     result.errorCode.empty() ? (result.cancelled ? "cancelled" : "unknown") : result.errorCode.c_str());
+					return result;
+				}
+			}
+			const auto sampleEnd = std::chrono::steady_clock::now();
+			const uint64_t endBytes = obs_output_get_total_bytes(resources.output);
+			const uint32_t endDropped = obs_output_get_frames_dropped(resources.output);
+			const uint32_t endFrames = obs_output_get_total_frames(resources.output);
+			const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(sampleEnd - sampleStart).count();
+			if (endBytes <= startBytes || elapsedNs == 0) {
+				terminationReason = "no_sample_data";
+				blog(LOG_WARNING,
+				     "[Auto Optimizer][YouTube Probe] Rung %d Kbps produced no measurable data: start_bytes=%llu, end_bytes=%llu, elapsed_ns=%llu",
+				     target, (unsigned long long)startBytes, (unsigned long long)endBytes, (unsigned long long)elapsedNs);
+				break;
+			}
+			const uint64_t measured = ((endBytes - startBytes) * 8ULL * 1000000000ULL) / elapsedNs / 1000ULL;
+			totalProbeBytes += endBytes - startBytes;
+			const uint32_t frameDelta = endFrames >= startFrames ? endFrames - startFrames : 0;
+			const uint32_t droppedDelta = endDropped >= startDropped ? endDropped - startDropped : 0;
+			const uint64_t expectedAggregateKbps = (uint64_t)target + kYoutubeProbeAudioBitrateKbps;
+			const bool throughputPassed = measured * 100ULL >= expectedAggregateKbps * 90ULL;
+			const bool dropsPassed = frameDelta == 0 || (uint64_t)droppedDelta * 100ULL <= (uint64_t)frameDelta * 2ULL;
+			const bool congestionPassed = maximumCongestion < 0.20f;
+			const bool rungPassed = throughputPassed && dropsPassed && congestionPassed;
+			const auto elapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(sampleEnd - sampleStart).count();
+			const uint64_t sampleBytes = endBytes - startBytes;
+			blog(LOG_INFO,
+			     "[Auto Optimizer][YouTube Probe] Rung result: video_target=%d Kbps, expected_aggregate=%llu Kbps, "
+			     "measured_aggregate=%llu Kbps, elapsed=%lld ms, sample_bytes=%llu, frames=%u, dropped=%u, max_congestion=%.3f, "
+			     "throughput_passed=%s, drops_passed=%s, congestion_passed=%s, passed=%s",
+			     target, (unsigned long long)expectedAggregateKbps, (unsigned long long)measured, (long long)elapsedMs,
+			     (unsigned long long)sampleBytes, (unsigned int)frameDelta, (unsigned int)droppedDelta, (double)maximumCongestion,
+			     throughputPassed ? "true" : "false", dropsPassed ? "true" : "false", congestionPassed ? "true" : "false",
+			     rungPassed ? "true" : "false");
+			if (!throughputPassed || !dropsPassed || !congestionPassed) {
+				terminationReason = "quality_gate_failed";
+				// Even a failed first rung is useful evidence: it is a
+				// conservative upper bound and must not be discarded in
+				// favor of a higher pre-probe bitrate.
+				rampEvidence.observe(measured, false, expectedAggregateKbps);
+				result.measuredKbps = rampEvidence.recommendationBasisKbps;
+				break;
+			}
+			rampEvidence.observe(measured, true);
+			result.measuredKbps = rampEvidence.recommendationBasisKbps;
+			result.ceilingReached = probePolicy::reachedEffectiveProbeCeiling(target, effectiveCeilingKbps);
+			if (result.ceilingReached)
+				terminationReason = "effective_ceiling_reached";
+			if (target < ladderTarget) {
+				terminationReason = "provider_or_request_cap_reached";
+				break;
+			}
+			if (totalProbeBytes >= kYoutubeProbeMaxBytes) {
+				terminationReason = "byte_budget_reached";
+				break;
+			}
+		}
+		if (result.measuredKbps == 0) {
+			blog(LOG_WARNING, "[Auto Optimizer][YouTube Probe] Ladder failed without usable throughput: termination=%s", terminationReason.c_str());
+			result.errorCode = "youtube_probe_no_passing_step";
 			return result;
 		}
-		if (obs_output_get_total_bytes(resources.output) - startBytes >= kProbeMaxBytes)
-			break;
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		const uint64_t uncappedSafeKbps = rampEvidence.safeVideoKbps(kYoutubeProbeSafeMultiplierPercent, kYoutubeProbeAudioBitrateKbps);
+		result.safeKbps = uncappedSafeKbps;
+		if (result.platformCapKbps > 0)
+			result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)result.platformCapKbps);
+		if (leg.limits.maxBitrateKbps > 0)
+			result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
+		blog(rampEvidence.passedStep ? LOG_INFO : LOG_WARNING,
+		     "[Auto Optimizer][YouTube Probe] Ladder summary: passed_step=%s, recommendation_basis=%llu Kbps, failed_upper_bound=%llu Kbps, "
+		     "safe_multiplier=%d%%, audio_reserve=%d Kbps, uncapped_safe_video=%llu Kbps, final_safe_video=%llu Kbps, "
+		     "platform_cap=%d Kbps, request_cap=%d Kbps, total_sample_bytes=%llu, ceiling_reached=%s, termination=%s",
+		     rampEvidence.passedStep ? "true" : "false", (unsigned long long)rampEvidence.recommendationBasisKbps,
+		     (unsigned long long)rampEvidence.failedUpperBoundKbps, kYoutubeProbeSafeMultiplierPercent, kYoutubeProbeAudioBitrateKbps,
+		     (unsigned long long)uncappedSafeKbps, (unsigned long long)result.safeKbps, result.platformCapKbps, leg.limits.maxBitrateKbps,
+		     (unsigned long long)totalProbeBytes, result.ceilingReached ? "true" : "false", terminationReason.c_str());
+		if (!rampEvidence.passedStep) {
+			result.errorCode = "youtube_probe_no_passing_step";
+			return result;
+		}
+		result.success = true;
 	}
 
-	const auto sampleEnd = std::chrono::steady_clock::now();
-	const uint64_t endBytes = obs_output_get_total_bytes(resources.output);
-	const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(sampleEnd - sampleStart).count();
-	if (endBytes <= startBytes || elapsedNs == 0) {
-		result.errorCode = "twitch_probe_no_data";
-		return result;
-	}
-
-	// Measure only the sample window. Connection/handshake latency is a separate
-	// diagnostic and must never be used as the throughput denominator.
-	result.measuredKbps = ((endBytes - startBytes) * 8ULL * 1000000000ULL) / elapsedNs / 1000ULL;
 	obs_output_stop(resources.output);
 	if (!waitForOutputInactive(resources.output, kProbeStopTimeoutMs)) {
 		obs_output_force_stop(resources.output);
 		if (!waitForOutputInactive(resources.output, kProbeStopTimeoutMs)) {
-			result.errorCode = "twitch_probe_cleanup_timeout";
+			result.success = false;
+			result.errorCode = result.provider + "_probe_cleanup_timeout";
 			return result;
 		}
 	}
-
-	result.success = result.measuredKbps > 0;
 	return result;
+}
+
+static void clearProbeSecrets(Session &session)
+{
+	for (auto &probe : session.probes) {
+		probe.streamKey.clear();
+		probe.server.clear();
+	}
 }
 
 static void completeCancelled(const std::shared_ptr<Session> &session)
 {
-	session->probe.streamKey.clear();
+	clearProbeSecrets(*session);
 	{
 		std::lock_guard<std::mutex> lock(session->mutex);
 		session->resultJson = serializeResult(*session, "cancelled", {}, "cancelled");
@@ -1435,7 +1874,7 @@ static void completeCancelled(const std::shared_ptr<Session> &session)
 
 static void completeFailed(const std::shared_ptr<Session> &session, const char *code)
 {
-	session->probe.streamKey.clear();
+	clearProbeSecrets(*session);
 	{
 		std::lock_guard<std::mutex> lock(session->mutex);
 		session->resultJson = serializeResult(*session, "failed", {}, code);
@@ -1472,23 +1911,53 @@ static void runSession(const std::shared_ptr<Session> &session)
 		pushEvent(session, "progress", "hardware", progress, code, preparedLegs.back().legId);
 	}
 
-	ProbeResult probeResult;
-	bool usedActiveProbe = false;
-	if (session->activeProbeEligible) {
-		pushEvent(session, "phase", "bandwidth", 30, {}, session->legs[0].legId, "active");
-		probeResult = runTwitchProbe(session, session->legs[0]);
-		if (probeResult.cancelled || session->cancelRequested.load()) {
+	std::vector<ProbeResult> probeResults;
+	const size_t eligibleProbeCount =
+		std::count_if(session->probes.begin(), session->probes.end(), [](const ProbeRequest &probe) { return probe.eligible; });
+	size_t completedProbeCount = 0;
+	for (auto &probe : session->probes) {
+		if (!probe.eligible) {
+			pushEvent(session, "progress", "bandwidth", 30, probe.denialReason, probe.legId, "estimated", probe.probeId, probe.provider);
+			continue;
+		}
+		const auto legIt = std::find_if(preparedLegs.begin(), preparedLegs.end(), [&](const LegRequest &leg) { return leg.legId == probe.legId; });
+		if (legIt == preparedLegs.end())
+			continue;
+		const double startProgress = 30.0 + (35.0 * (double)completedProbeCount / (double)std::max<size_t>(1, eligibleProbeCount));
+		const double endProgress = 30.0 + (35.0 * (double)(completedProbeCount + 1) / (double)std::max<size_t>(1, eligibleProbeCount));
+		pushEvent(session, "phase", "bandwidth", startProgress, probe.provider + "_probe_started", probe.legId, "active", probe.probeId,
+			  probe.provider);
+		const auto probeRunStarted = std::chrono::steady_clock::now();
+		ProbeResult result = runRtmpProbe(session, probe, *legIt, startProgress, endProgress);
+		const auto probeRunElapsedMs =
+			std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - probeRunStarted).count();
+		if (result.provider == "youtube") {
+			blog(result.success ? LOG_INFO : LOG_WARNING,
+			     "[Auto Optimizer][YouTube Probe] Probe summary: success=%s, cancelled=%s, measured_aggregate=%llu Kbps, "
+			     "safe_video=%llu Kbps, ceiling_reached=%s, elapsed=%lld ms, error=%s",
+			     result.success ? "true" : "false", result.cancelled ? "true" : "false", (unsigned long long)result.measuredKbps,
+			     (unsigned long long)result.safeKbps, result.ceilingReached ? "true" : "false", (long long)probeRunElapsedMs,
+			     result.errorCode.empty() ? "none" : result.errorCode.c_str());
+		}
+		if (probe.provider == "youtube") {
+			std::lock_guard<std::mutex> lock(session->probeConfirmationMutex);
+			session->probeConfirmations.erase(probe.probeId);
+			if (session->activeConfirmationProbeId == probe.probeId)
+				session->activeConfirmationProbeId.clear();
+		}
+		completedProbeCount++;
+		if (result.cancelled || session->cancelRequested.load()) {
 			completeCancelled(session);
 			return;
 		}
-		usedActiveProbe = probeResult.success;
-		if (!probeResult.success)
-			pushEvent(session, "progress", "bandwidth", 65, "twitch_probe_failed_estimate_used", session->legs[0].legId, "estimated");
-	} else {
-		session->probe.streamKey.clear();
-		pushEvent(session, "progress", "bandwidth", 65, session->activeProbeDenialReason.empty() ? "estimate_only" : session->activeProbeDenialReason,
-			  {}, "estimated");
+		pushEvent(session, "progress", "bandwidth", endProgress,
+			  result.success ? result.provider + "_probe_completed" : result.provider + "_probe_failed_estimate_used", result.legId,
+			  result.success ? "active" : "estimated", probe.probeId, probe.provider);
+		probeResults.push_back(std::move(result));
 	}
+	clearProbeSecrets(*session);
+	if (eligibleProbeCount == 0)
+		pushEvent(session, "progress", "bandwidth", 65, "estimate_only", {}, "estimated");
 
 	if (session->cancelRequested.load()) {
 		completeCancelled(session);
@@ -1512,15 +1981,33 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.reason = hardware.reason;
 		}
 
-		if (usedActiveProbe && leg.legId == session->probe.legId) {
+		const size_t requiredProbeCount = std::count_if(session->probes.begin(), session->probes.end(),
+								[&](const ProbeRequest &probe) { return probe.eligible && probe.legId == leg.legId; });
+		std::vector<const ProbeResult *> legProbeResults;
+		for (const auto &probeResult : probeResults) {
+			if (probeResult.legId == leg.legId)
+				legProbeResults.push_back(&probeResult);
+		}
+		const bool allRequiredProbesPassed =
+			requiredProbeCount > 0 && legProbeResults.size() == requiredProbeCount &&
+			std::all_of(legProbeResults.begin(), legProbeResults.end(), [](const ProbeResult *result) { return result->success; });
+		for (const ProbeResult *result : legProbeResults) {
+			recommendation.probes.push_back({result->provider, result->method, result->measuredKbps, result->safeKbps, result->headroomPercent,
+							 result->success, result->ceilingReached});
+		}
+
+		if (allRequiredProbesPassed) {
 			recommendation.measurementMode = "active";
-			if (hardware.passed && !hardware.constrained) {
+			if (hardware.passed && session->topology == "cloud-multistream") {
+				recommendation.confidence = "medium";
+				recommendation.reason = "indirect_provider_probes";
+			} else if (hardware.passed && !hardware.constrained) {
 				recommendation.confidence = "high";
 				recommendation.reason.clear();
 			}
-			uint64_t safeKbps = probeResult.measuredKbps * 70ULL / 100ULL;
-			if (probeResult.platformCapKbps > 0)
-				safeKbps = std::min<uint64_t>(safeKbps, (uint64_t)probeResult.platformCapKbps);
+			uint64_t safeKbps = UINT64_MAX;
+			for (const ProbeResult *result : legProbeResults)
+				safeKbps = std::min(safeKbps, result->safeKbps);
 			if (leg.limits.maxBitrateKbps > 0)
 				safeKbps = std::min<uint64_t>(safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
 			// Never turn a low measurement into a higher recommendation merely to
@@ -1530,10 +2017,28 @@ static void runSession(const std::shared_ptr<Session> &session)
 				recommendation.confidence = "low";
 				recommendation.reason = "insufficient_bandwidth";
 			}
-			recommendation.value.bitrateKbps = (int)std::clamp<uint64_t>(safeKbps, 1, kProbeMaximumBitrateKbps);
-		} else if (session->activeProbeEligible && leg.legId == session->probe.legId && !probeResult.success) {
+			recommendation.value.bitrateKbps = (int)std::clamp<uint64_t>(safeKbps, 1, kYoutubeProbeMaximumBitrateKbps);
+		} else if (requiredProbeCount > 0) {
 			recommendation.confidence = "low";
-			recommendation.reason = "probe_failed";
+			recommendation.reason = session->topology == "cloud-multistream" ? "indirect_provider_probe_failed" : "probe_failed";
+			// A failed YouTube rung can still report observed throughput.
+			// Treat its safe value as an upper bound on the estimate so a
+			// failed low rung can never fall back to a higher current bitrate.
+			uint64_t observedSafeKbps = UINT64_MAX;
+			bool hasObservedThroughput = false;
+			for (const ProbeResult *result : legProbeResults) {
+				if (result->measuredKbps > 0) {
+					hasObservedThroughput = true;
+					observedSafeKbps = std::min(observedSafeKbps, result->safeKbps);
+				}
+			}
+			if (hasObservedThroughput) {
+				const uint64_t representableSafeKbps = std::max<uint64_t>(1, observedSafeKbps);
+				recommendation.value.bitrateKbps = probePolicy::clampEstimateToObservedSafe(
+					recommendation.value.bitrateKbps, representableSafeKbps, kYoutubeProbeMaximumBitrateKbps);
+				if (observedSafeKbps < 500)
+					recommendation.reason = "insufficient_bandwidth";
+			}
 		}
 
 		recommendations.push_back(std::move(recommendation));
@@ -1561,6 +2066,7 @@ static bool requestCancellation(const std::shared_ptr<Session> &session)
 		return true;
 
 	session->cancelRequested.store(true);
+	session->probeConfirmationCondition.notify_all();
 	{
 		std::lock_guard<std::mutex> lock(session->probeMutex);
 		if (session->activeProbeOutput)
@@ -1583,6 +2089,8 @@ void Register(ipc::server &srv)
 	collection->register_function(std::make_shared<ipc::function>("GetAutoConfigCapabilities", std::vector<ipc::type>{}, GetCapabilities));
 	collection->register_function(std::make_shared<ipc::function>("CreateAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CreateSession));
 	collection->register_function(std::make_shared<ipc::function>("StartAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, StartSession));
+	collection->register_function(std::make_shared<ipc::function>(
+		"ConfirmAutoConfigProbeIngest", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::UInt32}, ConfirmProbeIngest));
 	collection->register_function(std::make_shared<ipc::function>("QueryAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, QuerySession));
 	collection->register_function(std::make_shared<ipc::function>("GetAutoConfigResult", std::vector<ipc::type>{ipc::type::String}, GetResult));
 	collection->register_function(std::make_shared<ipc::function>("CancelAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CancelSession));
@@ -1594,7 +2102,7 @@ void Register(ipc::server &srv)
 void GetCapabilities(void *, const int64_t, const std::vector<ipc::value> &, std::vector<ipc::value> &rval)
 {
 	static const char *capabilities =
-		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"bandwidthModes":["twitch-standard-active","estimate"]})";
+		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"bandwidthModes":["twitch-standard-active","youtube-unbound-active","estimate"]})";
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(capabilities));
 }
@@ -1668,6 +2176,42 @@ void StartSession(void *, const int64_t, const std::vector<ipc::value> &args, st
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 }
 
+void ConfirmProbeIngest(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	if (args.size() != 3) {
+		returnError(rval, "ConfirmAutoConfigProbeIngest expects sessionId, probeId, and received");
+		return;
+	}
+	auto session = findSession(args[0].value_str);
+	if (!session) {
+		returnError(rval, "autoconfig_session_not_found");
+		return;
+	}
+	if (session->state.load() != SessionState::Running) {
+		returnError(rval, "autoconfig_session_not_running");
+		return;
+	}
+	const std::string &probeId = args[1].value_str;
+	const auto probe = std::find_if(session->probes.begin(), session->probes.end(), [&](const ProbeRequest &candidate) {
+		return candidate.eligible && candidate.provider == "youtube" && candidate.probeId == probeId;
+	});
+	if (probe == session->probes.end()) {
+		returnError(rval, "autoconfig_probe_not_found");
+		return;
+	}
+	{
+		std::lock_guard<std::mutex> lock(session->probeConfirmationMutex);
+		auto confirmation = session->probeConfirmations.find(probeId);
+		if (confirmation == session->probeConfirmations.end() || session->activeConfirmationProbeId != probeId) {
+			returnError(rval, "autoconfig_probe_not_confirmable");
+			return;
+		}
+		confirmation->second = args[2].value_union.ui32 ? 1 : -1;
+	}
+	session->probeConfirmationCondition.notify_all();
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+}
+
 void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
@@ -1695,6 +2239,9 @@ void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, st
 	rval.push_back(ipc::value(event.code));
 	rval.push_back(ipc::value(event.legId));
 	rval.push_back(ipc::value(event.measurementMode));
+	rval.push_back(ipc::value(event.probeId));
+	rval.push_back(ipc::value(event.provider));
+	rval.push_back(ipc::value(event.targetBitrateKbps));
 	session->events.pop();
 }
 
@@ -1785,6 +2332,7 @@ void Shutdown()
 			completeCancelled(session);
 		} else if (state == SessionState::Running) {
 			session->cancelRequested.store(true);
+			session->probeConfirmationCondition.notify_all();
 			{
 				std::lock_guard<std::mutex> lock(session->probeMutex);
 				if (session->activeProbeOutput)
@@ -1798,7 +2346,7 @@ void Shutdown()
 		// normal cancellation deadline.
 		if (session->worker.valid())
 			session->worker.wait();
-		session->probe.streamKey.clear();
+		clearProbeSecrets(*session);
 		session->state.store(SessionState::Closed);
 	}
 

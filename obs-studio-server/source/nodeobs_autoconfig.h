@@ -19,6 +19,7 @@ void Shutdown();
 void GetCapabilities(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void CreateSession(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void StartSession(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+void ConfirmProbeIngest(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void QuerySession(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void GetResult(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void CancelSession(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

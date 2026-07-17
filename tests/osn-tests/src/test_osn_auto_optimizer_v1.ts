@@ -16,7 +16,7 @@ const testName = 'osn-auto-optimizer-v1';
 const mockPort = 11937;
 
 describe(testName, function() {
-    this.timeout(30000);
+    this.timeout(80000);
 
     let obs: OBSHandler;
 
@@ -85,7 +85,7 @@ describe(testName, function() {
                     try { osn.NodeObs.CloseAutoConfigSession(sessionId); } catch (_) { /* best effort */ }
                 }
                 reject(new Error('Auto Optimizer session timed out'));
-            }, 15000);
+            }, 60000);
 
             const onEvent = (event: IAutoConfigEvent) => {
                 events.push(event);
@@ -114,6 +114,7 @@ describe(testName, function() {
     }
 
     it('advertises the versioned, Desktop-owned apply contract', function() {
+        expect(osn.NodeObs.ConfirmAutoConfigProbeIngest).to.be.a('function');
         const capabilities = JSON.parse(osn.NodeObs.GetAutoConfigCapabilities()) as IAutoConfigCapabilities;
         expect(capabilities).to.deep.equal({
             apiVersion: 2,
@@ -122,7 +123,8 @@ describe(testName, function() {
             awaitableCancel: true,
             perUploadLegResults: true,
             desktopOwnedApply: true,
-            bandwidthModes: ['twitch-standard-active', 'estimate'],
+            multipleActiveProbes: true,
+            bandwidthModes: ['twitch-standard-active', 'youtube-unbound-active', 'estimate'],
         });
     });
 
@@ -134,13 +136,14 @@ describe(testName, function() {
                 schemaVersion: 1,
                 topology: 'custom-rtmp',
                 legs: [leg()],
-                activeProbe: {
+                activeProbes: [{
+                    probeId: 'twitch-primary',
                     kind: 'twitch-standard-v1',
                     legId: 'primary',
                     serviceName: 'Twitch',
                     server: `rtmp://127.0.0.1:${mockPort}/live`,
                     streamKey: secret,
-                },
+                }],
             });
 
             expect(mock.getConnections()).to.equal(0);
@@ -155,6 +158,135 @@ describe(testName, function() {
         } finally {
             await mock.close();
         }
+    });
+
+    it('default-denies non-official YouTube probe endpoints without dialing them', async function() {
+        const mock = await startConnectionSink(mockPort);
+        const secret = 'youtube-secret-must-not-appear';
+        try {
+            const response = await run({
+                schemaVersion: 1,
+                topology: 'direct-single',
+                legs: [leg({ destinations: [{ platform: 'youtube' }] })],
+                activeProbes: [{
+                    probeId: 'youtube-primary',
+                    kind: 'youtube-unbound-v1',
+                    legId: 'primary',
+                    serviceName: 'YouTube - RTMPS',
+                    server: `rtmps://127.0.0.1:${mockPort}/live2`,
+                    streamKey: secret,
+                }],
+            });
+
+            expect(mock.getConnections()).to.equal(0);
+            expect(mock.getBytes()).to.equal(0);
+            expect(response.result.legs[0].measurement.mode).to.equal('estimated');
+            expect(JSON.stringify(response.result)).not.to.contain(secret);
+            expect(JSON.stringify(response.events)).not.to.contain(secret);
+            expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
+        } finally {
+            await mock.close();
+        }
+    });
+
+    it('requires the exact YouTube RTMPS service identity before a probe is eligible', async function() {
+        const request = {
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({ destinations: [{ platform: 'youtube' }] })],
+            activeProbes: [{
+                probeId: 'youtube-missing-service',
+                kind: 'youtube-unbound-v1',
+                legId: 'primary',
+                server: 'rtmps://a.rtmps.youtube.com/live2',
+                streamKey: 'not-a-real-key',
+            }],
+        } as unknown as IAutoConfigRequest;
+
+        const response = await run(request);
+        expect(response.result.legs[0].measurement.mode).to.equal('estimated');
+        expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
+        expect(response.events.some(event => event.code === 'youtube_probe_started')).to.equal(false);
+    });
+
+    it('requires a complete Twitch and YouTube probe set for a shared cloud leg', async function() {
+        const response = await run({
+            schemaVersion: 1,
+            topology: 'cloud-multistream',
+            legs: [leg({
+                destinations: [{ platform: 'twitch' }, { platform: 'youtube' }],
+                estimateReason: 'cloud_multistream',
+            })],
+            activeProbes: [{
+                probeId: 'cloud-twitch-only',
+                kind: 'twitch-standard-v1',
+                legId: 'primary',
+                serviceName: 'Twitch',
+                // The incomplete set must be rejected before any connection
+                // attempt, so an intentionally unofficial endpoint is safe.
+                server: `rtmp://127.0.0.1:${mockPort}/live`,
+                streamKey: 'incomplete-cloud-secret',
+            }],
+        });
+        expect(response.result.legs[0].measurement.mode).to.equal('estimated');
+        expect(response.result.legs[0].measurement.reason).to.equal('cloud_multistream');
+        expect(response.events.some(event => event.code === 'active_probe_set_incomplete')).to.equal(true);
+        expect(response.events.some(event => event.code === 'twitch_probe_started')).to.equal(false);
+        expect(JSON.stringify(response.result)).not.to.contain('incomplete-cloud-secret');
+        expect(JSON.stringify(response.events)).not.to.contain('incomplete-cloud-secret');
+    });
+
+    it('default-denies independent dual-output active probes instead of recommending full uplink per leg', async function() {
+        const twitchSecret = 'dual-twitch-secret';
+        const youtubeSecret = 'dual-youtube-secret';
+        const response = await run({
+            schemaVersion: 1,
+            topology: 'dual-output',
+            legs: [
+                leg({
+                    legId: 'horizontal',
+                    display: 'horizontal',
+                    destinations: [{ platform: 'twitch' }],
+                    current: { ...leg().current, bitrateKbps: 6000 },
+                    estimateReason: 'dual_output',
+                }),
+                leg({
+                    legId: 'vertical',
+                    display: 'vertical',
+                    destinations: [{ platform: 'youtube' }],
+                    current: { ...leg().current, bitrateKbps: 6000 },
+                    estimateReason: 'dual_output',
+                }),
+            ],
+            activeProbes: [
+                {
+                    probeId: 'dual-twitch',
+                    kind: 'twitch-standard-v1',
+                    legId: 'horizontal',
+                    serviceName: 'Twitch',
+                    server: 'rtmp://live.twitch.tv/app',
+                    streamKey: twitchSecret,
+                },
+                {
+                    probeId: 'dual-youtube',
+                    kind: 'youtube-unbound-v1',
+                    legId: 'vertical',
+                    serviceName: 'YouTube - RTMPS',
+                    server: 'rtmps://a.rtmps.youtube.com/live2',
+                    streamKey: youtubeSecret,
+                },
+            ],
+        });
+
+        expect(response.result.legs).to.have.length(2);
+        expect(response.result.legs.every(resultLeg => resultLeg.measurement.mode === 'estimated')).to.equal(true);
+        expect(response.result.legs.every(resultLeg => resultLeg.measurement.reason === 'dual_output')).to.equal(true);
+        expect(response.events.filter(event => event.code === 'dual_output_multiple_active_legs')).to.have.length(2);
+        expect(response.events.some(event => event.code === 'twitch_probe_started' || event.code === 'youtube_probe_started')).to.equal(false);
+        expect(JSON.stringify(response.result)).not.to.contain(twitchSecret);
+        expect(JSON.stringify(response.result)).not.to.contain(youtubeSecret);
+        expect(JSON.stringify(response.events)).not.to.contain(twitchSecret);
+        expect(JSON.stringify(response.events)).not.to.contain(youtubeSecret);
     });
 
     it('clamps estimate-only results to bundled platform caps without raising current bitrate', async function() {
