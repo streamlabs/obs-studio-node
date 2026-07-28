@@ -303,11 +303,6 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-      - name: 'Copy necessary dll files'
-        run: ./ci/copy-files.cmd
-      - name: 'Prepare tag artifact'
-        if: startsWith(github.ref, 'refs/tags/')
-        run: ./ci/prepare-artifact.cmd
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
