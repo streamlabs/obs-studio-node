@@ -209,11 +209,23 @@ set(
     CACHE STRING "Location of libobs archive to base on"
 )
 
+set(
+    OSN_LIBOBS_DEPENDENCY_PREFIX_PATH
+    ""
+    CACHE STRING "Additional CMake prefixes required by the libobs package"
+)
+
 download_project(
     PROJ libobs
     URL ${OSN_LIBOBS_URL}
     UPDATE_DISCONNECTED 1
 )
+
+list(APPEND CMAKE_PREFIX_PATH "${libobs_SOURCE_DIR}" "${libobs_SOURCE_DIR}/cmake")
+if(OSN_LIBOBS_DEPENDENCY_PREFIX_PATH)
+    list(APPEND CMAKE_PREFIX_PATH ${OSN_LIBOBS_DEPENDENCY_PREFIX_PATH})
+endif()
+list(REMOVE_DUPLICATES CMAKE_PREFIX_PATH)
 
 if (WIN32)
 	include("${libobs_SOURCE_DIR}/cmake/LibObsConfig.cmake")
@@ -323,6 +335,8 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-simple-streaming.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-advanced-streaming.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-advanced-streaming.hpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-display-stats-tracker.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-display-stats-tracker.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-advanced-streaming.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-advanced-streaming.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-enhanced-broadcasting-simple-streaming.cpp"

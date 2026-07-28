@@ -1511,6 +1511,15 @@ export interface IModule {
     readonly dataPath: string;
 }
 
+export const NDI_RUNTIME_VERSION_MISMATCH = 'NDI_RUNTIME_VERSION_MISMATCH';
+export const NDI_RUNTIME_NOT_FOUND = 'NDI_RUNTIME_NOT_FOUND';
+
+export interface IObsModuleLoadFailure {
+    module: string;
+    code: string;
+    message: string;
+}
+
 export function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[] {
     const items: ISceneItem[] = [];
     if (Array.isArray(sceneItems)) {
@@ -1722,6 +1731,16 @@ export interface IStreaming {
     dataOutput: number;
 }
 
+export interface IEnhancedBroadcastingDisplayStats {
+    kbitsPerSec: number;
+    dataOutput: number;
+}
+
+export interface IEnhancedBroadcastingPerDisplayStats {
+    horizontal: IEnhancedBroadcastingDisplayStats;
+    vertical: IEnhancedBroadcastingDisplayStats;
+}
+
 export interface EOutputSignal {
     type: string,
     signal: string,
@@ -1779,6 +1798,7 @@ export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreami
     // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
     // This value should be initialized before the stream start.
     additionalVideo?: IVideo,
+    displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
 
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
@@ -1791,6 +1811,7 @@ export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
     // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
     // This value should be initialized before the stream start.
     additionalVideo?: IVideo,
+    displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
 
 export interface IEnhancedBroadcastingSimpleStreamingFactory {

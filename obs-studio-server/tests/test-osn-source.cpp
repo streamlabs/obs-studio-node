@@ -5,6 +5,8 @@
 #include "osn-source.hpp"
 #include <obs.h>
 #include "shared.hpp"
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include "obs-setup.hpp"
@@ -26,6 +28,20 @@ struct joining_thread {
 			t.join();
 	}
 };
+
+static bool wait_for_source_manager_size(std::size_t expectedSize)
+{
+	for (int i = 0; i < 100; i++) {
+		obs_wait_for_destroy_queue();
+
+		if (osn::Source::Manager::GetInstance().size() == expectedSize)
+			return true;
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(10));
+	}
+
+	return false;
+}
 
 TEST_CASE("Run osn::source tests")
 {
@@ -80,6 +96,6 @@ TEST_CASE("Run osn::source tests")
 			CHECK(expectedErrorCode);
 		}
 
-		CHECK(sourceCount == osn::Source::Manager::GetInstance().size()); // Check to see if all objects released.
+		CHECK(wait_for_source_manager_size(sourceCount)); // Check to see if all objects released.
 	}
 }
