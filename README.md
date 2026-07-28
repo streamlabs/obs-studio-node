@@ -33,6 +33,12 @@ cmake --build . --target install --config RelWithDebInfo
 
 This will will download any required dependencies, build the module, and then place it in an archive compatible with npm or yarn that you may specify in a given package.json.
 
+If you are testing a local libobs development package that was built before it bundled its public development dependencies, pass those dependency package prefixes with `OSN_LIBOBS_DEPENDENCY_PREFIX_PATH`. For example:
+
+```
+cmake .. -G"Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%CD%/libobs-src/cmake/ -DOSN_LIBOBS_DEPENDENCY_PREFIX_PATH=D:/path/to/obs/.deps/obs-deps-2025-08-23sl2-x64
+```
+
 ### Mac
 Building on Mac requires Xcode.
 
