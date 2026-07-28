@@ -421,6 +421,8 @@ jobs:
         with:
           fetch-depth: 2
           repository: stream-labs/symsrv-scripts
+          # Pinned so a push to symsrv-scripts cannot change this build without a PR here
+          ref: v1.1.1
           path: symsrv-scripts
       - name: Download build artifacts
         uses: actions/download-artifact@v4
