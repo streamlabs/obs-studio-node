@@ -356,6 +356,9 @@ jobs:
           OSN_ACCESS_KEY_ID: ${{secrets.AWS_RELEASE_ACCESS_KEY_ID}}
           OSN_SECRET_ACCESS_KEY: ${{secrets.AWS_RELEASE_SECRET_ACCESS_KEY}}
           RELEASE_NAME: release
+          # ffmpeg is not on the runner, but libobs ships one and CMake installs all of
+          # bin/64bit next to the osn binaries, so point the audio probe at that copy
+          FFMPEG_PATH: ${{github.workspace}}\${{env.SLFullDistributePath}}\${{env.InstallPath}}\ffmpeg.exe
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
         if: ${{ always() }}
