@@ -31,6 +31,7 @@ void Init(Napi::Env env, Napi::Object exports);
 Napi::Value OBS_API_initAPI(const Napi::CallbackInfo &info);
 Napi::Value OBS_API_destroyOBS_API(const Napi::CallbackInfo &info);
 Napi::Value OBS_API_getPerformanceStatistics(const Napi::CallbackInfo &info);
+Napi::Value OBS_API_getModuleLoadFailures(const Napi::CallbackInfo &info);
 Napi::Value SetWorkingDirectory(const Napi::CallbackInfo &info);
 Napi::Value InitShutdownSequence(const Napi::CallbackInfo &info);
 Napi::Value OBS_API_QueryHotkeys(const Napi::CallbackInfo &info);

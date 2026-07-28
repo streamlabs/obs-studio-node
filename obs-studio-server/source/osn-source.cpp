@@ -329,7 +329,7 @@ void osn::Source::GetSettings(void *data, const int64_t id, const std::vector<ip
 
 void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	blog(LOG_INFO, "[BrowserMessage] Update called with source id: %llu, %s", args[0].value_union.ui64, args[1].value_str.c_str());
+	blog(LOG_INFO, "[osn-source] Update called with source id: %llu, %s", args[0].value_union.ui64, args[1].value_str.c_str());
 	// Attempt to find the source asked to load.
 	obs_source_t *src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (src == nullptr) {
@@ -502,7 +502,7 @@ void osn::Source::GetId(void *data, const int64_t id, const std::vector<ipc::val
 
 void osn::Source::SendMessage(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	blog(LOG_INFO, "[BrowserMessage] SendMessage called with source id: %llu, %s", args[0].value_union.ui64, args[1].value_str.c_str());
+	blog(LOG_INFO, "[osn-source] SendMessage called with source id: %llu, %s", args[0].value_union.ui64, args[1].value_str.c_str());
 	// Attempt to find the source asked to load.
 	obs_source_t *src = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (src == nullptr) {

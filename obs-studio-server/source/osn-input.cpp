@@ -117,6 +117,8 @@ void osn::Input::Create(void *data, const int64_t id, const std::vector<ipc::val
 		sourceId += "_v" + std::to_string(version);
 	}
 
+	// Before create so a crash in obs_source_create still records the source id.
+	blog(LOG_INFO, "Creating input source '%s' (name: '%s')", sourceId.c_str(), name.c_str());
 	obs_source_t *source = obs_source_create(sourceId.c_str(), name.c_str(), settings, hotkeys);
 	obs_data_release(hotkeys);
 	obs_data_release(settings);

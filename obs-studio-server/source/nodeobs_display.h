@@ -35,7 +35,7 @@
 #include <versionhelpers.h>
 #include <windows.h>
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
-#define HINST_THISCOMPONENT ((HINSTANCE)&__ImageBase)
+#define HINST_THISCOMPONENT ((HINSTANCE) & __ImageBase)
 
 #elif defined(__APPLE__)
 

@@ -114,8 +114,7 @@ public:
 		HWND m_windowHandle = NULL;
 	};
 
-	struct DestroyWindowMessageAnswer : MessageAnswer {
-	};
+	struct DestroyWindowMessageAnswer : MessageAnswer {};
 
 	SystemWorkerThread() : m_thread(&OBS::Display::SystemWorkerThread::Thread, this) {}
 	~SystemWorkerThread()

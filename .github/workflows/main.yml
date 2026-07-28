@@ -25,7 +25,7 @@ env:
   SLGenerator: Visual Studio 17 2022
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 31.1.2sl20
+  LibOBSVersion: 32.1.1sl2
   PACKAGE_NAME: osn
 
 jobs:
@@ -303,11 +303,6 @@ jobs:
         run: node ci/bump-version.js "${{ steps.get_version.outputs.VERSION }}" "${{env.PACKAGE_PATH}}"
         env:
           PACKAGE_PATH: "${{env.SLFullDistributePath}}/${{env.InstallPath}}"
-      - name: 'Copy necessary dll files'
-        run: ./ci/copy-files.cmd
-      - name: 'Prepare tag artifact'
-        if: startsWith(github.ref, 'refs/tags/')
-        run: ./ci/prepare-artifact.cmd
       - name: Upload compiled artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -426,6 +421,8 @@ jobs:
         with:
           fetch-depth: 2
           repository: stream-labs/symsrv-scripts
+          # Pinned so a push to symsrv-scripts cannot change this build without a PR here
+          ref: v1.1.1
           path: symsrv-scripts
       - name: Download build artifacts
         uses: actions/download-artifact@v4

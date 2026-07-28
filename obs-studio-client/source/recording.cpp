@@ -92,10 +92,16 @@ Napi::Value osn::Recording::GetAvailableEncoders(const Napi::CallbackInfo &info)
 
 	Napi::Array arr = Napi::Array::New(info.Env());
 	uint32_t idx = 0;
-	for (size_t i = 1; i + 1 < response.size(); i += 2) {
+	for (size_t i = 1; i + 7 < response.size(); i += 8) {
 		Napi::Object obj = Napi::Object::New(info.Env());
 		obj.Set("title", Napi::String::New(info.Env(), response[i].value_str));
 		obj.Set("name", Napi::String::New(info.Env(), response[i + 1].value_str));
+		obj.Set("id", Napi::String::New(info.Env(), response[i + 2].value_str));
+		obj.Set("family", Napi::String::New(info.Env(), response[i + 3].value_str));
+		obj.Set("preset", Napi::String::New(info.Env(), response[i + 4].value_str));
+		obj.Set("codec", Napi::String::New(info.Env(), response[i + 5].value_str));
+		obj.Set("streaming", Napi::Boolean::New(info.Env(), response[i + 6].value_union.ui32 != 0));
+		obj.Set("recording", Napi::Boolean::New(info.Env(), response[i + 7].value_union.ui32 != 0));
 		arr.Set(idx++, obj);
 	}
 

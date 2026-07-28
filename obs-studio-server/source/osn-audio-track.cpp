@@ -118,7 +118,8 @@ obs_encoder_t *osn::IAudioTrack::CreateEncoderForTrack(uint32_t trackNumber, con
 	const uint32_t mixerIndex = GetMixerIndex(trackNumber);
 	OBSData settings = obs_data_create();
 	obs_data_set_int(settings, "bitrate", track->bitrate);
-	return obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), name.c_str(), settings, mixerIndex, nullptr);
+	const std::string &encoderName = track->name.empty() ? name : track->name;
+	return obs_audio_encoder_create(GetAACEncoderForBitrate(track->bitrate), encoderName.c_str(), settings, mixerIndex, nullptr);
 }
 
 void osn::IAudioTrack::SetTrackConfigAtMixerIndex(AudioTrack *track, uint32_t mixerIndex)

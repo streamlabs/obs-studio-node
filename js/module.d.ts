@@ -697,6 +697,13 @@ export interface IModule {
     readonly binaryPath: string;
     readonly dataPath: string;
 }
+export declare const NDI_RUNTIME_VERSION_MISMATCH = "NDI_RUNTIME_VERSION_MISMATCH";
+export declare const NDI_RUNTIME_NOT_FOUND = "NDI_RUNTIME_NOT_FOUND";
+export interface IObsModuleLoadFailure {
+    module: string;
+    code: string;
+    message: string;
+}
 export declare function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[];
 export interface FilterInfo {
     name: string;
@@ -801,6 +808,14 @@ export interface IStreaming {
     kbitsPerSec: number;
     dataOutput: number;
 }
+export interface IEnhancedBroadcastingDisplayStats {
+    kbitsPerSec: number;
+    dataOutput: number;
+}
+export interface IEnhancedBroadcastingPerDisplayStats {
+    horizontal: IEnhancedBroadcastingDisplayStats;
+    vertical: IEnhancedBroadcastingDisplayStats;
+}
 export interface EOutputSignal {
     type: string;
     signal: string;
@@ -810,6 +825,12 @@ export interface EOutputSignal {
 export interface IEncoderOption {
     title: string;
     name: string;
+    id: string;
+    family: string;
+    preset: string;
+    codec: string;
+    streaming: boolean;
+    recording: boolean;
 }
 export interface ISimpleStreaming extends IStreaming {
     audioEncoder: IAudioEncoder;
@@ -836,6 +857,7 @@ export interface IAdvancedStreamingFactory {
 }
 export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
     additionalVideo?: IVideo;
+    displayStats: IEnhancedBroadcastingPerDisplayStats;
 }
 export interface IEnhancedBroadcastingAdvancedStreamingFactory {
     create(): IEnhancedBroadcastingAdvancedStreaming;
@@ -844,6 +866,7 @@ export interface IEnhancedBroadcastingAdvancedStreamingFactory {
 }
 export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
     additionalVideo?: IVideo;
+    displayStats: IEnhancedBroadcastingPerDisplayStats;
 }
 export interface IEnhancedBroadcastingSimpleStreamingFactory {
     create(): IEnhancedBroadcastingSimpleStreaming;

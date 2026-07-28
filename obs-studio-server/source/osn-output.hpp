@@ -23,6 +23,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <string>
 #include <vector>
 
 namespace osn {
@@ -46,6 +47,7 @@ public:
 
 	// If no signal, will return an empty optional. Thread safe.
 	std::optional<SignalInfo> PopReceivedSignal();
+	void PushReceivedSignal(const std::string &signal, int code, const std::string &errorMessage);
 
 	void SetCanvas(obs_video_info *canvas);
 	obs_video_info *GetCanvas();

@@ -28,12 +28,15 @@
 #include <thread>
 
 #ifdef __cplusplus
-#define INITIALIZER(f)                \
-	static void f(void);          \
-	struct f##_t_ {               \
-		f##_t_(void) { f(); } \
-	};                            \
-	static f##_t_ f##_;           \
+#define INITIALIZER(f)       \
+	static void f(void); \
+	struct f##_t_ {      \
+		f##_t_(void) \
+		{            \
+			f(); \
+		}            \
+	};                   \
+	static f##_t_ f##_;  \
 	static void f(void)
 #elif defined(_MSC_VER)
 #pragma section(".CRT$XCU", read)
@@ -144,11 +147,17 @@ template<typename T> inline std::string TypeOf(T v)
 	return "unknown";
 }
 
-#define AUTO_TYPEOF(x) \
-	template<> inline std::string TypeOf<x>(x v) { return dstr(x); }
+#define AUTO_TYPEOF(x)                               \
+	template<> inline std::string TypeOf<x>(x v) \
+	{                                            \
+		return dstr(x);                      \
+	}
 
-#define AUTO_TYPEOF_NAME(x, y) \
-	template<> inline std::string TypeOf<x>(x v) { return y; }
+#define AUTO_TYPEOF_NAME(x, y)                       \
+	template<> inline std::string TypeOf<x>(x v) \
+	{                                            \
+		return y;                            \
+	}
 
 AUTO_TYPEOF_NAME(bool, "boolean");
 AUTO_TYPEOF(int8_t);
