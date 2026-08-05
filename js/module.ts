@@ -1961,7 +1961,7 @@ export interface IAudioTrackFactory {
     saveLegacySettings(): void;
 }
 
-// ---- Auto Optimizer API v1 (native API version 2) ----
+// ---- Auto Optimizer API ----
 
 export interface IAutoConfigCapabilities {
     apiVersion: 2;
@@ -2038,7 +2038,7 @@ export interface IAutoConfigLegRequest {
 
 export interface IAutoConfigTwitchActiveProbe {
     probeId: string;
-    kind: 'twitch-standard-v1';
+    kind: 'twitch-standard';
     legId: string;
     serviceName: 'Twitch';
     server: string;
@@ -2054,7 +2054,7 @@ export interface IAutoConfigYoutubeActiveProbe {
      * before deleting the liveStream through the YouTube API.
      */
     probeId: string;
-    kind: 'youtube-unbound-v1';
+    kind: 'youtube-unbound';
     legId: string;
     serviceName: 'YouTube - RTMPS';
     server: string;
@@ -2092,7 +2092,7 @@ export interface IAutoConfigEvent {
 
 export interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
-    method: 'twitch-bandwidth-test-v1' | 'youtube-unbound-ramp-v1';
+    method: 'twitch-bandwidth-test' | 'youtube-unbound-ramp';
     success: boolean;
     /** Observed aggregate RTMP throughput, including audio. */
     measuredKbps?: number;

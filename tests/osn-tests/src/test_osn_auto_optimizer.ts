@@ -12,7 +12,7 @@ import * as net from 'net';
 import { OBSHandler } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
 
-const testName = 'osn-auto-optimizer-v1';
+const testName = 'osn-auto-optimizer';
 const mockPort = 11937;
 
 describe(testName, function() {
@@ -138,7 +138,7 @@ describe(testName, function() {
                 legs: [leg()],
                 activeProbes: [{
                     probeId: 'twitch-primary',
-                    kind: 'twitch-standard-v1',
+                    kind: 'twitch-standard',
                     legId: 'primary',
                     serviceName: 'Twitch',
                     server: `rtmp://127.0.0.1:${mockPort}/live`,
@@ -170,7 +170,7 @@ describe(testName, function() {
                 legs: [leg({ destinations: [{ platform: 'youtube' }] })],
                 activeProbes: [{
                     probeId: 'youtube-primary',
-                    kind: 'youtube-unbound-v1',
+                    kind: 'youtube-unbound',
                     legId: 'primary',
                     serviceName: 'YouTube - RTMPS',
                     server: `rtmps://127.0.0.1:${mockPort}/live2`,
@@ -196,7 +196,7 @@ describe(testName, function() {
             legs: [leg({ destinations: [{ platform: 'youtube' }] })],
             activeProbes: [{
                 probeId: 'youtube-missing-service',
-                kind: 'youtube-unbound-v1',
+                kind: 'youtube-unbound',
                 legId: 'primary',
                 server: 'rtmps://a.rtmps.youtube.com/live2',
                 streamKey: 'not-a-real-key',
@@ -219,7 +219,7 @@ describe(testName, function() {
             })],
             activeProbes: [{
                 probeId: 'cloud-twitch-only',
-                kind: 'twitch-standard-v1',
+                kind: 'twitch-standard',
                 legId: 'primary',
                 serviceName: 'Twitch',
                 // The incomplete set must be rejected before any connection
@@ -261,7 +261,7 @@ describe(testName, function() {
             activeProbes: [
                 {
                     probeId: 'dual-twitch',
-                    kind: 'twitch-standard-v1',
+                    kind: 'twitch-standard',
                     legId: 'horizontal',
                     serviceName: 'Twitch',
                     server: 'rtmp://live.twitch.tv/app',
@@ -269,7 +269,7 @@ describe(testName, function() {
                 },
                 {
                     probeId: 'dual-youtube',
-                    kind: 'youtube-unbound-v1',
+                    kind: 'youtube-unbound',
                     legId: 'vertical',
                     serviceName: 'YouTube - RTMPS',
                     server: 'rtmps://a.rtmps.youtube.com/live2',

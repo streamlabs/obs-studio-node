@@ -1033,7 +1033,7 @@ export interface IAutoConfigLegRequest {
 }
 export interface IAutoConfigTwitchActiveProbe {
     probeId: string;
-    kind: 'twitch-standard-v1';
+    kind: 'twitch-standard';
     legId: string;
     serviceName: 'Twitch';
     server: string;
@@ -1041,7 +1041,7 @@ export interface IAutoConfigTwitchActiveProbe {
 }
 export interface IAutoConfigYoutubeActiveProbe {
     probeId: string;
-    kind: 'youtube-unbound-v1';
+    kind: 'youtube-unbound';
     legId: string;
     serviceName: 'YouTube - RTMPS';
     server: string;
@@ -1073,7 +1073,7 @@ export interface IAutoConfigEvent {
 }
 export interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
-    method: 'twitch-bandwidth-test-v1' | 'youtube-unbound-ramp-v1';
+    method: 'twitch-bandwidth-test' | 'youtube-unbound-ramp';
     success: boolean;
     measuredKbps?: number;
     safeKbps?: number;
