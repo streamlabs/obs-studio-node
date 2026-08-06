@@ -21,7 +21,7 @@
 #include "shared.hpp"
 #include "osn-audio-track.hpp"
 #include "osn-file-output.hpp"
-#include <osn-encoders.hpp>
+#include "osn-encoders.hpp"
 #include <util/platform.h>
 
 void osn::IAdvancedRecording::Register(ipc::server &srv)
@@ -282,8 +282,13 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	}
 
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
-	if (!recording->path.size() || !os_is_path_safe(recording->path.c_str())) {
+
+	if (!recording->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
+	}
+
+	if (!os_is_path_safe(recording->path.c_str())) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Unsafe recording path: symbolic links and junctions are not allowed.");
 	}
 
 	std::string path = recording->path;

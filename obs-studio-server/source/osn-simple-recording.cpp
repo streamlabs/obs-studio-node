@@ -398,8 +398,12 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 	}
 
-	if (!recording->path.size() || !os_is_path_safe(recording->path.c_str())) {
+	if (!recording->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
+	}
+
+	if (!os_is_path_safe(recording->path.c_str())) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Unsafe recording path: symbolic links and junctions are not allowed.");
 	}
 
 	std::string path = recording->path;

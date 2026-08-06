@@ -144,8 +144,12 @@ void osn::ISimpleReplayBuffer::Start(void *data, const int64_t id, const std::ve
 
 	obs_output_set_video_encoder(replayBuffer->GetOutput(), videoEncoder);
 
-	if (!replayBuffer->path.size() || !os_is_path_safe(replayBuffer->path.c_str())) {
+	if (!replayBuffer->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
+	}
+
+	if (!os_is_path_safe(replayBuffer->path.c_str())) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Unsafe recording path: symbolic links and junctions are not allowed.");
 	}
 
 	const char *rbPrefix = replayBuffer->prefix.c_str();
