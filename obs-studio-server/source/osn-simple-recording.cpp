@@ -24,6 +24,7 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-file-output.hpp"
 #include "osn-encoders.hpp"
+#include <util/platform.h>
 
 void osn::ISimpleRecording::Register(ipc::server &srv)
 {
@@ -397,7 +398,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 	}
 
-	if (!recording->path.size()) {
+	if (!recording->path.size() || !os_is_path_safe(recording->path.c_str())) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
 	}
 

@@ -22,6 +22,7 @@
 #include "shared.hpp"
 #include "osn-audio-track.hpp"
 #include "osn-encoders.hpp"
+#include <util/platform.h>
 
 void osn::IAdvancedReplayBuffer::Register(ipc::server &srv)
 {
@@ -201,7 +202,7 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 
 	obs_output_set_video_encoder(replayBuffer->GetOutput(), videoEncoder);
 
-	if (!replayBuffer->path.size()) {
+	if (!replayBuffer->path.size() || !os_is_path_safe(replayBuffer->path.c_str())) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
 	}
 
