@@ -20,6 +20,80 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include <osn-video.hpp>
+#include <util/platform.h>
+#include <algorithm>
+#include <mutex>
+
+// Serialises resolve-and-claim against the release in OnOutputStopped(). Start() runs on an IPC
+// worker thread and the release on libobs' capture thread, and the check-then-set has to be atomic
+// as a unit -- the manager's own lock is dropped when for_each returns, so it is not enough.
+static std::mutex s_filenameClaimMutex;
+
+// Windows paths are case-insensitive and accept either separator, so compare on a folded key
+// while the claim itself keeps the exact string the muxer was given.
+static std::string claim_key(const std::string &path)
+{
+	std::string key = path;
+	std::replace(key.begin(), key.end(), '\\', '/');
+#ifdef WIN32
+	std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return (char)tolower(c); });
+#endif
+	return key;
+}
+
+// Caller must hold s_filenameClaimMutex.
+static bool path_claimed_by_other(const std::string &candidate, const osn::FileOutput *owner)
+{
+	const std::string wanted = claim_key(candidate);
+	bool claimed = false;
+
+	osn::IFileOutput::Manager::GetInstance().for_each([&](osn::FileOutput *output) {
+		// Idle outputs, replay buffers (which never claim) and GetLegacySettings' throwaway
+		// objects all carry an empty claim.
+		if (claimed || !output || output == owner || output->claimedFilePath.empty())
+			return;
+
+		if (claim_key(output->claimedFilePath) == wanted)
+			claimed = true;
+	});
+
+	return claimed;
+}
+
+void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, FileOutput *owner, bool allowOverwrite)
+{
+	std::lock_guard<std::mutex> lock(s_filenameClaimMutex);
+
+	const char *ext = strrchr(strPath.c_str(), '.');
+	const int extStart = ext ? int(ext - strPath.c_str()) : -1;
+
+	std::string candidate = strPath;
+	int num = 2;
+
+	while ((!allowOverwrite && os_file_exists(candidate.c_str())) || path_claimed_by_other(candidate, owner)) {
+		if (extStart < 0)
+			break;
+
+		std::string numStr = noSpace ? "_" : " (";
+		numStr += std::to_string(num++);
+		if (!noSpace)
+			numStr += ")";
+
+		candidate = strPath;
+		candidate.insert(extStart, numStr);
+	}
+
+	strPath = candidate;
+
+	if (owner)
+		owner->claimedFilePath = strPath;
+}
+
+void osn::FileOutput::OnOutputStopped()
+{
+	std::lock_guard<std::mutex> lock(s_filenameClaimMutex);
+	claimedFilePath.clear();
+}
 
 void osn::IFileOutput::Register(ipc::server &srv)
 {

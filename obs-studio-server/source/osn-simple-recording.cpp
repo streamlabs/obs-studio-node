@@ -414,8 +414,7 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 
 	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->fileFormat, recording->GetCanvas());
 
-	if (!recording->overwrite)
-		FindBestFilename(path, recording->noSpace);
+	FindBestFilename(path, recording->noSpace, recording, recording->overwrite);
 
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, pathProperty.c_str(), path.c_str());

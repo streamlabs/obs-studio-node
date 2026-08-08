@@ -35,6 +35,9 @@ public:
 	}
 	virtual ~FileOutput() {}
 
+protected:
+	void OnOutputStopped() override;
+
 public:
 	std::string path;
 	std::string format;
@@ -42,6 +45,10 @@ public:
 	bool overwrite;
 	bool noSpace;
 	std::string muxerSettings;
+
+	// Full resolved path this output is recording to, empty while idle. Guarded by the
+	// claim mutex in osn-file-output.cpp; read it through that, not directly.
+	std::string claimedFilePath;
 };
 
 class IFileOutput {
@@ -82,7 +89,12 @@ public:
 	static void GetLastFile(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 	static std::string GenerateSpecifiedFilename(const std::string &extension, bool noSpace, const std::string &format, obs_video_info *ovi);
-	static void FindBestFilename(std::string &strPath, bool noSpace);
+
+	// Resolves strPath to a name no other live output has claimed, appending " (2)", " (3)"
+	// (or "_2" when noSpace) as needed, and records the result against owner. allowOverwrite
+	// suppresses the on-disk check only -- a path held by another running output is never
+	// reused, because two muxers on one file corrupt it whatever the overwrite setting says.
+	static void FindBestFilename(std::string &strPath, bool noSpace, FileOutput *owner, bool allowOverwrite);
 
 	static obs_encoder_t *duplicate_encoder(obs_encoder_t *src, uint64_t trackIndex = 0);
 };

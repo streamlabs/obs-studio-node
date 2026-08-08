@@ -21,7 +21,6 @@
 #include "osn-audio-encoder.hpp"
 #include "osn-error.hpp"
 #include "shared.hpp"
-#include "util/platform.h"
 #include "osn-encoders.hpp"
 
 extern char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, obs_video_info *ovi);
@@ -111,36 +110,6 @@ std::string osn::IRecording::GenerateSpecifiedFilename(const std::string &extens
 	bfree(filename);
 
 	return result;
-}
-
-void osn::IRecording::FindBestFilename(std::string &strPath, bool noSpace)
-{
-	int num = 2;
-
-	if (!os_file_exists(strPath.c_str()))
-		return;
-
-	const char *ext = strrchr(strPath.c_str(), '.');
-	if (!ext)
-		return;
-
-	int extStart = int(ext - strPath.c_str());
-	for (;;) {
-		std::string testPath = strPath;
-		std::string numStr;
-
-		numStr = noSpace ? "_" : " (";
-		numStr += std::to_string(num++);
-		if (!noSpace)
-			numStr += ")";
-
-		testPath.insert(extStart, numStr);
-
-		if (!os_file_exists(testPath.c_str())) {
-			strPath = testPath;
-			break;
-		}
-	}
 }
 
 obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t trackIndex)

@@ -625,6 +625,7 @@ if(BUILD_TESTING)
     add_executable(
         obs_studio_server_unit_tests
         "tests/test-osn-source.cpp"
+        "tests/test-osn-file-output.cpp"
         "tests/obs-setup.cpp"
         "tests/obs-setup.hpp"
     )

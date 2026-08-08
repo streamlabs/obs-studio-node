@@ -5,7 +5,7 @@ import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler, IOBSOutputSignalInfo, IVec2 } from '../util/obs_handler';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { IInput, ISettings, ITimeSpec } from '../osn';
-import { deleteConfigFiles, sleep, waitForFile } from '../util/general';
+import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType, EOBSSettingsCategories } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
 import { EFPSType } from '../osn';
@@ -159,6 +159,11 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
 
+        // Both canvases derive the same default %hh-%mm-%ss name, so this is the collision
+        // guard for the case a user actually hits: no explicit fileFormat.
+        expect(recording.lastFile()).to.not.equal(recording2.lastFile(),
+            'Dual output canvases recorded to the same file');
+
         const recordingEncoder = recording.videoEncoder;
         osn.AdvancedRecordingFactory.destroy(recording);
         recordingEncoder.release();
@@ -175,7 +180,6 @@ describe(testName, () => {
 
         const outputDir = path.join(path.normalize(__dirname), '..', 'osnData');
         const sharedFilename = 'dual-output-collision-' + randomUUID();
-        const firstExpectedFile = path.join(outputDir, `${sharedFilename}.mp4`);
 
         const recording = osn.AdvancedRecordingFactory.create();
         recording.path = outputDir;
@@ -205,7 +209,6 @@ describe(testName, () => {
 
         recording.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
-        await waitForFile(firstExpectedFile);
 
         recording2.start();
         await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);

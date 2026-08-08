@@ -71,7 +71,9 @@ public:
 	static void SetFileResetTimestamps(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 	static std::string GenerateSpecifiedFilename(const std::string &extension, bool noSpace, const std::string &format, obs_video_info *ovi);
-	static void FindBestFilename(std::string &strPath, bool noSpace);
+
+	// FindBestFilename is inherited from IFileOutput; it needs the output object to claim against.
+	using IFileOutput::FindBestFilename;
 
 	static obs_encoder_t *duplicate_encoder(obs_encoder_t *src, uint64_t trackIndex = 0);
 };
