@@ -179,8 +179,12 @@ void osn::Output::StartOutput()
 		code = OBS_OUTPUT_ERROR;
 	}
 
-	// libobs emits no "stop" here, so OnStopped() never runs for a failed start.
-	OnOutputStopped();
+	// libobs emits no "stop" here, so OnStopped() never runs for a failed start. But a failed start
+	// does not imply an idle output: obs_output_can_begin_data_capture() refuses while the output is
+	// already active, so starting twice lands here with the first muxer still writing. Releasing then
+	// would unclaim a file that is still being written to.
+	if (!obs_output_active(m_output))
+		OnOutputStopped();
 
 	PushReceivedSignal("stop", code, errorMessage);
 }

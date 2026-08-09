@@ -89,6 +89,11 @@ void osn::ISimpleRecording::Destroy(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
 
+	// Stop before deregistering. The destructor would do this anyway, but by then the object is out
+	// of the manager, and DeleteOutput() can wait up to 20s for the muxer to drain -- a window where
+	// the file is still being written but its claim is invisible to a concurrent Start.
+	recording->DeleteOutput();
+
 	osn::ISimpleRecording::Manager::GetInstance().free(recording);
 	delete recording;
 
