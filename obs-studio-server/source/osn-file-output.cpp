@@ -107,7 +107,10 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 
 	strPath = candidate;
 
-	if (owner)
+	// Never move the claim of an output that is already running. A duplicate start() resolves a
+	// fresh name -- the timestamp has moved on -- but obs_output_start() then refuses and the muxer
+	// stays on its original file. Reassigning here would unclaim the file actually being written.
+	if (owner && !obs_output_active(owner->GetOutput()))
 		owner->claimedFilePath = strPath;
 }
 
