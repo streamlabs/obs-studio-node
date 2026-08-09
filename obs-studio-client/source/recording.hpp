@@ -33,6 +33,10 @@ protected:
 	Napi::Reference<Napi::Object> streamingRef;
 	Napi::Reference<Napi::Object> audioEncoderRef;
 
+	Napi::Value GetPrefix(const Napi::CallbackInfo &info);
+	void SetPrefix(const Napi::CallbackInfo &info, const Napi::Value &value);
+	Napi::Value GetSuffix(const Napi::CallbackInfo &info);
+	void SetSuffix(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetVideoEncoder(const Napi::CallbackInfo &info);
 	void SetVideoEncoder(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetSignalHandler(const Napi::CallbackInfo &info);

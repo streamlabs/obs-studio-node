@@ -20,6 +20,54 @@
 #include "utility.hpp"
 #include "video-encoder.hpp"
 
+Napi::Value osn::Recording::GetPrefix(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper(className, "GetPrefix", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::String::New(info.Env(), response[1].value_str);
+}
+
+void osn::Recording::SetPrefix(const Napi::CallbackInfo &info, const Napi::Value &value)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	auto response = conn->call_synchronous_helper(className, "SetPrefix", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
+}
+
+Napi::Value osn::Recording::GetSuffix(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper(className, "GetSuffix", {ipc::value(this->uid)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::String::New(info.Env(), response[1].value_str);
+}
+
+void osn::Recording::SetSuffix(const Napi::CallbackInfo &info, const Napi::Value &value)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	auto response = conn->call_synchronous_helper(className, "SetSuffix", {ipc::value(this->uid), ipc::value(value.ToString().Utf8Value())});
+	ValidateResponse(info, response);
+}
+
 Napi::Value osn::Recording::GetVideoEncoder(const Napi::CallbackInfo &info)
 {
 	return videoEncoderRef.IsEmpty() ? info.Env().Undefined() : videoEncoderRef.Value();

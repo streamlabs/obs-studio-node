@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include "osn-file-output.hpp"
+#include "osn-recording.hpp"
 #include <util/platform.h>
 #include <fstream>
 #include <string>
@@ -74,6 +75,51 @@ TEST_CASE("FindBestFilename avoids a path claimed by another live output", "[fil
 	{
 		REQUIRE(resolve(wanted, first.get()) == wanted);
 		REQUIRE(resolve(wanted, first.get()) == wanted);
+	}
+}
+
+// prefix/suffix are how a caller keeps two canvases apart on disk. The rename in FindBestFilename
+// is only the backstop for when it did not.
+TEST_CASE("DecoratedFileFormat wraps the configured pattern", "[file-output]")
+{
+	osn::Recording recording;
+	recording.fileFormat = "%CCYY-%MM-%DD %hh-%mm-%ss";
+
+	SECTION("untouched when neither is set")
+	{
+		REQUIRE(recording.DecoratedFileFormat() == "%CCYY-%MM-%DD %hh-%mm-%ss");
+	}
+
+	SECTION("suffix is appended after a space")
+	{
+		recording.suffix = "Vertical";
+		REQUIRE(recording.DecoratedFileFormat() == "%CCYY-%MM-%DD %hh-%mm-%ss Vertical");
+	}
+
+	SECTION("prefix is prepended before a space")
+	{
+		recording.prefix = "Stream";
+		REQUIRE(recording.DecoratedFileFormat() == "Stream %CCYY-%MM-%DD %hh-%mm-%ss");
+	}
+
+	SECTION("caller-supplied spacing is not doubled")
+	{
+		recording.prefix = "Stream ";
+		recording.suffix = " Vertical";
+		REQUIRE(recording.DecoratedFileFormat() == "Stream %CCYY-%MM-%DD %hh-%mm-%ss Vertical");
+	}
+
+	SECTION("reserved path characters are stripped from prefix and suffix")
+	{
+		recording.suffix = "a/b\\c:d";
+		REQUIRE(recording.DecoratedFileFormat() == "%CCYY-%MM-%DD %hh-%mm-%ss a_b_c_d");
+	}
+
+	SECTION("fileFormat itself is left exactly as configured")
+	{
+		recording.fileFormat = "%CCYY-%MM-%DD/%hh-%mm-%ss";
+		recording.suffix = "Vertical";
+		REQUIRE(recording.DecoratedFileFormat() == "%CCYY-%MM-%DD/%hh-%mm-%ss Vertical");
 	}
 }
 

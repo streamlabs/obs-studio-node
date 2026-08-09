@@ -46,6 +46,8 @@ Napi::Object osn::SimpleRecording::Init(Napi::Env env, Napi::Object exports)
 			InstanceAccessor("fileFormat", &osn::SimpleRecording::GetFileFormat, &osn::SimpleRecording::SetFileFormat),
 			InstanceAccessor("overwrite", &osn::SimpleRecording::GetOverwrite, &osn::SimpleRecording::SetOverwrite),
 			InstanceAccessor("noSpace", &osn::SimpleRecording::GetNoSpace, &osn::SimpleRecording::SetNoSpace),
+			InstanceAccessor("prefix", &osn::SimpleRecording::GetPrefix, &osn::SimpleRecording::SetPrefix),
+			InstanceAccessor("suffix", &osn::SimpleRecording::GetSuffix, &osn::SimpleRecording::SetSuffix),
 			InstanceAccessor("lowCPU", &osn::SimpleRecording::GetLowCPU, &osn::SimpleRecording::SetLowCPU),
 			InstanceAccessor("streaming", &osn::SimpleRecording::GetStreaming, &osn::SimpleRecording::SetStreaming),
 			InstanceAccessor("enableFileSplit", &osn::SimpleRecording::GetEnableFileSplit, &osn::SimpleRecording::SetEnableFileSplit),

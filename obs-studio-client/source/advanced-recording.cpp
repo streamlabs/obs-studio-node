@@ -36,6 +36,8 @@ Napi::Object osn::AdvancedRecording::Init(Napi::Env env, Napi::Object exports)
 		 InstanceAccessor("fileFormat", &osn::AdvancedRecording::GetFileFormat, &osn::AdvancedRecording::SetFileFormat),
 		 InstanceAccessor("overwrite", &osn::AdvancedRecording::GetOverwrite, &osn::AdvancedRecording::SetOverwrite),
 		 InstanceAccessor("noSpace", &osn::AdvancedRecording::GetNoSpace, &osn::AdvancedRecording::SetNoSpace),
+		 InstanceAccessor("prefix", &osn::AdvancedRecording::GetPrefix, &osn::AdvancedRecording::SetPrefix),
+		 InstanceAccessor("suffix", &osn::AdvancedRecording::GetSuffix, &osn::AdvancedRecording::SetSuffix),
 
 		 InstanceAccessor("videoEncoder", &osn::AdvancedRecording::GetVideoEncoder, &osn::AdvancedRecording::SetVideoEncoder),
 		 InstanceAccessor("signalHandler", &osn::AdvancedRecording::GetSignalHandler, &osn::AdvancedRecording::SetSignalHandler),

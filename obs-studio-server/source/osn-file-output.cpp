@@ -69,8 +69,16 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 
 	std::string candidate = strPath;
 	int num = 2;
+	bool blockedByLiveOutput = false;
 
-	while ((!allowOverwrite && os_file_exists(candidate.c_str())) || path_claimed_by_other(candidate, owner)) {
+	for (;;) {
+		const bool onDisk = !allowOverwrite && os_file_exists(candidate.c_str());
+		const bool heldByPeer = path_claimed_by_other(candidate, owner);
+
+		if (!onDisk && !heldByPeer)
+			break;
+		if (heldByPeer)
+			blockedByLiveOutput = true;
 		if (extStart < 0)
 			break;
 
@@ -82,6 +90,12 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 		candidate = strPath;
 		candidate.insert(extStart, numStr);
 	}
+
+	// Stepping over a file left on disk is ordinary and stays quiet. Stepping over a path another
+	// running output holds is not: it means a client pointed two outputs at one file -- dual output
+	// without distinct prefix/suffix, most likely -- and got a name it did not ask for.
+	if (blockedByLiveOutput)
+		blog(LOG_WARNING, "Recording path '%s' is in use by another active output, writing to '%s' instead.", strPath.c_str(), candidate.c_str());
 
 	strPath = candidate;
 

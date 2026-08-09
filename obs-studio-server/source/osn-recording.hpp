@@ -49,11 +49,23 @@ public:
 	bool fileResetTimestamps;
 	bool simple;
 
+	// Wrapped around fileFormat, as the replay buffer already does. Dual output uses this to tell
+	// its two canvases apart on disk; without it both derive the same name from the same pattern.
+	std::string prefix;
+	std::string suffix;
+
+	// fileFormat with prefix/suffix applied, space-separated. Extension is added later.
+	std::string DecoratedFileFormat() const;
+
 	void ConfigureRecFileSplitting();
 };
 
 class IRecording : public IFileOutput {
 public:
+	static void GetPrefix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetPrefix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetSuffix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetSuffix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 

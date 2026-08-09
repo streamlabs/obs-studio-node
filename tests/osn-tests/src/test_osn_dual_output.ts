@@ -243,6 +243,74 @@ describe(testName, () => {
         recording2Encoder.release();
     });
 
+    it('Dual canvas recordings can be told apart by suffix', async function() {
+        if (obs.isDarwin()) {
+            this.skip();
+        }
+
+        const outputDir = path.join(path.normalize(__dirname), '..', 'osnData');
+        const sharedFilename = 'dual-output-suffix-' + randomUUID();
+
+        // What Desktop should do: it already knows which canvas is which, so it names them
+        // rather than letting the collision guard pick.
+        const recording = osn.AdvancedRecordingFactory.create();
+        recording.path = outputDir;
+        recording.format = ERecordingFormat.MP4;
+        recording.fileFormat = sharedFilename;
+        recording.useStreamEncoders = false;
+        recording.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-suffix-1');
+        recording.overwrite = false;
+        recording.noSpace = false;
+        recording.video = obs.defaultVideoContext;
+        const track1 = osn.AudioTrackFactory.create(160, 'track1');
+        osn.AudioTrackFactory.setAtIndex(track1, 1);
+        recording.signalHandler = (signal) => { obs.signals.push(signal) };
+
+        const recording2 = osn.AdvancedRecordingFactory.create();
+        recording2.path = outputDir;
+        recording2.format = ERecordingFormat.MP4;
+        recording2.fileFormat = sharedFilename;
+        recording2.suffix = 'Vertical';
+        recording2.useStreamEncoders = false;
+        recording2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-recording-suffix-2');
+        recording2.overwrite = false;
+        recording2.noSpace = false;
+        recording2.video = secondContext;
+        const track2 = osn.AudioTrackFactory.create(160, 'track2');
+        osn.AudioTrackFactory.setAtIndex(track2, 2);
+        recording2.signalHandler = (signal) => { obs.signals.push(signal) };
+
+        recording.start();
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+
+        recording2.start();
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Start, ETestErrorMsg.RecordingOutput);
+
+        await sleep(1500);
+
+        recording.stop();
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+
+        recording2.stop();
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stopping, ETestErrorMsg.RecordingOutput);
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Stop, ETestErrorMsg.RecordingOutput);
+        await handleStreamSignals(EOBSOutputType.Recording, EOBSOutputSignal.Wrote, ETestErrorMsg.RecordingOutput);
+
+        // Named, not renamed: no " (2)" anywhere.
+        expect(path.basename(recording.lastFile())).to.equal(`${sharedFilename}.mp4`);
+        expect(path.basename(recording2.lastFile())).to.equal(`${sharedFilename} Vertical.mp4`);
+
+        const recordingEncoder = recording.videoEncoder;
+        osn.AdvancedRecordingFactory.destroy(recording);
+        recordingEncoder.release();
+
+        const recording2Encoder = recording2.videoEncoder;
+        osn.AdvancedRecordingFactory.destroy(recording2);
+        recording2Encoder.release();
+    });
+
     it('Start Dual Output with recording and scene items', async function() {
         if (obs.isDarwin()) {
             this.skip();

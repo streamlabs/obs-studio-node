@@ -67,6 +67,10 @@ void osn::IAdvancedRecording::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("SetFileResetTimestamps", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32},
 							       SetFileResetTimestamps));
 	cls->register_function(std::make_shared<ipc::function>("GetAvailableEncoders", std::vector<ipc::type>{ipc::type::UInt64}, GetAvailableEncoders));
+	cls->register_function(std::make_shared<ipc::function>("GetPrefix", std::vector<ipc::type>{ipc::type::UInt64}, GetPrefix));
+	cls->register_function(std::make_shared<ipc::function>("SetPrefix", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetPrefix));
+	cls->register_function(std::make_shared<ipc::function>("GetSuffix", std::vector<ipc::type>{ipc::type::UInt64}, GetSuffix));
+	cls->register_function(std::make_shared<ipc::function>("SetSuffix", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetSuffix));
 
 	srv.register_collection(cls);
 }
@@ -297,7 +301,7 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->fileFormat, recording->GetCanvas());
+	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->DecoratedFileFormat(), recording->GetCanvas());
 
 	FindBestFilename(path, recording->noSpace, recording, recording->overwrite);
 
