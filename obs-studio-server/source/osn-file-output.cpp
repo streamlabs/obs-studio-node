@@ -29,16 +29,20 @@
 // as a unit -- the manager's own lock is dropped when for_each returns, so it is not enough.
 static std::mutex s_filenameClaimMutex;
 
-// Windows paths are case-insensitive and accept either separator, so compare on a folded key
-// while the claim itself keeps the exact string the muxer was given.
+// Windows paths are case-insensitive and accept either separator, so compare on a folded key while
+// the claim itself keeps the exact string the muxer was given. Elsewhere the comparison is exact:
+// on POSIX a backslash is an ordinary filename character, so folding it into a separator would make
+// two different files look like one.
 static std::string claim_key(const std::string &path)
 {
+#ifdef WIN32
 	std::string key = path;
 	std::replace(key.begin(), key.end(), '\\', '/');
-#ifdef WIN32
 	std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return (char)tolower(c); });
-#endif
 	return key;
+#else
+	return path;
+#endif
 }
 
 // Caller must hold s_filenameClaimMutex.

@@ -58,11 +58,22 @@ TEST_CASE("FindBestFilename avoids a path claimed by another live output", "[fil
 		REQUIRE(resolve(wanted, second.get(), false, true) == "C:/osn-test/2026-08-08 14-30-12 (2).mp4");
 	}
 
+#ifdef WIN32
+	// Windows only: separator and case are not part of path identity there. On POSIX a backslash
+	// is an ordinary filename character, so these really are different paths.
 	SECTION("separator and case differences do not evade the check")
 	{
 		REQUIRE(resolve(wanted, first.get()) == wanted);
 		REQUIRE(resolve("C:\\OSN-Test\\2026-08-08 14-30-12.mp4", second.get()) == "C:\\OSN-Test\\2026-08-08 14-30-12 (2).mp4");
 	}
+#else
+	SECTION("paths differing only by separator are distinct files")
+	{
+		REQUIRE(resolve(wanted, first.get()) == wanted);
+		const std::string backslashed = "C:\\osn-test\\2026-08-08 14-30-12.mp4";
+		REQUIRE(resolve(backslashed, second.get()) == backslashed);
+	}
+#endif
 
 	SECTION("the name is reusable once the first output stops")
 	{
