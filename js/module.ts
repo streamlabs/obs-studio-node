@@ -1832,6 +1832,14 @@ export interface IFileOutput {
 }
 
 export interface IRecording extends IFileOutput {
+    /**
+     * Wrapped around fileFormat, space-separated, before the extension is added.
+     * Set distinct values per canvas in dual output so the two recordings are
+     * distinguishable on disk; otherwise both derive the same name and the second
+     * one is renamed to "... (2)".
+     */
+    prefix: string,
+    suffix: string,
     videoEncoder: IVideoEncoder,
     enableFileSplit: boolean,
     splitType: ERecSplitType,
