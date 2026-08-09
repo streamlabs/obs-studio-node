@@ -68,8 +68,14 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 {
 	std::lock_guard<std::mutex> lock(s_filenameClaimMutex);
 
-	const char *ext = strrchr(strPath.c_str(), '.');
-	const int extStart = ext ? int(ext - strPath.c_str()) : -1;
+	// Insert before the extension, or at the very end when there is none. Only the final component
+	// counts: a dot in a directory name is not an extension. An extensionless name is reachable --
+	// osn_generate_formatted_filename() appends the extension and then truncates the whole thing to
+	// 255 bytes -- and giving up there would hand two live outputs the same path.
+	const size_t sep = strPath.find_last_of("/\\");
+	const size_t nameStart = (sep == std::string::npos) ? 0 : sep + 1;
+	const size_t dot = strPath.find_last_of('.');
+	const size_t insertAt = (dot != std::string::npos && dot > nameStart) ? dot : strPath.size();
 
 	std::string candidate = strPath;
 	int num = 2;
@@ -83,8 +89,6 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 			break;
 		if (heldByPeer)
 			blockedByLiveOutput = true;
-		if (extStart < 0)
-			break;
 
 		std::string numStr = noSpace ? "_" : " (";
 		numStr += std::to_string(num++);
@@ -92,7 +96,7 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 			numStr += ")";
 
 		candidate = strPath;
-		candidate.insert(extStart, numStr);
+		candidate.insert(insertAt, numStr);
 	}
 
 	// Stepping over a file left on disk is ordinary and stays quiet. Stepping over a path another

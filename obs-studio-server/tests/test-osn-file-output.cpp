@@ -87,6 +87,23 @@ TEST_CASE("FindBestFilename avoids a path claimed by another live output", "[fil
 		REQUIRE(resolve(wanted, first.get()) == wanted);
 		REQUIRE(resolve(wanted, first.get()) == wanted);
 	}
+
+	// osn_generate_formatted_filename() appends the extension and then truncates to 255 bytes, so a
+	// long enough prefix/suffix leaves no extension at all. The claim must still hold.
+	SECTION("an extensionless name is still made unique")
+	{
+		const std::string noExt = "C:/osn-test/2026-08-08 14-30-12";
+		REQUIRE(resolve(noExt, first.get()) == noExt);
+		REQUIRE(resolve(noExt, second.get()) == noExt + " (2)");
+	}
+
+	// A dot in a directory name is not an extension; the counter belongs on the filename.
+	SECTION("a dot in a directory is not treated as the extension")
+	{
+		const std::string dottedDir = "C:/osn.test/recording";
+		REQUIRE(resolve(dottedDir, first.get()) == dottedDir);
+		REQUIRE(resolve(dottedDir, second.get()) == "C:/osn.test/recording (2)");
+	}
 }
 
 // prefix/suffix are how a caller keeps two canvases apart on disk. The rename in FindBestFilename
