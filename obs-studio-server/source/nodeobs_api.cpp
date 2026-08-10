@@ -1022,6 +1022,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	copyModuleLoadFailures(mfi);
 	obs_log_loaded_modules();
 	obs_post_load_modules();
+	autoConfig::RegisterOutputTypes();
 
 	if (!moduleLoadFailures.empty()) {
 		for (const ModuleLoadFailure &failure : moduleLoadFailures) {

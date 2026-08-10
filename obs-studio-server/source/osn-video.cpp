@@ -22,6 +22,7 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "osn-streaming.hpp"
+#include "nodeobs_autoconfig.h"
 
 // DELETE ME WHEN REMOVING NODEOBS
 #include "nodeobs_configManager.hpp"
@@ -356,6 +357,12 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 	video.gpu_conversion = true;
 	video.fps_type = args[10].value_union.ui32;
 
+	// Updating a canvas has the same libobs restriction as removing it: no
+	// Auto Optimizer scratch output may still reference the video subsystem.
+	if (!autoConfig::CancelActiveSession()) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before updating the video context.");
+	}
+
 	int ret = OBS_VIDEO_FAIL;
 	try {
 		// Cannot disrupt video ptr inside obs while outputs are connecting.
@@ -414,6 +421,14 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 
 	if (!canvas) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
+	}
+
+	// Auto Optimizer owns disposable outputs and encoder/video resources while
+	// its hardware or bandwidth tests are running. OBS refuses to remove a
+	// video context while those resources are active, so make their cancellation
+	// observable and await their cleanup before attempting the reset.
+	if (!autoConfig::CancelActiveSession()) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before removing the video context.");
 	}
 
 	int ret = OBS_VIDEO_FAIL;

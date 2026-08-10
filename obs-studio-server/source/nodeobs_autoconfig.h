@@ -14,6 +14,14 @@
 namespace autoConfig {
 
 void Register(ipc::server &srv);
+// Register the private video-only encoded sink used by the hardware benchmark.
+// This must run after OBS modules are loaded and before any AutoConfig session.
+void RegisterOutputTypes();
+// Video contexts cannot be reset, updated, or removed while an Auto Optimizer
+// scratch output is active. Cancel the current session and wait for its owned
+// OBS resources to finish teardown without permanently shutting down the
+// AutoConfig service.
+bool CancelActiveSession();
 void Shutdown();
 
 void GetCapabilities(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

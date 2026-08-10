@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_service.h"
+#include "nodeobs_autoconfig.h"
 #ifdef WIN32
 #include <ShlObj.h>
 #include <windows.h>
@@ -497,6 +498,14 @@ static const size_t numVals = sizeof(vals) / sizeof(double);
 
 int OBS_service::resetVideoContext(bool reload, bool retryWithDefaultConf)
 {
+	// Auto Optimizer owns disposable encoder, output, and video-mix resources
+	// while a session is running. Wait for their teardown before changing the
+	// process-wide video context.
+	if (!autoConfig::CancelActiveSession()) {
+		blog(LOG_ERROR, "Timed out while stopping Auto Optimizer before resetting the video context.");
+		return OBS_VIDEO_CURRENTLY_ACTIVE;
+	}
+
 	obs_video_info ovi = prepareOBSVideoInfo(reload, false);
 	int errorcode = OBS_VIDEO_NOT_SUPPORTED;
 

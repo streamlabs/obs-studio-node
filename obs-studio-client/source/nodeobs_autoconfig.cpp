@@ -41,6 +41,15 @@ struct AutoConfigEvent {
 	std::string probeId;
 	std::string provider;
 	uint32_t targetBitrateKbps = 0;
+	std::string encoderId;
+	std::string encoderFamily;
+	std::string encoderTitle;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t fpsNum = 0;
+	uint32_t fpsDen = 0;
+	uint32_t selectedBitrateKbps = 0;
+	uint32_t availableBitrateKbps = 0;
 };
 
 std::atomic<bool> workerStop{true};
@@ -142,6 +151,24 @@ void DispatchEvent(AutoConfigEvent *event)
 				result.Set("provider", Napi::String::New(env, eventData->provider));
 			if (eventData->targetBitrateKbps > 0)
 				result.Set("targetBitrateKbps", Napi::Number::New(env, eventData->targetBitrateKbps));
+			if (!eventData->encoderId.empty())
+				result.Set("encoderId", Napi::String::New(env, eventData->encoderId));
+			if (!eventData->encoderFamily.empty())
+				result.Set("encoderFamily", Napi::String::New(env, eventData->encoderFamily));
+			if (!eventData->encoderTitle.empty())
+				result.Set("encoderTitle", Napi::String::New(env, eventData->encoderTitle));
+			if (eventData->width > 0)
+				result.Set("width", Napi::Number::New(env, eventData->width));
+			if (eventData->height > 0)
+				result.Set("height", Napi::Number::New(env, eventData->height));
+			if (eventData->fpsNum > 0)
+				result.Set("fpsNum", Napi::Number::New(env, eventData->fpsNum));
+			if (eventData->fpsDen > 0)
+				result.Set("fpsDen", Napi::Number::New(env, eventData->fpsDen));
+			if (eventData->selectedBitrateKbps > 0)
+				result.Set("selectedBitrateKbps", Napi::Number::New(env, eventData->selectedBitrateKbps));
+			if (eventData->availableBitrateKbps > 0)
+				result.Set("availableBitrateKbps", Napi::Number::New(env, eventData->availableBitrateKbps));
 
 			jsCallback.Call({result});
 		} catch (...) {
@@ -181,6 +208,17 @@ void Worker()
 					event->provider = response[11].value_str;
 					if (response.size() >= 13)
 						event->targetBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[12]));
+					if (response.size() >= 22) {
+						event->encoderId = response[13].value_str;
+						event->encoderFamily = response[14].value_str;
+						event->encoderTitle = response[15].value_str;
+						event->width = static_cast<uint32_t>(ReadUnsigned(response[16]));
+						event->height = static_cast<uint32_t>(ReadUnsigned(response[17]));
+						event->fpsNum = static_cast<uint32_t>(ReadUnsigned(response[18]));
+						event->fpsDen = static_cast<uint32_t>(ReadUnsigned(response[19]));
+						event->selectedBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[20]));
+						event->availableBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[21]));
+					}
 
 					if (event->sessionId == sessionId)
 						DispatchEvent(event);

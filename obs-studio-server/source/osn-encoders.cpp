@@ -27,7 +27,7 @@ static bool codecListContains(const char **codecs, const char *codec);
 static const char *getStreamOutputType(const obs_service_t *service);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
-static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
+static std::string makePublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
 static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, const std::string &encoderName, bool simpleMode);
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
@@ -269,7 +269,7 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 	return validEncoder;
 }
 
-static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName)
+static std::string makePublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName)
 {
 	if (opt.family == FAMILY_OBS)
 		return "x264";
@@ -329,7 +329,7 @@ void osn::EncoderUtils::getAvailableEncoders(std::vector<ipc::value> &rval, obs_
 			rval.push_back(ipc::value(title));
 			rval.push_back(ipc::value(name));
 			rval.push_back(ipc::value(encoderName));
-			rval.push_back(ipc::value(getPublicEncoderFamily(opt, name, encoderName)));
+			rval.push_back(ipc::value(makePublicEncoderFamily(opt, name, encoderName)));
 			rval.push_back(ipc::value(getPublicEncoderPreset(opt, encoderName, simpleMode)));
 			rval.push_back(ipc::value(codec ? codec : ""));
 			rval.push_back(ipc::value(static_cast<uint32_t>(opt.streaming)));
@@ -433,6 +433,40 @@ std::string osn::EncoderUtils::getEncoderFamily(const char *encoder)
 		blog(LOG_WARNING, "GetEncoderFamily - encoder %s is not found.", encoder);
 
 	return family;
+}
+
+std::string osn::EncoderUtils::getPublicEncoderFamily(const char *encoder)
+{
+	if (!encoder)
+		return {};
+
+	for (const auto &option : videoEncoderOptions) {
+		const std::string concrete = option.advanced_name.empty() ? option.simple_name : option.advanced_name;
+		if (concrete == encoder || option.simple_name == encoder || option.simple_internal_name == encoder)
+			return makePublicEncoderFamily(option, option.advanced_name.empty() ? option.simple_name : option.advanced_name, encoder);
+	}
+	return {};
+}
+
+std::string osn::EncoderUtils::getPublicEncoderTitle(const char *encoder)
+{
+	if (!encoder)
+		return {};
+
+	// Prefer the exact concrete catalog row. Some modern encoders also appear
+	// as another row's Simple-mode internal implementation (notably texture
+	// NVENC), whose title describes the alias rather than the selected ID.
+	for (const auto &option : videoEncoderOptions) {
+		const std::string concrete = option.advanced_name.empty() ? option.simple_name : option.advanced_name;
+		if (concrete == encoder)
+			return option.advanced_title.empty() ? option.simple_title : option.advanced_title;
+	}
+
+	for (const auto &option : videoEncoderOptions) {
+		if (option.simple_name == encoder || option.simple_internal_name == encoder)
+			return option.advanced_title.empty() ? option.simple_title : option.advanced_title;
+	}
+	return {};
 }
 
 bool osn::EncoderUtils::isOldJimNvencEncoder(const std::string &encoderId)

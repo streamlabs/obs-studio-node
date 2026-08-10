@@ -10,11 +10,13 @@
 #include "nodeobs_autoconfig.h"
 
 #include "autoconfig-probe-policy.hpp"
+#include "autoconfig-quality-policy.hpp"
 #include "osn-encoders.hpp"
 #include "osn-error.hpp"
 #include "shared.hpp"
 
 #include <obs.h>
+#include <obs-output.h>
 #include <media-io/audio-io.h>
 #include <media-io/video-frame.h>
 #include <media-io/video-io.h>
@@ -35,6 +37,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace autoConfig {
@@ -69,9 +72,78 @@ constexpr int kDefaultEstimatedBitrateKbps = 2500;
 constexpr int kHardwareWarmupMs = 500;
 constexpr int kHardwareSampleMs = 1500;
 constexpr int kHardwareStopTimeoutMs = 1000;
-constexpr int kHardwarePhaseTimeoutMs = 12000;
-constexpr int kHardwareMaximumLongEdge = 1920;
-constexpr int kHardwareMaximumShortEdge = 1080;
+constexpr char kHardwareBenchmarkOutputId[] = "auto_optimizer_video_only_output";
+
+struct HardwareBenchmarkOutput {
+	obs_output_t *output = nullptr;
+};
+
+static const char *hardwareBenchmarkOutputName(void *)
+{
+	return "Auto Optimizer Video-only Output";
+}
+
+static void *hardwareBenchmarkOutputCreate(obs_data_t *, obs_output_t *output)
+{
+	auto *context = new HardwareBenchmarkOutput();
+	context->output = output;
+	return context;
+}
+
+static void hardwareBenchmarkOutputDestroy(void *data)
+{
+	auto *context = static_cast<HardwareBenchmarkOutput *>(data);
+	if (!context)
+		return;
+	delete context;
+}
+
+static bool hardwareBenchmarkOutputStart(void *data)
+{
+	auto *context = static_cast<HardwareBenchmarkOutput *>(data);
+	if (!context)
+		return false;
+	if (!obs_output_can_begin_data_capture(context->output, 0) || !obs_output_initialize_encoders(context->output, 0))
+		return false;
+	return obs_output_begin_data_capture(context->output, 0);
+}
+
+static void hardwareBenchmarkOutputStop(void *data, uint64_t)
+{
+	auto *context = static_cast<HardwareBenchmarkOutput *>(data);
+	if (!context)
+		return;
+	// libobs performs end-of-capture teardown on its own worker thread.
+	obs_output_end_data_capture(context->output);
+}
+
+static void hardwareBenchmarkOutputPacket(void *, encoder_packet *) {}
+
+static void registerHardwareBenchmarkOutput()
+{
+	for (size_t index = 0;; index++) {
+		const char *id = nullptr;
+		if (!obs_enum_output_types(index, &id))
+			break;
+		if (id && std::strcmp(id, kHardwareBenchmarkOutputId) == 0)
+			return;
+	}
+
+	obs_output_info info{};
+	info.id = kHardwareBenchmarkOutputId;
+	// OBS's bundled null_output is AV-only. Attaching the isolated scratch
+	// canvas to it pairs video with an audio encoder that multi-canvas audio
+	// routing cannot service, so texture encoders wait for audio and emit no
+	// packets. A video-only sink exercises the encoder without that AV gate.
+	info.flags = OBS_OUTPUT_VIDEO | OBS_OUTPUT_ENCODED;
+	info.get_name = hardwareBenchmarkOutputName;
+	info.create = hardwareBenchmarkOutputCreate;
+	info.destroy = hardwareBenchmarkOutputDestroy;
+	info.start = hardwareBenchmarkOutputStart;
+	info.stop = hardwareBenchmarkOutputStop;
+	info.encoded_packet = hardwareBenchmarkOutputPacket;
+	obs_register_output(&info);
+}
 
 enum class SessionState { Created, Running, Complete, Cancelled, Failed, Closed };
 
@@ -92,7 +164,10 @@ struct CurrentSettings {
 	int fpsDen = 1;
 	int bitrateKbps = 0;
 	std::string encoderId;
+	std::string encoderFamily;
+	std::string encoderTitle;
 	std::string codec;
+	std::string presetKey;
 	std::string preset;
 };
 
@@ -105,6 +180,7 @@ struct HardwareAssessment {
 	bool attempted = false;
 	bool passed = false;
 	bool cancelled = false;
+	bool fatal = false;
 	bool constrained = false;
 	std::string reason;
 	CurrentSettings value;
@@ -168,6 +244,15 @@ struct SessionEvent {
 	std::string probeId;
 	std::string provider;
 	uint32_t targetBitrateKbps = 0;
+	std::string encoderId;
+	std::string encoderFamily;
+	std::string encoderTitle;
+	uint32_t width = 0;
+	uint32_t height = 0;
+	uint32_t fpsNum = 0;
+	uint32_t fpsDen = 0;
+	uint32_t selectedBitrateKbps = 0;
+	uint32_t availableBitrateKbps = 0;
 };
 
 struct Session : std::enable_shared_from_this<Session> {
@@ -368,6 +453,14 @@ static bool isKnownTopology(const std::string &topology)
 	return known.count(topology) != 0;
 }
 
+static bool providerOwnsEncoding(const std::string &topology, const LegRequest &leg)
+{
+	if (topology == "enhanced-broadcasting")
+		return true;
+	return leg.display == "both" &&
+	       std::any_of(leg.destinations.begin(), leg.destinations.end(), [](const Destination &destination) { return destination.platform == "twitch"; });
+}
+
 static bool parseRequest(const std::string &json, Session &session, std::string &error)
 {
 	obs_data_t *root = obs_data_create_from_json(json.c_str());
@@ -390,7 +483,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 	obs_data_array_t *legs = obs_data_get_array(root, "legs");
 	const size_t legCount = legs ? obs_data_array_count(legs) : 0;
-	if (valid && (legCount == 0 || legCount > 8)) {
+	if (valid && (legCount == 0 || legCount > qualityPolicy::kMaximumUploadLegs)) {
 		error = "invalid_autoconfig_legs";
 		valid = false;
 	}
@@ -569,7 +662,8 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 static void pushEvent(const std::shared_ptr<Session> &session, const char *type, const char *phase, double progress, const std::string &code = {},
 		      const std::string &legId = {}, const std::string &measurementMode = {}, const std::string &probeId = {}, const std::string &provider = {},
-		      uint32_t targetBitrateKbps = 0)
+		      uint32_t targetBitrateKbps = 0, const CurrentSettings *video = nullptr, uint32_t selectedBitrateKbps = 0,
+		      uint32_t availableBitrateKbps = 0)
 {
 	std::lock_guard<std::mutex> lock(session->mutex);
 	SessionEvent event;
@@ -583,6 +677,17 @@ static void pushEvent(const std::shared_ptr<Session> &session, const char *type,
 	event.probeId = probeId;
 	event.provider = provider;
 	event.targetBitrateKbps = targetBitrateKbps;
+	if (video) {
+		event.encoderId = video->encoderId;
+		event.encoderFamily = video->encoderFamily;
+		event.encoderTitle = video->encoderTitle;
+		event.width = (uint32_t)std::max(0, video->width);
+		event.height = (uint32_t)std::max(0, video->height);
+		event.fpsNum = (uint32_t)std::max(0, video->fpsNum);
+		event.fpsDen = (uint32_t)std::max(0, video->fpsDen);
+		event.selectedBitrateKbps = selectedBitrateKbps;
+	}
+	event.availableBitrateKbps = availableBitrateKbps;
 	session->events.push(std::move(event));
 }
 
@@ -599,9 +704,7 @@ static std::string resolveEncoderId(const std::string &id)
 	if (id.empty())
 		return {};
 	// The software VideoToolbox implementation is not a hardware-capacity
-	// signal and Desktop cannot currently apply Apple encoder-family metadata.
-	// Registered hardware VideoToolbox IDs are still preserved when already
-	// selected, but this software implementation must never be recommended.
+	// signal and must never be recommended.
 	if (id == "com.apple.videotoolbox.videoencoder.h264")
 		return {};
 	if (obs_get_encoder_codec(id.c_str()))
@@ -615,21 +718,82 @@ static std::string resolveEncoderId(const std::string &id)
 	return {};
 }
 
-static EncoderSelection chooseEncoder(const CurrentSettings &current)
-{
-	if (!resolveEncoderId(current.encoderId).empty())
-		return {current.encoderId, false};
+struct EncoderDescriptor {
+	std::string id;
+	std::string family;
+	std::string title;
+	std::string presetKey;
+	std::string preset;
+	bool hardware = false;
+};
 
-	// Apple/VideoToolbox is intentionally not an automatic fallback. Desktop's
-	// current encoder metadata has no Apple family mapping, so returning one here
-	// would produce a recommendation it cannot apply. A currently selected and
-	// registered Apple encoder is still preserved by the branch above.
-	const char *preferred[] = {ENCODER_NVENC_H264_TEX, ADVANCED_ENCODER_QSV_V2, ADVANCED_ENCODER_QSV, ADVANCED_ENCODER_AMD, ADVANCED_ENCODER_X264};
-	for (const char *candidate : preferred) {
-		if (candidate && osn::EncoderUtils::isEncoderRegistered(candidate))
-			return {candidate, candidate != current.encoderId};
-	}
-	return {{}, !current.encoderId.empty()};
+struct EncoderPreset {
+	const char *key;
+	const char *value;
+};
+
+static bool isH264Encoder(const std::string &id)
+{
+	const char *codec = id.empty() ? nullptr : obs_get_encoder_codec(id.c_str());
+	return codec && lowerCopy(codec) == "h264";
+}
+
+static bool isModernHardwareH264(const std::string &id)
+{
+	return id == ENCODER_NVENC_H264_TEX || id == ADVANCED_ENCODER_QSV_V2 || id == ADVANCED_ENCODER_AMD || id == APPLE_HARDWARE_VIDEO_ENCODER ||
+	       id == APPLE_HARDWARE_VIDEO_ENCODER_M1;
+}
+
+static EncoderPreset defaultEncoderPreset(const std::string &id)
+{
+	// These are the concrete native encoder properties and the defaults exposed
+	// by the matching modern OBS H.264 implementations. The value returned in
+	// the recommendation is therefore the exact value exercised by the scratch
+	// benchmark, not an OBS profile/config field name.
+	if (id == ENCODER_NVENC_H264_TEX)
+		return {"preset", "p5"};
+	if (id == ADVANCED_ENCODER_QSV_V2)
+		return {"target_usage", "TU4"};
+	if (id == ADVANCED_ENCODER_AMD)
+		return {"preset", "quality"};
+	if (id == APPLE_HARDWARE_VIDEO_ENCODER || id == APPLE_HARDWARE_VIDEO_ENCODER_M1)
+		return {"profile", "high"};
+	if (id == ADVANCED_ENCODER_X264)
+		return {"preset", "veryfast"};
+	return {nullptr, nullptr};
+}
+
+static EncoderDescriptor describeEncoder(const std::string &id, bool hardware)
+{
+	const EncoderPreset preset = defaultEncoderPreset(id);
+	return {id,
+		osn::EncoderUtils::getPublicEncoderFamily(id.c_str()),
+		osn::EncoderUtils::getPublicEncoderTitle(id.c_str()),
+		preset.key ? preset.key : "",
+		preset.value ? preset.value : "",
+		hardware};
+}
+
+static std::vector<EncoderDescriptor> availableHardwareEncoders(const CurrentSettings &current)
+{
+	std::vector<EncoderDescriptor> result;
+	auto add = [&](const std::string &id) {
+		const std::string resolved = resolveEncoderId(id);
+		if (!isModernHardwareH264(resolved) || !osn::EncoderUtils::isEncoderRegistered(resolved) || !isH264Encoder(resolved))
+			return;
+		if (std::none_of(result.begin(), result.end(), [&](const EncoderDescriptor &item) { return item.id == resolved; }))
+			result.push_back(describeEncoder(resolved, true));
+	};
+
+	// Keep a modern, currently selected hardware encoder first. A current x264,
+	// legacy QSV, HEVC, or AV1 selection deliberately does not block discovery.
+	add(current.encoderId);
+	add(ENCODER_NVENC_H264_TEX);
+	add(ADVANCED_ENCODER_QSV_V2);
+	add(ADVANCED_ENCODER_AMD);
+	add(APPLE_HARDWARE_VIDEO_ENCODER);
+	add(APPLE_HARDWARE_VIDEO_ENCODER_M1);
+	return result;
 }
 
 static std::string scratchEncoderId(const std::string &recommendationId)
@@ -637,24 +801,10 @@ static std::string scratchEncoderId(const std::string &recommendationId)
 	const std::string encoder = resolveEncoderId(recommendationId);
 	if (encoder == ENCODER_NVENC_H264_TEX)
 		return "obs_nvenc_h264_soft";
-	if (encoder == ENCODER_NVENC_HEVC_TEX)
-		return "obs_nvenc_hevc_soft";
-	if (encoder == ENCODER_NVENC_AV1_TEX)
-		return "obs_nvenc_av1_soft";
-	if (encoder == ADVANCED_ENCODER_QSV)
-		return "obs_qsv11_soft";
 	if (encoder == ADVANCED_ENCODER_QSV_V2)
 		return "obs_qsv11_soft_v2";
-	if (encoder == ADVANCED_ENCODER_QSV_AV1)
-		return "obs_qsv11_av1_soft";
-	if (encoder == ADVANCED_ENCODER_QSV_HEVC)
-		return "obs_qsv11_hevc_soft";
 	if (encoder == ADVANCED_ENCODER_AMD)
 		return "h264_fallback_amf";
-	if (encoder == ADVANCED_ENCODER_AMD_HEVC)
-		return "h265_fallback_amf";
-	if (encoder == ADVANCED_ENCODER_AMD_AV1)
-		return "av1_fallback_amf";
 	return encoder;
 }
 
@@ -750,6 +900,9 @@ static void applyEncoderSelection(CurrentSettings &value, const EncoderSelection
 		const char *codec = internal.empty() ? nullptr : obs_get_encoder_codec(internal.c_str());
 		value.codec = codec ? codec : "h264";
 	}
+	const std::string internal = resolveEncoderId(value.encoderId);
+	value.encoderFamily = osn::EncoderUtils::getPublicEncoderFamily(internal.c_str());
+	value.encoderTitle = osn::EncoderUtils::getPublicEncoderTitle(internal.c_str());
 }
 
 static CurrentSettings baseRecommendation(const LegRequest &leg)
@@ -762,7 +915,15 @@ static CurrentSettings baseRecommendation(const LegRequest &leg)
 	fitWithin(value, leg.limits.maxWidth > 0 ? leg.limits.maxWidth : value.width, leg.limits.maxHeight > 0 ? leg.limits.maxHeight : value.height);
 	if (leg.limits.maxFpsNum > 0)
 		capFps(value, leg.limits.maxFpsNum, leg.limits.maxFpsDen);
-	applyEncoderSelection(value, chooseEncoder(value));
+	// Encoder discovery and workload validation happen in the hardware phase.
+	// Preserve the current value here for provider-managed paths and as the
+	// fail-open recommendation when shared scratch infrastructure is unavailable.
+	const std::string currentEncoder = resolveEncoderId(value.encoderId);
+	if (!currentEncoder.empty()) {
+		value.encoderId = currentEncoder;
+		value.encoderFamily = osn::EncoderUtils::getPublicEncoderFamily(currentEncoder.c_str());
+		value.encoderTitle = osn::EncoderUtils::getPublicEncoderTitle(currentEncoder.c_str());
+	}
 	return value;
 }
 
@@ -864,6 +1025,8 @@ static std::string serializeResult(const Session &session, const char *status, c
 		obs_data_set_int(value, "fpsDen", recommendation.value.fpsDen);
 		obs_data_set_int(value, "bitrateKbps", recommendation.value.bitrateKbps);
 		obs_data_set_string(value, "encoderId", recommendation.value.encoderId.c_str());
+		obs_data_set_string(value, "encoderFamily", recommendation.value.encoderFamily.c_str());
+		obs_data_set_string(value, "encoderTitle", recommendation.value.encoderTitle.c_str());
 		obs_data_set_string(value, "codec", recommendation.value.codec.c_str());
 		if (!recommendation.value.preset.empty())
 			obs_data_set_string(value, "preset", recommendation.value.preset.c_str());
@@ -967,9 +1130,10 @@ public:
 	uint32_t videoFpsDen = 1;
 	video_t *syntheticVideo = nullptr;
 	obs_view_t *scratchView = nullptr;
-	obs_core_video_mix_t *scratchMix = nullptr;
 	std::unique_ptr<obs_video_info> scratchViewInfo;
+	obs_core_video_mix_t *scratchMix = nullptr;
 	bool coreVideoMix = false;
+	bool borrowedVideo = false;
 	audio_t *syntheticAudio = nullptr;
 	obs_encoder_t *videoEncoder = nullptr;
 	obs_encoder_t *audioEncoder = nullptr;
@@ -994,7 +1158,9 @@ public:
 		coreVideoMix = useCoreVideoMix;
 		if (coreVideoMix) {
 			// Hardware texture encoders require a real OBS video mix. Create an
-			// isolated, source-free view instead of attaching to any user canvas.
+			// isolated, source-free view for an availability and frame-throughput
+			// smoke test. Reusing a scene from another canvas can impose that
+			// canvas's cadence and falsely reject an otherwise healthy encoder.
 			// obs_view_add2 creates only a private mix and does not reset the
 			// application's existing video contexts.
 			scratchViewInfo = std::make_unique<obs_video_info>();
@@ -1013,17 +1179,14 @@ public:
 			scratchViewInfo->gpu_conversion = true;
 			scratchView = obs_view_create();
 			syntheticVideo = scratchView ? obs_view_add2(scratchView, scratchViewInfo.get()) : nullptr;
+			// obs_encoder_set_video() is not sufficient for texture encoders in
+			// the packaged libobs build: GPU startup resolves its mix again and
+			// can observe no mix. Acquire the just-published private mix by this
+			// unique video-info identity and keep that identity alive until the
+			// render thread has removed the mix.
 			scratchMix = syntheticVideo ? obs_video_mix_get(scratchViewInfo.get(), OBS_MAIN_VIDEO_RENDERING) : nullptr;
-			if (!syntheticVideo || !scratchMix) {
-				if (scratchView)
-					obs_view_remove(scratchView);
-				if (scratchView)
-					obs_view_destroy(scratchView);
-				scratchView = nullptr;
-				scratchMix = nullptr;
-				scratchViewInfo.reset();
+			if (!syntheticVideo || !scratchMix)
 				return false;
-			}
 			return true;
 		}
 
@@ -1066,9 +1229,19 @@ public:
 		return audio_output_open(&syntheticAudio, &info) == AUDIO_OUTPUT_SUCCESS;
 	}
 
+	bool useKnownStreamingVideoMix()
+	{
+		scratchMix = obs_video_mix_get(nullptr, OBS_STREAMING_VIDEO_RENDERING);
+		if (!scratchMix)
+			return false;
+		borrowedVideo = true;
+		syntheticVideo = obs_video_mix_get_video(scratchMix);
+		return syntheticVideo != nullptr;
+	}
+
 	void startFeeder()
 	{
-		if (coreVideoMix)
+		if (coreVideoMix || borrowedVideo)
 			return;
 		feeder = std::thread([this]() {
 			const auto frameDuration = std::chrono::nanoseconds((1000000000ULL * videoFpsDen) / videoFpsNum);
@@ -1153,21 +1326,34 @@ public:
 			obs_encoder_release(audioEncoder);
 			audioEncoder = nullptr;
 		}
-		if (syntheticVideo && !coreVideoMix) {
+		if (syntheticVideo && !coreVideoMix && !borrowedVideo) {
 			video_output_stop(syntheticVideo);
 			video_output_close(syntheticVideo);
 			syntheticVideo = nullptr;
 		}
 		if (scratchView) {
+			obs_video_info *removedViewInfo = scratchViewInfo.get();
 			obs_view_remove(scratchView);
 			obs_view_destroy(scratchView);
 			scratchView = nullptr;
-			scratchMix = nullptr;
 			syntheticVideo = nullptr;
-			// The render thread removes orphaned mixes on its next tick. Keep
-			// the video-info snapshot alive until that tick has elapsed.
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			scratchViewInfo.reset();
+			scratchMix = nullptr;
+			// The render thread removes orphaned mixes on a later tick. Do not
+			// release/reuse the identity used by obs_video_mix_get until the
+			// exact private mix is no longer published.
+			const auto mixRemovalDeadline =
+				std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(1000, stopTimeoutMs));
+			while (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING) &&
+			       std::chrono::steady_clock::now() < mixRemovalDeadline)
+				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+			if (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING)) {
+				// Preserve the identity rather than leaving an asynchronous mix
+				// with a dangling canvas_ovi pointer during abnormal shutdown.
+				blog(LOG_WARNING, "[Auto Optimizer][Hardware] timed out waiting for the private video mix to be removed");
+				(void)scratchViewInfo.release();
+			} else {
+				scratchViewInfo.reset();
+			}
 		}
 		if (syntheticAudio) {
 			audio_output_close(syntheticAudio);
@@ -1192,15 +1378,35 @@ struct HardwareAttempt {
 	bool success = false;
 	bool cancelled = false;
 	bool timedOut = false;
+	bool feederHealthy = false;
 	uint32_t totalFrames = 0;
 	uint32_t skippedFrames = 0;
 	uint32_t encodedFrames = 0;
+	uint32_t outputFrames = 0;
+	uint32_t outputDroppedFrames = 0;
 	uint32_t scheduledFrames = 0;
 	uint32_t submittedFrames = 0;
 	uint32_t lockFailedFrames = 0;
 	uint32_t lateFrames = 0;
+	uint32_t expectedFrames = 0;
+	uint32_t minimumEncodedFrames = 0;
+	uint32_t allowedSkippedFrames = 0;
+	uint32_t sourceFpsNum = 0;
+	uint32_t sourceFpsDen = 1;
+	uint32_t frameRateDivisor = 1;
+	std::string feedMode;
 	std::string errorCode;
+	std::string encoderLastError;
+	std::string outputLastError;
 };
+
+static std::string boundedLogValue(const std::string &value)
+{
+	std::string result = value.substr(0, 512);
+	std::replace(result.begin(), result.end(), '\r', ' ');
+	std::replace(result.begin(), result.end(), '\n', ' ');
+	return result;
+}
 
 static bool waitForScratchInterval(const std::shared_ptr<Session> &session, obs_output_t *output, std::chrono::steady_clock::time_point intervalDeadline,
 				   std::chrono::steady_clock::time_point phaseDeadline, HardwareAttempt &result)
@@ -1228,7 +1434,7 @@ static bool waitForScratchInterval(const std::shared_ptr<Session> &session, obs_
 }
 
 static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &session, const CurrentSettings &candidate,
-					  std::chrono::steady_clock::time_point phaseDeadline)
+					  std::chrono::steady_clock::time_point phaseDeadline, bool useMainVideoControl = false)
 {
 	HardwareAttempt result;
 	if (session->cancelRequested.load()) {
@@ -1249,22 +1455,21 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	}
 
 	ScratchResources resources(*session, kHardwareStopTimeoutMs);
-	if (!resources.createSyntheticVideo((uint32_t)candidate.width, (uint32_t)candidate.height, (uint32_t)candidate.fpsNum, (uint32_t)candidate.fpsDen,
-					    useCoreVideoMix)) {
-		result.errorCode = "hardware_benchmark_video_create_failed";
+	result.feedMode = useMainVideoControl ? "main-control" : useCoreVideoMix ? "private-mix" : "synthetic-raw";
+	const bool videoCreated = useMainVideoControl
+				  ? useCoreVideoMix && resources.useKnownStreamingVideoMix()
+				  : resources.createSyntheticVideo((uint32_t)candidate.width, (uint32_t)candidate.height, (uint32_t)candidate.fpsNum,
+							   (uint32_t)candidate.fpsDen, useCoreVideoMix);
+	if (!videoCreated) {
+		result.errorCode = useCoreVideoMix ? "hardware_benchmark_video_mix_create_failed" : "hardware_benchmark_video_create_failed";
 		return result;
 	}
-	if (!resources.createSyntheticAudio()) {
-		result.errorCode = "hardware_benchmark_audio_create_failed";
-		return result;
-	}
-
 	obs_data_t *encoderSettings = obs_data_create();
 	obs_data_set_int(encoderSettings, "bitrate", std::clamp(candidate.bitrateKbps, 500, kProbeMaximumBitrateKbps));
 	obs_data_set_string(encoderSettings, "rate_control", "CBR");
 	obs_data_set_int(encoderSettings, "keyint_sec", 2);
-	if (encoderId == ADVANCED_ENCODER_X264 && isX264Preset(candidate.preset))
-		obs_data_set_string(encoderSettings, "preset", candidate.preset.c_str());
+	if (!candidate.presetKey.empty() && !candidate.preset.empty() && (resolvedEncoderId != ADVANCED_ENCODER_X264 || isX264Preset(candidate.preset)))
+		obs_data_set_string(encoderSettings, candidate.presetKey.c_str(), candidate.preset.c_str());
 	resources.videoEncoder = obs_video_encoder_create(encoderId.c_str(), "auto_optimizer_hardware_benchmark_encoder", encoderSettings, nullptr);
 	obs_data_release(encoderSettings);
 	if (!resources.videoEncoder) {
@@ -1275,24 +1480,42 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 		obs_encoder_set_video_mix(resources.videoEncoder, resources.scratchMix);
 	else
 		obs_encoder_set_video(resources.videoEncoder, resources.syntheticVideo);
-
-	obs_data_t *audioSettings = obs_data_create();
-	obs_data_set_int(audioSettings, "bitrate", 32);
-	resources.audioEncoder = obs_audio_encoder_create("ffmpeg_aac", "auto_optimizer_hardware_benchmark_audio", audioSettings, 0, nullptr);
-	obs_data_release(audioSettings);
-	if (!resources.audioEncoder) {
-		result.errorCode = "hardware_benchmark_audio_encoder_create_failed";
-		return result;
+	if (useMainVideoControl)
+		obs_encoder_set_scaled_size(resources.videoEncoder, (uint32_t)candidate.width, (uint32_t)candidate.height);
+	if (const video_output_info *sourceInfo = video_output_get_info(resources.syntheticVideo)) {
+		result.sourceFpsNum = sourceInfo->fps_num;
+		result.sourceFpsDen = std::max(1U, sourceInfo->fps_den);
 	}
-	obs_encoder_set_audio(resources.audioEncoder, resources.syntheticAudio);
+	if (result.sourceFpsNum > 0) {
+		const auto divisor = qualityPolicy::frameRateDivisor(result.sourceFpsNum, result.sourceFpsDen,
+								     (uint32_t)std::max(1, candidate.fpsNum),
+								     (uint32_t)std::max(1, candidate.fpsDen));
+		if (!divisor.supported) {
+			result.errorCode = "hardware_benchmark_frame_rate_unsupported";
+			return result;
+		}
+		result.frameRateDivisor = divisor.value;
+		if (result.frameRateDivisor > 1 && !obs_encoder_set_frame_rate_divisor(resources.videoEncoder, result.frameRateDivisor)) {
+			result.errorCode = "hardware_benchmark_frame_rate_divisor_failed";
+			return result;
+		}
+	}
+	auto captureErrors = [&]() {
+		if (const char *lastError = obs_encoder_get_last_error(resources.videoEncoder); lastError && *lastError)
+			result.encoderLastError = lastError;
+		if (resources.output) {
+			if (const char *lastError = obs_output_get_last_error(resources.output); lastError && *lastError)
+				result.outputLastError = lastError;
+		}
+	};
 
-	resources.output = obs_output_create("null_output", "auto_optimizer_hardware_benchmark_output", nullptr, nullptr);
+	resources.output = obs_output_create(kHardwareBenchmarkOutputId, "auto_optimizer_hardware_benchmark_output", nullptr, nullptr);
 	if (!resources.output) {
 		result.errorCode = "hardware_benchmark_output_create_failed";
+		captureErrors();
 		return result;
 	}
 	obs_output_set_video_encoder(resources.output, resources.videoEncoder);
-	obs_output_set_audio_encoder(resources.output, resources.audioEncoder, 0);
 	resources.publishOutput();
 	resources.startFeeder();
 
@@ -1302,201 +1525,337 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	}
 	if (!obs_output_start(resources.output)) {
 		result.errorCode = "hardware_benchmark_start_failed";
+		captureErrors();
 		return result;
 	}
 
 	const auto warmupDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kHardwareWarmupMs);
-	if (!waitForScratchInterval(session, resources.output, warmupDeadline, phaseDeadline, result))
+	if (!waitForScratchInterval(session, resources.output, warmupDeadline, phaseDeadline, result)) {
+		captureErrors();
 		return result;
+	}
 
 	const uint32_t startTotal = video_output_get_total_frames(resources.syntheticVideo);
 	const uint32_t startSkipped = video_output_get_skipped_frames(resources.syntheticVideo);
 	const uint32_t startEncoded = obs_encoder_get_encoded_frames(resources.videoEncoder);
+	const uint32_t startOutputFrames = obs_output_get_total_frames(resources.output);
+	const uint32_t startOutputDroppedFrames = obs_output_get_frames_dropped(resources.output);
 	const uint32_t startScheduled = resources.scheduledFrames.load(std::memory_order_relaxed);
 	const uint32_t startSubmitted = resources.submittedFrames.load(std::memory_order_relaxed);
 	const uint32_t startLockFailed = resources.lockFailedFrames.load(std::memory_order_relaxed);
 	const uint32_t startLate = resources.lateFrames.load(std::memory_order_relaxed);
 	const auto sampleStart = std::chrono::steady_clock::now();
 	const auto sampleDeadline = sampleStart + std::chrono::milliseconds(kHardwareSampleMs);
-	if (!waitForScratchInterval(session, resources.output, sampleDeadline, phaseDeadline, result))
+	if (!waitForScratchInterval(session, resources.output, sampleDeadline, phaseDeadline, result)) {
+		captureErrors();
 		return result;
+	}
 
 	const auto sampleEnd = std::chrono::steady_clock::now();
 	result.totalFrames = video_output_get_total_frames(resources.syntheticVideo) - startTotal;
 	result.skippedFrames = video_output_get_skipped_frames(resources.syntheticVideo) - startSkipped;
 	result.encodedFrames = obs_encoder_get_encoded_frames(resources.videoEncoder) - startEncoded;
+	result.outputFrames = obs_output_get_total_frames(resources.output) - startOutputFrames;
+	result.outputDroppedFrames = obs_output_get_frames_dropped(resources.output) - startOutputDroppedFrames;
 	result.scheduledFrames = resources.scheduledFrames.load(std::memory_order_relaxed) - startScheduled;
 	result.submittedFrames = resources.submittedFrames.load(std::memory_order_relaxed) - startSubmitted;
 	result.lockFailedFrames = resources.lockFailedFrames.load(std::memory_order_relaxed) - startLockFailed;
 	result.lateFrames = resources.lateFrames.load(std::memory_order_relaxed) - startLate;
+	captureErrors();
 
 	obs_output_stop(resources.output);
 	if (!waitForOutputInactive(resources.output, kHardwareStopTimeoutMs)) {
 		obs_output_force_stop(resources.output);
 		if (!waitForOutputInactive(resources.output, kHardwareStopTimeoutMs)) {
 			result.errorCode = "hardware_benchmark_cleanup_timeout";
+			captureErrors();
 			return result;
 		}
 	}
 
 	const double elapsedSeconds = std::chrono::duration<double>(sampleEnd - sampleStart).count();
 	const double requestedFps = (double)candidate.fpsNum / (double)candidate.fpsDen;
-	const uint32_t expectedFrames = (uint32_t)std::max(1.0, std::floor(requestedFps * elapsedSeconds));
-	const uint32_t pipelineAllowance = std::min(4U, expectedFrames);
-	const uint32_t minimumEncoded = std::max(3U, (expectedFrames - pipelineAllowance) * 85U / 100U);
-	const uint32_t allowedSkipped = std::max(1U, result.totalFrames * 5U / 100U);
-	const uint32_t minimumSubmitted = std::max(3U, expectedFrames * 85U / 100U);
+	result.expectedFrames = (uint32_t)std::max(1.0, std::floor(requestedFps * elapsedSeconds));
+	const uint32_t pipelineAllowance = std::min(4U, result.expectedFrames);
+	result.minimumEncodedFrames = std::max(3U, (result.expectedFrames - pipelineAllowance) * 85U / 100U);
+	result.allowedSkippedFrames = std::max(1U, result.totalFrames * 5U / 100U);
+	const uint32_t minimumSubmitted = std::max(3U, result.expectedFrames * 85U / 100U);
 	const uint32_t allowedLockFailed = std::max(1U, result.scheduledFrames * 5U / 100U);
 	const uint32_t allowedLate = std::max(1U, result.scheduledFrames * 5U / 100U);
-	const bool feederHealthy = useCoreVideoMix || (result.submittedFrames >= minimumSubmitted && result.lockFailedFrames <= allowedLockFailed &&
-						       result.lateFrames <= allowedLate);
-	result.success = feederHealthy && result.encodedFrames >= minimumEncoded && result.skippedFrames <= allowedSkipped;
-	if (!result.success)
-		result.errorCode = "hardware_benchmark_overloaded";
+	result.feederHealthy = useMainVideoControl || useCoreVideoMix ||
+			       (result.submittedFrames >= minimumSubmitted && result.lockFailedFrames <= allowedLockFailed &&
+				result.lateFrames <= allowedLate);
+	// The streaming-mix control exists only to prove that this concrete encoder can
+	// produce packets from the known-working application video pipeline. Global
+	// main-video skipped-frame counters describe the running app, not this
+	// temporary encoder, so retain them for diagnostics but do not reject the
+	// control because of them.
+	const uint32_t classificationTotalFrames =
+		useMainVideoControl ? std::max({result.totalFrames, result.encodedFrames, result.outputFrames}) : result.totalFrames;
+	const uint32_t classificationSkippedFrames = useMainVideoControl ? 0 : result.skippedFrames;
+	const auto classification = qualityPolicy::classifyHardwareSample(result.feederHealthy, classificationTotalFrames,
+							classificationSkippedFrames,
+							result.encodedFrames, result.outputFrames, result.minimumEncodedFrames,
+								result.allowedSkippedFrames);
+	result.success = classification.success;
+	result.errorCode = classification.errorCode ? classification.errorCode : "";
 	return result;
 }
 
-static bool sameHardwareWorkload(const CurrentSettings &left, const CurrentSettings &right)
+static bool isSharedHardwareInfrastructureFailure(const HardwareAttempt &attempt)
 {
-	return left.width == right.width && left.height == right.height && left.fpsNum == right.fpsNum && left.fpsDen == right.fpsDen &&
-	       resolveEncoderId(left.encoderId) == resolveEncoderId(right.encoderId);
+	if (attempt.cancelled)
+		return false;
+	return qualityPolicy::hardwareFailureScope(attempt.errorCode, attempt.timedOut) == qualityPolicy::HardwareFailureScope::Phase;
 }
 
-static CurrentSettings lowerHardwareCandidate(CurrentSettings value, int longEdge, int shortEdge)
+static bool isEncoderCandidateFailure(const HardwareAttempt &attempt)
 {
-	const bool landscape = value.width >= value.height;
-	fitWithin(value, landscape ? longEdge : shortEdge, landscape ? shortEdge : longEdge);
-	capFps(value, 30, 1);
-	return value;
+	return !attempt.success && !attempt.cancelled &&
+	       qualityPolicy::hardwareFailureScope(attempt.errorCode, attempt.timedOut) == qualityPolicy::HardwareFailureScope::Encoder;
 }
 
-static bool isInfrastructureFailure(const HardwareAttempt &attempt)
+static CurrentSettings hardwareCandidate(const LegRequest &leg, const EncoderDescriptor &encoder, const qualityPolicy::HardwareTier &tier)
 {
-	return !attempt.success && !attempt.cancelled && attempt.errorCode != "hardware_benchmark_overloaded";
-}
-
-static HardwareAssessment assessHardware(const std::shared_ptr<Session> &session, const LegRequest &leg, std::chrono::steady_clock::time_point phaseDeadline)
-{
-	HardwareAssessment assessment;
-	assessment.attempted = true;
-	const EncoderSelection initialSelection = chooseEncoder(leg.current);
 	CurrentSettings target = baseRecommendation(leg);
+	const auto fitted = qualityPolicy::fitTier({target.width, target.height, target.fpsNum, target.fpsDen}, tier.longEdge, tier.shortEdge, tier.lowerFps);
+	target.width = fitted.width;
+	target.height = fitted.height;
+	target.fpsNum = fitted.fpsNum;
+	target.fpsDen = fitted.fpsDen;
+	target.encoderId = encoder.id;
+	target.encoderFamily = encoder.family;
+	target.encoderTitle = encoder.title;
+	target.codec = "h264";
+	target.presetKey = encoder.presetKey;
+	target.preset = encoder.preset;
+	return target;
+}
 
-	const bool landscape = target.width >= target.height;
-	bool ceilingConstrained = fitWithin(target, landscape ? kHardwareMaximumLongEdge : kHardwareMaximumShortEdge,
-					    landscape ? kHardwareMaximumShortEdge : kHardwareMaximumLongEdge);
-	ceilingConstrained = capFps(target, 60, 1) || ceilingConstrained;
-	if (target.encoderId.empty()) {
-		assessment.constrained = true;
-		assessment.reason = "hardware_no_usable_encoder";
-		assessment.value = target;
-		return assessment;
+static bool hardwareTupleChanged(const LegRequest &leg, const CurrentSettings &selected)
+{
+	CurrentSettings current = baseRecommendation(leg);
+	return current.width != selected.width || current.height != selected.height || current.fpsNum != selected.fpsNum || current.fpsDen != selected.fpsDen;
+}
+
+static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_ptr<Session> &session, const std::vector<LegRequest> &legs)
+{
+	std::vector<HardwareAssessment> assessments(legs.size());
+	for (size_t index = 0; index < legs.size(); index++) {
+		assessments[index].attempted = true;
+		assessments[index].value = baseRecommendation(legs[index]);
 	}
+	if (legs.empty())
+		return assessments;
 
-	auto unavailable = [&](const HardwareAttempt &failedAttempt) {
-		assessment.passed = false;
-		assessment.constrained = true;
-		assessment.reason = failedAttempt.timedOut || std::chrono::steady_clock::now() >= phaseDeadline ? "hardware_benchmark_timeout"
-														: "hardware_benchmark_unavailable";
-		// An infrastructure failure provides no evidence for a downgrade. Keep
-		// the capped current recommendation instead of returning an untested
-		// resolution or encoder.
-		assessment.value = target;
+	const auto hardware = availableHardwareEncoders(legs.front().current);
+	const bool x264Available = osn::EncoderUtils::isEncoderRegistered(ADVANCED_ENCODER_X264) && isH264Encoder(ADVANCED_ENCODER_X264);
+	const EncoderDescriptor x264 = describeEncoder(ADVANCED_ENCODER_X264, false);
+	const auto &tiers = qualityPolicy::hardwareTiers();
+	std::vector<EncoderDescriptor> plannedEncoders = hardware;
+	if (x264Available)
+		plannedEncoders.push_back(x264);
+	size_t plannedPrimaryAttempts = 0;
+	size_t plannedControlAttempts = 0;
+	for (const auto &encoder : plannedEncoders) {
+		std::set<std::string> workloads;
+		for (const auto &tier : tiers) {
+			std::string workloadKey;
+			for (const auto &leg : legs) {
+				const CurrentSettings candidate = hardwareCandidate(leg, encoder, tier);
+				workloadKey += std::to_string(candidate.width) + "x" + std::to_string(candidate.height) + "@" +
+					       std::to_string(candidate.fpsNum) + "/" + std::to_string(candidate.fpsDen) + ";";
+			}
+			if (workloads.insert(workloadKey).second) {
+				plannedPrimaryAttempts += legs.size();
+			}
+		}
+		if (encoder.hardware) {
+			// At most one known-streaming-mix control is useful per encoder and
+			// horizontal leg. Repeating an unavailable control at every quality
+			// tier would consume the budget needed to reach x264.
+			plannedControlAttempts +=
+				std::count_if(legs.begin(), legs.end(), [](const LegRequest &leg) { return leg.display == "horizontal"; });
+		}
+	}
+	const size_t plannedAttempts = std::max<size_t>(1, plannedPrimaryAttempts + plannedControlAttempts);
+	// A failed output may require both graceful-stop and force-stop waits, and
+	// each private mix can take one additional stop interval to leave the render
+	// thread. Budget all three so pathological cleanup cannot consume the time
+	// reserved for the x264 fallback.
+	const int phaseTimeoutMs = qualityPolicy::hardwarePhaseTimeoutMs(plannedAttempts, kHardwareWarmupMs, kHardwareSampleMs,
+							   3 * kHardwareStopTimeoutMs);
+	const auto phaseDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(phaseTimeoutMs);
+	blog(LOG_INFO,
+	     "[Auto Optimizer][Hardware] planned_attempts=%zu primary_attempts=%zu possible_main_controls=%zu timeout_ms=%d",
+	     plannedAttempts, plannedPrimaryAttempts, plannedControlAttempts, phaseTimeoutMs);
+	size_t attemptOrdinal = 0;
+	auto attemptProgress = [&]() { return 15.0 + 14.0 * (double)attemptOrdinal++ / (double)plannedAttempts; };
+
+	std::set<std::string> disabledEncoders;
+	std::set<std::string> attemptedMainControls;
+	std::map<std::string, std::set<std::string>> attemptedWorkloads;
+	std::map<std::string, std::pair<std::string, CurrentSettings>> lastAttemptedWorkload;
+	bool overloadObserved = false;
+
+	auto tryEncoder = [&](const EncoderDescriptor &encoder, const qualityPolicy::HardwareTier &tier, std::vector<CurrentSettings> &selected,
+			      bool &sharedFailure) -> bool {
+		selected.clear();
+		std::string workloadKey;
+		for (const auto &leg : legs) {
+			CurrentSettings candidate = hardwareCandidate(leg, encoder, tier);
+			workloadKey += std::to_string(candidate.width) + "x" + std::to_string(candidate.height) + "@" + std::to_string(candidate.fpsNum) + "/" +
+				       std::to_string(candidate.fpsDen) + ";";
+			selected.push_back(std::move(candidate));
+		}
+		if (!attemptedWorkloads[encoder.id].insert(workloadKey).second)
+			return false;
+
+		for (size_t legIndex = 0; legIndex < legs.size(); legIndex++) {
+			const CurrentSettings &candidate = selected[legIndex];
+			lastAttemptedWorkload[encoder.id] = {legs[legIndex].legId, candidate};
+			const double progress = attemptProgress();
+			pushEvent(session, "progress", "hardware", progress, encoder.hardware ? "hardware_testing_encoder" : "hardware_testing_x264",
+				  legs[legIndex].legId, {}, {}, {}, 0, &candidate);
+			HardwareAttempt attempt = runEncoderWorkload(session, candidate, phaseDeadline);
+			HardwareAttempt mainControl;
+			const std::string mainControlKey = encoder.id + ":" + legs[legIndex].legId;
+			const bool privatePacketFailure = attempt.errorCode == "hardware_benchmark_no_input_frames" ||
+							  attempt.errorCode == "hardware_benchmark_no_encoded_packets";
+			const bool mainControlAttempted = encoder.hardware && legs[legIndex].display == "horizontal" &&
+						  attempt.feedMode == "private-mix" && privatePacketFailure &&
+						  attemptedMainControls.insert(mainControlKey).second;
+			// A streaming-mix retry is diagnostic only. If it succeeds, the hardware
+			// encoder is healthy and the private benchmark infrastructure failed;
+			// never mislabel that outcome as overload or silently select x264.
+			double resolvedProgress = progress;
+			if (mainControlAttempted) {
+				resolvedProgress = attemptProgress();
+				pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_validating_encoder",
+					  legs[legIndex].legId, {}, {}, {}, 0, &candidate);
+				mainControl = runEncoderWorkload(session, candidate, phaseDeadline, true);
+			}
+			auto logAttempt = [&](const HardwareAttempt &value) {
+				const std::string encoderError = boundedLogValue(value.encoderLastError);
+				const std::string outputError = boundedLogValue(value.outputLastError);
+				blog(value.success ? LOG_INFO : LOG_WARNING,
+				     "[Auto Optimizer][Hardware] encoder=%s family=%s workload=%dx%d@%d/%d feed=%s success=%s cancelled=%s timed_out=%s error=%s "
+				     "source_fps=%u/%u frame_rate_divisor=%u input_frames=%u skipped_frames=%u encoded_frames=%u output_frames=%u "
+				     "output_dropped=%u expected_frames=%u minimum_encoded=%u allowed_skipped=%u feeder_healthy=%s "
+				     "scheduled=%u submitted=%u lock_failed=%u late=%u encoder_error=\"%s\" output_error=\"%s\"",
+				     encoder.id.c_str(), encoder.family.c_str(), candidate.width, candidate.height, candidate.fpsNum, candidate.fpsDen,
+				     value.feedMode.empty() ? "unavailable" : value.feedMode.c_str(), value.success ? "true" : "false",
+				     value.cancelled ? "true" : "false", value.timedOut ? "true" : "false",
+				     value.errorCode.empty() ? "none" : value.errorCode.c_str(), value.sourceFpsNum, value.sourceFpsDen,
+				     value.frameRateDivisor, value.totalFrames, value.skippedFrames,
+				     value.encodedFrames, value.outputFrames,
+				     value.outputDroppedFrames, value.expectedFrames, value.minimumEncodedFrames, value.allowedSkippedFrames,
+				     value.feederHealthy ? "true" : "false", value.scheduledFrames, value.submittedFrames, value.lockFailedFrames,
+				     value.lateFrames, encoderError.empty() ? "none" : encoderError.c_str(),
+				     outputError.empty() ? "none" : outputError.c_str());
+			};
+			logAttempt(attempt);
+			if (mainControlAttempted) {
+				logAttempt(mainControl);
+				if (mainControl.success)
+					blog(LOG_WARNING,
+					     "[Auto Optimizer][Hardware] private mix produced no packets, but the known-streaming-mix control passed for encoder=%s workload=%dx%d@%d/%d; accepting the validated hardware result",
+					     encoder.id.c_str(), candidate.width, candidate.height, candidate.fpsNum, candidate.fpsDen);
+				// Adopt only a conclusive success, cancellation, or shared
+				// infrastructure failure. If the optional control mix is unavailable
+				// or itself produces no packets, preserve the private result so lower
+				// tiers and the x264 fallback remain reachable.
+				if (qualityPolicy::shouldAdoptHardwareControl(mainControl.success, mainControl.cancelled,
+									      mainControl.errorCode, mainControl.timedOut))
+					attempt = std::move(mainControl);
+			}
+			if (attempt.errorCode == "hardware_benchmark_overloaded")
+				overloadObserved = true;
+			if (attempt.cancelled) {
+				for (auto &assessment : assessments)
+					assessment.cancelled = true;
+				return false;
+			}
+			if (isSharedHardwareInfrastructureFailure(attempt) || std::chrono::steady_clock::now() >= phaseDeadline) {
+				sharedFailure = true;
+				return false;
+			}
+			if (isEncoderCandidateFailure(attempt)) {
+				disabledEncoders.insert(encoder.id);
+				pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_encoder_rejected", legs[legIndex].legId, {}, {}, {}, 0,
+					  &candidate);
+				return false;
+			}
+			if (!attempt.success)
+				return false;
+		}
+		return true;
 	};
 
-	HardwareAttempt attempt = runEncoderWorkload(session, target, phaseDeadline);
-	if (attempt.cancelled) {
-		assessment.cancelled = true;
-		return assessment;
-	}
-	if (attempt.success) {
-		assessment.passed = true;
-		assessment.value = target;
-		assessment.constrained = initialSelection.replaced || ceilingConstrained;
-		if (initialSelection.replaced)
-			assessment.reason = "hardware_encoder_unavailable_fallback";
-		else if (ceilingConstrained)
-			assessment.reason = "hardware_benchmark_ceiling";
-		return assessment;
-	}
-	if (isInfrastructureFailure(attempt)) {
-		unavailable(attempt);
-		return assessment;
-	}
+	auto selectEncoder = [&](const std::vector<EncoderDescriptor> &encoders) -> bool {
+		for (const auto &tier : tiers) {
+			for (const auto &encoder : encoders) {
+				if (disabledEncoders.count(encoder.id))
+					continue;
+				std::vector<CurrentSettings> selected;
+				bool sharedFailure = false;
+				if (!tryEncoder(encoder, tier, selected, sharedFailure)) {
+					if (sharedFailure) {
+						for (auto &assessment : assessments) {
+							assessment.passed = false;
+							assessment.fatal = true;
+							assessment.constrained = true;
+							assessment.reason = std::chrono::steady_clock::now() >= phaseDeadline
+										    ? "hardware_benchmark_timeout"
+										    : "hardware_benchmark_unavailable";
+						}
+						return true;
+					}
+					if (std::any_of(assessments.begin(), assessments.end(), [](const HardwareAssessment &item) { return item.cancelled; }))
+						return true;
+					continue;
+				}
 
-	// A genuine overload is the only reason to test lower settings. Preserve the
-	// selected hardware encoder through the first downgrade before considering
-	// a software fallback.
-	CurrentSettings lowerSelected = lowerHardwareCandidate(target, 1280, 720);
-	if (!sameHardwareWorkload(target, lowerSelected) && std::chrono::steady_clock::now() < phaseDeadline) {
-		attempt = runEncoderWorkload(session, lowerSelected, phaseDeadline);
-		if (attempt.cancelled) {
-			assessment.cancelled = true;
-			return assessment;
+				for (size_t index = 0; index < assessments.size(); index++) {
+					assessments[index].passed = true;
+					assessments[index].value = selected[index];
+					const bool softwareFallback = !encoder.hardware &&
+								      resolveEncoderId(legs[index].current.encoderId) != ADVANCED_ENCODER_X264;
+					assessments[index].constrained = hardwareTupleChanged(legs[index], selected[index]) || softwareFallback;
+					if (hardwareTupleChanged(legs[index], selected[index]))
+						assessments[index].reason = "hardware_benchmark_resolution_fallback";
+					else if (softwareFallback)
+						assessments[index].reason = "hardware_benchmark_encoder_fallback";
+					pushEvent(session, "progress", "hardware", 30, "hardware_encoder_selected", legs[index].legId, {}, {}, {}, 0,
+						  &selected[index]);
+				}
+				return true;
+			}
 		}
-		if (attempt.success) {
-			assessment.passed = true;
-			assessment.constrained = true;
-			assessment.reason = "hardware_benchmark_resolution_fallback";
-			assessment.value = lowerSelected;
-			return assessment;
-		}
-		if (isInfrastructureFailure(attempt)) {
-			unavailable(attempt);
-			return assessment;
-		}
-	}
+		return false;
+	};
 
-	CurrentSettings softwareCandidate = lowerSelected;
-	if (osn::EncoderUtils::isEncoderRegistered(ADVANCED_ENCODER_X264) && resolveEncoderId(softwareCandidate.encoderId) != ADVANCED_ENCODER_X264) {
-		applyEncoderSelection(softwareCandidate, {ADVANCED_ENCODER_X264, true});
-		attempt = runEncoderWorkload(session, softwareCandidate, phaseDeadline);
-		if (attempt.cancelled) {
-			assessment.cancelled = true;
-			return assessment;
-		}
-		if (attempt.success) {
-			assessment.passed = true;
-			assessment.constrained = true;
-			assessment.reason = "hardware_benchmark_encoder_fallback";
-			assessment.value = softwareCandidate;
-			return assessment;
-		}
-		if (isInfrastructureFailure(attempt)) {
-			unavailable(attempt);
-			return assessment;
-		}
+	if (selectEncoder(hardware))
+		return assessments;
+	const double rejectionProgress = std::min(29.0, 15.0 + 14.0 * (double)attemptOrdinal / (double)plannedAttempts);
+	for (const auto &encoder : hardware) {
+		const auto attempted = lastAttemptedWorkload.find(encoder.id);
+		if (disabledEncoders.count(encoder.id) || attempted == lastAttemptedWorkload.end())
+			continue;
+		pushEvent(session, "progress", "hardware", rejectionProgress, "hardware_encoder_rejected", attempted->second.first, {}, {}, {}, 0,
+			  &attempted->second.second);
 	}
+	if (x264Available && selectEncoder({x264}))
+		return assessments;
 
-	CurrentSettings conservative = lowerHardwareCandidate(softwareCandidate, 640, 360);
-	if (!sameHardwareWorkload(softwareCandidate, conservative) && std::chrono::steady_clock::now() < phaseDeadline) {
-		attempt = runEncoderWorkload(session, conservative, phaseDeadline);
-		if (attempt.cancelled) {
-			assessment.cancelled = true;
-			return assessment;
-		}
-		if (attempt.success) {
-			assessment.passed = true;
-			assessment.constrained = true;
-			assessment.reason = "hardware_benchmark_resolution_fallback";
-			assessment.value = conservative;
-			return assessment;
-		}
-		if (isInfrastructureFailure(attempt)) {
-			unavailable(attempt);
-			return assessment;
-		}
+	for (auto &assessment : assessments) {
+		assessment.passed = false;
+		assessment.fatal = true;
+		assessment.constrained = true;
+		assessment.reason = qualityPolicy::hardwareFailureCode(std::chrono::steady_clock::now() >= phaseDeadline, overloadObserved);
 	}
-
-	// No candidate passed. Do not present the last failed candidate as a safe
-	// recommendation; retain capped current settings and make the low-confidence
-	// outcome explicit to Desktop.
-	assessment.passed = false;
-	assessment.constrained = true;
-	assessment.reason = std::chrono::steady_clock::now() >= phaseDeadline || attempt.timedOut ? "hardware_benchmark_timeout"
-												  : "hardware_benchmark_overloaded";
-	assessment.value = target;
-	return assessment;
+	pushEvent(session, "progress", "hardware", 30, assessments.front().reason, legs.front().legId);
+	return assessments;
 }
 
 static bool waitForProbeInterval(const std::shared_ptr<Session> &session, obs_output_t *output, std::chrono::steady_clock::time_point deadline,
@@ -2302,23 +2661,45 @@ static void runSession(const std::shared_ptr<Session> &session)
 		return;
 	}
 
-	pushEvent(session, "phase", "hardware", 15, "scratch_encoder_benchmark");
-	const auto hardwareDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kHardwarePhaseTimeoutMs);
 	std::vector<LegRequest> preparedLegs;
-	std::vector<HardwareAssessment> hardwareAssessments;
 	preparedLegs.reserve(session->legs.size());
-	hardwareAssessments.reserve(session->legs.size());
 	for (size_t index = 0; index < session->legs.size(); index++) {
 		preparedLegs.push_back(withOfflinePlatformCaps(session->legs[index]));
-		hardwareAssessments.push_back(assessHardware(session, preparedLegs.back(), hardwareDeadline));
-		const HardwareAssessment &assessment = hardwareAssessments.back();
+	}
+	std::vector<HardwareAssessment> hardwareAssessments(preparedLegs.size());
+	std::vector<LegRequest> automaticLegs;
+	std::vector<size_t> automaticLegIndices;
+	for (size_t index = 0; index < preparedLegs.size(); index++) {
+		if (providerOwnsEncoding(session->topology, preparedLegs[index])) {
+			hardwareAssessments[index].value = baseRecommendation(preparedLegs[index]);
+		} else {
+			automaticLegs.push_back(preparedLegs[index]);
+			automaticLegIndices.push_back(index);
+		}
+	}
+	if (automaticLegs.empty()) {
+		pushEvent(session, "phase", "hardware", 15, "hardware_provider_managed");
+		pushEvent(session, "progress", "hardware", 30, "hardware_provider_managed");
+	} else {
+		pushEvent(session, "phase", "hardware", 15, "hardware_discovering_encoders");
+		auto automaticAssessments = assessSessionHardware(session, automaticLegs);
+		for (size_t index = 0; index < automaticAssessments.size(); index++)
+			hardwareAssessments[automaticLegIndices[index]] = std::move(automaticAssessments[index]);
+		for (size_t index = 0; index < preparedLegs.size(); index++) {
+			if (providerOwnsEncoding(session->topology, preparedLegs[index]))
+				pushEvent(session, "progress", "hardware", 30, "hardware_provider_managed", preparedLegs[index].legId);
+		}
+	}
+	for (size_t index = 0; index < hardwareAssessments.size(); index++) {
+		const HardwareAssessment &assessment = hardwareAssessments[index];
 		if (assessment.cancelled || session->cancelRequested.load()) {
 			completeCancelled(session);
 			return;
 		}
-		const std::string code = assessment.reason.empty() ? "hardware_benchmark_passed" : assessment.reason;
-		const double progress = 15.0 + (15.0 * (double)(index + 1) / (double)session->legs.size());
-		pushEvent(session, "progress", "hardware", progress, code, preparedLegs.back().legId);
+		if (assessment.fatal) {
+			completeFailed(session, assessment.reason.empty() ? "hardware_benchmark_unavailable" : assessment.reason.c_str());
+			return;
+		}
 	}
 
 	std::vector<ProbeResult> probeResults;
@@ -2389,7 +2770,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 		recommendation.limits = leg.limits;
 		recommendation.value = estimateRecommendation(leg, hardware);
 		recommendation.reason = defaultEstimateReason(session->topology, leg);
-		if (!hardware.passed || hardware.constrained) {
+		if (hardware.attempted && (!hardware.passed || hardware.constrained)) {
 			recommendation.confidence = hardware.passed ? "medium" : "low";
 			recommendation.reason = hardware.reason;
 		}
@@ -2469,6 +2850,30 @@ static void runSession(const std::shared_ptr<Session> &session)
 			}
 		}
 
+		const double selectingProgress = 75.0 + 19.0 * (double)index / (double)std::max<size_t>(1, preparedLegs.size());
+		const double selectedProgress = 75.0 + 19.0 * (double)(index + 1) / (double)std::max<size_t>(1, preparedLegs.size());
+		if (!providerOwnsEncoding(session->topology, leg) && hardware.passed) {
+			pushEvent(session, "progress", "recommendation", selectingProgress, "recommendation_selecting_quality", leg.legId,
+				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, 0, (uint32_t)std::max(0, recommendation.value.bitrateKbps));
+			const auto selected = qualityPolicy::select({recommendation.value.width, recommendation.value.height, recommendation.value.fpsNum,
+								     recommendation.value.fpsDen},
+								    recommendation.value.bitrateKbps, recommendation.value.encoderFamily);
+			recommendation.value.width = selected.video.width;
+			recommendation.value.height = selected.video.height;
+			recommendation.value.fpsNum = selected.video.fpsNum;
+			recommendation.value.fpsDen = selected.video.fpsDen;
+			recommendation.value.bitrateKbps = selected.bitrateKbps;
+			if (selected.insufficientBandwidth) {
+				recommendation.confidence = "low";
+				recommendation.reason = "insufficient_bandwidth";
+			}
+			pushEvent(session, "progress", "recommendation", selectedProgress, "recommendation_quality_selected", leg.legId,
+				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, (uint32_t)std::max(0, recommendation.value.bitrateKbps));
+		} else {
+			pushEvent(session, "progress", "recommendation", selectedProgress, "recommendation_provider_managed", leg.legId,
+				  recommendation.measurementMode, {}, {}, 0, &recommendation.value);
+		}
+
 		recommendations.push_back(std::move(recommendation));
 	}
 
@@ -2509,6 +2914,11 @@ static bool requestCancellation(const std::shared_ptr<Session> &session)
 }
 
 } // namespace
+
+void RegisterOutputTypes()
+{
+	registerHardwareBenchmarkOutput();
+}
 
 void Register(ipc::server &srv)
 {
@@ -2670,6 +3080,15 @@ void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, st
 	rval.push_back(ipc::value(event.probeId));
 	rval.push_back(ipc::value(event.provider));
 	rval.push_back(ipc::value(event.targetBitrateKbps));
+	rval.push_back(ipc::value(event.encoderId));
+	rval.push_back(ipc::value(event.encoderFamily));
+	rval.push_back(ipc::value(event.encoderTitle));
+	rval.push_back(ipc::value(event.width));
+	rval.push_back(ipc::value(event.height));
+	rval.push_back(ipc::value(event.fpsNum));
+	rval.push_back(ipc::value(event.fpsDen));
+	rval.push_back(ipc::value(event.selectedBitrateKbps));
+	rval.push_back(ipc::value(event.availableBitrateKbps));
 	session->events.pop();
 }
 
@@ -2739,6 +3158,16 @@ void CloseSession(void *, const int64_t, const std::vector<ipc::value> &args, st
 			activeSession.reset();
 	}
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+}
+
+bool CancelActiveSession()
+{
+	std::shared_ptr<Session> session;
+	{
+		std::lock_guard<std::mutex> lock(sessionsMutex);
+		session = activeSession;
+	}
+	return !session || requestCancellation(session);
 }
 
 void Shutdown()

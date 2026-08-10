@@ -16,7 +16,7 @@ const testName = 'osn-auto-optimizer';
 const mockPort = 11937;
 
 describe(testName, function() {
-    this.timeout(80000);
+    this.timeout(340000);
 
     let obs: OBSHandler;
 
@@ -70,6 +70,41 @@ describe(testName, function() {
         };
     }
 
+    async function startSessionAtHardwareAttempt(): Promise<string> {
+        let sessionId = '';
+        let timeout: ReturnType<typeof setTimeout>;
+        const hardwareAttemptStarted = new Promise<void>((resolve, reject) => {
+            timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer scratch workload')), 15000);
+            const onEvent = (event: IAutoConfigEvent) => {
+                if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264') {
+                    clearTimeout(timeout);
+                    resolve();
+                } else if (event.type === 'complete' || event.type === 'cancelled') {
+                    clearTimeout(timeout);
+                    reject(new Error(`Auto Optimizer stopped before starting a scratch workload: ${event.code}`));
+                }
+            };
+
+            sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+                schemaVersion: 1,
+                topology: 'custom-rtmp',
+                legs: [leg()],
+            } as IAutoConfigRequest), onEvent);
+            osn.NodeObs.StartAutoConfigSession(sessionId);
+        });
+
+        try {
+            await hardwareAttemptStarted;
+            return sessionId;
+        } catch (error) {
+            if (sessionId) {
+                try { osn.NodeObs.CancelAutoConfigSession(sessionId); } catch (_) { /* best effort */ }
+                try { osn.NodeObs.CloseAutoConfigSession(sessionId); } catch (_) { /* best effort */ }
+            }
+            throw error;
+        }
+    }
+
     async function run(request: IAutoConfigRequest): Promise<{
         sessionId: string;
         events: IAutoConfigEvent[];
@@ -85,7 +120,7 @@ describe(testName, function() {
                     try { osn.NodeObs.CloseAutoConfigSession(sessionId); } catch (_) { /* best effort */ }
                 }
                 reject(new Error('Auto Optimizer session timed out'));
-            }, 60000);
+            }, 330000);
 
             const onEvent = (event: IAutoConfigEvent) => {
                 events.push(event);
@@ -155,6 +190,47 @@ describe(testName, function() {
             expect(JSON.stringify(response.result)).not.to.contain(secret);
             expect(JSON.stringify(response.events)).not.to.contain(secret);
             expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
+            expect(response.events.every((event, index) => index === 0 || event.progress >= response.events[index - 1].progress)).to.equal(true);
+            const hardwareAttempt = response.events.find(event =>
+                event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264');
+            expect(hardwareAttempt).not.to.equal(undefined);
+            if (!hardwareAttempt) throw new Error('Expected a hardware attempt event');
+            expect(hardwareAttempt.encoderId).to.be.a('string').and.not.equal('');
+            expect(hardwareAttempt.encoderFamily).to.be.a('string').and.not.equal('');
+            expect(hardwareAttempt.encoderTitle).to.be.a('string').and.not.equal('');
+            expect(hardwareAttempt.width).to.be.greaterThan(0);
+            expect(hardwareAttempt.height).to.be.greaterThan(0);
+            expect(hardwareAttempt.fpsNum).to.be.greaterThan(0);
+            expect(hardwareAttempt.fpsDen).to.be.greaterThan(0);
+            const qualityInput = response.events.find(event => event.code === 'recommendation_selecting_quality');
+            if (!qualityInput) throw new Error('Expected a quality-selection input event');
+            expect(qualityInput.availableBitrateKbps).to.equal(2500);
+            const qualityResult = response.events.find(event => event.code === 'recommendation_quality_selected');
+            if (!qualityResult) throw new Error('Expected a quality-selection result event');
+            expect(qualityResult.selectedBitrateKbps).to.equal(2500);
+            expect(response.result.legs[0].recommendation.encoderFamily).to.be.a('string').and.not.equal('');
+            expect(response.result.legs[0].recommendation.encoderTitle).to.be.a('string').and.not.equal('');
+            const testedPresets: Record<string, string> = {
+                obs_nvenc_h264_tex: 'p5',
+                obs_qsv11_v2: 'TU4',
+                h264_texture_amf: 'quality',
+                'com.apple.videotoolbox.videoencoder.h264.gva': 'high',
+                'com.apple.videotoolbox.videoencoder.ave.avc': 'high',
+                obs_x264: 'veryfast',
+            };
+            const recommendation = response.result.legs[0].recommendation;
+            const locallyExpectedEncoder = process.env.AUTOCONFIG_EXPECT_ENCODER;
+            if (locallyExpectedEncoder) expect(recommendation.encoderId).to.equal(locallyExpectedEncoder);
+            expect(recommendation.preset).to.equal(testedPresets[recommendation.encoderId]);
+            const expectedTitles: Record<string, string> = {
+                obs_nvenc_h264_tex: 'NVIDIA NVENC H.264 (new)',
+                obs_qsv11_v2: 'QuickSync H.264',
+                h264_texture_amf: 'AMD HW H.264',
+                'com.apple.videotoolbox.videoencoder.h264.gva': 'Apple VT H264 Hardware Encoder',
+                'com.apple.videotoolbox.videoencoder.ave.avc': 'Apple VT H264 Hardware Encoder',
+                obs_x264: 'Software (x264)',
+            };
+            expect(recommendation.encoderTitle).to.equal(expectedTitles[recommendation.encoderId]);
         } finally {
             await mock.close();
         }
@@ -283,6 +359,7 @@ describe(testName, function() {
         expect(response.result.legs.every(resultLeg => resultLeg.measurement.reason === 'dual_output')).to.equal(true);
         expect(response.events.filter(event => event.code === 'dual_output_multiple_active_legs')).to.have.length(2);
         expect(response.events.some(event => event.code === 'twitch_probe_started' || event.code === 'youtube_probe_started')).to.equal(false);
+        expect(new Set(response.result.legs.map(resultLeg => resultLeg.recommendation.encoderId)).size).to.equal(1);
         expect(JSON.stringify(response.result)).not.to.contain(twitchSecret);
         expect(JSON.stringify(response.result)).not.to.contain(youtubeSecret);
         expect(JSON.stringify(response.events)).not.to.contain(twitchSecret);
@@ -333,7 +410,33 @@ describe(testName, function() {
 
         expect(response.result.legs[0].recommendation.bitrateKbps).to.equal(1800);
         expect(response.result.legs[0].recommendation.encoderId).not.to.equal('definitely-not-a-real-encoder');
+        expect(response.result.legs[0].recommendation.codec).to.equal('h264');
+        expect(['obs_nvenc_h264_tex', 'qsv', 'amd', 'apple', 'x264']).to.include(response.result.legs[0].recommendation.encoderFamily);
         expect(response.result.legs[0].measurement.confidence).to.equal('medium');
+    });
+
+    it('does not test or replace provider-owned Twitch both-display encoding', async function() {
+        const response = await run({
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({
+                display: 'both',
+                destinations: [{ platform: 'twitch' }],
+                current: {
+                    ...leg().current,
+                    encoderId: 'obs_nvenc_av1_tex',
+                    codec: 'av1',
+                },
+                estimateReason: 'enhanced_broadcasting',
+            })],
+        });
+
+        expect(response.events.some(event => event.code === 'hardware_provider_managed')).to.equal(true);
+        expect(response.events.some(event =>
+            event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264')).to.equal(false);
+        expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
+        expect(response.result.legs[0].recommendation.encoderId).to.equal('obs_nvenc_av1_tex');
+        expect(response.result.legs[0].recommendation.codec).to.equal('av1');
     });
 
     it('cancels a prepared session and makes cleanup observable before returning', async function() {
@@ -371,12 +474,76 @@ describe(testName, function() {
         osn.NodeObs.CloseAutoConfigSession(sessionId);
     });
 
+    it('cancels an active session before the legacy service resets its video context', async function() {
+        const sessionId = await startSessionAtHardwareAttempt();
+
+        try {
+            expect(() => osn.NodeObs.OBS_service_resetVideoContext()).not.to.throw();
+
+            const result = JSON.parse(osn.NodeObs.GetAutoConfigResult(sessionId)) as IAutoConfigResult;
+            expect(result.status).to.equal('cancelled');
+            expect(result.error.code).to.equal('cancelled');
+        } finally {
+            try { osn.NodeObs.CancelAutoConfigSession(sessionId); } catch (_) { /* already cancelled */ }
+            try { osn.NodeObs.CloseAutoConfigSession(sessionId); } catch (_) { /* already closed */ }
+        }
+    });
+
+    it('cancels an active session before Advanced settings reset video', async function() {
+        const advancedSettings = obs.getSettingsContainer('Advanced');
+        const sessionId = await startSessionAtHardwareAttempt();
+
+        try {
+            expect(() => obs.setSettingsContainer('Advanced', advancedSettings)).not.to.throw();
+
+            const result = JSON.parse(osn.NodeObs.GetAutoConfigResult(sessionId)) as IAutoConfigResult;
+            expect(result.status).to.equal('cancelled');
+            expect(result.error.code).to.equal('cancelled');
+        } finally {
+            try { osn.NodeObs.CancelAutoConfigSession(sessionId); } catch (_) { /* already cancelled */ }
+            try { osn.NodeObs.CloseAutoConfigSession(sessionId); } catch (_) { /* already closed */ }
+        }
+    });
+
     it('rejects malformed versioned requests before creating a session', function() {
         expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
             schemaVersion: 999,
             topology: 'direct-single',
             legs: [leg()],
         }), () => undefined)).to.throw('unsupported_autoconfig_schema');
+    });
+
+    it('rejects more upload legs than Desktop can create', function() {
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'dual-output',
+            legs: [
+                leg({ legId: 'horizontal', display: 'horizontal' }),
+                leg({ legId: 'vertical', display: 'vertical' }),
+                leg({ legId: 'unexpected-third', display: 'horizontal' }),
+            ],
+        } as IAutoConfigRequest), () => undefined)).to.throw('invalid_autoconfig_legs');
+    });
+
+    it('cancels an active session before removing its video context', async function() {
+        const sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'custom-rtmp',
+            legs: [leg()],
+        } as IAutoConfigRequest), () => undefined);
+
+        osn.NodeObs.StartAutoConfigSession(sessionId);
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const startedAt = Date.now();
+        obs.destroyDefaultVideoContext();
+        expect(Date.now() - startedAt).to.be.lessThan(15000);
+
+        const result = JSON.parse(osn.NodeObs.GetAutoConfigResult(sessionId)) as IAutoConfigResult;
+        expect(result.status).to.equal('cancelled');
+        expect(result.error.code).to.equal('cancelled');
+        osn.NodeObs.CloseAutoConfigSession(sessionId);
+        obs.createDefaultVideoContext();
     });
 
     it('disconnects cleanly while a session worker is running', async function() {

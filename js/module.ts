@@ -2088,6 +2088,20 @@ export interface IAutoConfigEvent {
     provider?: 'twitch' | 'youtube';
     /** Applied video bitrate for the active probe substep; audio is additional. */
     targetBitrateKbps?: number;
+    /** Concrete encoder currently being tested or selected. */
+    encoderId?: string;
+    /** Public family key matching getAvailableEncoders(). */
+    encoderFamily?: string;
+    /** User-facing encoder title from the native encoder catalog. */
+    encoderTitle?: string;
+    width?: number;
+    height?: number;
+    fpsNum?: number;
+    fpsDen?: number;
+    /** Final video bitrate selected with the quality tuple. */
+    selectedBitrateKbps?: number;
+    /** Effective safe video bandwidth used to select the quality tuple. */
+    availableBitrateKbps?: number;
 }
 
 export interface IAutoConfigProbeMeasurement {
@@ -2116,6 +2130,8 @@ export interface IAutoConfigRecommendation {
     fpsDen: number;
     bitrateKbps: number;
     encoderId: string;
+    encoderFamily: string;
+    encoderTitle: string;
     codec: string;
     preset?: string;
 }
@@ -2133,8 +2149,17 @@ export interface IAutoConfigLegResult {
     limits?: IAutoConfigLimits;
 }
 
+export type AutoConfigFatalErrorCode =
+    | 'cancelled'
+    | 'hardware_no_usable_encoder'
+    | 'hardware_benchmark_overloaded'
+    | 'hardware_benchmark_timeout'
+    | 'hardware_benchmark_unavailable'
+    | 'autoconfig_worker_failed'
+    | 'autoconfig_worker_launch_failed';
+
 export interface IAutoConfigError {
-    code: string;
+    code: AutoConfigFatalErrorCode;
 }
 
 export interface IAutoConfigResult {
