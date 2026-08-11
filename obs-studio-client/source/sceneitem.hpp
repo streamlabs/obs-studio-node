@@ -65,6 +65,8 @@ public:
 	void SetBoundsType(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetCrop(const Napi::CallbackInfo &info);
 	void SetCrop(const Napi::CallbackInfo &info, const Napi::Value &value);
+	Napi::Value GetCropToBounds(const Napi::CallbackInfo &info);
+	void SetCropToBounds(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetTransformInfo(const Napi::CallbackInfo &info);
 	void SetTransformInfo(const Napi::CallbackInfo &info, const Napi::Value &value);
 	Napi::Value GetId(const Napi::CallbackInfo &info);

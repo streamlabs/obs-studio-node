@@ -39,6 +39,8 @@ Napi::Object osn::Scene::Init(Napi::Env env, Napi::Object exports)
 						  StaticMethod("create", &osn::Scene::Create),
 						  StaticMethod("createPrivate", &osn::Scene::CreatePrivate),
 						  StaticMethod("fromName", &osn::Scene::FromName),
+						  StaticAccessor("coordinateMode", &osn::Scene::GetCoordinateMode, &osn::Scene::SetCoordinateMode),
+						  StaticMethod("invalidateItemTransformCache", &osn::Scene::InvalidateItemTransformCache),
 
 						  InstanceAccessor("source", &osn::Scene::AsSource, nullptr),
 
@@ -184,6 +186,40 @@ Napi::Value osn::Scene::FromName(const Napi::CallbackInfo &info)
 	return instance;
 }
 
+Napi::Value osn::Scene::GetCoordinateMode(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper("Scene", "GetCoordinateMode", {});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
+}
+
+void osn::Scene::SetCoordinateMode(const Napi::CallbackInfo &info, const Napi::Value &value)
+{
+	if (!value.IsNumber()) {
+		Napi::TypeError::New(info.Env(), "Scene coordinate mode must be a number").ThrowAsJavaScriptException();
+		return;
+	}
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	auto response = conn->call_synchronous_helper("Scene", "SetCoordinateMode", {ipc::value(value.ToNumber().Uint32Value())});
+	ValidateResponse(info, response);
+}
+
+Napi::Value osn::Scene::InvalidateItemTransformCache(const Napi::CallbackInfo &info)
+{
+	CacheManager<SceneItemData *>::getInstance().InvalidateSceneItemTransforms();
+	return info.Env().Undefined();
+}
+
 Napi::Value osn::Scene::Release(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -269,6 +305,10 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(crop.Get("top").ToNumber().Int64Value()));
 		params.push_back(ipc::value(crop.Get("right").ToNumber().Int64Value()));
 		params.push_back(ipc::value(crop.Get("bottom").ToNumber().Int64Value()));
+		const Napi::Value referenceWidth = crop.Get("referenceWidth");
+		const Napi::Value referenceHeight = crop.Get("referenceHeight");
+		params.push_back(ipc::value(referenceWidth.IsNumber() ? referenceWidth.ToNumber().Uint32Value() : 0));
+		params.push_back(ipc::value(referenceHeight.IsNumber() ? referenceHeight.ToNumber().Uint32Value() : 0));
 
 		params.push_back(ipc::value(transform.Get("streamVisible").ToBoolean().Value()));
 		params.push_back(ipc::value(transform.Get("recordingVisible").ToBoolean().Value()));
@@ -277,11 +317,13 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(transform.Get("blendingMode").ToNumber().Uint32Value()));
 		params.push_back(ipc::value(transform.Get("blendingMethod").ToNumber().Uint32Value()));
 	}
-	if (info.Length() >= 3) {
+	if (info.Length() >= 3 && info[2].IsObject()) {
 		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[2].ToObject());
 		if (video)
 			params.push_back(ipc::value(video->canvasId));
 	}
+	if (info.Length() >= 2 && params.size() == 19)
+		params.push_back(ipc::value(uint64_t{0}));
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
@@ -325,7 +367,9 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		sid->cropTop = crop.Get("top").ToNumber().Int32Value();
 		sid->cropRight = crop.Get("right").ToNumber().Int32Value();
 		sid->cropBottom = crop.Get("bottom").ToNumber().Int32Value();
-		sid->cropChanged = false;
+		// The server may normalize the reference for non-scene sources or
+		// automatically anchor a legacy four-field crop, so fetch it once.
+		sid->cropChanged = true;
 
 		// Rotation
 		sid->rotation = transform.Get("rotation").ToNumber().FloatValue();

@@ -156,6 +156,10 @@ export declare const enum ESceneDupType {
     PrivateRefs = 2,
     PrivateCopy = 3
 }
+export declare const enum ESceneCoordinateMode {
+    Absolute = 0,
+    Relative = 1
+}
 export declare const enum ESourceType {
     Input = 0,
     Filter = 1,
@@ -336,12 +340,15 @@ export interface ITransformInfo {
     readonly boundsType: EBoundsType;
     readonly boundsAlignment: number;
     readonly bounds: IVec2;
+    readonly cropToBounds: boolean;
 }
 export interface ICropInfo {
     readonly left: number;
     readonly right: number;
     readonly top: number;
     readonly bottom: number;
+    readonly referenceWidth?: number;
+    readonly referenceHeight?: number;
 }
 export interface IIPC {
     setServerPath(binaryPath: string, workingDirectoryPath?: string): void;
@@ -500,6 +507,7 @@ export interface ISceneItemInfo {
     recordingVisible: boolean;
     scaleFilter: EScaleType;
     blendingMode: EBlendingMode;
+    blendingMethod: EBlendingMethod;
 }
 export interface IInput extends ISource {
     volume: number;
@@ -534,13 +542,15 @@ export interface IInput extends ISource {
     load(): void;
 }
 export interface ISceneFactory {
+    coordinateMode: ESceneCoordinateMode;
+    invalidateItemTransformCache(): void;
     create(name: string): IScene;
     createPrivate(name: string): IScene;
     fromName(name: string): IScene;
 }
 export interface IScene extends ISource {
     duplicate(name: string, type: ESceneDupType): IScene;
-    add(source: IInput, transform?: ISceneItemInfo): ISceneItem;
+    add(source: IInput, transform?: ISceneItemInfo, video?: IVideo): ISceneItem;
     readonly source: IInput;
     moveItem(oldIndex: number, newIndex: number): void;
     orderItems(order: number[]): void;
@@ -574,6 +584,7 @@ export interface ISceneItem {
     video: IVideo;
     transformInfo: ITransformInfo;
     crop: ICropInfo;
+    cropToBounds: boolean;
     moveUp(): void;
     moveDown(): void;
     moveTop(): void;

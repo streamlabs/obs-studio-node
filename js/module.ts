@@ -220,6 +220,14 @@ export const enum ESceneDupType {
 }
 
 /**
+ * Coordinate representation used by scenes created after the mode is set.
+ */
+export const enum ESceneCoordinateMode {
+    Absolute,
+    Relative,
+}
+
+/**
  * Describes the type of source
  */
 export const enum ESourceType {
@@ -439,6 +447,7 @@ export interface ITransformInfo {
     readonly boundsType: EBoundsType;
     readonly boundsAlignment: number;
     readonly bounds: IVec2;
+    readonly cropToBounds: boolean;
 }
 
 /**
@@ -449,6 +458,9 @@ export interface ICropInfo {
     readonly right: number;
     readonly top: number;
     readonly bottom: number;
+    /** Canvas dimensions against which a nested-scene crop was authored. */
+    readonly referenceWidth?: number;
+    readonly referenceHeight?: number;
 }
 
 /**
@@ -853,7 +865,8 @@ export interface ISceneItemInfo {
     streamVisible: boolean,
     recordingVisible: boolean,
     scaleFilter: EScaleType,
-    blendingMode: EBlendingMode
+    blendingMode: EBlendingMode,
+    blendingMethod: EBlendingMethod
 }
 
 /**
@@ -983,6 +996,17 @@ export interface IInput extends ISource {
 
 export interface ISceneFactory {
     /**
+     * Coordinate mode applied to newly created and subsequently loaded scenes.
+     * Changing the mode while any scene graph is loaded is rejected.
+     */
+    coordinateMode: ESceneCoordinateMode;
+
+    /**
+     * Invalidates cached absolute scene-item transforms after a canvas reset.
+     */
+    invalidateItemTransformCache(): void;
+
+    /**
      * Create a new scene instance
      * @param name - Name of the scene to create
      * @returns - Returns the instance or null on failure
@@ -1020,7 +1044,7 @@ export interface IScene extends ISource {
      * @param source - Input source to add to the scene
      * @returns - Return the sceneitem or null on failure
      */
-    add(source: IInput, transform?: ISceneItemInfo): ISceneItem;
+    add(source: IInput, transform?: ISceneItemInfo, video?: IVideo): ISceneItem;
 
     /**
      * A scene may be used as an input source (even though its type
@@ -1150,6 +1174,9 @@ export interface ISceneItem {
 
     /** Current crop applied to the item */
     crop: ICropInfo;
+
+    /** Whether bounds crop the source when using a supported bounds type. */
+    cropToBounds: boolean;
 
     /** Move the item towards the top-most item one spot */
     moveUp(): void;

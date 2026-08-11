@@ -76,6 +76,8 @@ struct SceneItemData {
 	int32_t cropTop = 0;
 	int32_t cropRight = 0;
 	int32_t cropBottom = 0;
+	uint32_t cropReferenceWidth = 0;
+	uint32_t cropReferenceHeight = 0;
 	bool cropChanged = true;
 
 	float rotation = 0;
@@ -201,6 +203,19 @@ public:
 					itemsData.erase(id);
 				}
 			}
+		}
+	}
+
+	void InvalidateSceneItemTransforms()
+	{
+		for (auto &entry : itemsData) {
+			SceneItemData *item = entry.second;
+			if (!item)
+				continue;
+
+			item->posChanged = true;
+			item->scaleChanged = true;
+			item->cropChanged = true;
 		}
 	}
 };
