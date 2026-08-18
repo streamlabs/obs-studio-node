@@ -61,11 +61,10 @@ void osn::SceneItem::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetBoundsType", std::vector<ipc::type>{ipc::type::UInt64}, GetBoundsType));
 	cls->register_function(std::make_shared<ipc::function>("SetBoundsType", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32}, SetBoundsType));
 	cls->register_function(std::make_shared<ipc::function>("GetCrop", std::vector<ipc::type>{ipc::type::UInt64}, GetCrop));
-	cls->register_function(std::make_shared<ipc::function>(
-		"SetCrop",
-		std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32, ipc::type::Int32, ipc::type::Int32, ipc::type::Int32, ipc::type::UInt32,
-				       ipc::type::UInt32},
-		SetCrop));
+	cls->register_function(std::make_shared<ipc::function>("SetCrop",
+							       std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32, ipc::type::Int32, ipc::type::Int32,
+										      ipc::type::Int32, ipc::type::UInt32, ipc::type::UInt32},
+							       SetCrop));
 	cls->register_function(std::make_shared<ipc::function>("GetCropToBounds", std::vector<ipc::type>{ipc::type::UInt64}, GetCropToBounds));
 	cls->register_function(
 		std::make_shared<ipc::function>("SetCropToBounds", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32}, SetCropToBounds));

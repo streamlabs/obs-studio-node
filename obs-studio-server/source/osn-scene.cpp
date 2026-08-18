@@ -44,11 +44,10 @@ void osn::Scene::Register(ipc::server &srv)
 		std::make_shared<ipc::function>("AddSource", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::UInt64}, AddSource));
 
 	cls->register_function(std::make_shared<ipc::function>(
-		"AddSourceWithTransform",
-		std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::Double, ipc::type::Double, ipc::type::Int32, ipc::type::Double,
-				       ipc::type::Double, ipc::type::Double, ipc::type::Int64, ipc::type::Int64, ipc::type::Int64, ipc::type::Int64,
-				       ipc::type::UInt32, ipc::type::UInt32, ipc::type::Int32, ipc::type::Int32, ipc::type::UInt32, ipc::type::UInt32,
-				       ipc::type::UInt32, ipc::type::UInt64},
+		"AddSourceWithTransform", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::Double, ipc::type::Double, ipc::type::Int32,
+								 ipc::type::Double, ipc::type::Double, ipc::type::Double, ipc::type::Int64,  ipc::type::Int64,
+								 ipc::type::Int64,  ipc::type::Int64,  ipc::type::UInt32, ipc::type::UInt32, ipc::type::Int32,
+								 ipc::type::Int32,  ipc::type::UInt32, ipc::type::UInt32, ipc::type::UInt32, ipc::type::UInt64},
 		AddSource));
 
 	cls->register_function(std::make_shared<ipc::function>("FindItemByName", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, FindItemByName));
@@ -158,7 +157,7 @@ void osn::Scene::SetCoordinateMode(void *data, const int64_t id, const std::vect
 
 	obs_data_t *privateData = obs_get_private_data();
 	const SceneCoordinateMode currentMode = obs_data_get_bool(privateData, "AbsoluteCoordinates") ? SceneCoordinateMode::Absolute
-													    : SceneCoordinateMode::Relative;
+												      : SceneCoordinateMode::Relative;
 	const SceneCoordinateMode requestedMode = static_cast<SceneCoordinateMode>(requestedValue);
 	if (requestedMode == currentMode) {
 		obs_data_release(privateData);
