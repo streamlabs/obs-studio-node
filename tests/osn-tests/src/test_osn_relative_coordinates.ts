@@ -131,6 +131,57 @@ describe(testName, () => {
         }
     });
 
+    it('keeps fixed-size scene transforms independent of the assigned canvas size', () => {
+        const scene = osn.SceneFactory.create('relative-coordinate-fixed-size-scene');
+        const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-fixed-size-source');
+        const secondCanvas = osn.VideoFactory.create();
+        const originalVideoInfo: osn.IVideoInfo = {
+            ...obs.defaultVideoContext.video,
+            baseWidth: 1920,
+            baseHeight: 1080,
+            outputWidth: 1920,
+            outputHeight: 1080,
+        };
+        const resizedVideoInfo: osn.IVideoInfo = {
+            ...originalVideoInfo,
+            baseWidth: 1280,
+            baseHeight: 720,
+            outputWidth: 1280,
+            outputHeight: 720,
+        };
+        const authoredPosition = { x: 320, y: 180 };
+        const authoredScale = { x: 1.25, y: 0.75 };
+        let item: osn.ISceneItem;
+
+        try {
+            scene.update({ custom_size: true, cx: 640, cy: 360 });
+            scene.load();
+            expect(scene.source.width).to.equal(640);
+            expect(scene.source.height).to.equal(360);
+
+            secondCanvas.video = originalVideoInfo;
+            item = scene.add(source);
+            item.video = secondCanvas;
+            item.position = authoredPosition;
+            item.scale = authoredScale;
+
+            secondCanvas.video = resizedVideoInfo;
+            osn.SceneFactory.invalidateItemTransformCache();
+
+            expect(scene.source.width).to.equal(640);
+            expect(scene.source.height).to.equal(360);
+            expect(item.position.x).to.be.closeTo(authoredPosition.x, 0.01);
+            expect(item.position.y).to.be.closeTo(authoredPosition.y, 0.01);
+            expect(item.scale.x).to.be.closeTo(authoredScale.x, 0.01);
+            expect(item.scale.y).to.be.closeTo(authoredScale.y, 0.01);
+        } finally {
+            if (item) item.remove();
+            source.release();
+            scene.release();
+            secondCanvas.destroy();
+        }
+    });
+
     it('refreshes cached absolute transforms after a relative canvas reset', () => {
         const originalVideoInfo = obs.defaultVideoContext.video;
         const resizedBaseWidth = Math.round(originalVideoInfo.baseWidth * 1.5);
@@ -345,10 +396,11 @@ describe(testName, () => {
             blendingMode: osn.EBlendingMode.Normal,
             blendingMethod: osn.EBlendingMethod.Default,
         };
+        let item: osn.ISceneItem;
 
         try {
             verticalCanvas.video = verticalVideoInfo;
-            const item = outerScene.add(nestedSource, transform, verticalCanvas);
+            item = outerScene.add(nestedSource, transform, verticalCanvas);
 
             expect(item.video.video.baseWidth).to.equal(verticalVideoInfo.baseWidth);
             expect(item.video.video.baseHeight).to.equal(verticalVideoInfo.baseHeight);
@@ -368,6 +420,10 @@ describe(testName, () => {
             expect(reloadedItem.crop_ref_width).to.equal(verticalVideoInfo.baseWidth);
             expect(reloadedItem.crop_ref_height).to.equal(verticalVideoInfo.baseHeight);
         } finally {
+            if (item) {
+                item.video = obs.defaultVideoContext;
+                item.remove();
+            }
             nestedSource.release();
             outerScene.release();
             nestedScene.release();
