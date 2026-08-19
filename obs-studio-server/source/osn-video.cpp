@@ -415,8 +415,7 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while scene items are assigned to it.");
 	} else if (ret == OBS_VIDEO_REINITIALIZATION_FAILED) {
 		osn::Video::Manager::GetInstance().free(args[0].value_union.ui64);
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference,
-				    "Video context was removed, but the remaining video contexts failed to initialize.");
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video context was removed, but the remaining video contexts failed to initialize.");
 	} else if (ret == OBS_VIDEO_CURRENTLY_ACTIVE) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while video is active.");
 	} else if (ret != OBS_VIDEO_SUCCESS) {
