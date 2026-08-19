@@ -168,8 +168,7 @@ void OBS_API::Register(ipc::server &srv)
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("API");
 
 	cls->register_function(std::make_shared<ipc::function>(
-		"OBS_API_initAPI",
-		std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String, ipc::type::String}, OBS_API_initAPI));
+		"OBS_API_initAPI", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String, ipc::type::String}, OBS_API_initAPI));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_destroyOBS_API", std::vector<ipc::type>{}, OBS_API_destroyOBS_API));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_getPerformanceStatistics", std::vector<ipc::type>{}, OBS_API_getPerformanceStatistics));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_getModuleLoadFailures", std::vector<ipc::type>{}, OBS_API_getModuleLoadFailures));
