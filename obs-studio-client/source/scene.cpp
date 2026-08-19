@@ -21,6 +21,7 @@
 #include <mutex>
 #include <string>
 #include "controller.hpp"
+#include "osn-common.hpp"
 #include "osn-error.hpp"
 #include "input.hpp"
 #include "video.hpp"
@@ -256,13 +257,20 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 {
 	std::vector<ipc::value> params;
 	osn::Input *input = Napi::ObjectWrap<osn::Input>::Unwrap(info[0].ToObject());
+	const bool hasTransform = info.Length() >= 2 && !info[1].IsUndefined();
+	const bool hasVideo = info.Length() >= 3 && !info[2].IsUndefined();
+
+	if (hasVideo && !hasTransform) {
+		Napi::TypeError::New(info.Env(), "A transform is required when a video canvas is provided.").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
 
 	params.push_back(ipc::value(this->sourceId));
 	params.push_back(ipc::value(input->sourceId));
 	Napi::Object transform = Napi::Object::New(info.Env());
 	Napi::Object crop = Napi::Object::New(info.Env());
 
-	if (info.Length() >= 2) {
+	if (hasTransform) {
 		transform = info[1].ToObject();
 		params.push_back(ipc::value(transform.Get("scaleX").ToNumber().DoubleValue()));
 		params.push_back(ipc::value(transform.Get("scaleY").ToNumber().DoubleValue()));
@@ -288,18 +296,27 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(transform.Get("blendingMode").ToNumber().Uint32Value()));
 		params.push_back(ipc::value(transform.Get("blendingMethod").ToNumber().Uint32Value()));
 	}
-	if (info.Length() >= 3 && info[2].IsObject()) {
+	if (hasVideo) {
+		if (!info[2].IsObject() || !info[2].ToObject().InstanceOf(osn::Video::constructor.Value())) {
+			Napi::TypeError::New(info.Env(), "Video canvas must be a Video instance.").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
 		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[2].ToObject());
-		if (video)
-			params.push_back(ipc::value(video->canvasId));
+		if (!video || video->canvasId == osn::common::INVALID_ID) {
+			Napi::Error::New(info.Env(), "Canvas reference is not valid.").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
+		params.push_back(ipc::value(video->canvasId));
 	}
-	if (info.Length() >= 2 && params.size() == 19)
-		params.push_back(ipc::value(uint64_t{0}));
+	if (hasTransform && !hasVideo)
+		params.push_back(ipc::value(osn::common::INVALID_ID));
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	auto response = conn->call_synchronous_helper("Scene", info.Length() >= 2 ? "AddSourceWithTransform" : "AddSource", params);
+	auto response = conn->call_synchronous_helper("Scene", hasTransform ? "AddSourceWithTransform" : "AddSource", params);
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -318,7 +335,7 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 	sid->obs_itemId = obs_id;
 	sid->scene_id = this->sourceId;
 
-	if (info.Length() >= 2) {
+	if (hasTransform) {
 		// Position
 		sid->posX = transform.Get("x").ToNumber().FloatValue();
 		sid->posY = transform.Get("y").ToNumber().FloatValue();

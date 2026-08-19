@@ -21,6 +21,7 @@
 #include <string>
 
 #include "controller.hpp"
+#include "osn-common.hpp"
 #include "osn-error.hpp"
 #include "input.hpp"
 #include "ipc-value.hpp"
@@ -419,6 +420,8 @@ Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
+	if (response[1].value_union.ui64 == osn::common::INVALID_ID)
+		return info.Env().Null();
 
 	auto instance = osn::Video::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
@@ -427,10 +430,15 @@ Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
 
 void osn::SceneItem::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!value.IsObject() || !value.ToObject().InstanceOf(osn::Video::constructor.Value())) {
+		Napi::TypeError::New(info.Env(), "Video canvas must be a Video instance.").ThrowAsJavaScriptException();
+		return;
+	}
+
 	osn::Video *canvas = Napi::ObjectWrap<osn::Video>::Unwrap(value.ToObject());
 
-	if (!canvas) {
-		Napi::TypeError::New(info.Env(), "Invalid canvas argument").ThrowAsJavaScriptException();
+	if (!canvas || canvas->canvasId == osn::common::INVALID_ID) {
+		Napi::Error::New(info.Env(), "Canvas reference is not valid.").ThrowAsJavaScriptException();
 		return;
 	}
 

@@ -1046,8 +1046,12 @@ export interface IScene extends ISource {
      * Add an input source to the scene, creating a scene item.
      * @param source - Input source to add to the scene
      * @param transform - Initial transform and visual settings for the scene item
-     * @param video - Target video canvas, assigned before applying the transform. Requires transform when provided
+     * @param video - Optional target video canvas, assigned before applying the transform. When omitted, the item remains
+     * unassigned and renders on every canvas. Requires `transform` when provided.
      * @returns - The created scene item
+     * @throws {TypeError} If `video` is provided without `transform` or is not an `IVideo` instance.
+     * @throws {Error} If the scene, source, or supplied video canvas is no longer valid, or if OSN cannot create the item.
+     * Reference validation failures do not add an item to the scene.
      */
     add(source: IInput, transform?: ISceneItemInfo, video?: IVideo): ISceneItem;
 
@@ -1170,7 +1174,18 @@ export interface ISceneItem {
     /** Whether or not the item is visible on the recording output */
     recordingVisible: boolean;
 
-    video: IVideo;
+    /**
+     * The canvas this item is routed to, or `null` when it renders on every canvas.
+     * @throws {Error} If the item is no longer valid or if the OSN call fails.
+     */
+    get video(): IVideo | null;
+
+    /**
+     * Assign this item to a video canvas while preserving its caller-visible transform.
+     * @throws {TypeError} If `value` is not an `IVideo` instance.
+     * @throws {Error} If the item or supplied video canvas is no longer valid, or if the OSN call fails.
+     */
+    set video(value: IVideo);
     /**
      * Transform information on the item packed into
      * a single convenient object
@@ -1565,6 +1580,15 @@ export interface IObsModuleLoadFailure {
     message: string;
 }
 
+/**
+ * Add multiple existing inputs to a scene with their initial transforms.
+ * The returned items are initially unassigned and render on every canvas. Assign each item's `video`
+ * before relying on canvas-specific routing or geometry.
+ * @param scene - Scene that receives the items
+ * @param sceneItems - Existing input names and their initial transforms
+ * @returns The created, unassigned scene items
+ * @throws {Error} If an input cannot be found or an item cannot be created
+ */
 export function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[] {
     const items: ISceneItem[] = [];
     if (Array.isArray(sceneItems)) {

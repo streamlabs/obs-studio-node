@@ -582,7 +582,8 @@ export interface ISceneItem {
     visible: boolean;
     streamVisible: boolean;
     recordingVisible: boolean;
-    video: IVideo;
+    get video(): IVideo | null;
+    set video(value: IVideo);
     transformInfo: ITransformInfo;
     crop: ICropInfo;
     cropToBounds: boolean;

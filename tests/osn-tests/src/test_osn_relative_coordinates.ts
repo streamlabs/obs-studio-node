@@ -8,6 +8,24 @@ import { EOBSInputTypes } from '../util/obs_enums';
 
 const testName = 'osn-relative-coordinates';
 
+function makeSceneItemInfo(name: string): osn.ISceneItemInfo {
+    return {
+        name,
+        crop: { left: 1, top: 2, right: 3, bottom: 4 },
+        scaleX: 1.25,
+        scaleY: 0.75,
+        visible: true,
+        x: 320,
+        y: 180,
+        rotation: 15,
+        streamVisible: true,
+        recordingVisible: true,
+        scaleFilter: osn.EScaleType.Disable,
+        blendingMode: osn.EBlendingMode.Normal,
+        blendingMethod: osn.EBlendingMethod.Default,
+    };
+}
+
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed = false;
@@ -34,6 +52,162 @@ describe(testName, () => {
 
     afterEach(function() {
         if (this.currentTest.state === 'failed') hasTestFailed = true;
+    });
+
+    it('leaves transformed items unassigned when the canvas is omitted', () => {
+        const scene = osn.SceneFactory.create('relative-coordinate-omitted-canvas-scene');
+        const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-omitted-canvas-source');
+        const transform = makeSceneItemInfo(source.name);
+        const plainItem = scene.add(source);
+        const omittedItem = scene.add(source, transform);
+        const undefinedItem = (scene as any).add(source, transform, undefined) as osn.ISceneItem;
+        const [bulkItem] = osn.addItems(scene, [transform]);
+
+        try {
+            expect(plainItem.video).to.equal(null);
+            expect(omittedItem.video).to.equal(null);
+            expect(undefinedItem.video).to.equal(null);
+            expect(bulkItem.video).to.equal(null);
+            expect(omittedItem.position.x).to.be.closeTo(transform.x, 0.01);
+            expect(omittedItem.position.y).to.be.closeTo(transform.y, 0.01);
+            expect(omittedItem.scale.x).to.be.closeTo(transform.scaleX, 0.01);
+            expect(omittedItem.scale.y).to.be.closeTo(transform.scaleY, 0.01);
+            expect(omittedItem.crop).to.deep.equal(transform.crop);
+        } finally {
+            bulkItem.remove();
+            undefinedItem.remove();
+            omittedItem.remove();
+            plainItem.remove();
+            source.release();
+            scene.release();
+        }
+    });
+
+    it('assigns a supplied canvas before applying the initial transform', () => {
+        const scene = osn.SceneFactory.create('relative-coordinate-explicit-canvas-scene');
+        const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-explicit-canvas-source');
+        const transform = makeSceneItemInfo(source.name);
+        const secondCanvas = osn.VideoFactory.create();
+        const secondVideoInfo: osn.IVideoInfo = {
+            ...obs.defaultVideoContext.video,
+            baseWidth: 720,
+            baseHeight: 1280,
+            outputWidth: 720,
+            outputHeight: 1280,
+        };
+        let item: osn.ISceneItem;
+
+        try {
+            secondCanvas.video = secondVideoInfo;
+            item = scene.add(source, transform, secondCanvas);
+
+            expect(item.video).to.not.equal(null);
+            expect(item.video.video.baseWidth).to.equal(secondVideoInfo.baseWidth);
+            expect(item.video.video.baseHeight).to.equal(secondVideoInfo.baseHeight);
+            expect(item.position.x).to.be.closeTo(transform.x, 0.01);
+            expect(item.position.y).to.be.closeTo(transform.y, 0.01);
+            expect(item.scale.x).to.be.closeTo(transform.scaleX, 0.01);
+            expect(item.scale.y).to.be.closeTo(transform.scaleY, 0.01);
+            expect(item.crop).to.deep.equal(transform.crop);
+        } finally {
+            if (item) item.remove();
+            source.release();
+            scene.release();
+            secondCanvas.destroy();
+        }
+    });
+
+    it('rejects a destroyed canvas without adding a scene item', () => {
+        const scene = osn.SceneFactory.create('relative-coordinate-destroyed-canvas-scene');
+        const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-destroyed-canvas-source');
+        const transform = makeSceneItemInfo(source.name);
+        const destroyedCanvas = osn.VideoFactory.create();
+        let addError: Error;
+        let remainingItems: osn.ISceneItem[] = [];
+
+        try {
+            destroyedCanvas.destroy();
+
+            try {
+                scene.add(source, transform, destroyedCanvas);
+            } catch (error) {
+                addError = error;
+            }
+
+            expect(addError).to.be.instanceOf(Error);
+            expect(addError.message).to.equal('Canvas reference is not valid.');
+            remainingItems = scene.getItems();
+            expect(remainingItems).to.have.length(0);
+
+            const unassignedItem = scene.add(source);
+            let setterError: Error;
+            try {
+                unassignedItem.video = destroyedCanvas;
+            } catch (error) {
+                setterError = error;
+            }
+
+            expect(setterError).to.be.instanceOf(Error);
+            expect(setterError.message).to.equal('Canvas reference is not valid.');
+            expect(unassignedItem.video).to.equal(null);
+            unassignedItem.remove();
+        } finally {
+            remainingItems.forEach(item => item.remove());
+            source.release();
+            scene.release();
+        }
+    });
+
+    it('rejects invalid canvas arguments without adding scene items', () => {
+        const scene = osn.SceneFactory.create('relative-coordinate-invalid-canvas-scene');
+        const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-invalid-canvas-source');
+        const transform = makeSceneItemInfo(source.name);
+        const canvas = osn.VideoFactory.create();
+        const invalidCanvases = [null, 42, {}];
+        let remainingItems: osn.ISceneItem[] = [];
+
+        try {
+            invalidCanvases.forEach(invalidCanvas => {
+                let addError: Error;
+                try {
+                    (scene as any).add(source, transform, invalidCanvas);
+                } catch (error) {
+                    addError = error;
+                }
+
+                expect(addError).to.be.instanceOf(TypeError);
+                expect(addError.message).to.equal('Video canvas must be a Video instance.');
+            });
+
+            let missingTransformError: Error;
+            try {
+                (scene as any).add(source, undefined, canvas);
+            } catch (error) {
+                missingTransformError = error;
+            }
+
+            expect(missingTransformError).to.be.instanceOf(TypeError);
+            expect(missingTransformError.message).to.equal('A transform is required when a video canvas is provided.');
+
+            let setterError: Error;
+            const item = scene.add(source);
+            try {
+                (item as any).video = {};
+            } catch (error) {
+                setterError = error;
+            }
+
+            expect(setterError).to.be.instanceOf(TypeError);
+            expect(setterError.message).to.equal('Video canvas must be a Video instance.');
+            item.remove();
+            remainingItems = scene.getItems();
+            expect(remainingItems).to.have.length(0);
+        } finally {
+            remainingItems.forEach(item => item.remove());
+            source.release();
+            scene.release();
+            canvas.destroy();
+        }
     });
 
     it('preserves absolute appearance when assigning an item to another canvas', () => {

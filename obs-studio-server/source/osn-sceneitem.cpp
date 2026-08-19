@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "osn-sceneitem.hpp"
+#include <osn-common.hpp>
 #include <osn-error.hpp>
 #include "osn-source.hpp"
 #include "shared.hpp"
@@ -299,8 +300,13 @@ void osn::SceneItem::GetCanvas(void *data, const int64_t id, const std::vector<i
 	}
 
 	obs_video_info *canvas = obs_sceneitem_get_canvas(item);
-
-	uint64_t uid = osn::Video::Manager::GetInstance().find(canvas);
+	uint64_t uid = osn::common::INVALID_ID;
+	if (canvas) {
+		uid = osn::Video::Manager::GetInstance().find(canvas);
+		if (uid == osn::common::INVALID_ID) {
+			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
+		}
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint64_t)uid));
@@ -320,6 +326,9 @@ void osn::SceneItem::SetCanvas(void *data, const int64_t id, const std::vector<i
 	}
 
 	obs_sceneitem_set_canvas(item, canvas);
+	if (obs_sceneitem_get_canvas(item) != canvas) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;

@@ -51,6 +51,7 @@ SET(osn-client_SOURCES
     ${OSN_CLIENT_CORE_SOURCES}
 
     "${CMAKE_SOURCE_DIR}/source/osn-error.hpp"
+    "${CMAKE_SOURCE_DIR}/source/osn-common.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.cpp"
 
