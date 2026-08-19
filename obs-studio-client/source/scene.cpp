@@ -39,7 +39,6 @@ Napi::Object osn::Scene::Init(Napi::Env env, Napi::Object exports)
 						  StaticMethod("create", &osn::Scene::Create),
 						  StaticMethod("createPrivate", &osn::Scene::CreatePrivate),
 						  StaticMethod("fromName", &osn::Scene::FromName),
-						  StaticAccessor("coordinateMode", &osn::Scene::GetCoordinateMode, &osn::Scene::SetCoordinateMode),
 						  StaticMethod("invalidateItemTransformCache", &osn::Scene::InvalidateItemTransformCache),
 
 						  InstanceAccessor("source", &osn::Scene::AsSource, nullptr),
@@ -184,34 +183,6 @@ Napi::Value osn::Scene::FromName(const Napi::CallbackInfo &info)
 	auto instance = osn::Scene::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(si->id))});
 
 	return instance;
-}
-
-Napi::Value osn::Scene::GetCoordinateMode(const Napi::CallbackInfo &info)
-{
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	auto response = conn->call_synchronous_helper("Scene", "GetCoordinateMode", {});
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
-}
-
-void osn::Scene::SetCoordinateMode(const Napi::CallbackInfo &info, const Napi::Value &value)
-{
-	if (!value.IsNumber()) {
-		Napi::TypeError::New(info.Env(), "Scene coordinate mode must be a number").ThrowAsJavaScriptException();
-		return;
-	}
-
-	auto conn = GetConnection(info);
-	if (!conn)
-		return;
-
-	auto response = conn->call_synchronous_helper("Scene", "SetCoordinateMode", {ipc::value(value.ToNumber().Uint32Value())});
-	ValidateResponse(info, response);
 }
 
 Napi::Value osn::Scene::InvalidateItemTransformCache(const Napi::CallbackInfo &info)

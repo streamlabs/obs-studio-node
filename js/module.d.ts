@@ -156,9 +156,11 @@ export declare const enum ESceneDupType {
     PrivateRefs = 2,
     PrivateCopy = 3
 }
-export declare const enum ESceneCoordinateMode {
-    Absolute = 0,
-    Relative = 1
+export interface IOBSAPIInitializationOptions {
+    language: string;
+    appDataPath: string;
+    version: string;
+    crashServerUrl: string;
 }
 export declare const enum ESourceType {
     Input = 0,
@@ -542,7 +544,6 @@ export interface IInput extends ISource {
     load(): void;
 }
 export interface ISceneFactory {
-    coordinateMode: ESceneCoordinateMode;
     invalidateItemTransformCache(): void;
     create(name: string): IScene;
     createPrivate(name: string): IScene;
@@ -1008,4 +1009,8 @@ export declare const enum VCamOutputType {
     ProgramView = 3,
     PreviewOutput = 4
 }
-export declare const NodeObs: any;
+export interface INodeObs {
+    [key: string]: any;
+    OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+}
+export declare const NodeObs: INodeObs;

@@ -219,12 +219,21 @@ export const enum ESceneDupType {
     PrivateCopy
 }
 
-/**
- * Coordinate representation used by scenes created after the mode is set.
- */
-export const enum ESceneCoordinateMode {
-    Absolute,
-    Relative,
+export interface IOBSAPIInitializationOptions {
+    /** OBS locale. */
+    language: string;
+
+    /** Application data directory. */
+    appDataPath: string;
+
+    /** Application version. */
+    version: string;
+
+    /**
+     * Crash-reporting server URL override.
+     * Pass an empty string to use the built-in endpoint for the current release channel.
+     */
+    crashServerUrl: string;
 }
 
 /**
@@ -996,12 +1005,6 @@ export interface IInput extends ISource {
 
 export interface ISceneFactory {
     /**
-     * Coordinate mode applied to newly created and subsequently loaded scenes.
-     * Changing the mode while any scene graph is loaded is rejected.
-     */
-    coordinateMode: ESceneCoordinateMode;
-
-    /**
      * Invalidates cached absolute scene-item transforms after a canvas reset.
      */
     invalidateItemTransformCache(): void;
@@ -1042,7 +1045,9 @@ export interface IScene extends ISource {
     /**
      * Add an input source to the scene, creating a scene item.
      * @param source - Input source to add to the scene
-     * @returns - Return the sceneitem or null on failure
+     * @param transform - Initial transform and visual settings for the scene item
+     * @param video - Target video canvas, assigned before applying the transform. Requires transform when provided
+     * @returns - The created scene item
      */
     add(source: IInput, transform?: ISceneItemInfo, video?: IVideo): ISceneItem;
 
@@ -2012,4 +2017,14 @@ else if (fs.existsSync(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 
 else {
     obs.IPC.setServerPath(path.resolve(__dirname, `obs32.exe`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirname).replace('app.asar', 'app.asar.unpacked'));
 }
-export const NodeObs = obs;
+export interface INodeObs {
+    [key: string]: any;
+
+    /**
+     * Initializes the global OBS runtime.
+     * @param options - Required runtime initialization options
+     */
+    OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+}
+
+export const NodeObs: INodeObs = obs;

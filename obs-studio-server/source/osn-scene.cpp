@@ -29,8 +29,6 @@ void osn::Scene::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("Create", std::vector<ipc::type>{ipc::type::String}, Create));
 	cls->register_function(std::make_shared<ipc::function>("CreatePrivate", std::vector<ipc::type>{ipc::type::String}, CreatePrivate));
 	cls->register_function(std::make_shared<ipc::function>("FromName", std::vector<ipc::type>{ipc::type::String}, FromName));
-	cls->register_function(std::make_shared<ipc::function>("GetCoordinateMode", std::vector<ipc::type>{}, GetCoordinateMode));
-	cls->register_function(std::make_shared<ipc::function>("SetCoordinateMode", std::vector<ipc::type>{ipc::type::UInt32}, SetCoordinateMode));
 
 	cls->register_function(std::make_shared<ipc::function>("Release", std::vector<ipc::type>{ipc::type::UInt64}, Release));
 	cls->register_function(std::make_shared<ipc::function>("Remove", std::vector<ipc::type>{ipc::type::UInt64}, Remove));
@@ -130,61 +128,6 @@ void osn::Scene::FromName(void *data, const int64_t id, const std::vector<ipc::v
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
-	AUTO_DEBUG;
-}
-
-namespace {
-enum class SceneCoordinateMode : uint32_t { Absolute, Relative };
-} // namespace
-
-void osn::Scene::GetCoordinateMode(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
-{
-	obs_data_t *privateData = obs_get_private_data();
-	const bool absolute = obs_data_get_bool(privateData, "AbsoluteCoordinates");
-	obs_data_release(privateData);
-
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(static_cast<uint32_t>(absolute ? SceneCoordinateMode::Absolute : SceneCoordinateMode::Relative)));
-	AUTO_DEBUG;
-}
-
-void osn::Scene::SetCoordinateMode(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
-{
-	const uint32_t requestedValue = args[0].value_union.ui32;
-	if (requestedValue > static_cast<uint32_t>(SceneCoordinateMode::Relative)) {
-		PRETTY_ERROR_RETURN(ErrorCode::OutOfBounds, "Scene coordinate mode is invalid.");
-	}
-
-	obs_data_t *privateData = obs_get_private_data();
-	const SceneCoordinateMode currentMode = obs_data_get_bool(privateData, "AbsoluteCoordinates") ? SceneCoordinateMode::Absolute
-												      : SceneCoordinateMode::Relative;
-	const SceneCoordinateMode requestedMode = static_cast<SceneCoordinateMode>(requestedValue);
-	if (requestedMode == currentMode) {
-		obs_data_release(privateData);
-		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-		AUTO_DEBUG;
-		return;
-	}
-
-	bool hasLoadedSceneGraph = false;
-	obs_enum_all_sources(
-		[](void *param, obs_source_t *source) {
-			if (!obs_scene_from_source(source) && !obs_group_from_source(source))
-				return true;
-
-			*static_cast<bool *>(param) = true;
-			return false;
-		},
-		&hasLoadedSceneGraph);
-	if (hasLoadedSceneGraph) {
-		obs_data_release(privateData);
-		PRETTY_ERROR_RETURN(ErrorCode::Error,
-				    "Scene coordinate mode only affects newly created scenes and cannot be changed while scene graphs are loaded.");
-	}
-
-	obs_data_set_bool(privateData, "AbsoluteCoordinates", requestedMode == SceneCoordinateMode::Absolute);
-	obs_data_release(privateData);
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
 

@@ -8,26 +8,17 @@ import { EOBSInputTypes } from '../util/obs_enums';
 
 const testName = 'osn-relative-coordinates';
 
-function oppositeMode(mode: osn.ESceneCoordinateMode): osn.ESceneCoordinateMode {
-    return mode === osn.ESceneCoordinateMode.Absolute
-        ? osn.ESceneCoordinateMode.Relative
-        : osn.ESceneCoordinateMode.Absolute;
-}
-
 describe(testName, () => {
     let obs: OBSHandler;
-    let originalMode: osn.ESceneCoordinateMode;
     let hasTestFailed = false;
 
     before(function() {
         logInfo(testName, `Starting ${testName} tests`);
         deleteConfigFiles();
-        obs = new OBSHandler(testName);
-        originalMode = osn.SceneFactory.coordinateMode;
+        obs = new OBSHandler(testName, true);
     });
 
     after(async function() {
-        osn.SceneFactory.coordinateMode = originalMode;
         obs.shutdown();
 
         if (hasTestFailed) {
@@ -45,50 +36,7 @@ describe(testName, () => {
         if (this.currentTest.state === 'failed') hasTestFailed = true;
     });
 
-    it('round-trips scene coordinate mode before scene creation', () => {
-        const requestedMode = oppositeMode(originalMode);
-
-        osn.SceneFactory.coordinateMode = requestedMode;
-        expect(osn.SceneFactory.coordinateMode).to.equal(requestedMode);
-
-        osn.SceneFactory.coordinateMode = originalMode;
-        expect(osn.SceneFactory.coordinateMode).to.equal(originalMode);
-    });
-
-    it('rejects an invalid scene coordinate mode', () => {
-        expect(() => {
-            osn.SceneFactory.coordinateMode = 100 as osn.ESceneCoordinateMode;
-        }).to.throw(/coordinate mode is invalid/i);
-        expect(osn.SceneFactory.coordinateMode).to.equal(originalMode);
-    });
-
-    it('rejects changing coordinate mode while a public scene is loaded', () => {
-        const scene = osn.SceneFactory.create('relative-coordinate-public-scene');
-        try {
-            expect(() => {
-                osn.SceneFactory.coordinateMode = oppositeMode(originalMode);
-            }).to.throw(/cannot be changed while scene graphs are loaded/i);
-            expect(osn.SceneFactory.coordinateMode).to.equal(originalMode);
-        } finally {
-            scene.release();
-        }
-    });
-
-    it('rejects changing coordinate mode while a private scene is loaded', () => {
-        const scene = osn.SceneFactory.createPrivate('relative-coordinate-private-scene');
-        try {
-            expect(() => {
-                osn.SceneFactory.coordinateMode = oppositeMode(originalMode);
-            }).to.throw(/cannot be changed while scene graphs are loaded/i);
-            expect(osn.SceneFactory.coordinateMode).to.equal(originalMode);
-        } finally {
-            scene.release();
-        }
-    });
-
     it('preserves absolute appearance when assigning an item to another canvas', () => {
-        osn.SceneFactory.coordinateMode = osn.ESceneCoordinateMode.Relative;
-
         const scene = osn.SceneFactory.create('relative-coordinate-rebase-scene');
         const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-rebase-source');
         const item = scene.add(source);
@@ -126,8 +74,6 @@ describe(testName, () => {
     });
 
     it('refreshes cached absolute transforms after a relative canvas reset', () => {
-        osn.SceneFactory.coordinateMode = osn.ESceneCoordinateMode.Relative;
-
         const originalVideoInfo = obs.defaultVideoContext.video;
         const resizedBaseWidth = Math.round(originalVideoInfo.baseWidth * 1.5);
         const resizedBaseHeight = Math.round(originalVideoInfo.baseHeight * 1.5);
@@ -174,8 +120,6 @@ describe(testName, () => {
     });
 
     it('does not suppress writes that match stale cached transforms after invalidation', () => {
-        osn.SceneFactory.coordinateMode = osn.ESceneCoordinateMode.Relative;
-
         const originalVideoInfo = obs.defaultVideoContext.video;
         const resizedVideoInfo: osn.IVideoInfo = {
             ...originalVideoInfo,
@@ -227,8 +171,6 @@ describe(testName, () => {
     });
 
     it('refreshes only items assigned to the resized canvas', () => {
-        osn.SceneFactory.coordinateMode = osn.ESceneCoordinateMode.Relative;
-
         const originalVideoInfo = obs.defaultVideoContext.video;
         const firstCanvasInfo: osn.IVideoInfo = {
             ...originalVideoInfo,
@@ -304,8 +246,6 @@ describe(testName, () => {
     });
 
     it('preserves nested-scene crop references through canvas assignment and save/load', () => {
-        osn.SceneFactory.coordinateMode = osn.ESceneCoordinateMode.Relative;
-
         const outerScene = osn.SceneFactory.create('relative-coordinate-crop-outer-scene');
         const nestedScene = osn.SceneFactory.create('relative-coordinate-crop-nested-scene');
         const nestedSource = nestedScene.source;

@@ -168,7 +168,8 @@ void OBS_API::Register(ipc::server &srv)
 	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("API");
 
 	cls->register_function(std::make_shared<ipc::function>(
-		"OBS_API_initAPI", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String, ipc::type::String}, OBS_API_initAPI));
+		"OBS_API_initAPI",
+		std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String, ipc::type::String}, OBS_API_initAPI));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_destroyOBS_API", std::vector<ipc::type>{}, OBS_API_destroyOBS_API));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_getPerformanceStatistics", std::vector<ipc::type>{}, OBS_API_getPerformanceStatistics));
 	cls->register_function(std::make_shared<ipc::function>("OBS_API_getModuleLoadFailures", std::vector<ipc::type>{}, OBS_API_getModuleLoadFailures));
@@ -1012,6 +1013,8 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	/* Set global private settings for whomever it concerns */
 	obs_data_t *private_settings = obs_data_create();
 	obs_data_set_bool(private_settings, "BrowserHWAccel", browserAccel);
+	/* Relative coordinates are an invariant of this OSN generation. */
+	obs_data_set_bool(private_settings, "AbsoluteCoordinates", false);
 	obs_apply_private_data(private_settings);
 	obs_data_release(private_settings);
 

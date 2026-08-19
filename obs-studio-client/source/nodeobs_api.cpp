@@ -32,25 +32,30 @@ Napi::ThreadSafeFunction js_thread;
 
 Napi::Value api::OBS_API_initAPI(const Napi::CallbackInfo &info)
 {
-	std::string path;
+	if (info.Length() != 1 || !info[0].IsObject()) {
+		Napi::TypeError::New(info.Env(), "OBS_API_initAPI expects exactly one initialization options object").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	std::string appDataPath;
 	std::string language;
 	std::string version;
 	std::string crashserverurl;
 
-	ASSERT_GET_VALUE(info, info[0], language);
-	ASSERT_GET_VALUE(info, info[1], path);
-	ASSERT_GET_VALUE(info, info[2], version);
-	if (info.Length() > 3)
-		ASSERT_GET_VALUE(info, info[3], crashserverurl);
+	const Napi::Object options = info[0].As<Napi::Object>();
+	ASSERT_GET_VALUE(info, options.Get("language"), language);
+	ASSERT_GET_VALUE(info, options.Get("appDataPath"), appDataPath);
+	ASSERT_GET_VALUE(info, options.Get("version"), version);
+	ASSERT_GET_VALUE(info, options.Get("crashServerUrl"), crashserverurl);
 
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->set_freeze_callback(ipc_freeze_callback, path);
+	conn->set_freeze_callback(ipc_freeze_callback, appDataPath);
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper(
-		"API", "OBS_API_initAPI", {ipc::value(path), ipc::value(language), ipc::value(version), ipc::value(crashserverurl)});
+		"API", "OBS_API_initAPI", {ipc::value(appDataPath), ipc::value(language), ipc::value(version), ipc::value(crashserverurl)});
 
 	// The API init method will return a response error + graphical error
 	// If there is a problem with the IPC the number of responses here will be zero so we must validate the
