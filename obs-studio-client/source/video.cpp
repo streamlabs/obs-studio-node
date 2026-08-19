@@ -104,8 +104,11 @@ void osn::Video::Destroy(const Napi::CallbackInfo &info)
 		return;
 
 	auto response = conn->call_synchronous_helper("Video", "RemoveVideoContext", {ipc::value((uint64_t)(this->canvasId))});
-	ValidateResponse(info, response);
-	isLastVideoValid = false;
+	const bool invalidated = !response.empty() && response[0].type == ipc::type::UInt64 &&
+				 static_cast<ErrorCode>(response[0].value_union.ui64) == ErrorCode::InvalidReference;
+	const bool succeeded = ValidateResponse(info, response);
+	if (invalidated || succeeded)
+		isLastVideoValid = false;
 	return;
 }
 

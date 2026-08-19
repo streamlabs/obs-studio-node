@@ -73,6 +73,64 @@ describe(testName, () => {
         }
     });
 
+    it('rejects destroying an assigned canvas and keeps the canvas usable for reassignment', () => {
+        const scene = osn.SceneFactory.create('relative-coordinate-canvas-lifetime-scene');
+        const source = osn.InputFactory.create(EOBSInputTypes.ImageSource, 'relative-coordinate-canvas-lifetime-source');
+        const item = scene.add(source);
+        const secondCanvas = osn.VideoFactory.create();
+        const secondVideoInfo: osn.IVideoInfo = {
+            ...obs.defaultVideoContext.video,
+            baseWidth: 720,
+            baseHeight: 1280,
+            outputWidth: 720,
+            outputHeight: 1280,
+        };
+        const authoredPosition = { x: 180, y: 320 };
+        let secondCanvasDestroyed = false;
+        let destroyError: Error;
+
+        try {
+            secondCanvas.video = secondVideoInfo;
+            item.video = secondCanvas;
+            item.position = authoredPosition;
+
+            try {
+                secondCanvas.destroy();
+                secondCanvasDestroyed = true;
+            } catch (error) {
+                destroyError = error;
+            }
+
+            expect(destroyError).to.be.instanceOf(Error);
+            expect(destroyError.message).to.equal(
+                'Cannot remove video context while scene items are assigned to it.',
+            );
+
+            // A rejected destroy must leave both the OSN wrapper and the
+            // native item assignment intact so the caller can recover.
+            expect(secondCanvas.video.baseWidth).to.equal(secondVideoInfo.baseWidth);
+            expect(secondCanvas.video.baseHeight).to.equal(secondVideoInfo.baseHeight);
+            expect(item.video.video.baseWidth).to.equal(secondVideoInfo.baseWidth);
+            expect(item.video.video.baseHeight).to.equal(secondVideoInfo.baseHeight);
+            expect(item.position.x).to.be.closeTo(authoredPosition.x, 0.01);
+            expect(item.position.y).to.be.closeTo(authoredPosition.y, 0.01);
+
+            item.video = obs.defaultVideoContext;
+
+            expect(item.video.video.baseWidth).to.equal(obs.defaultVideoContext.video.baseWidth);
+            expect(item.video.video.baseHeight).to.equal(obs.defaultVideoContext.video.baseHeight);
+            expect(item.position.x).to.be.closeTo(authoredPosition.x, 0.01);
+            expect(item.position.y).to.be.closeTo(authoredPosition.y, 0.01);
+            secondCanvas.destroy();
+            secondCanvasDestroyed = true;
+        } finally {
+            item.remove();
+            if (!secondCanvasDestroyed) secondCanvas.destroy();
+            source.release();
+            scene.release();
+        }
+    });
+
     it('refreshes cached absolute transforms after a relative canvas reset', () => {
         const originalVideoInfo = obs.defaultVideoContext.video;
         const resizedBaseWidth = Math.round(originalVideoInfo.baseWidth * 1.5);

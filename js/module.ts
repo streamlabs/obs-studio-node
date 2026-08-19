@@ -1492,8 +1492,21 @@ export interface IVideoInfo {
 export interface IVideo {
     video: IVideoInfo;
     legacySettings: IVideoInfo;
+    /**
+     * Permanently destroys this video context.
+     *
+     * @throws {Error} If one or more scene items are assigned to this video
+     * context. The context and this object remain valid.
+     * @throws {Error} If libobs rejects removal before it begins, for example
+     * because video is active. The context and this object remain valid.
+     * @throws {Error} If removal completes but the remaining video contexts
+     * cannot be initialized. The context is destroyed and this object is no
+     * longer valid.
+     * @throws {Error} If the OSN IPC call fails. In this case whether removal
+     * completed may be unknown.
+     */
     destroy(): void;
-	/**
+    /**
      * Number of total skipped frames
      */
      readonly skippedFrames: number;
