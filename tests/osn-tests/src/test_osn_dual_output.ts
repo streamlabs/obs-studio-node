@@ -745,6 +745,7 @@ describe(testName, () => {
 
         let signalInfo: IOBSOutputSignalInfo;
         // Getting scene
+        const returnSource = osn.Global.getOutputSource(0);
         let secondSceneName = 'scene_' + randomUUID();
         const scene = osn.SceneFactory.create(secondSceneName);
         osn.Global.setOutputSource(0, scene);
@@ -807,5 +808,15 @@ describe(testName, () => {
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate, ETestErrorMsg.StreamOutput);
 
         await secondStreamUserPoolHandler.releaseUser();
+
+        osn.Global.setOutputSource(0, returnSource);
+
+        sceneItem1.source.release();
+        sceneItem1.remove();
+
+        sceneItem2.source.release();
+        sceneItem2.remove();
+
+        scene.release();
     });
 });
