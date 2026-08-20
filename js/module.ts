@@ -2060,6 +2060,9 @@ export interface INodeObs {
     /**
      * Initializes the global OBS runtime.
      * @param options - Required runtime initialization options
+     * @returns The OBS video initialization result code
+     * @throws {TypeError} If exactly one options object is not provided, or if a required option is not a string
+     * @throws {Error} If the IPC call fails or OSN returns an error response without an initialization result
      */
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
 }

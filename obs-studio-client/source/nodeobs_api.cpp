@@ -30,9 +30,28 @@
 
 Napi::ThreadSafeFunction js_thread;
 
+namespace {
+
+bool getRequiredStringOption(const Napi::CallbackInfo &info, const Napi::Object &options, const char *name, std::string &value)
+{
+	const Napi::Value option = options.Get(name);
+	if (info.Env().IsExceptionPending())
+		return false;
+
+	if (!option.IsString()) {
+		Napi::TypeError::New(info.Env(), std::string("OBS_API_initAPI option '") + name + "' must be a string").ThrowAsJavaScriptException();
+		return false;
+	}
+
+	value = option.As<Napi::String>().Utf8Value();
+	return true;
+}
+
+} // namespace
+
 Napi::Value api::OBS_API_initAPI(const Napi::CallbackInfo &info)
 {
-	if (info.Length() != 1 || !info[0].IsObject()) {
+	if (info.Length() != 1 || !info[0].IsObject() || info[0].IsArray()) {
 		Napi::TypeError::New(info.Env(), "OBS_API_initAPI expects exactly one initialization options object").ThrowAsJavaScriptException();
 		return info.Env().Undefined();
 	}
@@ -43,10 +62,10 @@ Napi::Value api::OBS_API_initAPI(const Napi::CallbackInfo &info)
 	std::string crashserverurl;
 
 	const Napi::Object options = info[0].As<Napi::Object>();
-	ASSERT_GET_VALUE(info, options.Get("language"), language);
-	ASSERT_GET_VALUE(info, options.Get("appDataPath"), appDataPath);
-	ASSERT_GET_VALUE(info, options.Get("version"), version);
-	ASSERT_GET_VALUE(info, options.Get("crashServerUrl"), crashserverurl);
+	if (!getRequiredStringOption(info, options, "language", language) || !getRequiredStringOption(info, options, "appDataPath", appDataPath) ||
+	    !getRequiredStringOption(info, options, "version", version) || !getRequiredStringOption(info, options, "crashServerUrl", crashserverurl)) {
+		return info.Env().Undefined();
+	}
 
 	auto conn = GetConnection(info);
 	if (!conn)
