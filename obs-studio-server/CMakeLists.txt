@@ -626,6 +626,7 @@ if(BUILD_TESTING)
         obs_studio_server_unit_tests
         "tests/test-osn-source.cpp"
         "tests/test-osn-file-output.cpp"
+        "tests/test-osn-scene-relative-coordinates.cpp"
         "tests/obs-setup.cpp"
         "tests/obs-setup.hpp"
     )
