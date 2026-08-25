@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 SET(NODEJS_URL "https://artifacts.electronjs.org/headers/dist" CACHE STRING "Node.JS URL")
 SET(NODEJS_NAME "iojs" CACHE STRING "Node.JS Name")
-SET(NODEJS_VERSION "v29.4.3" CACHE STRING "Node.JS Version")
+SET(NODEJS_VERSION "v43.2.0" CACHE STRING "Node.JS Version")
 
 if(WIN32)
     # Resource VersionInfo
