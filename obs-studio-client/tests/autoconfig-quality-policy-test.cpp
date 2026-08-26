@@ -3,6 +3,8 @@
 #include "autoconfig-quality-policy.hpp"
 
 using autoConfig::qualityPolicy::VideoTuple;
+using autoConfig::qualityPolicy::benchmarkCeiling;
+using autoConfig::qualityPolicy::boundCurrentToV1Tier;
 using autoConfig::qualityPolicy::candidates;
 using autoConfig::qualityPolicy::classifyHardwareSample;
 using autoConfig::qualityPolicy::frameRateDivisor;
@@ -10,6 +12,8 @@ using autoConfig::qualityPolicy::hardwareFailureCode;
 using autoConfig::qualityPolicy::hardwareFailureScope;
 using autoConfig::qualityPolicy::hardwarePhaseTimeoutMs;
 using autoConfig::qualityPolicy::hardwareTiers;
+using autoConfig::qualityPolicy::isResolutionPromotion;
+using autoConfig::qualityPolicy::recommendationCeiling;
 using autoConfig::qualityPolicy::roundedMinimumBitrateKbps;
 using autoConfig::qualityPolicy::select;
 using autoConfig::qualityPolicy::shouldAdoptHardwareControl;
@@ -186,6 +190,88 @@ TEST_CASE("Auto Config quality policy never upscales the tested ceiling")
 	CHECK(result.front().height == 720);
 	CHECK(result.front().fpsNum == 30);
 	CHECK(select({1280, 720, 30, 1}, 10000, "obs_nvenc_h264_tex").video.width == 1280);
+}
+
+TEST_CASE("Auto Config benchmark ceiling explicitly permits canvas-bounded promotion")
+{
+	const VideoTuple current{1280, 720, 30, 1};
+	CHECK(autoConfig::qualityPolicy::sameVideo(benchmarkCeiling(current, 0, 0), current));
+	CHECK(autoConfig::qualityPolicy::sameVideo(benchmarkCeiling(current, 1920, 0), current));
+
+	const auto promoted = benchmarkCeiling(current, 1920, 1080);
+	CHECK(promoted.width == 1920);
+	CHECK(promoted.height == 1080);
+	CHECK(promoted.fpsNum == 30);
+	CHECK(select(promoted, 6000, "obs_nvenc_h264_tex").video.width == 1920);
+	CHECK(select(promoted, 3000, "obs_nvenc_h264_tex").video.width == 1280);
+
+	const auto canvasBound = benchmarkCeiling(current, 1280, 720);
+	CHECK(select(canvasBound, 10000, "obs_nvenc_h264_tex").video.width == 1280);
+
+	const auto productBound = benchmarkCeiling(current, 3840, 2160);
+	CHECK(productBound.width == 1920);
+	CHECK(productBound.height == 1080);
+
+	const auto lowerProductBound = benchmarkCeiling({1920, 1080, 30, 1}, 1280, 720);
+	CHECK(lowerProductBound.width == 1280);
+	CHECK(lowerProductBound.height == 720);
+	const auto boundingBox = boundCurrentToV1Tier({1920, 1080, 30, 1}, 1366, 768);
+	CHECK(boundingBox.width == 1280);
+	CHECK(boundingBox.height == 720);
+}
+
+TEST_CASE("Auto Config benchmark ceiling preserves portrait orientation")
+{
+	const auto promoted = benchmarkCeiling({720, 1280, 30, 1}, 1080, 1920);
+	CHECK(promoted.width == 1080);
+	CHECK(promoted.height == 1920);
+	CHECK(select(promoted, 6000, "obs_nvenc_h264_tex").video.height == 1920);
+}
+
+TEST_CASE("Auto Config promotes only the exact V1 aspect family")
+{
+	const std::vector<VideoTuple> custom = {
+		{1600, 1000, 30, 1}, // 16:10
+		{1024, 768, 30, 1},  // 4:3
+		{2560, 1080, 30, 1}, // ultrawide
+	};
+	for (const auto &current : custom) {
+		CAPTURE(current.width, current.height);
+		CHECK(autoConfig::qualityPolicy::sameVideo(boundCurrentToV1Tier(current, 640, 360), current));
+		const auto ceiling = benchmarkCeiling(current, 1920, 1080);
+		CHECK(autoConfig::qualityPolicy::sameVideo(ceiling, current));
+		const auto options = candidates(ceiling);
+		REQUIRE(options.size() == 1);
+		CHECK(autoConfig::qualityPolicy::sameVideo(options.front(), current));
+		CHECK(autoConfig::qualityPolicy::sameVideo(select(ceiling, 100, "x264").video, current));
+		CHECK(options.front().width >= 64);
+		CHECK(options.front().height >= 64);
+	}
+
+	const VideoTuple minimumSafe{8192, 64, 30, 1};
+	const auto minimumOptions = candidates(minimumSafe);
+	REQUIRE(minimumOptions.size() == 1);
+	CHECK(autoConfig::qualityPolicy::sameVideo(minimumOptions.front(), minimumSafe));
+}
+
+TEST_CASE("Auto Config recommendation promotion requires successful active evidence")
+{
+	const VideoTuple current{1280, 720, 30, 1};
+	const VideoTuple tested{1920, 1080, 30, 1};
+
+	const auto active = recommendationCeiling(tested, current, true);
+	CHECK(select(active, 6000, "obs_nvenc_h264_tex").video.width == 1920);
+	CHECK(isResolutionPromotion(current, select(active, 6000, "obs_nvenc_h264_tex").video));
+	CHECK(select(active, 3000, "obs_nvenc_h264_tex").video.width == 1280);
+
+	const auto estimated = recommendationCeiling(tested, current, false);
+	CHECK(autoConfig::qualityPolicy::sameVideo(estimated, current));
+	CHECK(select(estimated, 6000, "obs_nvenc_h264_tex").video.width == 1280);
+
+	// A failed probe is represented by the same no-promotion decision even when
+	// it leaves usable throughput evidence for a conservative bitrate estimate.
+	const auto failedProbe = recommendationCeiling(tested, current, false);
+	CHECK(select(failedProbe, 6000, "obs_nvenc_h264_tex").video.width == 1280);
 }
 
 TEST_CASE("Auto Config quality policy preserves orientation aspect ratio and even dimensions")

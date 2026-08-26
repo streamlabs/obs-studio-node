@@ -163,15 +163,32 @@ inline bool fpsGreaterThan(const VideoTuple &value, int numerator, int denominat
 	return (int64_t)value.fpsNum * denominator > (int64_t)numerator * std::max(1, value.fpsDen);
 }
 
+inline bool hasV1AspectRatio(const VideoTuple &value)
+{
+	if (value.width <= 0 || value.height <= 0)
+		return false;
+	const int64_t longEdge = std::max(value.width, value.height);
+	const int64_t shortEdge = std::min(value.width, value.height);
+	return longEdge * 9 == shortEdge * 16;
+}
+
 inline VideoTuple fitTier(const VideoTuple &ceiling, int longEdge, int shortEdge, bool lowerFps)
 {
 	VideoTuple result = ceiling;
+	// V1 exposes only the three exact 16:9 tiers (and their portrait
+	// equivalents). Preserve custom-aspect output geometry and cadence instead
+	// of inventing proportional tuples that Desktop cannot present or safely
+	// apply as one of those tiers.
+	if (!hasV1AspectRatio(ceiling))
+		return result;
+
 	const bool landscape = ceiling.width >= ceiling.height;
 	const int maxWidth = landscape ? longEdge : shortEdge;
 	const int maxHeight = landscape ? shortEdge : longEdge;
-	const double scale = std::min({1.0, (double)maxWidth / std::max(1, ceiling.width), (double)maxHeight / std::max(1, ceiling.height)});
-	result.width = std::max(2, ((int)std::floor((double)ceiling.width * scale)) & ~1);
-	result.height = std::max(2, ((int)std::floor((double)ceiling.height * scale)) & ~1);
+	if (ceiling.width > maxWidth || ceiling.height > maxHeight) {
+		result.width = maxWidth;
+		result.height = maxHeight;
+	}
 	result.fpsDen = std::max(1, ceiling.fpsDen);
 	result.fpsNum = std::max(1, ceiling.fpsNum);
 	if (fpsGreaterThan(result, 60)) {
@@ -189,6 +206,77 @@ inline VideoTuple fitTier(const VideoTuple &ceiling, int longEdge, int shortEdge
 		result.fpsNum = std::max(1, result.fpsNum / 2);
 	}
 	return result;
+}
+
+// Convert Desktop's complete canvas-bounded maximum into the highest exact V1
+// tuple eligible for promotion. An absent/partial maximum, an orientation
+// mismatch, or a custom aspect ratio deliberately keeps the current output as
+// the ceiling, so native code cannot infer permission to change geometry.
+inline VideoTuple boundCurrentToV1Tier(const VideoTuple &current, int maxWidth, int maxHeight)
+{
+	if (maxWidth <= 0 || maxHeight <= 0)
+		return current;
+	if (!hasV1AspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
+		return current;
+	if (current.width <= maxWidth && current.height <= maxHeight)
+		return current;
+
+	const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
+	for (const auto &tier : tiers) {
+		VideoTuple candidate = fitTier(current, tier[0], tier[1], false);
+		if (candidate.width <= maxWidth && candidate.height <= maxHeight) {
+			candidate.fpsNum = current.fpsNum;
+			candidate.fpsDen = current.fpsDen;
+			return candidate;
+		}
+	}
+	return current;
+}
+
+inline VideoTuple benchmarkCeiling(const VideoTuple &current, int maxWidth, int maxHeight)
+{
+	const VideoTuple bounded = boundCurrentToV1Tier(current, maxWidth, maxHeight);
+	if (!sameVideo(bounded, current))
+		return bounded;
+	if (maxWidth <= 0 || maxHeight <= 0)
+		return current;
+
+	if (!hasV1AspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
+		return current;
+
+	const bool landscape = current.width >= current.height;
+	const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
+	for (const auto &tier : tiers) {
+		const int width = landscape ? tier[0] : tier[1];
+		const int height = landscape ? tier[1] : tier[0];
+		if (width <= maxWidth && height <= maxHeight && width > current.width && height > current.height)
+			return {width, height, current.fpsNum, current.fpsDen};
+	}
+	return current;
+}
+
+// A completed active provider probe is the only source of permission to use a
+// tested tuple above the current output. Estimate-only and failed-probe paths
+// retain lower hardware fallbacks but cannot promote geometry or cadence.
+inline VideoTuple recommendationCeiling(const VideoTuple &tested, const VideoTuple &current, bool allowPromotion)
+{
+	if (allowPromotion)
+		return tested;
+
+	if (tested.width > current.width || tested.height > current.height)
+		return current;
+
+	VideoTuple result = tested;
+	if (fpsGreaterThan(result, current.fpsNum, current.fpsDen)) {
+		result.fpsNum = current.fpsNum;
+		result.fpsDen = std::max(1, current.fpsDen);
+	}
+	return result;
+}
+
+inline bool isResolutionPromotion(const VideoTuple &current, const VideoTuple &selected)
+{
+	return (int64_t)selected.width * selected.height > (int64_t)current.width * current.height;
 }
 
 inline std::vector<VideoTuple> candidates(const VideoTuple &ceiling)

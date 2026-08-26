@@ -64,8 +64,6 @@ constexpr int kYoutubeProbeMaximumConfirmationEpisodes = 2;
 constexpr int kYoutubeProbeBudgetEstimatePercent = 115;
 constexpr float kYoutubeProbeCongestionHigh = 0.20f;
 constexpr float kYoutubeProbeCongestionSevere = 0.50f;
-constexpr int kTwitchProbeSafeMultiplierPercent = 70;
-constexpr int kYoutubeProbeSafeMultiplierPercent = 80;
 constexpr int kTwitchProbeAudioBitrateKbps = 32;
 constexpr int kYoutubeProbeAudioBitrateKbps = 128;
 constexpr int kDefaultEstimatedBitrateKbps = 2500;
@@ -525,13 +523,27 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 		obs_data_t *limits = obs_data_get_obj(item, "limits");
 		if (limits) {
-			leg.limits.maxBitrateKbps = (int)obs_data_get_int(limits, "maxBitrateKbps");
-			leg.limits.maxWidth = (int)obs_data_get_int(limits, "maxWidth");
-			leg.limits.maxHeight = (int)obs_data_get_int(limits, "maxHeight");
-			leg.limits.maxFpsNum = (int)obs_data_get_int(limits, "maxFpsNum");
-			leg.limits.maxFpsDen = (int)obs_data_get_int(limits, "maxFpsDen");
-			if (leg.limits.maxFpsNum > 0 && leg.limits.maxFpsDen <= 0)
-				leg.limits.maxFpsDen = 1;
+			const int64_t maxBitrateKbps = obs_data_get_int(limits, "maxBitrateKbps");
+			const int64_t maxWidth = obs_data_get_int(limits, "maxWidth");
+			const int64_t maxHeight = obs_data_get_int(limits, "maxHeight");
+			const int64_t maxFpsNum = obs_data_get_int(limits, "maxFpsNum");
+			const int64_t maxFpsDen = obs_data_get_int(limits, "maxFpsDen");
+			const bool hasPartialResolutionLimit = (maxWidth > 0) != (maxHeight > 0);
+			const bool hasOrphanFpsDenominator = maxFpsNum == 0 && maxFpsDen > 0;
+			const bool invalidLimits = maxBitrateKbps < 0 || maxBitrateKbps > 100000 || maxWidth < 0 || maxWidth > 8192 || maxHeight < 0 ||
+						   maxHeight > 8192 || (maxWidth > 0 && maxWidth < 64) || (maxHeight > 0 && maxHeight < 64) ||
+						   hasPartialResolutionLimit || maxFpsNum < 0 || maxFpsNum > 240000 || maxFpsDen < 0 || maxFpsDen > 10000 ||
+						   hasOrphanFpsDenominator;
+			if (invalidLimits) {
+				error = "invalid_autoconfig_limits";
+				valid = false;
+			} else {
+				leg.limits.maxBitrateKbps = (int)maxBitrateKbps;
+				leg.limits.maxWidth = (int)maxWidth;
+				leg.limits.maxHeight = (int)maxHeight;
+				leg.limits.maxFpsNum = (int)maxFpsNum;
+				leg.limits.maxFpsDen = maxFpsNum > 0 && maxFpsDen == 0 ? 1 : (int)maxFpsDen;
+			}
 			obs_data_release(limits);
 		}
 
@@ -860,19 +872,6 @@ static LegRequest withOfflinePlatformCaps(const LegRequest &input)
 	return leg;
 }
 
-static bool fitWithin(CurrentSettings &value, int maxWidth, int maxHeight)
-{
-	maxWidth = std::max(64, maxWidth);
-	maxHeight = std::max(64, maxHeight);
-	const double scale = std::min({1.0, (double)maxWidth / (double)value.width, (double)maxHeight / (double)value.height});
-	const int width = std::max(64, ((int)std::floor((double)value.width * scale)) & ~1);
-	const int height = std::max(64, ((int)std::floor((double)value.height * scale)) & ~1);
-	const bool changed = width != value.width || height != value.height;
-	value.width = width;
-	value.height = height;
-	return changed;
-}
-
 static bool capFps(CurrentSettings &value, int maxNum, int maxDen)
 {
 	maxDen = maxDen > 0 ? maxDen : 1;
@@ -912,7 +911,10 @@ static CurrentSettings baseRecommendation(const LegRequest &leg)
 		value.bitrateKbps = kDefaultEstimatedBitrateKbps;
 	if (leg.limits.maxBitrateKbps > 0)
 		value.bitrateKbps = std::min(value.bitrateKbps, leg.limits.maxBitrateKbps);
-	fitWithin(value, leg.limits.maxWidth > 0 ? leg.limits.maxWidth : value.width, leg.limits.maxHeight > 0 ? leg.limits.maxHeight : value.height);
+	const auto bounded =
+		qualityPolicy::boundCurrentToV1Tier({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
+	value.width = bounded.width;
+	value.height = bounded.height;
 	if (leg.limits.maxFpsNum > 0)
 		capFps(value, leg.limits.maxFpsNum, leg.limits.maxFpsDen);
 	// Encoder discovery and workload validation happen in the hardware phase.
@@ -938,6 +940,18 @@ static CurrentSettings estimateRecommendation(const LegRequest &leg, const Hardw
 		applyEncoderSelection(value, {hardware.value.encoderId, hardware.value.encoderId != value.encoderId});
 		value.preset = hardware.value.preset;
 	}
+	return value;
+}
+
+static CurrentSettings benchmarkCeiling(const LegRequest &leg)
+{
+	CurrentSettings value = baseRecommendation(leg);
+	const auto ceiling =
+		qualityPolicy::benchmarkCeiling({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
+	value.width = ceiling.width;
+	value.height = ceiling.height;
+	value.fpsNum = ceiling.fpsNum;
+	value.fpsDen = ceiling.fpsDen;
 	return value;
 }
 
@@ -1045,13 +1059,15 @@ static std::string serializeResult(const Session &session, const char *status, c
 	return json;
 }
 
-enum class ProbeStability { Stable, Degraded, Variable, Unstable };
+enum class ProbeStability { Stable, SourceUnderfill, Degraded, Variable, Unstable };
 
 static const char *probeStabilityName(ProbeStability stability)
 {
 	switch (stability) {
 	case ProbeStability::Stable:
 		return "stable";
+	case ProbeStability::SourceUnderfill:
+		return "source_underfill";
 	case ProbeStability::Degraded:
 		return "degraded";
 	case ProbeStability::Variable:
@@ -1341,8 +1357,7 @@ public:
 			// The render thread removes orphaned mixes on a later tick. Do not
 			// release/reuse the identity used by obs_video_mix_get until the
 			// exact private mix is no longer published.
-			const auto mixRemovalDeadline =
-				std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(1000, stopTimeoutMs));
+			const auto mixRemovalDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(1000, stopTimeoutMs));
 			while (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING) &&
 			       std::chrono::steady_clock::now() < mixRemovalDeadline)
 				std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -1456,10 +1471,9 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 
 	ScratchResources resources(*session, kHardwareStopTimeoutMs);
 	result.feedMode = useMainVideoControl ? "main-control" : useCoreVideoMix ? "private-mix" : "synthetic-raw";
-	const bool videoCreated = useMainVideoControl
-				  ? useCoreVideoMix && resources.useKnownStreamingVideoMix()
-				  : resources.createSyntheticVideo((uint32_t)candidate.width, (uint32_t)candidate.height, (uint32_t)candidate.fpsNum,
-							   (uint32_t)candidate.fpsDen, useCoreVideoMix);
+	const bool videoCreated = useMainVideoControl ? useCoreVideoMix && resources.useKnownStreamingVideoMix()
+						      : resources.createSyntheticVideo((uint32_t)candidate.width, (uint32_t)candidate.height,
+										       (uint32_t)candidate.fpsNum, (uint32_t)candidate.fpsDen, useCoreVideoMix);
 	if (!videoCreated) {
 		result.errorCode = useCoreVideoMix ? "hardware_benchmark_video_mix_create_failed" : "hardware_benchmark_video_create_failed";
 		return result;
@@ -1487,8 +1501,7 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 		result.sourceFpsDen = std::max(1U, sourceInfo->fps_den);
 	}
 	if (result.sourceFpsNum > 0) {
-		const auto divisor = qualityPolicy::frameRateDivisor(result.sourceFpsNum, result.sourceFpsDen,
-								     (uint32_t)std::max(1, candidate.fpsNum),
+		const auto divisor = qualityPolicy::frameRateDivisor(result.sourceFpsNum, result.sourceFpsDen, (uint32_t)std::max(1, candidate.fpsNum),
 								     (uint32_t)std::max(1, candidate.fpsDen));
 		if (!divisor.supported) {
 			result.errorCode = "hardware_benchmark_frame_rate_unsupported";
@@ -1583,20 +1596,18 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	const uint32_t allowedLockFailed = std::max(1U, result.scheduledFrames * 5U / 100U);
 	const uint32_t allowedLate = std::max(1U, result.scheduledFrames * 5U / 100U);
 	result.feederHealthy = useMainVideoControl || useCoreVideoMix ||
-			       (result.submittedFrames >= minimumSubmitted && result.lockFailedFrames <= allowedLockFailed &&
-				result.lateFrames <= allowedLate);
+			       (result.submittedFrames >= minimumSubmitted && result.lockFailedFrames <= allowedLockFailed && result.lateFrames <= allowedLate);
 	// The streaming-mix control exists only to prove that this concrete encoder can
 	// produce packets from the known-working application video pipeline. Global
 	// main-video skipped-frame counters describe the running app, not this
 	// temporary encoder, so retain them for diagnostics but do not reject the
 	// control because of them.
-	const uint32_t classificationTotalFrames =
-		useMainVideoControl ? std::max({result.totalFrames, result.encodedFrames, result.outputFrames}) : result.totalFrames;
+	const uint32_t classificationTotalFrames = useMainVideoControl ? std::max({result.totalFrames, result.encodedFrames, result.outputFrames})
+								       : result.totalFrames;
 	const uint32_t classificationSkippedFrames = useMainVideoControl ? 0 : result.skippedFrames;
-	const auto classification = qualityPolicy::classifyHardwareSample(result.feederHealthy, classificationTotalFrames,
-							classificationSkippedFrames,
-							result.encodedFrames, result.outputFrames, result.minimumEncodedFrames,
-								result.allowedSkippedFrames);
+	const auto classification = qualityPolicy::classifyHardwareSample(result.feederHealthy, classificationTotalFrames, classificationSkippedFrames,
+									  result.encodedFrames, result.outputFrames, result.minimumEncodedFrames,
+									  result.allowedSkippedFrames);
 	result.success = classification.success;
 	result.errorCode = classification.errorCode ? classification.errorCode : "";
 	return result;
@@ -1617,7 +1628,7 @@ static bool isEncoderCandidateFailure(const HardwareAttempt &attempt)
 
 static CurrentSettings hardwareCandidate(const LegRequest &leg, const EncoderDescriptor &encoder, const qualityPolicy::HardwareTier &tier)
 {
-	CurrentSettings target = baseRecommendation(leg);
+	CurrentSettings target = benchmarkCeiling(leg);
 	const auto fitted = qualityPolicy::fitTier({target.width, target.height, target.fpsNum, target.fpsDen}, tier.longEdge, tier.shortEdge, tier.lowerFps);
 	target.width = fitted.width;
 	target.height = fitted.height;
@@ -1632,10 +1643,10 @@ static CurrentSettings hardwareCandidate(const LegRequest &leg, const EncoderDes
 	return target;
 }
 
-static bool hardwareTupleChanged(const LegRequest &leg, const CurrentSettings &selected)
+static bool hardwareFellBelowBenchmarkCeiling(const LegRequest &leg, const CurrentSettings &selected)
 {
-	CurrentSettings current = baseRecommendation(leg);
-	return current.width != selected.width || current.height != selected.height || current.fpsNum != selected.fpsNum || current.fpsDen != selected.fpsDen;
+	const CurrentSettings ceiling = benchmarkCeiling(leg);
+	return ceiling.width != selected.width || ceiling.height != selected.height || ceiling.fpsNum != selected.fpsNum || ceiling.fpsDen != selected.fpsDen;
 }
 
 static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_ptr<Session> &session, const std::vector<LegRequest> &legs)
@@ -1674,8 +1685,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			// At most one known-streaming-mix control is useful per encoder and
 			// horizontal leg. Repeating an unavailable control at every quality
 			// tier would consume the budget needed to reach x264.
-			plannedControlAttempts +=
-				std::count_if(legs.begin(), legs.end(), [](const LegRequest &leg) { return leg.display == "horizontal"; });
+			plannedControlAttempts += std::count_if(legs.begin(), legs.end(), [](const LegRequest &leg) { return leg.display == "horizontal"; });
 		}
 	}
 	const size_t plannedAttempts = std::max<size_t>(1, plannedPrimaryAttempts + plannedControlAttempts);
@@ -1683,12 +1693,10 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 	// each private mix can take one additional stop interval to leave the render
 	// thread. Budget all three so pathological cleanup cannot consume the time
 	// reserved for the x264 fallback.
-	const int phaseTimeoutMs = qualityPolicy::hardwarePhaseTimeoutMs(plannedAttempts, kHardwareWarmupMs, kHardwareSampleMs,
-							   3 * kHardwareStopTimeoutMs);
+	const int phaseTimeoutMs = qualityPolicy::hardwarePhaseTimeoutMs(plannedAttempts, kHardwareWarmupMs, kHardwareSampleMs, 3 * kHardwareStopTimeoutMs);
 	const auto phaseDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(phaseTimeoutMs);
-	blog(LOG_INFO,
-	     "[Auto Optimizer][Hardware] planned_attempts=%zu primary_attempts=%zu possible_main_controls=%zu timeout_ms=%d",
-	     plannedAttempts, plannedPrimaryAttempts, plannedControlAttempts, phaseTimeoutMs);
+	blog(LOG_INFO, "[Auto Optimizer][Hardware] planned_attempts=%zu primary_attempts=%zu possible_main_controls=%zu timeout_ms=%d", plannedAttempts,
+	     plannedPrimaryAttempts, plannedControlAttempts, phaseTimeoutMs);
 	size_t attemptOrdinal = 0;
 	auto attemptProgress = [&]() { return 15.0 + 14.0 * (double)attemptOrdinal++ / (double)plannedAttempts; };
 
@@ -1722,17 +1730,16 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			const std::string mainControlKey = encoder.id + ":" + legs[legIndex].legId;
 			const bool privatePacketFailure = attempt.errorCode == "hardware_benchmark_no_input_frames" ||
 							  attempt.errorCode == "hardware_benchmark_no_encoded_packets";
-			const bool mainControlAttempted = encoder.hardware && legs[legIndex].display == "horizontal" &&
-						  attempt.feedMode == "private-mix" && privatePacketFailure &&
-						  attemptedMainControls.insert(mainControlKey).second;
+			const bool mainControlAttempted = encoder.hardware && legs[legIndex].display == "horizontal" && attempt.feedMode == "private-mix" &&
+							  privatePacketFailure && attemptedMainControls.insert(mainControlKey).second;
 			// A streaming-mix retry is diagnostic only. If it succeeds, the hardware
 			// encoder is healthy and the private benchmark infrastructure failed;
 			// never mislabel that outcome as overload or silently select x264.
 			double resolvedProgress = progress;
 			if (mainControlAttempted) {
 				resolvedProgress = attemptProgress();
-				pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_validating_encoder",
-					  legs[legIndex].legId, {}, {}, {}, 0, &candidate);
+				pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_validating_encoder", legs[legIndex].legId, {}, {}, {}, 0,
+					  &candidate);
 				mainControl = runEncoderWorkload(session, candidate, phaseDeadline, true);
 			}
 			auto logAttempt = [&](const HardwareAttempt &value) {
@@ -1746,13 +1753,11 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 				     encoder.id.c_str(), encoder.family.c_str(), candidate.width, candidate.height, candidate.fpsNum, candidate.fpsDen,
 				     value.feedMode.empty() ? "unavailable" : value.feedMode.c_str(), value.success ? "true" : "false",
 				     value.cancelled ? "true" : "false", value.timedOut ? "true" : "false",
-				     value.errorCode.empty() ? "none" : value.errorCode.c_str(), value.sourceFpsNum, value.sourceFpsDen,
-				     value.frameRateDivisor, value.totalFrames, value.skippedFrames,
-				     value.encodedFrames, value.outputFrames,
-				     value.outputDroppedFrames, value.expectedFrames, value.minimumEncodedFrames, value.allowedSkippedFrames,
-				     value.feederHealthy ? "true" : "false", value.scheduledFrames, value.submittedFrames, value.lockFailedFrames,
-				     value.lateFrames, encoderError.empty() ? "none" : encoderError.c_str(),
-				     outputError.empty() ? "none" : outputError.c_str());
+				     value.errorCode.empty() ? "none" : value.errorCode.c_str(), value.sourceFpsNum, value.sourceFpsDen, value.frameRateDivisor,
+				     value.totalFrames, value.skippedFrames, value.encodedFrames, value.outputFrames, value.outputDroppedFrames,
+				     value.expectedFrames, value.minimumEncodedFrames, value.allowedSkippedFrames, value.feederHealthy ? "true" : "false",
+				     value.scheduledFrames, value.submittedFrames, value.lockFailedFrames, value.lateFrames,
+				     encoderError.empty() ? "none" : encoderError.c_str(), outputError.empty() ? "none" : outputError.c_str());
 			};
 			logAttempt(attempt);
 			if (mainControlAttempted) {
@@ -1765,8 +1770,8 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 				// infrastructure failure. If the optional control mix is unavailable
 				// or itself produces no packets, preserve the private result so lower
 				// tiers and the x264 fallback remain reachable.
-				if (qualityPolicy::shouldAdoptHardwareControl(mainControl.success, mainControl.cancelled,
-									      mainControl.errorCode, mainControl.timedOut))
+				if (qualityPolicy::shouldAdoptHardwareControl(mainControl.success, mainControl.cancelled, mainControl.errorCode,
+									      mainControl.timedOut))
 					attempt = std::move(mainControl);
 			}
 			if (attempt.errorCode == "hardware_benchmark_overloaded")
@@ -1821,8 +1826,8 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 					assessments[index].value = selected[index];
 					const bool softwareFallback = !encoder.hardware &&
 								      resolveEncoderId(legs[index].current.encoderId) != ADVANCED_ENCODER_X264;
-					assessments[index].constrained = hardwareTupleChanged(legs[index], selected[index]) || softwareFallback;
-					if (hardwareTupleChanged(legs[index], selected[index]))
+					assessments[index].constrained = hardwareFellBelowBenchmarkCeiling(legs[index], selected[index]) || softwareFallback;
+					if (hardwareFellBelowBenchmarkCeiling(legs[index], selected[index]))
 						assessments[index].reason = "hardware_benchmark_resolution_fallback";
 					else if (softwareFallback)
 						assessments[index].reason = "hardware_benchmark_encoder_fallback";
@@ -1934,6 +1939,19 @@ static const char *youtubeSampleClassName(probePolicy::YoutubeProbeSampleClass s
 		return "marginal";
 	case probePolicy::YoutubeProbeSampleClass::Hard:
 		return "hard";
+	}
+	return "unknown";
+}
+
+static const char *youtubeLoadResultName(probePolicy::YoutubeProbeLoadResult loadResult)
+{
+	switch (loadResult) {
+	case probePolicy::YoutubeProbeLoadResult::Accepted:
+		return "accepted";
+	case probePolicy::YoutubeProbeLoadResult::SourceUnderfill:
+		return "source_underfill";
+	case probePolicy::YoutubeProbeLoadResult::TransportPressure:
+		return "transport_pressure";
 	}
 	return "unknown";
 }
@@ -2140,8 +2158,9 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 	sample.medianSubwindowAggregateKbps = medianValue(subwindowThroughputs);
 	sample.wholeWindowAggregateKbps = (endBytes - startBytes) * 8ULL * 1000000000ULL / elapsedNs / 1000ULL;
 	// The median filters isolated scheduler/network spikes, while the complete
-	// window catches multi-second stalls. Use the conservative value for both
-	// classification and recommendation.
+	// window catches multi-second stalls. The conservative value feeds the
+	// recommendation and source-underfill diagnostic. Transport classification
+	// uses only explicit drop/congestion evidence.
 	sample.measuredAggregateKbps = std::min(sample.medianSubwindowAggregateKbps, sample.wholeWindowAggregateKbps);
 	sample.sampleBytes = endBytes - startBytes;
 	sample.frames = endFrames >= startFrames ? endFrames - startFrames : 0;
@@ -2166,31 +2185,32 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 								    sample.congestionSevereSamples, sample.congestionSamples);
 	totalProbeBytes = youtubeProbeBytesUsed(resources.output, budgetStartBytes);
 
-	const probePolicy::YoutubeProbeSampleClass sampleClass = probePolicy::classifyYoutubeProbeSample(sample.metrics);
+	const probePolicy::YoutubeProbeSampleClass transportClass = probePolicy::classifyYoutubeProbeTransport(sample.metrics);
 	blog(LOG_INFO,
 	     "[Auto Optimizer][YouTube Probe] Sample result: purpose=%s, video_target=%d Kbps, expected_aggregate=%llu Kbps, "
 	     "representative_aggregate=%llu Kbps, median_subwindow_aggregate=%llu Kbps, whole_window_aggregate=%llu Kbps, "
 	     "elapsed=%lld ms, sample_bytes=%llu, frames=%u, "
 	     "dropped=%u, max_congestion=%.3f, p95_congestion=%.3f, congestion_high=%u/%u, congestion_severe=%u/%u, "
-	     "throughput_ratio=%.2f%%, drop_ratio=%.2f%%, congestion_high_ratio=%.2f%%, congestion_severe_ratio=%.2f%%, class=%s",
+	     "throughput_ratio=%.2f%%, throughput_at_target=%s, drop_ratio=%.2f%%, congestion_high_ratio=%.2f%%, "
+	     "congestion_severe_ratio=%.2f%%, transport_class=%s",
 	     eventCode, target, (unsigned long long)sample.expectedAggregateKbps, (unsigned long long)sample.measuredAggregateKbps,
 	     (unsigned long long)sample.medianSubwindowAggregateKbps, (unsigned long long)sample.wholeWindowAggregateKbps, sample.elapsedMs,
 	     (unsigned long long)sample.sampleBytes, (unsigned int)sample.frames, (unsigned int)sample.droppedFrames, (double)sample.maximumCongestion,
 	     (double)sample.p95Congestion, (unsigned int)sample.congestionHighSamples, (unsigned int)sample.congestionSamples,
 	     (unsigned int)sample.congestionSevereSamples, (unsigned int)sample.congestionSamples, (double)sample.metrics.throughputBasisPoints / 100.0,
-	     (double)sample.metrics.dropBasisPoints / 100.0, (double)sample.metrics.congestionHighBasisPoints / 100.0,
-	     (double)sample.metrics.congestionSevereBasisPoints / 100.0, youtubeSampleClassName(sampleClass));
+	     probePolicy::youtubeThroughputAtTarget(sample.metrics) ? "true" : "false", (double)sample.metrics.dropBasisPoints / 100.0,
+	     (double)sample.metrics.congestionHighBasisPoints / 100.0, (double)sample.metrics.congestionSevereBasisPoints / 100.0,
+	     youtubeSampleClassName(transportClass));
 	return true;
 }
 
 static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
-				double slotEndProgress)
+				double slotEndProgress, int youtubeProbeCeilingOverrideKbps = 0)
 {
 	ProbeResult result;
 	result.provider = probe.provider;
 	result.legId = probe.legId;
 	result.method = probe.provider == "youtube" ? "youtube-unbound-ramp" : "twitch-bandwidth-test";
-	result.headroomPercent = 100 - (probe.provider == "youtube" ? kYoutubeProbeSafeMultiplierPercent : kTwitchProbeSafeMultiplierPercent);
 	ScratchResources resources(*session);
 
 	obs_data_t *serviceSettings = obs_data_create();
@@ -2324,6 +2344,7 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		if (!waitForProbeInterval(session, resources.output, std::chrono::steady_clock::now() + std::chrono::milliseconds(kProbeWarmupMs), result))
 			return result;
 		const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
+		const uint32_t startDroppedFrames = obs_output_get_frames_dropped(resources.output);
 		const auto sampleStart = std::chrono::steady_clock::now();
 		const auto sampleDeadline = sampleStart + std::chrono::milliseconds(kProbeSampleMs);
 		while (std::chrono::steady_clock::now() < sampleDeadline && obs_output_get_total_bytes(resources.output) - startBytes < kProbeMaxBytes) {
@@ -2332,22 +2353,38 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		}
 		const auto sampleEnd = std::chrono::steady_clock::now();
 		const uint64_t endBytes = obs_output_get_total_bytes(resources.output);
+		const uint32_t endDroppedFrames = obs_output_get_frames_dropped(resources.output);
+		const uint32_t droppedFrames = endDroppedFrames >= startDroppedFrames ? endDroppedFrames - startDroppedFrames : endDroppedFrames;
 		const uint64_t elapsedNs = (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(sampleEnd - sampleStart).count();
 		if (endBytes <= startBytes || elapsedNs == 0) {
 			result.errorCode = "twitch_probe_no_data";
 			return result;
 		}
 		result.measuredKbps = ((endBytes - startBytes) * 8ULL * 1000000000ULL) / elapsedNs / 1000ULL;
-		result.safeKbps = probePolicy::safeVideoKbps(result.measuredKbps, kTwitchProbeSafeMultiplierPercent, kTwitchProbeAudioBitrateKbps);
+		const probePolicy::TwitchProbeDecision decision =
+			probePolicy::decideTwitchProbe(result.measuredKbps, (uint64_t)std::max(0, initialBitrate), droppedFrames);
+		result.safeKbps = decision.recommendedVideoKbps;
 		if (result.platformCapKbps > 0)
 			result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)result.platformCapKbps);
-		result.success = result.measuredKbps > 0;
+		if (leg.limits.maxBitrateKbps > 0)
+			result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
+		result.success = result.safeKbps > 0;
+		result.stability = decision.targetPassed ? ProbeStability::Stable : ProbeStability::Degraded;
+		const int effectiveCeilingKbps =
+			probePolicy::effectiveProbeCeilingKbps(kProbeMaximumBitrateKbps, result.platformCapKbps, leg.limits.maxBitrateKbps);
+		result.ceilingReached = decision.targetPassed && probePolicy::reachedEffectiveProbeCeiling(initialBitrate, effectiveCeilingKbps);
+		blog(result.success ? LOG_INFO : LOG_WARNING,
+		     "[Auto Optimizer][Twitch Probe] Measurement decision: target=%d Kbps, measured_aggregate=%llu Kbps, dropped_frames=%u, "
+		     "target_passed=%s, recommended_video=%llu Kbps, platform_cap=%d Kbps, request_cap=%d Kbps",
+		     initialBitrate, (unsigned long long)result.measuredKbps, droppedFrames, decision.targetPassed ? "true" : "false",
+		     (unsigned long long)result.safeKbps, result.platformCapKbps, leg.limits.maxBitrateKbps);
 	} else {
 		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
 		uint64_t totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
 		probePolicy::YoutubeRampEvidence rampEvidence;
+		const int requestProbeCeilingKbps = youtubeProbeCeilingOverrideKbps > 0 ? youtubeProbeCeilingOverrideKbps : leg.limits.maxBitrateKbps;
 		const int effectiveCeilingKbps =
-			probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, leg.limits.maxBitrateKbps);
+			probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, requestProbeCeilingKbps);
 		std::vector<std::pair<int, int>> plannedTargets;
 		int lastPlannedTarget = 0;
 		for (int ladderTarget : ladder) {
@@ -2360,7 +2397,11 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		std::string terminationReason = "ladder_exhausted";
 		int activeTarget = initialBitrate;
 		size_t confirmationEpisodes = 0;
-		bool measurementConclusive = false;
+		// This means the probe produced enough evidence for a conservative
+		// recommendation; it does not necessarily mean the physical path limit
+		// was measured.
+		bool recommendationEvidenceUsable = false;
+		probePolicy::YoutubeSourceUnderfillState sourceUnderfillState;
 		const auto rampStarted = std::chrono::steady_clock::now();
 		const auto probeElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(rampStarted - probeStarted).count();
 		const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(youtubeDeadline - rampStarted).count();
@@ -2446,7 +2487,16 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 						else if (usedThirdBaselineSample)
 							result.stability = ProbeStability::Variable;
 
-						rampEvidence.observe(baselineBasis, true);
+						const probePolicy::YoutubeProbeLoadResult baselineLoad =
+							probePolicy::classifyYoutubeProbeLoad(baseline.reference, baseline);
+						sourceUnderfillState.observeTransportClean(baselineLoad);
+						blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] Baseline load result: result=%s",
+						     youtubeLoadResultName(baselineLoad));
+
+						if (sourceUnderfillState.terminal)
+							rampEvidence.observeTransportCleanLowerBound(baselineBasis, (uint64_t)baselineTarget);
+						else
+							rampEvidence.observeAcceptedTarget(baselineBasis, (uint64_t)baselineTarget);
 						YoutubeProbeSample lastAccepted = baselineFirst;
 						lastAccepted.targetVideoKbps = baselineTarget;
 						lastAccepted.expectedAggregateKbps = (uint64_t)baselineTarget + kYoutubeProbeAudioBitrateKbps;
@@ -2454,8 +2504,9 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 						lastAccepted.metrics = baseline.reference;
 						result.ceilingReached = probePolicy::reachedEffectiveProbeCeiling(baselineTarget, effectiveCeilingKbps);
 						if (result.ceilingReached) {
-							terminationReason = "effective_ceiling_reached_at_baseline";
-							measurementConclusive = true;
+							terminationReason = sourceUnderfillState.terminal ? "source_underfill_at_effective_ceiling_baseline"
+													  : "effective_ceiling_reached_at_baseline";
+							recommendationEvidenceUsable = true;
 						}
 
 						for (size_t targetIndex = 1; targetIndex < plannedTargets.size() && !result.ceilingReached; targetIndex++) {
@@ -2474,19 +2525,33 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 										   "youtube_probe_measuring", highFirst, result))
 								return result;
 
-							if (probePolicy::youtubeSampleAccepted(highFirst.metrics, baseline)) {
-								rampEvidence.observe(highFirst.measuredAggregateKbps, true);
+							const probePolicy::YoutubeProbeLoadResult highFirstLoad =
+								probePolicy::classifyYoutubeProbeLoad(highFirst.metrics, baseline);
+							blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] Rung load result: target=%d Kbps, result=%s",
+							     plannedTarget, youtubeLoadResultName(highFirstLoad));
+							if (!probePolicy::youtubeRequiresCapacityConfirmation(highFirstLoad)) {
+								const bool sourceUnderfill = highFirstLoad ==
+											     probePolicy::YoutubeProbeLoadResult::SourceUnderfill;
+								sourceUnderfillState.observeTransportClean(highFirstLoad);
+								if (sourceUnderfill)
+									rampEvidence.observeTransportCleanLowerBound(highFirst.measuredAggregateKbps,
+														     (uint64_t)highFirst.targetVideoKbps);
+								else
+									rampEvidence.observeAcceptedTarget(highFirst.measuredAggregateKbps,
+													   (uint64_t)highFirst.targetVideoKbps);
 								result.measuredKbps = rampEvidence.recommendationBasisKbps;
 								lastAccepted = highFirst;
 								result.ceilingReached = probePolicy::reachedEffectiveProbeCeiling(highFirst.targetVideoKbps,
 																  effectiveCeilingKbps);
 								if (result.ceilingReached) {
-									terminationReason = "effective_ceiling_reached";
-									measurementConclusive = true;
+									terminationReason = sourceUnderfill ? "source_underfill_at_effective_ceiling"
+													    : "effective_ceiling_reached";
+									recommendationEvidenceUsable = true;
 								}
 								if (highFirst.targetVideoKbps < ladderTarget) {
-									terminationReason = "provider_or_request_cap_reached";
-									measurementConclusive = true;
+									terminationReason = sourceUnderfill ? "source_underfill_at_provider_or_request_cap"
+													    : "provider_or_request_cap_reached";
+									recommendationEvidenceUsable = true;
 									break;
 								}
 								continue;
@@ -2526,39 +2591,57 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 
 							const bool lowRecovered =
 								probePolicy::youtubeLowControlRecovered(lowControl.metrics, lastAccepted.metrics, baseline);
-							const bool highAccepted = probePolicy::youtubeSampleAccepted(highRetry.metrics, baseline);
+							const probePolicy::YoutubeProbeLoadResult highRetryLoad =
+								probePolicy::classifyYoutubeProbeLoad(highRetry.metrics, baseline);
+							const bool highAccepted = !probePolicy::youtubeRequiresCapacityConfirmation(highRetryLoad);
 							const probePolicy::YoutubeConfirmationDecision confirmation =
 								probePolicy::decideYoutubeConfirmation(lowRecovered, highAccepted);
 							blog(LOG_INFO,
 							     "[Auto Optimizer][YouTube Probe] Confirmation decision: episode=%llu, high_target=%d Kbps, "
-							     "low_recovered=%s, high_retry_accepted=%s, decision=%s",
+							     "low_recovered=%s, high_retry_result=%s, decision=%s",
 							     (unsigned long long)confirmationEpisodes, plannedTarget, lowRecovered ? "true" : "false",
-							     highAccepted ? "true" : "false", youtubeConfirmationDecisionName(confirmation));
+							     youtubeLoadResultName(highRetryLoad), youtubeConfirmationDecisionName(confirmation));
 
 							if (confirmation == probePolicy::YoutubeConfirmationDecision::CapacityKnee) {
+								// Two pressure observations at the high target with a
+								// recovered low control are explicit transport evidence;
+								// they supersede any earlier source-underfill diagnostic.
+								sourceUnderfillState.confirmCapacityKnee();
 								const uint64_t confirmedBasis =
 									std::min(lastAccepted.measuredAggregateKbps, lowControl.measuredAggregateKbps);
-								rampEvidence.observe(confirmedBasis, true);
+								rampEvidence.observeAcceptedTarget(confirmedBasis, (uint64_t)lastAccepted.targetVideoKbps);
 								result.measuredKbps = rampEvidence.recommendationBasisKbps;
 								terminationReason = "confirmed_capacity_knee";
-								measurementConclusive = true;
+								recommendationEvidenceUsable = true;
 								break;
 							}
 							if (confirmation == probePolicy::YoutubeConfirmationDecision::TransientRecovered) {
 								if (result.stability == ProbeStability::Stable)
 									result.stability = ProbeStability::Variable;
-								rampEvidence.observe(highRetry.measuredAggregateKbps, true);
+								const bool sourceUnderfill = highRetryLoad ==
+											     probePolicy::YoutubeProbeLoadResult::SourceUnderfill;
+								sourceUnderfillState.observeTransportClean(highRetryLoad);
+								if (sourceUnderfill)
+									rampEvidence.observeTransportCleanLowerBound(highRetry.measuredAggregateKbps,
+														     (uint64_t)highRetry.targetVideoKbps);
+								else
+									rampEvidence.observeAcceptedTarget(highRetry.measuredAggregateKbps,
+													   (uint64_t)highRetry.targetVideoKbps);
 								result.measuredKbps = rampEvidence.recommendationBasisKbps;
 								lastAccepted = highRetry;
 								result.ceilingReached = probePolicy::reachedEffectiveProbeCeiling(highRetry.targetVideoKbps,
 																  effectiveCeilingKbps);
 								if (result.ceilingReached) {
-									terminationReason = "effective_ceiling_reached_after_retry";
-									measurementConclusive = true;
+									terminationReason = sourceUnderfill
+												    ? "source_underfill_at_effective_ceiling_after_retry"
+												    : "effective_ceiling_reached_after_retry";
+									recommendationEvidenceUsable = true;
 								}
 								if (highRetry.targetVideoKbps < ladderTarget) {
-									terminationReason = "provider_or_request_cap_reached_after_retry";
-									measurementConclusive = true;
+									terminationReason = sourceUnderfill
+												    ? "source_underfill_at_provider_or_request_cap_after_retry"
+												    : "provider_or_request_cap_reached_after_retry";
+									recommendationEvidenceUsable = true;
 									break;
 								}
 								continue;
@@ -2577,20 +2660,21 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 			}
 		}
 
-		if (result.stability != ProbeStability::Unstable && rampEvidence.passedStep && !measurementConclusive) {
+		if (sourceUnderfillState.terminal && result.stability == ProbeStability::Stable)
+			result.stability = ProbeStability::SourceUnderfill;
+
+		if (result.stability != ProbeStability::Unstable && rampEvidence.passedStep && !recommendationEvidenceUsable) {
 			result.observedThroughputReliable = false;
 			if (result.errorCode.empty())
 				result.errorCode = "youtube_probe_inconclusive";
 		}
 
 		uint64_t uncappedSafeKbps = 0;
-		if (result.stability != ProbeStability::Unstable && rampEvidence.passedStep && measurementConclusive) {
-			uncappedSafeKbps = rampEvidence.safeVideoKbps(kYoutubeProbeSafeMultiplierPercent, kYoutubeProbeAudioBitrateKbps);
+		if (result.stability != ProbeStability::Unstable && rampEvidence.passedStep && recommendationEvidenceUsable) {
+			uncappedSafeKbps = rampEvidence.recommendedVideoKbps();
 			result.safeKbps = uncappedSafeKbps;
 			if (result.platformCapKbps > 0)
 				result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)result.platformCapKbps);
-			if (leg.limits.maxBitrateKbps > 0)
-				result.safeKbps = std::min<uint64_t>(result.safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
 			result.success = result.safeKbps > 0;
 		} else {
 			result.safeKbps = 0;
@@ -2600,14 +2684,14 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		}
 		blog(result.success ? LOG_INFO : LOG_WARNING,
 		     "[Auto Optimizer][YouTube Probe] Adaptive ladder summary: passed_step=%s, stability=%s, "
-		     "observed_throughput_reliable=%s, recommendation_basis=%llu Kbps, safe_multiplier=%d%%, audio_reserve=%d Kbps, "
-		     "uncapped_safe_video=%llu Kbps, final_safe_video=%llu Kbps, platform_cap=%d Kbps, request_cap=%d Kbps, "
-		     "total_output_bytes=%llu, ceiling_reached=%s, conclusive=%s, confirmation_episodes=%llu, termination=%s, error=%s",
+		     "observed_output_reliable_for_recommendation=%s, recommendation_basis=%llu Kbps, validated_video=%llu Kbps, "
+		     "final_safe_video=%llu Kbps, platform_cap=%d Kbps, recommendation_cap=%d Kbps, probe_ceiling=%d Kbps, "
+		     "total_output_bytes=%llu, ceiling_reached=%s, recommendation_evidence_usable=%s, confirmation_episodes=%llu, termination=%s, error=%s",
 		     rampEvidence.passedStep ? "true" : "false", probeStabilityName(result.stability), result.observedThroughputReliable ? "true" : "false",
-		     (unsigned long long)rampEvidence.recommendationBasisKbps, kYoutubeProbeSafeMultiplierPercent, kYoutubeProbeAudioBitrateKbps,
-		     (unsigned long long)uncappedSafeKbps, (unsigned long long)result.safeKbps, result.platformCapKbps, leg.limits.maxBitrateKbps,
-		     (unsigned long long)totalProbeBytes, result.ceilingReached ? "true" : "false", measurementConclusive ? "true" : "false",
-		     (unsigned long long)confirmationEpisodes, terminationReason.c_str(), result.errorCode.empty() ? "none" : result.errorCode.c_str());
+		     (unsigned long long)rampEvidence.recommendationBasisKbps, (unsigned long long)uncappedSafeKbps, (unsigned long long)result.safeKbps,
+		     result.platformCapKbps, leg.limits.maxBitrateKbps, effectiveCeilingKbps, (unsigned long long)totalProbeBytes,
+		     result.ceilingReached ? "true" : "false", recommendationEvidenceUsable ? "true" : "false", (unsigned long long)confirmationEpisodes,
+		     terminationReason.c_str(), result.errorCode.empty() ? "none" : result.errorCode.c_str());
 	}
 
 	obs_output_stop(resources.output);
@@ -2705,8 +2789,21 @@ static void runSession(const std::shared_ptr<Session> &session)
 	std::vector<ProbeResult> probeResults;
 	const size_t eligibleProbeCount =
 		std::count_if(session->probes.begin(), session->probes.end(), [](const ProbeRequest &probe) { return probe.eligible; });
+	std::vector<ProbeRequest *> orderedProbes;
+	orderedProbes.reserve(session->probes.size());
+	for (auto &probe : session->probes)
+		orderedProbes.push_back(&probe);
+	// A shared-leg YouTube verification can use the preceding clean Twitch
+	// result to decide whether it should test one rung above the final 6000-Kbps
+	// recommendation cap. Do not depend on Desktop's request ordering.
+	std::stable_sort(orderedProbes.begin(), orderedProbes.end(), [](const ProbeRequest *left, const ProbeRequest *right) {
+		const int leftPriority = left->provider == "twitch" ? 0 : left->provider == "youtube" ? 2 : 1;
+		const int rightPriority = right->provider == "twitch" ? 0 : right->provider == "youtube" ? 2 : 1;
+		return leftPriority < rightPriority;
+	});
 	size_t completedProbeCount = 0;
-	for (auto &probe : session->probes) {
+	for (ProbeRequest *probePointer : orderedProbes) {
+		ProbeRequest &probe = *probePointer;
 		if (!probe.eligible) {
 			pushEvent(session, "progress", "bandwidth", 30, probe.denialReason, probe.legId, "estimated", probe.probeId, probe.provider);
 			continue;
@@ -2718,18 +2815,50 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const double endProgress = 30.0 + (35.0 * (double)(completedProbeCount + 1) / (double)std::max<size_t>(1, eligibleProbeCount));
 		pushEvent(session, "phase", "bandwidth", startProgress, probe.provider + "_probe_started", probe.legId, "active", probe.probeId,
 			  probe.provider);
+		int youtubeProbeCeilingOverrideKbps = 0;
+		if (probe.provider == "youtube") {
+			const bool hasTwitchDestination = std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
+								      [](const Destination &destination) { return destination.platform == "twitch"; });
+			const bool hasYoutubeDestination = std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
+								       [](const Destination &destination) { return destination.platform == "youtube"; });
+			const auto twitchResultIt = std::find_if(probeResults.rbegin(), probeResults.rend(), [&](const ProbeResult &candidate) {
+				return candidate.legId == probe.legId && candidate.provider == "twitch";
+			});
+			if (twitchResultIt != probeResults.rend()) {
+				const int recommendationCapKbps = legIt->limits.maxBitrateKbps > 0 ? legIt->limits.maxBitrateKbps
+												   : twitchResultIt->platformCapKbps;
+				if (probePolicy::shouldValidateYoutubeAboveSharedCap(hasTwitchDestination && hasYoutubeDestination, twitchResultIt->success,
+										     twitchResultIt->stability == ProbeStability::Stable,
+										     twitchResultIt->safeKbps, recommendationCapKbps)) {
+					youtubeProbeCeilingOverrideKbps =
+						probePolicy::nextYoutubeValidationCeilingKbps(recommendationCapKbps, kYoutubeProbeMaximumBitrateKbps);
+					blog(LOG_INFO,
+					     "[Auto Optimizer][YouTube Probe] Expanding shared-leg verification above recommendation cap: "
+					     "twitch_safe=%llu Kbps, recommendation_cap=%d Kbps, verification_ceiling=%d Kbps",
+					     (unsigned long long)twitchResultIt->safeKbps, recommendationCapKbps, youtubeProbeCeilingOverrideKbps);
+				}
+			}
+		}
 		const auto probeRunStarted = std::chrono::steady_clock::now();
-		ProbeResult result = runRtmpProbe(session, probe, *legIt, startProgress, endProgress);
+		ProbeResult result = runRtmpProbe(session, probe, *legIt, startProgress, endProgress, youtubeProbeCeilingOverrideKbps);
 		const auto probeRunElapsedMs =
 			std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - probeRunStarted).count();
 		if (result.provider == "youtube") {
 			blog(result.success ? LOG_INFO : LOG_WARNING,
 			     "[Auto Optimizer][YouTube Probe] Probe summary: success=%s, cancelled=%s, measured_aggregate=%llu Kbps, "
-			     "safe_video=%llu Kbps, ceiling_reached=%s, stability=%s, observed_throughput_reliable=%s, elapsed=%lld ms, error=%s",
+			     "safe_video=%llu Kbps, ceiling_reached=%s, stability=%s, observed_output_reliable_for_recommendation=%s, elapsed=%lld ms, "
+			     "error=%s",
 			     result.success ? "true" : "false", result.cancelled ? "true" : "false", (unsigned long long)result.measuredKbps,
 			     (unsigned long long)result.safeKbps, result.ceilingReached ? "true" : "false", probeStabilityName(result.stability),
 			     result.observedThroughputReliable ? "true" : "false", (long long)probeRunElapsedMs,
 			     result.errorCode.empty() ? "none" : result.errorCode.c_str());
+		} else if (result.provider == "twitch") {
+			blog(result.success ? LOG_INFO : LOG_WARNING,
+			     "[Auto Optimizer][Twitch Probe] Probe summary: success=%s, cancelled=%s, measured_aggregate=%llu Kbps, "
+			     "safe_video=%llu Kbps, ceiling_reached=%s, stability=%s, elapsed=%lld ms, error=%s",
+			     result.success ? "true" : "false", result.cancelled ? "true" : "false", (unsigned long long)result.measuredKbps,
+			     (unsigned long long)result.safeKbps, result.ceilingReached ? "true" : "false", probeStabilityName(result.stability),
+			     (long long)probeRunElapsedMs, result.errorCode.empty() ? "none" : result.errorCode.c_str());
 		}
 		if (probe.provider == "youtube") {
 			std::lock_guard<std::mutex> lock(session->probeConfirmationMutex);
@@ -2742,7 +2871,9 @@ static void runSession(const std::shared_ptr<Session> &session)
 			completeCancelled(session);
 			return;
 		}
-		const std::string completionCode = result.success                                 ? result.provider + "_probe_completed"
+		const std::string completionCode = result.success && result.stability == ProbeStability::SourceUnderfill
+							   ? result.provider + "_probe_source_underfill_completed"
+						   : result.success                               ? result.provider + "_probe_completed"
 						   : result.stability == ProbeStability::Unstable ? result.provider + "_probe_unstable_estimate_used"
 												  : result.provider + "_probe_failed_estimate_used";
 		pushEvent(session, "progress", "bandwidth", endProgress, completionCode, result.legId, result.success ? "active" : "estimated", probe.probeId,
@@ -2811,12 +2942,20 @@ static void runSession(const std::shared_ptr<Session> &session)
 								  [](const ProbeResult *result) { return result->stability == ProbeStability::Degraded; });
 			const bool hasVariableProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(),
 								  [](const ProbeResult *result) { return result->stability == ProbeStability::Variable; });
+			const bool hasSourceUnderfillProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(), [](const ProbeResult *result) {
+				return result->stability == ProbeStability::SourceUnderfill;
+			});
 			if (hasDegradedProbe && recommendation.confidence != "low") {
 				recommendation.confidence = "low";
 				recommendation.reason = "unstable_connection";
 			} else if (hasVariableProbe && recommendation.confidence == "high") {
 				recommendation.confidence = "medium";
 				recommendation.reason = "connection_variability_detected";
+			} else if (hasSourceUnderfillProbe && recommendation.confidence == "high") {
+				// The measured output is a useful conservative lower bound, but
+				// source/encoder underfill did not establish the physical path limit.
+				recommendation.confidence = "medium";
+				recommendation.reason = "probe_source_underfill";
 			}
 			if (safeKbps < 500) {
 				recommendation.confidence = "low";
@@ -2853,6 +2992,18 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const double selectingProgress = 75.0 + 19.0 * (double)index / (double)std::max<size_t>(1, preparedLegs.size());
 		const double selectedProgress = 75.0 + 19.0 * (double)(index + 1) / (double)std::max<size_t>(1, preparedLegs.size());
 		if (!providerOwnsEncoding(session->topology, leg) && hardware.passed) {
+			// A successful provider probe is required before raising the current
+			// resolution. Estimate-only and failed-probe paths may still select a
+			// lower tested tuple, but never promote from assumed bandwidth.
+			const CurrentSettings currentCeiling = baseRecommendation(leg);
+			const auto eligibleCeiling = qualityPolicy::recommendationCeiling(
+				{recommendation.value.width, recommendation.value.height, recommendation.value.fpsNum, recommendation.value.fpsDen},
+				{currentCeiling.width, currentCeiling.height, currentCeiling.fpsNum, currentCeiling.fpsDen},
+				recommendation.measurementMode == "active");
+			recommendation.value.width = eligibleCeiling.width;
+			recommendation.value.height = eligibleCeiling.height;
+			recommendation.value.fpsNum = eligibleCeiling.fpsNum;
+			recommendation.value.fpsDen = eligibleCeiling.fpsDen;
 			pushEvent(session, "progress", "recommendation", selectingProgress, "recommendation_selecting_quality", leg.legId,
 				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, 0, (uint32_t)std::max(0, recommendation.value.bitrateKbps));
 			const auto selected = qualityPolicy::select({recommendation.value.width, recommendation.value.height, recommendation.value.fpsNum,
@@ -2866,6 +3017,14 @@ static void runSession(const std::shared_ptr<Session> &session)
 			if (selected.insufficientBandwidth) {
 				recommendation.confidence = "low";
 				recommendation.reason = "insufficient_bandwidth";
+			} else if (qualityPolicy::isResolutionPromotion({leg.current.width, leg.current.height, leg.current.fpsNum, leg.current.fpsDen},
+									selected.video) &&
+				   recommendation.confidence != "low" && recommendation.reason != "probe_source_underfill") {
+				// Synthetic encoder validation plus a successful provider probe is
+				// enough to offer the higher tier, but not to claim the same
+				// confidence as a recommendation that leaves geometry unchanged.
+				recommendation.confidence = "medium";
+				recommendation.reason = "resolution_promotion_tested";
 			}
 			pushEvent(session, "progress", "recommendation", selectedProgress, "recommendation_quality_selected", leg.legId,
 				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, (uint32_t)std::max(0, recommendation.value.bitrateKbps));

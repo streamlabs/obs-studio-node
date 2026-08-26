@@ -2098,6 +2098,12 @@ export interface IAutoConfigCurrentSettings {
 
 export interface IAutoConfigLimits {
     maxBitrateKbps?: number;
+    /**
+     * Complete canvas-bounded output ceiling eligible for hardware testing.
+     * Supply maxWidth and maxHeight together. Native also caps this tuple to
+     * the V1 1080p tier and promotes only exact 16:9 or 9:16 outputs. Custom
+     * aspect ratios retain their current resolution and frame rate.
+     */
     maxWidth?: number;
     maxHeight?: number;
     maxFpsNum?: number;
@@ -2184,12 +2190,37 @@ export interface IAutoConfigEvent {
 export interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'youtube-unbound-ramp';
+    /**
+     * True when the probe produced sufficient evidence for a usable safeKbps
+     * recommendation. This does not assert that the physical upload path was
+     * saturated or that its full capacity was measured.
+     */
     success: boolean;
-    /** Observed aggregate RTMP throughput, including audio. */
+    /**
+     * Aggregate output payload rate observed during the probe. This is
+     * sender-side evidence, not receiver-confirmed network capacity: the
+     * source or encoder can underfill its target without network loss or
+     * congestion.
+     */
     measuredKbps?: number;
-    /** Safe video bitrate after headroom and the probe audio reserve. */
+    /**
+     * Recommended video bitrate derived from usable probe evidence and
+     * applicable platform or request caps. A clean probe reports the validated
+     * video target; only explicit degradation or transport evidence can lower
+     * it. This is not necessarily the raw observed aggregate payload rate.
+     */
     safeKbps?: number;
+    /**
+     * Fixed percentage removed from usable probe evidence. Current probe
+     * policies validate targets directly and report zero; the field remains in
+     * the measurement contract so callers can explain future policies.
+     */
     headroomPercent?: number;
+    /**
+     * True when the active ladder reached its effective probe ceiling. The
+     * ceiling can come from probe, platform, or request limits and does not
+     * imply that the physical upload path was saturated.
+     */
     ceilingReached: boolean;
 }
 

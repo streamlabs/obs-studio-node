@@ -170,7 +170,7 @@ describe(testName, function() {
             const response = await run({
                 schemaVersion: 1,
                 topology: 'custom-rtmp',
-                legs: [leg()],
+                legs: [leg({ limits: { maxWidth: 1920, maxHeight: 1080 } })],
                 activeProbes: [{
                     probeId: 'twitch-primary',
                     kind: 'twitch-standard',
@@ -202,12 +202,20 @@ describe(testName, function() {
             expect(hardwareAttempt.height).to.be.greaterThan(0);
             expect(hardwareAttempt.fpsNum).to.be.greaterThan(0);
             expect(hardwareAttempt.fpsDen).to.be.greaterThan(0);
+            expect(response.events.some(event =>
+                (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264') &&
+                event.width === 1920 && event.height === 1080)).to.equal(true);
             const qualityInput = response.events.find(event => event.code === 'recommendation_selecting_quality');
             if (!qualityInput) throw new Error('Expected a quality-selection input event');
             expect(qualityInput.availableBitrateKbps).to.equal(2500);
+            // This estimate-only path may test the higher canvas ceiling, but
+            // cannot promote without a successful provider bandwidth probe.
+            expect(qualityInput.width).to.equal(1280);
             const qualityResult = response.events.find(event => event.code === 'recommendation_quality_selected');
             if (!qualityResult) throw new Error('Expected a quality-selection result event');
             expect(qualityResult.selectedBitrateKbps).to.equal(2500);
+            expect(response.result.legs[0].recommendation.width).to.be.at.most(1280);
+            expect(response.result.legs[0].recommendation.height).to.be.at.most(720);
             expect(response.result.legs[0].recommendation.encoderFamily).to.be.a('string').and.not.equal('');
             expect(response.result.legs[0].recommendation.encoderTitle).to.be.a('string').and.not.equal('');
             const testedPresets: Record<string, string> = {
@@ -511,6 +519,30 @@ describe(testName, function() {
             topology: 'direct-single',
             legs: [leg()],
         }), () => undefined)).to.throw('unsupported_autoconfig_schema');
+
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({ limits: { maxWidth: 1920 } })],
+        }), () => undefined)).to.throw('invalid_autoconfig_limits');
+
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({ limits: { maxWidth: 4294969216, maxHeight: 4294968376 } })],
+        }), () => undefined)).to.throw('invalid_autoconfig_limits');
+
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({ limits: { maxFpsNum: 60, maxFpsDen: -1 } })],
+        }), () => undefined)).to.throw('invalid_autoconfig_limits');
+
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({ limits: { maxFpsDen: 1 } })],
+        }), () => undefined)).to.throw('invalid_autoconfig_limits');
     });
 
     it('rejects more upload legs than Desktop can create', function() {

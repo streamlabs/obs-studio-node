@@ -12,12 +12,16 @@ constexpr uint32_t kYoutubeCleanThroughputMinimumBasisPoints = 9000;
 constexpr uint32_t kYoutubeCleanDropMaximumBasisPoints = 200;
 constexpr uint32_t kYoutubeCleanCongestionHighMaximumBasisPoints = 1000;
 constexpr uint32_t kYoutubeCleanCongestionSevereMaximumBasisPoints = 200;
-constexpr uint32_t kYoutubeHardThroughputMinimumBasisPoints = 7500;
 constexpr uint32_t kYoutubeHardDropMaximumBasisPoints = 500;
 constexpr uint32_t kYoutubeHardCongestionHighMaximumBasisPoints = 3000;
 constexpr uint32_t kYoutubeHardCongestionSevereMaximumBasisPoints = 1000;
+constexpr uint32_t kTwitchTargetMinimumBasisPoints = 7500;
+constexpr uint32_t kTwitchDegradedFallbackBasisPoints = 7000;
 
 struct YoutubeProbeSampleMetrics {
+	// The observed-output/target ratio is useful for identifying source or
+	// encoder underfill and for choosing a conservative recommendation. It is
+	// not transport-impairment evidence by itself.
 	uint32_t throughputBasisPoints = 0;
 	uint32_t dropBasisPoints = 0;
 	uint32_t congestionHighBasisPoints = 0;
@@ -25,6 +29,8 @@ struct YoutubeProbeSampleMetrics {
 };
 
 enum class YoutubeProbeSampleClass { Clean, Marginal, Hard };
+
+enum class YoutubeProbeLoadResult { Accepted, SourceUnderfill, TransportPressure };
 
 enum class YoutubeBaselineDecision { Clean, Impaired, NeedsThird, Unstable };
 
@@ -52,19 +58,23 @@ inline YoutubeProbeSampleMetrics makeYoutubeProbeSampleMetrics(uint32_t measured
 		ratioBasisPoints(congestionHighSamples, congestionSamples), ratioBasisPoints(congestionSevereSamples, congestionSamples)};
 }
 
-inline YoutubeProbeSampleClass classifyYoutubeProbeSample(const YoutubeProbeSampleMetrics &sample)
+inline YoutubeProbeSampleClass classifyYoutubeProbeTransport(const YoutubeProbeSampleMetrics &sample)
 {
-	if (sample.throughputBasisPoints < kYoutubeHardThroughputMinimumBasisPoints || sample.dropBasisPoints > kYoutubeHardDropMaximumBasisPoints ||
-	    sample.congestionHighBasisPoints > kYoutubeHardCongestionHighMaximumBasisPoints ||
+	if (sample.dropBasisPoints > kYoutubeHardDropMaximumBasisPoints || sample.congestionHighBasisPoints > kYoutubeHardCongestionHighMaximumBasisPoints ||
 	    sample.congestionSevereBasisPoints > kYoutubeHardCongestionSevereMaximumBasisPoints)
 		return YoutubeProbeSampleClass::Hard;
 
-	if (sample.throughputBasisPoints >= kYoutubeCleanThroughputMinimumBasisPoints && sample.dropBasisPoints <= kYoutubeCleanDropMaximumBasisPoints &&
+	if (sample.dropBasisPoints <= kYoutubeCleanDropMaximumBasisPoints &&
 	    sample.congestionHighBasisPoints <= kYoutubeCleanCongestionHighMaximumBasisPoints &&
 	    sample.congestionSevereBasisPoints <= kYoutubeCleanCongestionSevereMaximumBasisPoints)
 		return YoutubeProbeSampleClass::Clean;
 
 	return YoutubeProbeSampleClass::Marginal;
+}
+
+inline bool youtubeThroughputAtTarget(const YoutubeProbeSampleMetrics &sample)
+{
+	return sample.throughputBasisPoints >= kYoutubeCleanThroughputMinimumBasisPoints;
 }
 
 inline uint32_t absoluteDifference(uint32_t left, uint32_t right)
@@ -86,16 +96,15 @@ inline YoutubeProbeSampleMetrics conservativeReference(const YoutubeProbeSampleM
 
 inline bool youtubeBaselineSamplesSimilar(const YoutubeProbeSampleMetrics &first, const YoutubeProbeSampleMetrics &second)
 {
-	return absoluteDifference(first.throughputBasisPoints, second.throughputBasisPoints) <= 500 &&
-	       absoluteDifference(first.dropBasisPoints, second.dropBasisPoints) <= 100 &&
+	return absoluteDifference(first.dropBasisPoints, second.dropBasisPoints) <= 100 &&
 	       absoluteDifference(first.congestionHighBasisPoints, second.congestionHighBasisPoints) <= 1000 &&
 	       absoluteDifference(first.congestionSevereBasisPoints, second.congestionSevereBasisPoints) <= 500;
 }
 
 inline YoutubeBaselineAssessment assessYoutubeBaseline(const YoutubeProbeSampleMetrics &first, const YoutubeProbeSampleMetrics &second)
 {
-	const YoutubeProbeSampleClass firstClass = classifyYoutubeProbeSample(first);
-	const YoutubeProbeSampleClass secondClass = classifyYoutubeProbeSample(second);
+	const YoutubeProbeSampleClass firstClass = classifyYoutubeProbeTransport(first);
+	const YoutubeProbeSampleClass secondClass = classifyYoutubeProbeTransport(second);
 	const YoutubeProbeSampleMetrics reference = conservativeReference(first, second);
 
 	if (firstClass == YoutubeProbeSampleClass::Hard && secondClass == YoutubeProbeSampleClass::Hard)
@@ -115,12 +124,12 @@ inline YoutubeBaselineAssessment resolveYoutubeBaseline(const YoutubeProbeSample
 					    medianOfThree(first.congestionHighBasisPoints, second.congestionHighBasisPoints, third.congestionHighBasisPoints),
 					    medianOfThree(first.congestionSevereBasisPoints, second.congestionSevereBasisPoints,
 							  third.congestionSevereBasisPoints)};
-	const size_t hardSamples = (classifyYoutubeProbeSample(first) == YoutubeProbeSampleClass::Hard ? 1 : 0) +
-				   (classifyYoutubeProbeSample(second) == YoutubeProbeSampleClass::Hard ? 1 : 0) +
-				   (classifyYoutubeProbeSample(third) == YoutubeProbeSampleClass::Hard ? 1 : 0);
+	const size_t hardSamples = (classifyYoutubeProbeTransport(first) == YoutubeProbeSampleClass::Hard ? 1 : 0) +
+				   (classifyYoutubeProbeTransport(second) == YoutubeProbeSampleClass::Hard ? 1 : 0) +
+				   (classifyYoutubeProbeTransport(third) == YoutubeProbeSampleClass::Hard ? 1 : 0);
 	if (hardSamples >= 2)
 		return {YoutubeBaselineDecision::Unstable, reference};
-	const YoutubeProbeSampleClass referenceClass = classifyYoutubeProbeSample(reference);
+	const YoutubeProbeSampleClass referenceClass = classifyYoutubeProbeTransport(reference);
 	if (referenceClass == YoutubeProbeSampleClass::Hard)
 		return {YoutubeBaselineDecision::Unstable, reference};
 	if (referenceClass == YoutubeProbeSampleClass::Clean)
@@ -128,31 +137,57 @@ inline YoutubeBaselineAssessment resolveYoutubeBaseline(const YoutubeProbeSample
 	return {YoutubeBaselineDecision::Impaired, reference};
 }
 
-inline bool youtubeSampleAccepted(const YoutubeProbeSampleMetrics &sample, const YoutubeBaselineAssessment &baseline)
+inline bool youtubeTransportAccepted(const YoutubeProbeSampleMetrics &sample, const YoutubeBaselineAssessment &baseline)
 {
-	if (classifyYoutubeProbeSample(sample) == YoutubeProbeSampleClass::Clean)
+	if (classifyYoutubeProbeTransport(sample) == YoutubeProbeSampleClass::Clean)
 		return true;
 	if (baseline.decision != YoutubeBaselineDecision::Impaired)
 		return false;
 
 	const YoutubeProbeSampleMetrics &reference = baseline.reference;
-	const uint32_t minimumThroughput =
-		std::max<uint32_t>(kYoutubeHardThroughputMinimumBasisPoints, reference.throughputBasisPoints > 500 ? reference.throughputBasisPoints - 500 : 0);
 	const uint32_t maximumDrops = std::min<uint32_t>(kYoutubeHardDropMaximumBasisPoints, reference.dropBasisPoints + 100);
 	const uint32_t maximumHighCongestion = std::min<uint32_t>(kYoutubeHardCongestionHighMaximumBasisPoints, reference.congestionHighBasisPoints + 1000);
 	const uint32_t maximumSevereCongestion =
 		std::min<uint32_t>(kYoutubeHardCongestionSevereMaximumBasisPoints, reference.congestionSevereBasisPoints + 500);
-	return sample.throughputBasisPoints >= minimumThroughput && sample.dropBasisPoints <= maximumDrops &&
-	       sample.congestionHighBasisPoints <= maximumHighCongestion && sample.congestionSevereBasisPoints <= maximumSevereCongestion;
+	return sample.dropBasisPoints <= maximumDrops && sample.congestionHighBasisPoints <= maximumHighCongestion &&
+	       sample.congestionSevereBasisPoints <= maximumSevereCongestion;
+}
+
+inline YoutubeProbeLoadResult classifyYoutubeProbeLoad(const YoutubeProbeSampleMetrics &sample, const YoutubeBaselineAssessment &baseline)
+{
+	if (!youtubeTransportAccepted(sample, baseline))
+		return YoutubeProbeLoadResult::TransportPressure;
+	return youtubeThroughputAtTarget(sample) ? YoutubeProbeLoadResult::Accepted : YoutubeProbeLoadResult::SourceUnderfill;
+}
+
+inline bool youtubeRequiresCapacityConfirmation(YoutubeProbeLoadResult loadResult)
+{
+	return loadResult == YoutubeProbeLoadResult::TransportPressure;
+}
+
+struct YoutubeSourceUnderfillState {
+	bool terminal = false;
+
+	void observeTransportClean(YoutubeProbeLoadResult loadResult)
+	{
+		if (!youtubeRequiresCapacityConfirmation(loadResult))
+			terminal = loadResult == YoutubeProbeLoadResult::SourceUnderfill;
+	}
+
+	void confirmCapacityKnee() { terminal = false; }
+};
+
+inline bool youtubeSampleAccepted(const YoutubeProbeSampleMetrics &sample, const YoutubeBaselineAssessment &baseline)
+{
+	return !youtubeRequiresCapacityConfirmation(classifyYoutubeProbeLoad(sample, baseline));
 }
 
 inline bool youtubeLowControlRecovered(const YoutubeProbeSampleMetrics &control, const YoutubeProbeSampleMetrics &original,
 				       const YoutubeBaselineAssessment &baseline)
 {
-	if (!youtubeSampleAccepted(control, baseline))
+	if (!youtubeTransportAccepted(control, baseline))
 		return false;
-	return (uint64_t)control.throughputBasisPoints + 500 >= original.throughputBasisPoints &&
-	       control.dropBasisPoints <= (uint64_t)original.dropBasisPoints + 100 &&
+	return control.dropBasisPoints <= (uint64_t)original.dropBasisPoints + 100 &&
 	       control.congestionHighBasisPoints <= (uint64_t)original.congestionHighBasisPoints + 1000 &&
 	       control.congestionSevereBasisPoints <= (uint64_t)original.congestionSevereBasisPoints + 500;
 }
@@ -167,41 +202,46 @@ inline YoutubeConfirmationDecision decideYoutubeConfirmation(bool lowControlReco
 struct YoutubeRampEvidence {
 	bool passedStep = false;
 	uint64_t recommendationBasisKbps = 0;
-	uint64_t failedUpperBoundKbps = 0;
+	uint64_t validatedVideoKbps = 0;
 
-	void observe(uint64_t measuredKbps, bool passed, uint64_t attemptedAggregateKbps = 0)
+	void observeAcceptedTarget(uint64_t measuredAggregateKbps, uint64_t targetVideoKbps)
 	{
-		if (passed) {
-			passedStep = true;
-			recommendationBasisKbps = measuredKbps;
-			return;
-		}
-
-		failedUpperBoundKbps = attemptedAggregateKbps > 0 ? std::min(measuredKbps, attemptedAggregateKbps) : measuredKbps;
-		if (!passedStep)
-			recommendationBasisKbps = measuredKbps;
+		passedStep = true;
+		recommendationBasisKbps = measuredAggregateKbps;
+		validatedVideoKbps = targetVideoKbps;
 	}
 
-	uint64_t safeVideoKbps(int safeMultiplierPercent, uint64_t audioKbps) const
+	void observeTransportCleanLowerBound(uint64_t measuredAggregateKbps, uint64_t targetVideoKbps)
 	{
-		if (recommendationBasisKbps == 0 || safeMultiplierPercent <= 0)
-			return 0;
-
-		uint64_t safe = std::max<uint64_t>(1, recommendationBasisKbps * (uint64_t)safeMultiplierPercent / 100ULL);
-		if (failedUpperBoundKbps > 0) {
-			const uint64_t failedSafe = std::max<uint64_t>(1, failedUpperBoundKbps * (uint64_t)safeMultiplierPercent / 100ULL);
-			safe = std::min(safe, failedSafe);
-		}
-		return safe > audioKbps ? safe - audioKbps : 0;
+		passedStep = true;
+		// An underfilled but transport-clean observation establishes only a
+		// lower bound. Preserve the highest such bound instead of regressing to
+		// a noisier later sample. Aggregate bytes can include audio, so never
+		// let that lower bound exceed the requested video target.
+		recommendationBasisKbps = std::max(recommendationBasisKbps, measuredAggregateKbps);
+		validatedVideoKbps = std::max(validatedVideoKbps, std::min(measuredAggregateKbps, targetVideoKbps));
 	}
+
+	uint64_t recommendedVideoKbps() const { return validatedVideoKbps; }
 };
 
-inline uint64_t safeVideoKbps(uint64_t measuredAggregateKbps, int safeMultiplierPercent, uint64_t audioKbps)
+struct TwitchProbeDecision {
+	bool targetPassed = false;
+	uint64_t recommendedVideoKbps = 0;
+};
+
+// Match upstream OBS's successful-test behavior: a target that was sustained
+// without dropped frames is recommended exactly. The legacy 70% calculation
+// is retained only for an actually degraded sample and never subtracts probe
+// audio from a video-bitrate setting.
+inline TwitchProbeDecision decideTwitchProbe(uint64_t measuredAggregateKbps, uint64_t targetVideoKbps, uint32_t droppedFrames)
 {
-	if (measuredAggregateKbps == 0 || safeMultiplierPercent <= 0)
-		return 0;
-	const uint64_t safeAggregateKbps = measuredAggregateKbps * (uint64_t)safeMultiplierPercent / 100ULL;
-	return safeAggregateKbps > audioKbps ? safeAggregateKbps - audioKbps : 0;
+	if (measuredAggregateKbps == 0 || targetVideoKbps == 0)
+		return {};
+	const bool throughputAtTarget = measuredAggregateKbps * kBasisPointsScale >= targetVideoKbps * kTwitchTargetMinimumBasisPoints;
+	if (droppedFrames == 0 && throughputAtTarget)
+		return {true, targetVideoKbps};
+	return {false, measuredAggregateKbps * kTwitchDegradedFallbackBasisPoints / kBasisPointsScale};
 }
 
 inline bool hasProbeThroughputMetrics(bool success, uint64_t measuredKbps)
@@ -224,6 +264,25 @@ inline int effectiveProbeCeilingKbps(int probeMaximumKbps, int platformMaximumKb
 	if (requestMaximumKbps > 0)
 		effective = std::min(effective, requestMaximumKbps);
 	return effective;
+}
+
+inline int nextYoutubeValidationCeilingKbps(int recommendationCapKbps, int probeMaximumKbps)
+{
+	if (recommendationCapKbps <= 0 || probeMaximumKbps <= recommendationCapKbps)
+		return recommendationCapKbps;
+	constexpr int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
+	for (int target : ladder) {
+		if (target > recommendationCapKbps)
+			return std::min(target, probeMaximumKbps);
+	}
+	return probeMaximumKbps;
+}
+
+inline bool shouldValidateYoutubeAboveSharedCap(bool sharedTwitchYoutubeLeg, bool twitchSucceeded, bool twitchStable, uint64_t twitchRecommendedKbps,
+						int recommendationCapKbps)
+{
+	return sharedTwitchYoutubeLeg && twitchSucceeded && twitchStable && recommendationCapKbps > 0 &&
+	       twitchRecommendedKbps >= (uint64_t)recommendationCapKbps;
 }
 
 inline bool reachedEffectiveProbeCeiling(int targetKbps, int effectiveCeilingKbps)
