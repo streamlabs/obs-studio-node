@@ -2,6 +2,7 @@
 #include "nodeobs_api.h"
 #include "osn-error.hpp"
 #include "osn-input.hpp"
+#include "osn-scene.hpp"
 #include "osn-source.hpp"
 #include <obs.h>
 #include "shared.hpp"
@@ -41,6 +42,22 @@ static bool wait_for_source_manager_size(std::size_t expectedSize)
 	}
 
 	return false;
+}
+
+TEST_CASE("Scene AddSource rejects malformed argument counts")
+{
+	for (const std::size_t argumentCount : {std::size_t{0}, std::size_t{1}, std::size_t{3}, std::size_t{19}, std::size_t{21}}) {
+		std::vector<ipc::value> args;
+		for (std::size_t i = 0; i < argumentCount; i++)
+			args.emplace_back(uint64_t{0});
+
+		std::vector<ipc::value> response;
+		osn::Scene::AddSource(nullptr, 0, args, response);
+
+		REQUIRE(response.size() >= 2);
+		CHECK((ErrorCode)response[0].value_union.ui64 == ErrorCode::Error);
+		CHECK(response[1].value_str == "Invalid number of arguments to add a source to a scene.");
+	}
 }
 
 TEST_CASE("Run osn::source tests")

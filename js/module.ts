@@ -219,6 +219,23 @@ export const enum ESceneDupType {
     PrivateCopy
 }
 
+export interface IOBSAPIInitializationOptions {
+    /** OBS locale. */
+    language: string;
+
+    /** Application data directory. */
+    appDataPath: string;
+
+    /** Application version. */
+    version: string;
+
+    /**
+     * Crash-reporting server URL override.
+     * Pass an empty string to use the built-in endpoint for the current release channel.
+     */
+    crashServerUrl: string;
+}
+
 /**
  * Describes the type of source
  */
@@ -439,6 +456,7 @@ export interface ITransformInfo {
     readonly boundsType: EBoundsType;
     readonly boundsAlignment: number;
     readonly bounds: IVec2;
+    readonly cropToBounds: boolean;
 }
 
 /**
@@ -449,6 +467,9 @@ export interface ICropInfo {
     readonly right: number;
     readonly top: number;
     readonly bottom: number;
+    /** Canvas dimensions against which a nested-scene crop was authored. */
+    readonly referenceWidth?: number;
+    readonly referenceHeight?: number;
 }
 
 /**
@@ -853,7 +874,8 @@ export interface ISceneItemInfo {
     streamVisible: boolean,
     recordingVisible: boolean,
     scaleFilter: EScaleType,
-    blendingMode: EBlendingMode
+    blendingMode: EBlendingMode,
+    blendingMethod: EBlendingMethod
 }
 
 /**
@@ -983,6 +1005,11 @@ export interface IInput extends ISource {
 
 export interface ISceneFactory {
     /**
+     * Invalidates cached absolute scene-item transforms after a canvas reset.
+     */
+    invalidateItemTransformCache(): void;
+
+    /**
      * Create a new scene instance
      * @param name - Name of the scene to create
      * @returns - Returns the instance or null on failure
@@ -1018,9 +1045,15 @@ export interface IScene extends ISource {
     /**
      * Add an input source to the scene, creating a scene item.
      * @param source - Input source to add to the scene
-     * @returns - Return the sceneitem or null on failure
+     * @param transform - Initial transform and visual settings for the scene item
+     * @param video - Optional target video canvas, assigned before applying the transform. When omitted, the item remains
+     * unassigned and renders on every canvas. Requires `transform` when provided.
+     * @returns - The created scene item
+     * @throws {TypeError} If `video` is provided without `transform` or is not an `IVideo` instance.
+     * @throws {Error} If the scene, source, or supplied video canvas is no longer valid, or if OSN cannot create the item.
+     * Reference validation failures do not add an item to the scene.
      */
-    add(source: IInput, transform?: ISceneItemInfo): ISceneItem;
+    add(source: IInput, transform?: ISceneItemInfo, video?: IVideo): ISceneItem;
 
     /**
      * A scene may be used as an input source (even though its type
@@ -1141,7 +1174,18 @@ export interface ISceneItem {
     /** Whether or not the item is visible on the recording output */
     recordingVisible: boolean;
 
-    video: IVideo;
+    /**
+     * The canvas this item is routed to, or `null` when it renders on every canvas.
+     * @throws {Error} If the item is no longer valid or if the OSN call fails.
+     */
+    get video(): IVideo | null;
+
+    /**
+     * Assign this item to a video canvas while preserving its caller-visible transform.
+     * @throws {TypeError} If `value` is not an `IVideo` instance.
+     * @throws {Error} If the item or supplied video canvas is no longer valid, or if the OSN call fails.
+     */
+    set video(value: IVideo);
     /**
      * Transform information on the item packed into
      * a single convenient object
@@ -1150,6 +1194,9 @@ export interface ISceneItem {
 
     /** Current crop applied to the item */
     crop: ICropInfo;
+
+    /** Whether bounds crop the source when using a supported bounds type. */
+    cropToBounds: boolean;
 
     /** Move the item towards the top-most item one spot */
     moveUp(): void;
@@ -1460,8 +1507,21 @@ export interface IVideoInfo {
 export interface IVideo {
     video: IVideoInfo;
     legacySettings: IVideoInfo;
+    /**
+     * Permanently destroys this video context.
+     *
+     * @throws {Error} If one or more scene items are assigned to this video
+     * context. The context and this object remain valid.
+     * @throws {Error} If libobs rejects removal before it begins, for example
+     * because video is active. The context and this object remain valid.
+     * @throws {Error} If removal completes but the remaining video contexts
+     * cannot be initialized. The context is destroyed and this object is no
+     * longer valid.
+     * @throws {Error} If the OSN IPC call fails. In this case whether removal
+     * completed may be unknown.
+     */
     destroy(): void;
-	/**
+    /**
      * Number of total skipped frames
      */
      readonly skippedFrames: number;
@@ -1520,6 +1580,15 @@ export interface IObsModuleLoadFailure {
     message: string;
 }
 
+/**
+ * Add multiple existing inputs to a scene with their initial transforms.
+ * The returned items are initially unassigned and render on every canvas. Assign each item's `video`
+ * before relying on canvas-specific routing or geometry.
+ * @param scene - Scene that receives the items
+ * @param sceneItems - Existing input names and their initial transforms
+ * @returns The created, unassigned scene items
+ * @throws {Error} If an input cannot be found or an item cannot be created
+ */
 export function addItems(scene: IScene, sceneItems: ISceneItemInfo[]): ISceneItem[] {
     const items: ISceneItem[] = [];
     if (Array.isArray(sceneItems)) {
@@ -1985,4 +2054,17 @@ else if (fs.existsSync(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 
 else {
     obs.IPC.setServerPath(path.resolve(__dirname, `obs32.exe`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirname).replace('app.asar', 'app.asar.unpacked'));
 }
-export const NodeObs = obs;
+export interface INodeObs {
+    [key: string]: any;
+
+    /**
+     * Initializes the global OBS runtime.
+     * @param options - Required runtime initialization options
+     * @returns The OBS video initialization result code
+     * @throws {TypeError} If exactly one options object is not provided, or if a required option is not a string
+     * @throws {Error} If the IPC call fails or OSN returns an error response without an initialization result
+     */
+    OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+}
+
+export const NodeObs: INodeObs = obs;

@@ -127,7 +127,12 @@ export class OBSHandler {
                 throw Error(`OBS IPC host failed with code ${exitCode}. See osn.EIPCError for more details.`);
             }
             osn.NodeObs.SetWorkingDirectory(this.workingDirectory);
-            initResult = osn.NodeObs.OBS_API_initAPI(this.language, this.obsPath, this.version, this.crashServer);
+            initResult = osn.NodeObs.OBS_API_initAPI({
+                language: this.language,
+                appDataPath: this.obsPath,
+                version: this.version,
+                crashServerUrl: this.crashServer,
+            });
         } catch (e) {
             throw Error('Exception when initializing OBS process: ' + e);
         }

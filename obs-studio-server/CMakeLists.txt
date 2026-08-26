@@ -270,6 +270,7 @@ set(PROJECT_DATA "${PROJECT_SOURCE_DIR}/resources")
 
 SET(osn-server_SOURCES
     "${CMAKE_SOURCE_DIR}/source/osn-error.hpp"
+    "${CMAKE_SOURCE_DIR}/source/osn-common.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.hpp"
     "${CMAKE_SOURCE_DIR}/source/obs-property.cpp"
 
@@ -284,7 +285,6 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-calldata.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-calldata.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-common.cpp"
-    "${PROJECT_SOURCE_DIR}/source/osn-common.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-display.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-display.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-fader.cpp"
@@ -626,6 +626,7 @@ if(BUILD_TESTING)
         obs_studio_server_unit_tests
         "tests/test-osn-source.cpp"
         "tests/test-osn-file-output.cpp"
+        "tests/test-osn-scene-relative-coordinates.cpp"
         "tests/obs-setup.cpp"
         "tests/obs-setup.hpp"
     )

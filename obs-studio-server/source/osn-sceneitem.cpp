@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "osn-sceneitem.hpp"
+#include <osn-common.hpp>
 #include <osn-error.hpp>
 #include "osn-source.hpp"
 #include "shared.hpp"
@@ -61,8 +62,13 @@ void osn::SceneItem::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetBoundsType", std::vector<ipc::type>{ipc::type::UInt64}, GetBoundsType));
 	cls->register_function(std::make_shared<ipc::function>("SetBoundsType", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32}, SetBoundsType));
 	cls->register_function(std::make_shared<ipc::function>("GetCrop", std::vector<ipc::type>{ipc::type::UInt64}, GetCrop));
-	cls->register_function(std::make_shared<ipc::function>(
-		"SetCrop", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32, ipc::type::Int32, ipc::type::Int32, ipc::type::Int32}, SetCrop));
+	cls->register_function(std::make_shared<ipc::function>("SetCrop",
+							       std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32, ipc::type::Int32, ipc::type::Int32,
+										      ipc::type::Int32, ipc::type::UInt32, ipc::type::UInt32},
+							       SetCrop));
+	cls->register_function(std::make_shared<ipc::function>("GetCropToBounds", std::vector<ipc::type>{ipc::type::UInt64}, GetCropToBounds));
+	cls->register_function(
+		std::make_shared<ipc::function>("SetCropToBounds", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Int32}, SetCropToBounds));
 	cls->register_function(std::make_shared<ipc::function>("GetTransformInfo",
 							       std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Float, ipc::type::Float, ipc::type::Float,
 										      ipc::type::Float, ipc::type::Float, ipc::type::UInt32, ipc::type::UInt32,
@@ -71,7 +77,7 @@ void osn::SceneItem::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("SetTransformInfo",
 							       std::vector<ipc::type>{ipc::type::UInt64, ipc::type::Float, ipc::type::Float, ipc::type::Float,
 										      ipc::type::Float, ipc::type::Float, ipc::type::UInt32, ipc::type::UInt32,
-										      ipc::type::UInt32, ipc::type::Float, ipc::type::Float},
+										      ipc::type::UInt32, ipc::type::Float, ipc::type::Float, ipc::type::Int32},
 							       SetTransformInfo));
 	cls->register_function(std::make_shared<ipc::function>("GetId", std::vector<ipc::type>{ipc::type::UInt64}, GetId));
 	cls->register_function(std::make_shared<ipc::function>("MoveUp", std::vector<ipc::type>{ipc::type::UInt64}, MoveUp));
@@ -294,8 +300,13 @@ void osn::SceneItem::GetCanvas(void *data, const int64_t id, const std::vector<i
 	}
 
 	obs_video_info *canvas = obs_sceneitem_get_canvas(item);
-
-	uint64_t uid = osn::Video::Manager::GetInstance().find(canvas);
+	uint64_t uid = osn::common::INVALID_ID;
+	if (canvas) {
+		uid = osn::Video::Manager::GetInstance().find(canvas);
+		if (uid == osn::common::INVALID_ID) {
+			PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
+		}
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint64_t)uid));
@@ -315,6 +326,9 @@ void osn::SceneItem::SetCanvas(void *data, const int64_t id, const std::vector<i
 	}
 
 	obs_sceneitem_set_canvas(item, canvas);
+	if (obs_sceneitem_get_canvas(item) != canvas) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
@@ -466,6 +480,7 @@ void osn::SceneItem::SetBounds(void *data, const int64_t id, const std::vector<i
 	bounds.x = args[1].value_union.fp32;
 	bounds.y = args[2].value_union.fp32;
 
+	obs_sceneitem_set_bounds(item, &bounds);
 	obs_sceneitem_get_bounds(item, &bounds);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(bounds.x));
@@ -540,12 +555,17 @@ void osn::SceneItem::GetCrop(void *data, const int64_t id, const std::vector<ipc
 
 	obs_sceneitem_crop crop;
 	obs_sceneitem_get_crop(item, &crop);
+	uint32_t referenceWidth = 0;
+	uint32_t referenceHeight = 0;
+	obs_sceneitem_get_crop_reference(item, &referenceWidth, &referenceHeight);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(crop.left));
 	rval.push_back(ipc::value(crop.top));
 	rval.push_back(ipc::value(crop.right));
 	rval.push_back(ipc::value(crop.bottom));
+	rval.push_back(ipc::value(referenceWidth));
+	rval.push_back(ipc::value(referenceHeight));
 	AUTO_DEBUG;
 }
 
@@ -563,13 +583,47 @@ void osn::SceneItem::SetCrop(void *data, const int64_t id, const std::vector<ipc
 	crop.bottom = args[4].value_union.i32;
 
 	obs_sceneitem_set_crop(item, &crop);
+	const uint32_t referenceWidth = args[5].value_union.ui32;
+	const uint32_t referenceHeight = args[6].value_union.ui32;
+	if (referenceWidth != 0 && referenceHeight != 0)
+		obs_sceneitem_set_crop_reference(item, referenceWidth, referenceHeight);
 	obs_sceneitem_get_crop(item, &crop);
+	uint32_t effectiveReferenceWidth = 0;
+	uint32_t effectiveReferenceHeight = 0;
+	obs_sceneitem_get_crop_reference(item, &effectiveReferenceWidth, &effectiveReferenceHeight);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(crop.left));
 	rval.push_back(ipc::value(crop.top));
 	rval.push_back(ipc::value(crop.right));
 	rval.push_back(ipc::value(crop.bottom));
+	rval.push_back(ipc::value(effectiveReferenceWidth));
+	rval.push_back(ipc::value(effectiveReferenceHeight));
+	AUTO_DEBUG;
+}
+
+void osn::SceneItem::GetCropToBounds(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	obs_sceneitem_t *item = osn::SceneItem::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!item) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Item reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(obs_sceneitem_get_bounds_crop(item)));
+	AUTO_DEBUG;
+}
+
+void osn::SceneItem::SetCropToBounds(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	obs_sceneitem_t *item = osn::SceneItem::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!item) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Item reference is not valid.");
+	}
+
+	obs_sceneitem_set_bounds_crop(item, !!args[1].value_union.i32);
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(obs_sceneitem_get_bounds_crop(item)));
 	AUTO_DEBUG;
 }
 
@@ -594,6 +648,7 @@ void osn::SceneItem::GetTransformInfo(void *data, const int64_t id, const std::v
 	rval.push_back(ipc::value(info.bounds_alignment));
 	rval.push_back(ipc::value(info.bounds.x));
 	rval.push_back(ipc::value(info.bounds.y));
+	rval.push_back(ipc::value(info.crop_to_bounds));
 
 	AUTO_DEBUG;
 }
@@ -605,7 +660,7 @@ void osn::SceneItem::SetTransformInfo(void *data, const int64_t id, const std::v
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Item reference is not valid.");
 	}
 
-	obs_transform_info info;
+	obs_transform_info info = {};
 	info.pos.x = args[1].value_union.fp32;
 	info.pos.y = args[2].value_union.fp32;
 	info.rot = args[3].value_union.fp32;
@@ -616,6 +671,7 @@ void osn::SceneItem::SetTransformInfo(void *data, const int64_t id, const std::v
 	info.bounds_alignment = args[8].value_union.ui32;
 	info.bounds.x = args[9].value_union.fp32;
 	info.bounds.y = args[10].value_union.fp32;
+	info.crop_to_bounds = !!args[11].value_union.i32;
 	obs_sceneitem_set_info2(item, &info);
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));

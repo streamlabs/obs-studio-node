@@ -325,6 +325,7 @@ describe(testName, () => {
         expect(info.boundsAlignment).to.equal(0, GetErrorMessage(ETestErrorMsg.BoundAlignment));
         expect(info.bounds.x).to.equal(0.0, GetErrorMessage(ETestErrorMsg.PositionX));
         expect(info.bounds.y).to.equal(0.0, GetErrorMessage(ETestErrorMsg.PositionX));
+        expect(info.cropToBounds).to.equal(false);
 
         sceneItem.source.release();
         sceneItem.remove();
@@ -348,6 +349,7 @@ describe(testName, () => {
             boundsType: osn.EBoundsType.ScaleToWidth,
             boundsAlignment: 100500,
             bounds: { x: 100, y: 200 },
+            cropToBounds: true,
         };
 
         const info = sceneItem.transformInfo;
@@ -362,6 +364,7 @@ describe(testName, () => {
         expect(info.boundsAlignment).to.equal(100500, GetErrorMessage(ETestErrorMsg.BoundAlignment));
         expect(info.bounds.x).to.be.closeTo(100, 0.001, GetErrorMessage(ETestErrorMsg.PositionX));
         expect(info.bounds.y).to.be.closeTo(200, 0.001, GetErrorMessage(ETestErrorMsg.PositionX));
+        expect(info.cropToBounds).to.equal(true);
 
         sceneItem.source.release();
         sceneItem.remove();

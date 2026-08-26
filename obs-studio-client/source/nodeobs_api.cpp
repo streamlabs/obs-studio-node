@@ -30,27 +30,51 @@
 
 Napi::ThreadSafeFunction js_thread;
 
+namespace {
+
+bool getRequiredStringOption(const Napi::CallbackInfo &info, const Napi::Object &options, const char *name, std::string &value)
+{
+	const Napi::Value option = options.Get(name);
+	if (info.Env().IsExceptionPending())
+		return false;
+
+	if (!option.IsString()) {
+		Napi::TypeError::New(info.Env(), std::string("OBS_API_initAPI option '") + name + "' must be a string").ThrowAsJavaScriptException();
+		return false;
+	}
+
+	value = option.As<Napi::String>().Utf8Value();
+	return true;
+}
+
+} // namespace
+
 Napi::Value api::OBS_API_initAPI(const Napi::CallbackInfo &info)
 {
-	std::string path;
+	if (info.Length() != 1 || !info[0].IsObject() || info[0].IsArray()) {
+		Napi::TypeError::New(info.Env(), "OBS_API_initAPI expects exactly one initialization options object").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	std::string appDataPath;
 	std::string language;
 	std::string version;
 	std::string crashserverurl;
 
-	ASSERT_GET_VALUE(info, info[0], language);
-	ASSERT_GET_VALUE(info, info[1], path);
-	ASSERT_GET_VALUE(info, info[2], version);
-	if (info.Length() > 3)
-		ASSERT_GET_VALUE(info, info[3], crashserverurl);
+	const Napi::Object options = info[0].As<Napi::Object>();
+	if (!getRequiredStringOption(info, options, "language", language) || !getRequiredStringOption(info, options, "appDataPath", appDataPath) ||
+	    !getRequiredStringOption(info, options, "version", version) || !getRequiredStringOption(info, options, "crashServerUrl", crashserverurl)) {
+		return info.Env().Undefined();
+	}
 
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	conn->set_freeze_callback(ipc_freeze_callback, path);
+	conn->set_freeze_callback(ipc_freeze_callback, appDataPath);
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper(
-		"API", "OBS_API_initAPI", {ipc::value(path), ipc::value(language), ipc::value(version), ipc::value(crashserverurl)});
+		"API", "OBS_API_initAPI", {ipc::value(appDataPath), ipc::value(language), ipc::value(version), ipc::value(crashserverurl)});
 
 	// The API init method will return a response error + graphical error
 	// If there is a problem with the IPC the number of responses here will be zero so we must validate the

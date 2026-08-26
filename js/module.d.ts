@@ -156,6 +156,12 @@ export declare const enum ESceneDupType {
     PrivateRefs = 2,
     PrivateCopy = 3
 }
+export interface IOBSAPIInitializationOptions {
+    language: string;
+    appDataPath: string;
+    version: string;
+    crashServerUrl: string;
+}
 export declare const enum ESourceType {
     Input = 0,
     Filter = 1,
@@ -336,12 +342,15 @@ export interface ITransformInfo {
     readonly boundsType: EBoundsType;
     readonly boundsAlignment: number;
     readonly bounds: IVec2;
+    readonly cropToBounds: boolean;
 }
 export interface ICropInfo {
     readonly left: number;
     readonly right: number;
     readonly top: number;
     readonly bottom: number;
+    readonly referenceWidth?: number;
+    readonly referenceHeight?: number;
 }
 export interface IIPC {
     setServerPath(binaryPath: string, workingDirectoryPath?: string): void;
@@ -500,6 +509,7 @@ export interface ISceneItemInfo {
     recordingVisible: boolean;
     scaleFilter: EScaleType;
     blendingMode: EBlendingMode;
+    blendingMethod: EBlendingMethod;
 }
 export interface IInput extends ISource {
     volume: number;
@@ -534,13 +544,14 @@ export interface IInput extends ISource {
     load(): void;
 }
 export interface ISceneFactory {
+    invalidateItemTransformCache(): void;
     create(name: string): IScene;
     createPrivate(name: string): IScene;
     fromName(name: string): IScene;
 }
 export interface IScene extends ISource {
     duplicate(name: string, type: ESceneDupType): IScene;
-    add(source: IInput, transform?: ISceneItemInfo): ISceneItem;
+    add(source: IInput, transform?: ISceneItemInfo, video?: IVideo): ISceneItem;
     readonly source: IInput;
     moveItem(oldIndex: number, newIndex: number): void;
     orderItems(order: number[]): void;
@@ -571,9 +582,11 @@ export interface ISceneItem {
     visible: boolean;
     streamVisible: boolean;
     recordingVisible: boolean;
-    video: IVideo;
+    get video(): IVideo | null;
+    set video(value: IVideo);
     transformInfo: ITransformInfo;
     crop: ICropInfo;
+    cropToBounds: boolean;
     moveUp(): void;
     moveDown(): void;
     moveTop(): void;
@@ -997,4 +1010,8 @@ export declare const enum VCamOutputType {
     ProgramView = 3,
     PreviewOutput = 4
 }
-export declare const NodeObs: any;
+export interface INodeObs {
+    [key: string]: any;
+    OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+}
+export declare const NodeObs: INodeObs;

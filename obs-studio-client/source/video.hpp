@@ -24,7 +24,6 @@ namespace osn {
 class Video : public Napi::ObjectWrap<osn::Video> {
 public:
 	uint64_t canvasId = 0;
-	constexpr static uint64_t nonCavasId = std::numeric_limits<uint64_t>::max();
 
 private:
 	std::vector<ipc::value> lastVideo;

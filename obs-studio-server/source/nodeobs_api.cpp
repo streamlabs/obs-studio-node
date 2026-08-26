@@ -1012,6 +1012,8 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	/* Set global private settings for whomever it concerns */
 	obs_data_t *private_settings = obs_data_create();
 	obs_data_set_bool(private_settings, "BrowserHWAccel", browserAccel);
+	/* Relative coordinates are an invariant of this OSN generation. */
+	obs_data_set_bool(private_settings, "AbsoluteCoordinates", false);
 	obs_apply_private_data(private_settings);
 	obs_data_release(private_settings);
 

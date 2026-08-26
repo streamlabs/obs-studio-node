@@ -17,11 +17,16 @@
 ******************************************************************************/
 
 #pragma once
-#include <ipc-value.hpp>
-#include <obs.h>
-#include <vector>
+
+#include <cstdint>
+#include <limits>
 
 namespace osn {
 namespace common {
-}
+
+// Reserved wire value for a missing OSN object reference. Live object IDs
+// never use this value.
+inline constexpr uint64_t INVALID_ID = std::numeric_limits<uint64_t>::max();
+
+} // namespace common
 } // namespace osn
