@@ -9,7 +9,7 @@ import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_en
 import { ERecordingFormat, ERecordingQuality } from '../osn';
 import * as inputSettings from '../util/input_settings';
 import { getMeanVolumeDb } from '../util/media_probe';
-import path = require('path');
+import * as path from 'path';
 const fs = require('fs');
 const childProcess = require('child_process');
 

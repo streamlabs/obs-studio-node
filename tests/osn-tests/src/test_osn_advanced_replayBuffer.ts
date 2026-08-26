@@ -6,7 +6,7 @@ import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
-import path = require('path');
+import * as path from 'path';
 
 const testName = 'osn-advanced-replay-buffer';
 

@@ -7,8 +7,8 @@ import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles } from '../util/general';
 import { EOBSInputTypes } from '../util/obs_enums';
 
-import chai = require('chai');
-import chaiSubset = require("chai-subset")
+import * as chai from 'chai';
+import * as chaiSubset from 'chai-subset'
 chai.use(chaiSubset);
 
 const testName = 'osn-service';

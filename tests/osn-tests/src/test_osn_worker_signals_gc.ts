@@ -6,7 +6,7 @@ import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { ERecordingFormat } from '../osn';
-import path = require('path');
+import * as path from 'path';
 
 declare const global: { gc?: () => void };
 

@@ -9,7 +9,7 @@ import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
 import { randomUUID } from 'crypto';
-import path = require('path');
+import * as path from 'path';
 
 const testName = 'osn-simple-recording';
 
