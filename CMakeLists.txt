@@ -20,6 +20,13 @@ set(VERSION_BUILD 0)
 project(obs-studio-node VERSION ${VERSION_FULL}.${VERSION_BUILD})
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
+# MSVC reports __cplusplus as 199711L even under /std:c++20 unless this is set.
+# V8 (v8config.h) hard-errors on __cplusplus <= 201703L, so the node headers
+# won't compile without it.
+if(MSVC)
+	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
+endif()
+
 # CppCheck
 IF( NOT CLANG_ANALYZE_CONFIG)
 	include(cppcheck)
