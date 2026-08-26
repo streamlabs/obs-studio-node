@@ -1017,7 +1017,7 @@ export interface IAutoConfigCapabilities {
 export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'stream-shift' | 'mixed';
 export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
 export type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
-export type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'stream_shift' | 'mixed_topology' | 'probe_disabled';
+export type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
 export interface IAutoConfigDestination {
     platform: AutoConfigPlatform;
 }

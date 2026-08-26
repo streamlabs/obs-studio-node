@@ -433,6 +433,16 @@ static std::string defaultEstimateReason(const std::string &topology, const LegR
 	return "non_twitch";
 }
 
+static size_t probeableProviderCount(const LegRequest &leg)
+{
+	std::set<std::string> expectedProviders;
+	for (const auto &destination : leg.destinations) {
+		if (destination.platform == "twitch" || destination.platform == "youtube")
+			expectedProviders.insert(destination.platform);
+	}
+	return expectedProviders.size();
+}
+
 static bool isKnownDisplay(const std::string &display)
 {
 	return display == "horizontal" || display == "vertical" || display == "both";
@@ -641,32 +651,6 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		}
 		if (probe.eligible && probe.provider == "youtube")
 			session.probeConfirmations.emplace(probe.probeId, 0);
-	}
-
-	// A shared cloud upload is active-measured only when every Twitch/YouTube
-	// destination has exactly one eligible probe. Otherwise a partial provider
-	// sample could recommend a bitrate that is unsafe for the unmeasured peer.
-	if (session.topology == "cloud-multistream" && session.legs.size() == 1) {
-		const LegRequest &leg = session.legs.front();
-		bool completeProviderSet = true;
-		for (const auto &destination : leg.destinations) {
-			if (destination.platform != "twitch" && destination.platform != "youtube")
-				continue;
-			const size_t eligibleCount = std::count_if(session.probes.begin(), session.probes.end(), [&](const ProbeRequest &probe) {
-				return probe.eligible && probe.legId == leg.legId && probe.provider == destination.platform;
-			});
-			completeProviderSet = completeProviderSet && eligibleCount == 1;
-		}
-		if (!completeProviderSet) {
-			for (auto &probe : session.probes) {
-				if (probe.legId == leg.legId) {
-					probe.eligible = false;
-					probe.denialReason = "active_probe_set_incomplete";
-					probe.streamKey.clear();
-					probe.server.clear();
-				}
-			}
-		}
 	}
 
 	return true;
@@ -946,8 +930,8 @@ static CurrentSettings estimateRecommendation(const LegRequest &leg, const Hardw
 static CurrentSettings benchmarkCeiling(const LegRequest &leg)
 {
 	CurrentSettings value = baseRecommendation(leg);
-	const auto ceiling =
-		qualityPolicy::benchmarkCeiling({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
+	const auto ceiling = qualityPolicy::benchmarkCeiling({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight,
+							     leg.limits.maxFpsNum, leg.limits.maxFpsDen);
 	value.width = ceiling.width;
 	value.height = ceiling.height;
 	value.fpsNum = ceiling.fpsNum;
@@ -1409,10 +1393,19 @@ struct HardwareAttempt {
 	uint32_t sourceFpsNum = 0;
 	uint32_t sourceFpsDen = 1;
 	uint32_t frameRateDivisor = 1;
+	uint32_t validatedFpsNum = 0;
+	uint32_t validatedFpsDen = 1;
+	bool sourceCadenceBelowTarget = false;
 	std::string feedMode;
 	std::string errorCode;
 	std::string encoderLastError;
 	std::string outputLastError;
+};
+
+enum class HardwareWorkloadFeed {
+	Automatic,
+	MainControl,
+	SyntheticRawExact,
 };
 
 static std::string boundedLogValue(const std::string &value)
@@ -1449,7 +1442,7 @@ static bool waitForScratchInterval(const std::shared_ptr<Session> &session, obs_
 }
 
 static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &session, const CurrentSettings &candidate,
-					  std::chrono::steady_clock::time_point phaseDeadline, bool useMainVideoControl = false)
+					  std::chrono::steady_clock::time_point phaseDeadline, HardwareWorkloadFeed feed = HardwareWorkloadFeed::Automatic)
 {
 	HardwareAttempt result;
 	if (session->cancelRequested.load()) {
@@ -1462,7 +1455,9 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	}
 
 	const std::string resolvedEncoderId = resolveEncoderId(candidate.encoderId);
-	const bool useCoreVideoMix = resolvedEncoderId != ADVANCED_ENCODER_X264;
+	const bool useMainVideoControl = feed == HardwareWorkloadFeed::MainControl;
+	const bool useSyntheticRawExact = feed == HardwareWorkloadFeed::SyntheticRawExact;
+	const bool useCoreVideoMix = !useSyntheticRawExact && resolvedEncoderId != ADVANCED_ENCODER_X264;
 	const std::string encoderId = useCoreVideoMix ? resolvedEncoderId : scratchEncoderId(candidate.encoderId);
 	if (encoderId.empty() || !obs_get_encoder_codec(encoderId.c_str())) {
 		result.errorCode = "hardware_benchmark_encoder_unavailable";
@@ -1470,7 +1465,10 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	}
 
 	ScratchResources resources(*session, kHardwareStopTimeoutMs);
-	result.feedMode = useMainVideoControl ? "main-control" : useCoreVideoMix ? "private-mix" : "synthetic-raw";
+	result.feedMode = useMainVideoControl    ? "main-control"
+			  : useSyntheticRawExact ? "synthetic-raw-exact"
+			  : useCoreVideoMix      ? "private-mix"
+						 : "synthetic-raw";
 	const bool videoCreated = useMainVideoControl ? useCoreVideoMix && resources.useKnownStreamingVideoMix()
 						      : resources.createSyntheticVideo((uint32_t)candidate.width, (uint32_t)candidate.height,
 										       (uint32_t)candidate.fpsNum, (uint32_t)candidate.fpsDen, useCoreVideoMix);
@@ -1504,14 +1502,33 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 		const auto divisor = qualityPolicy::frameRateDivisor(result.sourceFpsNum, result.sourceFpsDen, (uint32_t)std::max(1, candidate.fpsNum),
 								     (uint32_t)std::max(1, candidate.fpsDen));
 		if (!divisor.supported) {
-			result.errorCode = "hardware_benchmark_frame_rate_unsupported";
-			return result;
+			if (!qualityPolicy::requiresExactHardwareCadenceValidation(useCoreVideoMix, result.sourceFpsNum, result.sourceFpsDen,
+										   (uint32_t)std::max(1, candidate.fpsNum),
+										   (uint32_t)std::max(1, candidate.fpsDen))) {
+				result.errorCode = "hardware_benchmark_frame_rate_unsupported";
+				return result;
+			}
+			// Libobs renders every private texture mix at the main canvas
+			// cadence. Validate the public texture encoder at the candidate's
+			// exact resolution and this available cadence; the caller must pair
+			// this with an exact-resolution/FPS raw-input run before accepting a
+			// frame-rate promotion.
+			result.sourceCadenceBelowTarget = true;
+			result.validatedFpsNum = result.sourceFpsNum;
+			result.validatedFpsDen = result.sourceFpsDen;
+		} else {
+			result.frameRateDivisor = divisor.value;
+			result.validatedFpsNum = (uint32_t)std::max(1, candidate.fpsNum);
+			result.validatedFpsDen = (uint32_t)std::max(1, candidate.fpsDen);
+			if (result.frameRateDivisor > 1 && !obs_encoder_set_frame_rate_divisor(resources.videoEncoder, result.frameRateDivisor)) {
+				result.errorCode = "hardware_benchmark_frame_rate_divisor_failed";
+				return result;
+			}
 		}
-		result.frameRateDivisor = divisor.value;
-		if (result.frameRateDivisor > 1 && !obs_encoder_set_frame_rate_divisor(resources.videoEncoder, result.frameRateDivisor)) {
-			result.errorCode = "hardware_benchmark_frame_rate_divisor_failed";
-			return result;
-		}
+	}
+	if (result.validatedFpsNum == 0) {
+		result.validatedFpsNum = (uint32_t)std::max(1, candidate.fpsNum);
+		result.validatedFpsDen = (uint32_t)std::max(1, candidate.fpsDen);
 	}
 	auto captureErrors = [&]() {
 		if (const char *lastError = obs_encoder_get_last_error(resources.videoEncoder); lastError && *lastError)
@@ -1587,7 +1604,7 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	}
 
 	const double elapsedSeconds = std::chrono::duration<double>(sampleEnd - sampleStart).count();
-	const double requestedFps = (double)candidate.fpsNum / (double)candidate.fpsDen;
+	const double requestedFps = (double)result.validatedFpsNum / (double)result.validatedFpsDen;
 	result.expectedFrames = (uint32_t)std::max(1.0, std::floor(requestedFps * elapsedSeconds));
 	const uint32_t pipelineAllowance = std::min(4U, result.expectedFrames);
 	result.minimumEncodedFrames = std::max(3U, (result.expectedFrames - pipelineAllowance) * 85U / 100U);
@@ -1643,7 +1660,7 @@ static CurrentSettings hardwareCandidate(const LegRequest &leg, const EncoderDes
 	return target;
 }
 
-static bool hardwareFellBelowBenchmarkCeiling(const LegRequest &leg, const CurrentSettings &selected)
+static bool hardwareFellBelowQualityCeiling(const LegRequest &leg, const CurrentSettings &selected)
 {
 	const CurrentSettings ceiling = benchmarkCeiling(leg);
 	return ceiling.width != selected.width || ceiling.height != selected.height || ceiling.fpsNum != selected.fpsNum || ceiling.fpsDen != selected.fpsDen;
@@ -1668,17 +1685,32 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 		plannedEncoders.push_back(x264);
 	size_t plannedPrimaryAttempts = 0;
 	size_t plannedControlAttempts = 0;
+	size_t plannedCadenceValidationAttempts = 0;
+	obs_video_info mainVideoInfo{};
+	const bool hasMainVideoInfo = obs_get_video_info(&mainVideoInfo);
 	for (const auto &encoder : plannedEncoders) {
 		std::set<std::string> workloads;
 		for (const auto &tier : tiers) {
 			std::string workloadKey;
+			std::vector<CurrentSettings> workloadCandidates;
 			for (const auto &leg : legs) {
 				const CurrentSettings candidate = hardwareCandidate(leg, encoder, tier);
 				workloadKey += std::to_string(candidate.width) + "x" + std::to_string(candidate.height) + "@" +
 					       std::to_string(candidate.fpsNum) + "/" + std::to_string(candidate.fpsDen) + ";";
+				workloadCandidates.push_back(candidate);
 			}
 			if (workloads.insert(workloadKey).second) {
 				plannedPrimaryAttempts += legs.size();
+				if (encoder.hardware) {
+					for (const auto &candidate : workloadCandidates) {
+						const int sourceFpsNum = hasMainVideoInfo ? (int)mainVideoInfo.fps_num : candidate.fpsNum;
+						const int sourceFpsDen = hasMainVideoInfo ? (int)std::max(1U, mainVideoInfo.fps_den) : candidate.fpsDen;
+						if (qualityPolicy::requiresExactHardwareCadenceValidation(
+							    encoder.hardware, (uint32_t)std::max(0, sourceFpsNum), (uint32_t)std::max(1, sourceFpsDen),
+							    (uint32_t)std::max(0, candidate.fpsNum), (uint32_t)std::max(1, candidate.fpsDen)))
+							plannedCadenceValidationAttempts++;
+					}
+				}
 			}
 		}
 		if (encoder.hardware) {
@@ -1688,15 +1720,17 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			plannedControlAttempts += std::count_if(legs.begin(), legs.end(), [](const LegRequest &leg) { return leg.display == "horizontal"; });
 		}
 	}
-	const size_t plannedAttempts = std::max<size_t>(1, plannedPrimaryAttempts + plannedControlAttempts);
+	const size_t plannedAttempts = std::max<size_t>(1, plannedPrimaryAttempts + plannedControlAttempts + plannedCadenceValidationAttempts);
 	// A failed output may require both graceful-stop and force-stop waits, and
 	// each private mix can take one additional stop interval to leave the render
 	// thread. Budget all three so pathological cleanup cannot consume the time
 	// reserved for the x264 fallback.
 	const int phaseTimeoutMs = qualityPolicy::hardwarePhaseTimeoutMs(plannedAttempts, kHardwareWarmupMs, kHardwareSampleMs, 3 * kHardwareStopTimeoutMs);
 	const auto phaseDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(phaseTimeoutMs);
-	blog(LOG_INFO, "[Auto Optimizer][Hardware] planned_attempts=%zu primary_attempts=%zu possible_main_controls=%zu timeout_ms=%d", plannedAttempts,
-	     plannedPrimaryAttempts, plannedControlAttempts, phaseTimeoutMs);
+	blog(LOG_INFO,
+	     "[Auto Optimizer][Hardware] planned_attempts=%zu primary_attempts=%zu possible_main_controls=%zu possible_cadence_validations=%zu "
+	     "timeout_ms=%d",
+	     plannedAttempts, plannedPrimaryAttempts, plannedControlAttempts, plannedCadenceValidationAttempts, phaseTimeoutMs);
 	size_t attemptOrdinal = 0;
 	auto attemptProgress = [&]() { return 15.0 + 14.0 * (double)attemptOrdinal++ / (double)plannedAttempts; };
 
@@ -1723,8 +1757,19 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			const CurrentSettings &candidate = selected[legIndex];
 			lastAttemptedWorkload[encoder.id] = {legs[legIndex].legId, candidate};
 			const double progress = attemptProgress();
-			pushEvent(session, "progress", "hardware", progress, encoder.hardware ? "hardware_testing_encoder" : "hardware_testing_x264",
-				  legs[legIndex].legId, {}, {}, {}, 0, &candidate);
+			const bool plannedCadencePair = qualityPolicy::requiresExactHardwareCadenceValidation(
+				encoder.hardware, hasMainVideoInfo ? mainVideoInfo.fps_num : 0, hasMainVideoInfo ? std::max(1U, mainVideoInfo.fps_den) : 1,
+				(uint32_t)std::max(0, candidate.fpsNum), (uint32_t)std::max(1, candidate.fpsDen));
+			CurrentSettings surfaceCandidate = candidate;
+			if (plannedCadencePair) {
+				surfaceCandidate.fpsNum = (int)mainVideoInfo.fps_num;
+				surfaceCandidate.fpsDen = (int)std::max(1U, mainVideoInfo.fps_den);
+			}
+			const char *attemptCode = !encoder.hardware    ? "hardware_testing_x264"
+						  : plannedCadencePair ? "hardware_testing_encoder_surfaces"
+								       : "hardware_testing_encoder";
+			pushEvent(session, "progress", "hardware", progress, attemptCode, legs[legIndex].legId, {}, {}, {}, 0,
+				  plannedCadencePair ? &surfaceCandidate : &candidate);
 			HardwareAttempt attempt = runEncoderWorkload(session, candidate, phaseDeadline);
 			HardwareAttempt mainControl;
 			const std::string mainControlKey = encoder.id + ":" + legs[legIndex].legId;
@@ -1739,25 +1784,26 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			if (mainControlAttempted) {
 				resolvedProgress = attemptProgress();
 				pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_validating_encoder", legs[legIndex].legId, {}, {}, {}, 0,
-					  &candidate);
-				mainControl = runEncoderWorkload(session, candidate, phaseDeadline, true);
+					  plannedCadencePair ? &surfaceCandidate : &candidate);
+				mainControl = runEncoderWorkload(session, candidate, phaseDeadline, HardwareWorkloadFeed::MainControl);
 			}
 			auto logAttempt = [&](const HardwareAttempt &value) {
 				const std::string encoderError = boundedLogValue(value.encoderLastError);
 				const std::string outputError = boundedLogValue(value.outputLastError);
 				blog(value.success ? LOG_INFO : LOG_WARNING,
 				     "[Auto Optimizer][Hardware] encoder=%s family=%s workload=%dx%d@%d/%d feed=%s success=%s cancelled=%s timed_out=%s error=%s "
-				     "source_fps=%u/%u frame_rate_divisor=%u input_frames=%u skipped_frames=%u encoded_frames=%u output_frames=%u "
+				     "source_fps=%u/%u validated_fps=%u/%u frame_rate_divisor=%u input_frames=%u skipped_frames=%u encoded_frames=%u output_frames=%u "
 				     "output_dropped=%u expected_frames=%u minimum_encoded=%u allowed_skipped=%u feeder_healthy=%s "
 				     "scheduled=%u submitted=%u lock_failed=%u late=%u encoder_error=\"%s\" output_error=\"%s\"",
 				     encoder.id.c_str(), encoder.family.c_str(), candidate.width, candidate.height, candidate.fpsNum, candidate.fpsDen,
 				     value.feedMode.empty() ? "unavailable" : value.feedMode.c_str(), value.success ? "true" : "false",
 				     value.cancelled ? "true" : "false", value.timedOut ? "true" : "false",
-				     value.errorCode.empty() ? "none" : value.errorCode.c_str(), value.sourceFpsNum, value.sourceFpsDen, value.frameRateDivisor,
-				     value.totalFrames, value.skippedFrames, value.encodedFrames, value.outputFrames, value.outputDroppedFrames,
-				     value.expectedFrames, value.minimumEncodedFrames, value.allowedSkippedFrames, value.feederHealthy ? "true" : "false",
-				     value.scheduledFrames, value.submittedFrames, value.lockFailedFrames, value.lateFrames,
-				     encoderError.empty() ? "none" : encoderError.c_str(), outputError.empty() ? "none" : outputError.c_str());
+				     value.errorCode.empty() ? "none" : value.errorCode.c_str(), value.sourceFpsNum, value.sourceFpsDen, value.validatedFpsNum,
+				     value.validatedFpsDen, value.frameRateDivisor, value.totalFrames, value.skippedFrames, value.encodedFrames,
+				     value.outputFrames, value.outputDroppedFrames, value.expectedFrames, value.minimumEncodedFrames,
+				     value.allowedSkippedFrames, value.feederHealthy ? "true" : "false", value.scheduledFrames, value.submittedFrames,
+				     value.lockFailedFrames, value.lateFrames, encoderError.empty() ? "none" : encoderError.c_str(),
+				     outputError.empty() ? "none" : outputError.c_str());
 			};
 			logAttempt(attempt);
 			if (mainControlAttempted) {
@@ -1773,6 +1819,37 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 				if (qualityPolicy::shouldAdoptHardwareControl(mainControl.success, mainControl.cancelled, mainControl.errorCode,
 									      mainControl.timedOut))
 					attempt = std::move(mainControl);
+			}
+			if (encoder.hardware && attempt.success && attempt.sourceCadenceBelowTarget) {
+				resolvedProgress = attemptProgress();
+				pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_validating_target_cadence", legs[legIndex].legId, {}, {},
+					  {}, 0, &candidate);
+				HardwareAttempt cadenceValidation =
+					runEncoderWorkload(session, candidate, phaseDeadline, HardwareWorkloadFeed::SyntheticRawExact);
+				logAttempt(cadenceValidation);
+				if (cadenceValidation.errorCode == "hardware_benchmark_overloaded")
+					overloadObserved = true;
+				if (cadenceValidation.cancelled) {
+					for (auto &assessment : assessments)
+						assessment.cancelled = true;
+					return false;
+				}
+				// The texture path already proved the public encoder is usable.
+				// Failure of its raw-input counterpart constrains only this exact
+				// resolution/cadence candidate. Continue through lower tiers rather
+				// than blacklisting the hardware family or selecting x264.
+				const bool cadencePhaseFailure =
+					qualityPolicy::exactCadenceValidationFailureScope(cadenceValidation.errorCode, cadenceValidation.timedOut) ==
+					qualityPolicy::HardwareFailureScope::Phase;
+				if (cadencePhaseFailure || std::chrono::steady_clock::now() >= phaseDeadline) {
+					sharedFailure = true;
+					return false;
+				}
+				if (!cadenceValidation.success) {
+					pushEvent(session, "progress", "hardware", resolvedProgress, "hardware_target_cadence_rejected", legs[legIndex].legId,
+						  {}, {}, {}, 0, &candidate);
+					return false;
+				}
 			}
 			if (attempt.errorCode == "hardware_benchmark_overloaded")
 				overloadObserved = true;
@@ -1826,9 +1903,9 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 					assessments[index].value = selected[index];
 					const bool softwareFallback = !encoder.hardware &&
 								      resolveEncoderId(legs[index].current.encoderId) != ADVANCED_ENCODER_X264;
-					assessments[index].constrained = hardwareFellBelowBenchmarkCeiling(legs[index], selected[index]) || softwareFallback;
-					if (hardwareFellBelowBenchmarkCeiling(legs[index], selected[index]))
-						assessments[index].reason = "hardware_benchmark_resolution_fallback";
+					assessments[index].constrained = hardwareFellBelowQualityCeiling(legs[index], selected[index]) || softwareFallback;
+					if (hardwareFellBelowQualityCeiling(legs[index], selected[index]))
+						assessments[index].reason = "hardware_benchmark_quality_fallback";
 					else if (softwareFallback)
 						assessments[index].reason = "hardware_benchmark_encoder_fallback";
 					pushEvent(session, "progress", "hardware", 30, "hardware_encoder_selected", legs[index].legId, {}, {}, {}, 0,
@@ -2790,9 +2867,15 @@ static void runSession(const std::shared_ptr<Session> &session)
 	const size_t eligibleProbeCount =
 		std::count_if(session->probes.begin(), session->probes.end(), [](const ProbeRequest &probe) { return probe.eligible; });
 	std::vector<ProbeRequest *> orderedProbes;
-	orderedProbes.reserve(session->probes.size());
-	for (auto &probe : session->probes)
-		orderedProbes.push_back(&probe);
+	orderedProbes.reserve(eligibleProbeCount);
+	// Emit all denials before active work advances through the bandwidth phase;
+	// otherwise a later ineligible provider could regress progress back to 30.
+	for (auto &probe : session->probes) {
+		if (probe.eligible)
+			orderedProbes.push_back(&probe);
+		else
+			pushEvent(session, "progress", "bandwidth", 30, probe.denialReason, probe.legId, "estimated", probe.probeId, probe.provider);
+	}
 	// A shared-leg YouTube verification can use the preceding clean Twitch
 	// result to decide whether it should test one rung above the final 6000-Kbps
 	// recommendation cap. Do not depend on Desktop's request ordering.
@@ -2804,10 +2887,6 @@ static void runSession(const std::shared_ptr<Session> &session)
 	size_t completedProbeCount = 0;
 	for (ProbeRequest *probePointer : orderedProbes) {
 		ProbeRequest &probe = *probePointer;
-		if (!probe.eligible) {
-			pushEvent(session, "progress", "bandwidth", 30, probe.denialReason, probe.legId, "estimated", probe.probeId, probe.provider);
-			continue;
-		}
 		const auto legIt = std::find_if(preparedLegs.begin(), preparedLegs.end(), [&](const LegRequest &leg) { return leg.legId == probe.legId; });
 		if (legIt == preparedLegs.end())
 			continue;
@@ -2909,21 +2988,32 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const size_t requiredProbeCount = std::count_if(session->probes.begin(), session->probes.end(),
 								[&](const ProbeRequest &probe) { return probe.eligible && probe.legId == leg.legId; });
 		std::vector<const ProbeResult *> legProbeResults;
+		std::set<std::string> successfulProbeProviders;
 		for (const auto &probeResult : probeResults) {
-			if (probeResult.legId == leg.legId)
+			if (probeResult.legId == leg.legId) {
 				legProbeResults.push_back(&probeResult);
+				if (probeResult.success)
+					successfulProbeProviders.insert(probeResult.provider);
+			}
 		}
-		const bool allRequiredProbesPassed =
-			requiredProbeCount > 0 && legProbeResults.size() == requiredProbeCount &&
-			std::all_of(legProbeResults.begin(), legProbeResults.end(), [](const ProbeResult *result) { return result->success; });
+		const probePolicy::ProviderProbeCoverage coverage =
+			probePolicy::classifyProviderProbeCoverage(probeableProviderCount(leg), successfulProbeProviders.size());
+		const bool hasSuccessfulProbe = !successfulProbeProviders.empty();
+		const bool hasPartialProviderCoverage = coverage == probePolicy::ProviderProbeCoverage::Partial;
 		for (const ProbeResult *result : legProbeResults) {
 			recommendation.probes.push_back({result->provider, result->method, result->measuredKbps, result->safeKbps, result->headroomPercent,
 							 result->success, result->ceilingReached});
 		}
 
-		if (allRequiredProbesPassed) {
+		if (hasSuccessfulProbe) {
 			recommendation.measurementMode = "active";
-			if (hardware.passed && session->topology == "cloud-multistream") {
+			if (hasPartialProviderCoverage) {
+				recommendation.confidence = "low";
+				// Keep a more actionable hardware failure/fallback reason when it
+				// already explains why the recommendation is constrained.
+				if (recommendation.reason.rfind("hardware_", 0) != 0)
+					recommendation.reason = "partial_provider_probes";
+			} else if (hardware.passed && session->topology == "cloud-multistream") {
 				recommendation.confidence = "medium";
 				recommendation.reason = "indirect_provider_probes";
 			} else if (hardware.passed && !hardware.constrained) {
@@ -2931,21 +3021,25 @@ static void runSession(const std::shared_ptr<Session> &session)
 				recommendation.reason.clear();
 			}
 			uint64_t safeKbps = UINT64_MAX;
-			for (const ProbeResult *result : legProbeResults)
-				safeKbps = std::min(safeKbps, result->safeKbps);
+			for (const ProbeResult *result : legProbeResults) {
+				if (probePolicy::probeSafeValueContributesToActiveRecommendation(result->success, result->observedThroughputReliable,
+												 result->measuredKbps, result->safeKbps))
+					safeKbps = std::min(safeKbps, result->safeKbps);
+			}
 			if (leg.limits.maxBitrateKbps > 0)
 				safeKbps = std::min<uint64_t>(safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
 			// Never turn a low measurement into a higher recommendation merely to
 			// satisfy a nominal bitrate floor. Surface the low-confidence result and
 			// let Desktop decide how to explain an insufficient connection.
-			const bool hasDegradedProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(),
-								  [](const ProbeResult *result) { return result->stability == ProbeStability::Degraded; });
+			const bool hasDegradedProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(), [](const ProbeResult *result) {
+				return result->stability == ProbeStability::Degraded || result->stability == ProbeStability::Unstable;
+			});
 			const bool hasVariableProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(),
 								  [](const ProbeResult *result) { return result->stability == ProbeStability::Variable; });
 			const bool hasSourceUnderfillProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(), [](const ProbeResult *result) {
 				return result->stability == ProbeStability::SourceUnderfill;
 			});
-			if (hasDegradedProbe && recommendation.confidence != "low") {
+			if (hasDegradedProbe) {
 				recommendation.confidence = "low";
 				recommendation.reason = "unstable_connection";
 			} else if (hasVariableProbe && recommendation.confidence == "high") {
@@ -2992,14 +3086,15 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const double selectingProgress = 75.0 + 19.0 * (double)index / (double)std::max<size_t>(1, preparedLegs.size());
 		const double selectedProgress = 75.0 + 19.0 * (double)(index + 1) / (double)std::max<size_t>(1, preparedLegs.size());
 		if (!providerOwnsEncoding(session->topology, leg) && hardware.passed) {
-			// A successful provider probe is required before raising the current
-			// resolution. Estimate-only and failed-probe paths may still select a
-			// lower tested tuple, but never promote from assumed bandwidth.
+			// Complete successful provider coverage is required before raising the
+			// current resolution or frame rate. Estimate-only, failed, and partial
+			// paths may still select a lower tested tuple, but never promote from
+			// incomplete bandwidth evidence.
 			const CurrentSettings currentCeiling = baseRecommendation(leg);
 			const auto eligibleCeiling = qualityPolicy::recommendationCeiling(
 				{recommendation.value.width, recommendation.value.height, recommendation.value.fpsNum, recommendation.value.fpsDen},
 				{currentCeiling.width, currentCeiling.height, currentCeiling.fpsNum, currentCeiling.fpsDen},
-				recommendation.measurementMode == "active");
+				probePolicy::providerProbeCoverageAllowsQualityPromotion(recommendation.measurementMode == "active", coverage));
 			recommendation.value.width = eligibleCeiling.width;
 			recommendation.value.height = eligibleCeiling.height;
 			recommendation.value.fpsNum = eligibleCeiling.fpsNum;
@@ -3017,14 +3112,14 @@ static void runSession(const std::shared_ptr<Session> &session)
 			if (selected.insufficientBandwidth) {
 				recommendation.confidence = "low";
 				recommendation.reason = "insufficient_bandwidth";
-			} else if (qualityPolicy::isResolutionPromotion({leg.current.width, leg.current.height, leg.current.fpsNum, leg.current.fpsDen},
-									selected.video) &&
+			} else if (qualityPolicy::isQualityPromotion({leg.current.width, leg.current.height, leg.current.fpsNum, leg.current.fpsDen},
+								     selected.video) &&
 				   recommendation.confidence != "low" && recommendation.reason != "probe_source_underfill") {
 				// Synthetic encoder validation plus a successful provider probe is
 				// enough to offer the higher tier, but not to claim the same
-				// confidence as a recommendation that leaves geometry unchanged.
+				// confidence as a recommendation that leaves video quality unchanged.
 				recommendation.confidence = "medium";
-				recommendation.reason = "resolution_promotion_tested";
+				recommendation.reason = "quality_promotion_tested";
 			}
 			pushEvent(session, "progress", "recommendation", selectedProgress, "recommendation_quality_selected", leg.legId,
 				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, (uint32_t)std::max(0, recommendation.value.bitrateKbps));

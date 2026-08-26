@@ -41,6 +41,33 @@ struct YoutubeBaselineAssessment {
 
 enum class YoutubeConfirmationDecision { CapacityKnee, TransientRecovered, PathUnstable, Inconsistent };
 
+enum class ProviderProbeCoverage { None, Partial, Complete };
+
+/**
+ * Classify how much of an upload leg's probeable destination set can be
+ * measured. Each provider is counted at most once by the caller. A partial
+ * set is still useful evidence, but it must not be presented with the same
+ * confidence as a complete provider set.
+ */
+inline ProviderProbeCoverage classifyProviderProbeCoverage(size_t expectedProviderCount, size_t eligibleProviderCount)
+{
+	if (eligibleProviderCount == 0)
+		return ProviderProbeCoverage::None;
+	if (expectedProviderCount > eligibleProviderCount)
+		return ProviderProbeCoverage::Partial;
+	return ProviderProbeCoverage::Complete;
+}
+
+inline bool providerProbeCoverageAllowsQualityPromotion(bool activeMeasurement, ProviderProbeCoverage coverage)
+{
+	return activeMeasurement && coverage == ProviderProbeCoverage::Complete;
+}
+
+inline bool probeSafeValueContributesToActiveRecommendation(bool success, bool observedThroughputReliable, uint64_t measuredKbps, uint64_t safeKbps)
+{
+	return safeKbps > 0 && (success || (observedThroughputReliable && measuredKbps > 0));
+}
+
 inline uint32_t ratioBasisPoints(uint32_t numerator, uint32_t denominator)
 {
 	if (denominator == 0)

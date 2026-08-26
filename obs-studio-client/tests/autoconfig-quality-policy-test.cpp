@@ -7,13 +7,15 @@ using autoConfig::qualityPolicy::benchmarkCeiling;
 using autoConfig::qualityPolicy::boundCurrentToV1Tier;
 using autoConfig::qualityPolicy::candidates;
 using autoConfig::qualityPolicy::classifyHardwareSample;
+using autoConfig::qualityPolicy::exactCadenceValidationFailureScope;
 using autoConfig::qualityPolicy::frameRateDivisor;
 using autoConfig::qualityPolicy::hardwareFailureCode;
 using autoConfig::qualityPolicy::hardwareFailureScope;
 using autoConfig::qualityPolicy::hardwarePhaseTimeoutMs;
 using autoConfig::qualityPolicy::hardwareTiers;
-using autoConfig::qualityPolicy::isResolutionPromotion;
+using autoConfig::qualityPolicy::isQualityPromotion;
 using autoConfig::qualityPolicy::recommendationCeiling;
+using autoConfig::qualityPolicy::requiresExactHardwareCadenceValidation;
 using autoConfig::qualityPolicy::roundedMinimumBitrateKbps;
 using autoConfig::qualityPolicy::select;
 using autoConfig::qualityPolicy::shouldAdoptHardwareControl;
@@ -192,21 +194,41 @@ TEST_CASE("Auto Config quality policy never upscales the tested ceiling")
 	CHECK(select({1280, 720, 30, 1}, 10000, "obs_nvenc_h264_tex").video.width == 1280);
 }
 
-TEST_CASE("Auto Config benchmark ceiling explicitly permits canvas-bounded promotion")
+TEST_CASE("Auto Config benchmark ceiling explicitly permits isolated promotion above the current canvas")
 {
 	const VideoTuple current{1280, 720, 30, 1};
 	CHECK(autoConfig::qualityPolicy::sameVideo(benchmarkCeiling(current, 0, 0), current));
-	CHECK(autoConfig::qualityPolicy::sameVideo(benchmarkCeiling(current, 1920, 0), current));
+	CHECK(autoConfig::qualityPolicy::sameVideo(benchmarkCeiling(current, 1920, 0, 60, 1), current));
 
-	const auto promoted = benchmarkCeiling(current, 1920, 1080);
+	const auto promoted = benchmarkCeiling(current, 1920, 1080, 60, 1);
 	CHECK(promoted.width == 1920);
 	CHECK(promoted.height == 1080);
-	CHECK(promoted.fpsNum == 30);
+	CHECK(promoted.fpsNum == 60);
+	CHECK(promoted.fpsDen == 1);
 	CHECK(select(promoted, 6000, "obs_nvenc_h264_tex").video.width == 1920);
+	CHECK(select(promoted, 6000, "obs_nvenc_h264_tex").video.fpsNum == 60);
 	CHECK(select(promoted, 3000, "obs_nvenc_h264_tex").video.width == 1280);
 
 	const auto canvasBound = benchmarkCeiling(current, 1280, 720);
 	CHECK(select(canvasBound, 10000, "obs_nvenc_h264_tex").video.width == 1280);
+	CHECK(canvasBound.fpsNum == 30);
+
+	const auto frameRateOnly = benchmarkCeiling(current, 1280, 720, 60, 1);
+	CHECK(frameRateOnly.width == 1280);
+	CHECK(frameRateOnly.height == 720);
+	CHECK(frameRateOnly.fpsNum == 60);
+	CHECK(frameRateOnly.fpsDen == 1);
+
+	const auto ntsc = benchmarkCeiling({1280, 720, 30000, 1001}, 1280, 720, 60000, 1001);
+	CHECK(ntsc.fpsNum == 60000);
+	CHECK(ntsc.fpsDen == 1001);
+
+	const auto cappedInteger = benchmarkCeiling(current, 1280, 720, 120, 1);
+	CHECK(cappedInteger.fpsNum == 60);
+	CHECK(cappedInteger.fpsDen == 1);
+	const auto cappedNtsc = benchmarkCeiling({1280, 720, 30000, 1001}, 1280, 720, 120000, 1001);
+	CHECK(cappedNtsc.fpsNum == 60000);
+	CHECK(cappedNtsc.fpsDen == 1001);
 
 	const auto productBound = benchmarkCeiling(current, 3840, 2160);
 	CHECK(productBound.width == 1920);
@@ -218,6 +240,29 @@ TEST_CASE("Auto Config benchmark ceiling explicitly permits canvas-bounded promo
 	const auto boundingBox = boundCurrentToV1Tier({1920, 1080, 30, 1}, 1366, 768);
 	CHECK(boundingBox.width == 1280);
 	CHECK(boundingBox.height == 720);
+}
+
+TEST_CASE("Auto Config pairs texture and raw hardware checks only above the rendered cadence")
+{
+	CHECK(requiresExactHardwareCadenceValidation(true, 30, 1, 60, 1));
+	CHECK(requiresExactHardwareCadenceValidation(true, 30000, 1001, 60000, 1001));
+	CHECK_FALSE(requiresExactHardwareCadenceValidation(true, 60, 1, 60, 1));
+	CHECK_FALSE(requiresExactHardwareCadenceValidation(true, 60, 1, 30, 1));
+	CHECK_FALSE(requiresExactHardwareCadenceValidation(false, 30, 1, 60, 1));
+	CHECK_FALSE(requiresExactHardwareCadenceValidation(true, 0, 1, 60, 1));
+}
+
+TEST_CASE("Auto Config exact-cadence raw failures constrain the workload instead of blacklisting hardware")
+{
+	using autoConfig::qualityPolicy::HardwareFailureScope;
+
+	CHECK(exactCadenceValidationFailureScope("hardware_benchmark_encoder_unavailable") == HardwareFailureScope::Workload);
+	CHECK(exactCadenceValidationFailureScope("hardware_benchmark_video_create_failed") == HardwareFailureScope::Workload);
+	CHECK(exactCadenceValidationFailureScope("hardware_benchmark_no_output_packets") == HardwareFailureScope::Workload);
+	CHECK(exactCadenceValidationFailureScope("hardware_benchmark_feeder_stalled") == HardwareFailureScope::Workload);
+	CHECK(exactCadenceValidationFailureScope("hardware_benchmark_overloaded") == HardwareFailureScope::Workload);
+	CHECK(exactCadenceValidationFailureScope("hardware_benchmark_cleanup_timeout") == HardwareFailureScope::Phase);
+	CHECK(exactCadenceValidationFailureScope("", true) == HardwareFailureScope::Phase);
 }
 
 TEST_CASE("Auto Config benchmark ceiling preserves portrait orientation")
@@ -238,7 +283,7 @@ TEST_CASE("Auto Config promotes only the exact V1 aspect family")
 	for (const auto &current : custom) {
 		CAPTURE(current.width, current.height);
 		CHECK(autoConfig::qualityPolicy::sameVideo(boundCurrentToV1Tier(current, 640, 360), current));
-		const auto ceiling = benchmarkCeiling(current, 1920, 1080);
+		const auto ceiling = benchmarkCeiling(current, 1920, 1080, 60, 1);
 		CHECK(autoConfig::qualityPolicy::sameVideo(ceiling, current));
 		const auto options = candidates(ceiling);
 		REQUIRE(options.size() == 1);
@@ -257,11 +302,12 @@ TEST_CASE("Auto Config promotes only the exact V1 aspect family")
 TEST_CASE("Auto Config recommendation promotion requires successful active evidence")
 {
 	const VideoTuple current{1280, 720, 30, 1};
-	const VideoTuple tested{1920, 1080, 30, 1};
+	const VideoTuple tested{1920, 1080, 60, 1};
 
 	const auto active = recommendationCeiling(tested, current, true);
 	CHECK(select(active, 6000, "obs_nvenc_h264_tex").video.width == 1920);
-	CHECK(isResolutionPromotion(current, select(active, 6000, "obs_nvenc_h264_tex").video));
+	CHECK(isQualityPromotion(current, select(active, 6000, "obs_nvenc_h264_tex").video));
+	CHECK(select(active, 6000, "obs_nvenc_h264_tex").video.fpsNum == 60);
 	CHECK(select(active, 3000, "obs_nvenc_h264_tex").video.width == 1280);
 
 	const auto estimated = recommendationCeiling(tested, current, false);
@@ -272,6 +318,10 @@ TEST_CASE("Auto Config recommendation promotion requires successful active evide
 	// it leaves usable throughput evidence for a conservative bitrate estimate.
 	const auto failedProbe = recommendationCeiling(tested, current, false);
 	CHECK(select(failedProbe, 6000, "obs_nvenc_h264_tex").video.width == 1280);
+
+	const VideoTuple testedFrameRateOnly{1280, 720, 60, 1};
+	CHECK(isQualityPromotion(current, recommendationCeiling(testedFrameRateOnly, current, true)));
+	CHECK(autoConfig::qualityPolicy::sameVideo(recommendationCeiling(testedFrameRateOnly, current, false), current));
 }
 
 TEST_CASE("Auto Config quality policy preserves orientation aspect ratio and even dimensions")

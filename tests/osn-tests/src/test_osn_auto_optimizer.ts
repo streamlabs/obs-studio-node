@@ -76,7 +76,8 @@ describe(testName, function() {
         const hardwareAttemptStarted = new Promise<void>((resolve, reject) => {
             timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer scratch workload')), 15000);
             const onEvent = (event: IAutoConfigEvent) => {
-                if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264') {
+                if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
+                    event.code === 'hardware_testing_x264') {
                     clearTimeout(timeout);
                     resolve();
                 } else if (event.type === 'complete' || event.type === 'cancelled') {
@@ -170,7 +171,7 @@ describe(testName, function() {
             const response = await run({
                 schemaVersion: 1,
                 topology: 'custom-rtmp',
-                legs: [leg({ limits: { maxWidth: 1920, maxHeight: 1080 } })],
+                legs: [leg({ limits: { maxWidth: 1920, maxHeight: 1080, maxFpsNum: 60, maxFpsDen: 1 } })],
                 activeProbes: [{
                     probeId: 'twitch-primary',
                     kind: 'twitch-standard',
@@ -192,7 +193,8 @@ describe(testName, function() {
             expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
             expect(response.events.every((event, index) => index === 0 || event.progress >= response.events[index - 1].progress)).to.equal(true);
             const hardwareAttempt = response.events.find(event =>
-                event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264');
+                event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
+                event.code === 'hardware_testing_x264');
             expect(hardwareAttempt).not.to.equal(undefined);
             if (!hardwareAttempt) throw new Error('Expected a hardware attempt event');
             expect(hardwareAttempt.encoderId).to.be.a('string').and.not.equal('');
@@ -203,8 +205,9 @@ describe(testName, function() {
             expect(hardwareAttempt.fpsNum).to.be.greaterThan(0);
             expect(hardwareAttempt.fpsDen).to.be.greaterThan(0);
             expect(response.events.some(event =>
-                (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264') &&
-                event.width === 1920 && event.height === 1080)).to.equal(true);
+                (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264' ||
+                    event.code === 'hardware_validating_target_cadence') &&
+                event.width === 1920 && event.height === 1080 && event.fpsNum === 60 && event.fpsDen === 1)).to.equal(true);
             const qualityInput = response.events.find(event => event.code === 'recommendation_selecting_quality');
             if (!qualityInput) throw new Error('Expected a quality-selection input event');
             expect(qualityInput.availableBitrateKbps).to.equal(2500);
@@ -216,6 +219,8 @@ describe(testName, function() {
             expect(qualityResult.selectedBitrateKbps).to.equal(2500);
             expect(response.result.legs[0].recommendation.width).to.be.at.most(1280);
             expect(response.result.legs[0].recommendation.height).to.be.at.most(720);
+            expect(response.result.legs[0].recommendation.fpsNum).to.equal(30);
+            expect(response.result.legs[0].recommendation.fpsDen).to.equal(1);
             expect(response.result.legs[0].recommendation.encoderFamily).to.be.a('string').and.not.equal('');
             expect(response.result.legs[0].recommendation.encoderTitle).to.be.a('string').and.not.equal('');
             const testedPresets: Record<string, string> = {
@@ -293,7 +298,7 @@ describe(testName, function() {
         expect(response.events.some(event => event.code === 'youtube_probe_started')).to.equal(false);
     });
 
-    it('requires a complete Twitch and YouTube probe set for a shared cloud leg', async function() {
+    it('keeps a shared cloud leg estimate-only when no supplied probe is eligible', async function() {
         const response = await run({
             schemaVersion: 1,
             topology: 'cloud-multistream',
@@ -306,15 +311,14 @@ describe(testName, function() {
                 kind: 'twitch-standard',
                 legId: 'primary',
                 serviceName: 'Twitch',
-                // The incomplete set must be rejected before any connection
-                // attempt, so an intentionally unofficial endpoint is safe.
+                // Individual endpoint validation must reject this credential
+                // without affecting the partial-provider coverage policy.
                 server: `rtmp://127.0.0.1:${mockPort}/live`,
                 streamKey: 'incomplete-cloud-secret',
             }],
         });
         expect(response.result.legs[0].measurement.mode).to.equal('estimated');
         expect(response.result.legs[0].measurement.reason).to.equal('cloud_multistream');
-        expect(response.events.some(event => event.code === 'active_probe_set_incomplete')).to.equal(true);
         expect(response.events.some(event => event.code === 'twitch_probe_started')).to.equal(false);
         expect(JSON.stringify(response.result)).not.to.contain('incomplete-cloud-secret');
         expect(JSON.stringify(response.events)).not.to.contain('incomplete-cloud-secret');
@@ -441,7 +445,8 @@ describe(testName, function() {
 
         expect(response.events.some(event => event.code === 'hardware_provider_managed')).to.equal(true);
         expect(response.events.some(event =>
-            event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264')).to.equal(false);
+            event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
+            event.code === 'hardware_validating_target_cadence' || event.code === 'hardware_testing_x264')).to.equal(false);
         expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
         expect(response.result.legs[0].recommendation.encoderId).to.equal('obs_nvenc_av1_tex');
         expect(response.result.legs[0].recommendation.codec).to.equal('av1');

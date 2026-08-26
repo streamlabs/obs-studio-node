@@ -10,7 +10,11 @@ using autoConfig::probePolicy::YoutubeProbeLoadResult;
 using autoConfig::probePolicy::YoutubeProbeSampleClass;
 using autoConfig::probePolicy::YoutubeProbeSampleMetrics;
 using autoConfig::probePolicy::YoutubeSourceUnderfillState;
+using autoConfig::probePolicy::ProviderProbeCoverage;
 using autoConfig::probePolicy::assessYoutubeBaseline;
+using autoConfig::probePolicy::classifyProviderProbeCoverage;
+using autoConfig::probePolicy::providerProbeCoverageAllowsQualityPromotion;
+using autoConfig::probePolicy::probeSafeValueContributesToActiveRecommendation;
 using autoConfig::probePolicy::classifyYoutubeProbeLoad;
 using autoConfig::probePolicy::classifyYoutubeProbeTransport;
 using autoConfig::probePolicy::clampEstimateToObservedSafe;
@@ -27,6 +31,23 @@ using autoConfig::probePolicy::shouldValidateYoutubeAboveSharedCap;
 using autoConfig::probePolicy::youtubeLowControlRecovered;
 using autoConfig::probePolicy::youtubeRequiresCapacityConfirmation;
 using autoConfig::probePolicy::youtubeSampleAccepted;
+
+TEST_CASE("Provider probe coverage distinguishes absent, partial, and complete evidence")
+{
+	CHECK(classifyProviderProbeCoverage(2, 0) == ProviderProbeCoverage::None);
+	CHECK(classifyProviderProbeCoverage(2, 1) == ProviderProbeCoverage::Partial);
+	CHECK(classifyProviderProbeCoverage(2, 2) == ProviderProbeCoverage::Complete);
+	CHECK(classifyProviderProbeCoverage(1, 1) == ProviderProbeCoverage::Complete);
+	CHECK_FALSE(providerProbeCoverageAllowsQualityPromotion(true, ProviderProbeCoverage::None));
+	CHECK_FALSE(providerProbeCoverageAllowsQualityPromotion(true, ProviderProbeCoverage::Partial));
+	CHECK(providerProbeCoverageAllowsQualityPromotion(true, ProviderProbeCoverage::Complete));
+	CHECK_FALSE(providerProbeCoverageAllowsQualityPromotion(false, ProviderProbeCoverage::Complete));
+	CHECK(probeSafeValueContributesToActiveRecommendation(true, false, 0, 6000));
+	CHECK(probeSafeValueContributesToActiveRecommendation(false, true, 1800, 1600));
+	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(false, false, 1800, 1600));
+	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(false, true, 0, 1600));
+	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(true, true, 6000, 0));
+}
 
 TEST_CASE("YouTube probe metrics use deterministic basis-point ratios")
 {

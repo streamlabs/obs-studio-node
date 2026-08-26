@@ -2079,7 +2079,8 @@ export type AutoConfigEstimateReason =
     'enhanced_broadcasting' |
     'stream_shift' |
     'mixed_topology' |
-    'probe_disabled';
+    'probe_disabled' |
+    'partial_provider_probes';
 
 export interface IAutoConfigDestination {
     platform: AutoConfigPlatform;
@@ -2099,13 +2100,23 @@ export interface IAutoConfigCurrentSettings {
 export interface IAutoConfigLimits {
     maxBitrateKbps?: number;
     /**
-     * Complete canvas-bounded output ceiling eligible for hardware testing.
-     * Supply maxWidth and maxHeight together. Native also caps this tuple to
-     * the V1 1080p tier and promotes only exact 16:9 or 9:16 outputs. Custom
-     * aspect ratios retain their current resolution and frame rate.
+     * Complete attempt-scoped output ceiling eligible for isolated hardware
+     * testing. It may exceed the current canvas because native does not mutate
+     * persistent video settings while benchmarking. Supply maxWidth and
+     * maxHeight together. Native caps this tuple to the V1 1080p tier and
+     * promotes only exact 16:9 or 9:16 outputs. The caller remains responsible
+     * for safely applying a recommended Base Canvas resize. Custom aspect
+     * ratios retain their current resolution and frame rate.
      */
     maxWidth?: number;
     maxHeight?: number;
+    /**
+     * Complete frame-rate ceiling eligible for hardware testing. Supply
+     * maxFpsNum to permit promotion above the current cadence; maxFpsDen
+     * defaults to 1. Native caps the V1 benchmark at 60 or 59.94 FPS, and a
+     * successful active provider probe is still required before returning a
+     * higher frame rate as the recommendation.
+     */
     maxFpsNum?: number;
     maxFpsDen?: number;
 }
@@ -2150,6 +2161,13 @@ export interface IAutoConfigRequest {
     schemaVersion: 1;
     topology: AutoConfigTopology;
     legs: IAutoConfigLegRequest[];
+    /**
+     * Attempt-scoped provider credentials. Native validates each probe
+     * independently. A shared cloud leg may contain a subset of its probeable
+     * destinations. A subset that succeeds during setup or execution produces
+     * active evidence with low confidence rather than disabling every provider
+     * measurement.
+     */
     activeProbes?: IAutoConfigActiveProbe[];
 }
 
@@ -2164,6 +2182,16 @@ export interface IAutoConfigEvent {
     type: AutoConfigEventType;
     phase: AutoConfigPhase;
     progress: number;
+    /**
+     * Machine-readable status or failure code. During hardware promotion,
+     * hardware_testing_encoder_surfaces means OSN is validating the requested
+     * resolution and public texture path at the available render cadence;
+     * hardware_validating_target_cadence then validates the exact requested
+     * resolution and frame rate through the hardware encoder's synthetic
+     * raw-input counterpart. hardware_target_cadence_rejected means only that
+     * quality candidate was rejected; OSN continues testing lower cadences and
+     * keeps the public hardware encoder eligible.
+     */
     code?: string;
     legId?: string;
     measurementMode?: AutoConfigMeasurementMode;
@@ -2228,6 +2256,11 @@ export interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
+    /**
+     * Evidence only for providers whose probes were attempted. For a
+     * partial_provider_probes result, compare these providers with the leg's
+     * destinations to identify destinations that were estimated.
+     */
     probes?: IAutoConfigProbeMeasurement[];
 }
 

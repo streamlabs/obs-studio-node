@@ -52,9 +52,8 @@ inline FrameRateDivisor frameRateDivisor(uint32_t sourceNum, uint32_t sourceDen,
 // Keep the throughput decision independent from OBS resource management so
 // contradictory states (for example success=true with zero output packets)
 // cannot escape into encoder selection.
-inline HardwareSampleClassification classifyHardwareSample(bool feederHealthy, uint32_t totalFrames, uint32_t skippedFrames,
-						     uint32_t encodedFrames, uint32_t outputFrames, uint32_t minimumEncodedFrames,
-						     uint32_t allowedSkippedFrames)
+inline HardwareSampleClassification classifyHardwareSample(bool feederHealthy, uint32_t totalFrames, uint32_t skippedFrames, uint32_t encodedFrames,
+							   uint32_t outputFrames, uint32_t minimumEncodedFrames, uint32_t allowedSkippedFrames)
 {
 	if (!feederHealthy)
 		return {false, "hardware_benchmark_feeder_stalled"};
@@ -77,8 +76,7 @@ inline HardwareFailureScope hardwareFailureScope(std::string_view code, bool tim
 {
 	if (timedOut || code == "hardware_benchmark_video_create_failed" || code == "hardware_benchmark_audio_create_failed" ||
 	    code == "hardware_benchmark_audio_encoder_create_failed" || code == "hardware_benchmark_output_create_failed" ||
-	    code == "hardware_benchmark_no_output_packets" || code == "hardware_benchmark_feeder_stalled" ||
-	    code == "hardware_benchmark_cleanup_timeout")
+	    code == "hardware_benchmark_no_output_packets" || code == "hardware_benchmark_feeder_stalled" || code == "hardware_benchmark_cleanup_timeout")
 		return HardwareFailureScope::Phase;
 	if (code == "hardware_benchmark_encoder_unavailable" || code == "hardware_benchmark_video_mix_create_failed")
 		return HardwareFailureScope::Encoder;
@@ -92,6 +90,15 @@ inline HardwareFailureScope hardwareFailureScope(std::string_view code, bool tim
 inline bool shouldAdoptHardwareControl(bool success, bool cancelled, std::string_view errorCode, bool timedOut = false)
 {
 	return success || cancelled || hardwareFailureScope(errorCode, timedOut) == HardwareFailureScope::Phase;
+}
+
+// Once the public texture path has passed, the paired raw path is evidence only
+// for the requested higher cadence. Its ordinary setup, packet, feeder, or
+// overload failures constrain that workload rather than disabling the public
+// encoder. Only a phase deadline or unsafe teardown prevents further testing.
+inline HardwareFailureScope exactCadenceValidationFailureScope(std::string_view code, bool timedOut = false)
+{
+	return timedOut || code == "hardware_benchmark_cleanup_timeout" ? HardwareFailureScope::Phase : HardwareFailureScope::Workload;
 }
 
 struct VideoTuple {
@@ -163,6 +170,17 @@ inline bool fpsGreaterThan(const VideoTuple &value, int numerator, int denominat
 	return (int64_t)value.fpsNum * denominator > (int64_t)numerator * std::max(1, value.fpsDen);
 }
 
+// Libobs can render a private texture mix only at the main canvas cadence. A
+// hardware candidate above that observed cadence therefore needs a second,
+// exact-cadence raw-input validation before its public texture encoder can be
+// recommended. Software encoders already use that exact raw path directly.
+inline bool requiresExactHardwareCadenceValidation(bool hardware, uint32_t sourceNum, uint32_t sourceDen, uint32_t targetNum, uint32_t targetDen)
+{
+	if (!hardware || sourceNum == 0 || sourceDen == 0 || targetNum == 0 || targetDen == 0)
+		return false;
+	return (uint64_t)targetNum * sourceDen > (uint64_t)sourceNum * targetDen;
+}
+
 inline bool hasV1AspectRatio(const VideoTuple &value)
 {
 	if (value.width <= 0 || value.height <= 0)
@@ -208,10 +226,12 @@ inline VideoTuple fitTier(const VideoTuple &ceiling, int longEdge, int shortEdge
 	return result;
 }
 
-// Convert Desktop's complete canvas-bounded maximum into the highest exact V1
-// tuple eligible for promotion. An absent/partial maximum, an orientation
-// mismatch, or a custom aspect ratio deliberately keeps the current output as
-// the ceiling, so native code cannot infer permission to change geometry.
+// Bound the current tuple downward when the caller supplies a smaller complete
+// geometry limit. Promotion above the current canvas is handled separately by
+// benchmarkCeiling through an isolated native workload. An absent/partial
+// maximum, an orientation mismatch, or a custom aspect ratio deliberately
+// keeps the current output as the ceiling, so native cannot infer permission to
+// change geometry.
 inline VideoTuple boundCurrentToV1Tier(const VideoTuple &current, int maxWidth, int maxHeight)
 {
 	if (maxWidth <= 0 || maxHeight <= 0)
@@ -233,26 +253,52 @@ inline VideoTuple boundCurrentToV1Tier(const VideoTuple &current, int maxWidth, 
 	return current;
 }
 
-inline VideoTuple benchmarkCeiling(const VideoTuple &current, int maxWidth, int maxHeight)
+// Promote only inside a complete, orientation-compatible V1 geometry bound.
+// The optional frame-rate bound is permission to benchmark a higher cadence,
+// not permission to return it without successful active bandwidth evidence.
+inline VideoTuple benchmarkCeiling(const VideoTuple &current, int maxWidth, int maxHeight, int maxFpsNum = 0, int maxFpsDen = 1)
 {
 	const VideoTuple bounded = boundCurrentToV1Tier(current, maxWidth, maxHeight);
-	if (!sameVideo(bounded, current))
-		return bounded;
 	if (maxWidth <= 0 || maxHeight <= 0)
 		return current;
 
 	if (!hasV1AspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
 		return current;
 
+	VideoTuple result = bounded;
 	const bool landscape = current.width >= current.height;
-	const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
-	for (const auto &tier : tiers) {
-		const int width = landscape ? tier[0] : tier[1];
-		const int height = landscape ? tier[1] : tier[0];
-		if (width <= maxWidth && height <= maxHeight && width > current.width && height > current.height)
-			return {width, height, current.fpsNum, current.fpsDen};
+	if (sameVideo(bounded, current)) {
+		const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
+		for (const auto &tier : tiers) {
+			const int width = landscape ? tier[0] : tier[1];
+			const int height = landscape ? tier[1] : tier[0];
+			if (width <= maxWidth && height <= maxHeight && width > current.width && height > current.height) {
+				result.width = width;
+				result.height = height;
+				break;
+			}
+		}
 	}
-	return current;
+
+	if (maxFpsNum > 0) {
+		VideoTuple requested = result;
+		requested.fpsNum = maxFpsNum;
+		requested.fpsDen = std::max(1, maxFpsDen);
+		if (fpsGreaterThan(requested, 60)) {
+			if (requested.fpsDen == 1001) {
+				requested.fpsNum = 60000;
+				requested.fpsDen = 1001;
+			} else {
+				requested.fpsNum = 60;
+				requested.fpsDen = 1;
+			}
+		}
+		if (fpsGreaterThan(requested, current.fpsNum, current.fpsDen)) {
+			result.fpsNum = requested.fpsNum;
+			result.fpsDen = requested.fpsDen;
+		}
+	}
+	return result;
 }
 
 // A completed active provider probe is the only source of permission to use a
@@ -274,9 +320,9 @@ inline VideoTuple recommendationCeiling(const VideoTuple &tested, const VideoTup
 	return result;
 }
 
-inline bool isResolutionPromotion(const VideoTuple &current, const VideoTuple &selected)
+inline bool isQualityPromotion(const VideoTuple &current, const VideoTuple &selected)
 {
-	return (int64_t)selected.width * selected.height > (int64_t)current.width * current.height;
+	return (int64_t)selected.width * selected.height > (int64_t)current.width * current.height || fpsGreaterThan(selected, current.fpsNum, current.fpsDen);
 }
 
 inline std::vector<VideoTuple> candidates(const VideoTuple &ceiling)
