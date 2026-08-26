@@ -639,7 +639,7 @@ function(add_nodejs_module NAME)
         C_VISIBILITY_PRESET hidden
         CXX_VISIBILITY_PRESET hidden
         POSITION_INDEPENDENT_CODE TRUE
-        CMAKE_CXX_STANDARD_REQUIRED TRUE
+        CXX_STANDARD_REQUIRED TRUE
         CXX_STANDARD 20
     )
 
