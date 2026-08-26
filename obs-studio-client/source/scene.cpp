@@ -21,6 +21,7 @@
 #include <mutex>
 #include <string>
 #include "controller.hpp"
+#include "osn-common.hpp"
 #include "osn-error.hpp"
 #include "input.hpp"
 #include "video.hpp"
@@ -39,6 +40,7 @@ Napi::Object osn::Scene::Init(Napi::Env env, Napi::Object exports)
 						  StaticMethod("create", &osn::Scene::Create),
 						  StaticMethod("createPrivate", &osn::Scene::CreatePrivate),
 						  StaticMethod("fromName", &osn::Scene::FromName),
+						  StaticMethod("invalidateItemTransformCache", &osn::Scene::InvalidateItemTransformCache),
 
 						  InstanceAccessor("source", &osn::Scene::AsSource, nullptr),
 
@@ -184,6 +186,12 @@ Napi::Value osn::Scene::FromName(const Napi::CallbackInfo &info)
 	return instance;
 }
 
+Napi::Value osn::Scene::InvalidateItemTransformCache(const Napi::CallbackInfo &info)
+{
+	CacheManager<SceneItemData *>::getInstance().InvalidateSceneItemTransforms();
+	return info.Env().Undefined();
+}
+
 Napi::Value osn::Scene::Release(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -249,13 +257,20 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 {
 	std::vector<ipc::value> params;
 	osn::Input *input = Napi::ObjectWrap<osn::Input>::Unwrap(info[0].ToObject());
+	const bool hasTransform = info.Length() >= 2 && !info[1].IsUndefined();
+	const bool hasVideo = info.Length() >= 3 && !info[2].IsUndefined();
+
+	if (hasVideo && !hasTransform) {
+		Napi::TypeError::New(info.Env(), "A transform is required when a video canvas is provided.").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
 
 	params.push_back(ipc::value(this->sourceId));
 	params.push_back(ipc::value(input->sourceId));
 	Napi::Object transform = Napi::Object::New(info.Env());
 	Napi::Object crop = Napi::Object::New(info.Env());
 
-	if (info.Length() >= 2) {
+	if (hasTransform) {
 		transform = info[1].ToObject();
 		params.push_back(ipc::value(transform.Get("scaleX").ToNumber().DoubleValue()));
 		params.push_back(ipc::value(transform.Get("scaleY").ToNumber().DoubleValue()));
@@ -269,6 +284,10 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(crop.Get("top").ToNumber().Int64Value()));
 		params.push_back(ipc::value(crop.Get("right").ToNumber().Int64Value()));
 		params.push_back(ipc::value(crop.Get("bottom").ToNumber().Int64Value()));
+		const Napi::Value referenceWidth = crop.Get("referenceWidth");
+		const Napi::Value referenceHeight = crop.Get("referenceHeight");
+		params.push_back(ipc::value(referenceWidth.IsNumber() ? referenceWidth.ToNumber().Uint32Value() : 0));
+		params.push_back(ipc::value(referenceHeight.IsNumber() ? referenceHeight.ToNumber().Uint32Value() : 0));
 
 		params.push_back(ipc::value(transform.Get("streamVisible").ToBoolean().Value()));
 		params.push_back(ipc::value(transform.Get("recordingVisible").ToBoolean().Value()));
@@ -277,16 +296,27 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		params.push_back(ipc::value(transform.Get("blendingMode").ToNumber().Uint32Value()));
 		params.push_back(ipc::value(transform.Get("blendingMethod").ToNumber().Uint32Value()));
 	}
-	if (info.Length() >= 3) {
+	if (hasVideo) {
+		if (!info[2].IsObject() || !info[2].ToObject().InstanceOf(osn::Video::constructor.Value())) {
+			Napi::TypeError::New(info.Env(), "Video canvas must be a Video instance.").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
 		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[2].ToObject());
-		if (video)
-			params.push_back(ipc::value(video->canvasId));
+		if (!video || video->canvasId == osn::common::INVALID_ID) {
+			Napi::Error::New(info.Env(), "Canvas reference is not valid.").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
+		params.push_back(ipc::value(video->canvasId));
 	}
+	if (hasTransform && !hasVideo)
+		params.push_back(ipc::value(osn::common::INVALID_ID));
 	auto conn = GetConnection(info);
 	if (!conn)
 		return info.Env().Undefined();
 
-	auto response = conn->call_synchronous_helper("Scene", info.Length() >= 2 ? "AddSourceWithTransform" : "AddSource", params);
+	auto response = conn->call_synchronous_helper("Scene", hasTransform ? "AddSourceWithTransform" : "AddSource", params);
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
@@ -305,7 +335,7 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 	sid->obs_itemId = obs_id;
 	sid->scene_id = this->sourceId;
 
-	if (info.Length() >= 2) {
+	if (hasTransform) {
 		// Position
 		sid->posX = transform.Get("x").ToNumber().FloatValue();
 		sid->posY = transform.Get("y").ToNumber().FloatValue();
@@ -325,7 +355,9 @@ Napi::Value osn::Scene::AddSource(const Napi::CallbackInfo &info)
 		sid->cropTop = crop.Get("top").ToNumber().Int32Value();
 		sid->cropRight = crop.Get("right").ToNumber().Int32Value();
 		sid->cropBottom = crop.Get("bottom").ToNumber().Int32Value();
-		sid->cropChanged = false;
+		// The server may normalize the reference for non-scene sources or
+		// automatically anchor a legacy four-field crop, so fetch it once.
+		sid->cropChanged = true;
 
 		// Rotation
 		sid->rotation = transform.Get("rotation").ToNumber().FloatValue();

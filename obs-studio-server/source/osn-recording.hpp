@@ -49,11 +49,23 @@ public:
 	bool fileResetTimestamps;
 	bool simple;
 
+	// Wrapped around fileFormat, as the replay buffer already does. Dual output uses this to tell
+	// its two canvases apart on disk; without it both derive the same name from the same pattern.
+	std::string prefix;
+	std::string suffix;
+
+	// fileFormat with prefix/suffix applied, space-separated. Extension is added later.
+	std::string DecoratedFileFormat() const;
+
 	void ConfigureRecFileSplitting();
 };
 
 class IRecording : public IFileOutput {
 public:
+	static void GetPrefix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetPrefix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetSuffix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetSuffix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetVideoEncoder(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
@@ -71,7 +83,9 @@ public:
 	static void SetFileResetTimestamps(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 	static std::string GenerateSpecifiedFilename(const std::string &extension, bool noSpace, const std::string &format, obs_video_info *ovi);
-	static void FindBestFilename(std::string &strPath, bool noSpace);
+
+	// FindBestFilename is inherited from IFileOutput; it needs the output object to claim against.
+	using IFileOutput::FindBestFilename;
 
 	static obs_encoder_t *duplicate_encoder(obs_encoder_t *src, uint64_t trackIndex = 0);
 };

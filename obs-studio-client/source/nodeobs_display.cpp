@@ -18,6 +18,7 @@
 
 #include "nodeobs_display.hpp"
 #include "controller.hpp"
+#include "osn-common.hpp"
 #include "osn-error.hpp"
 #include "utility-v8.hpp"
 
@@ -86,7 +87,7 @@ Napi::Value display::OBS_content_createDisplay(const Napi::CallbackInfo &info)
 
 	bool renderAtBottom = (info.Length() > 3) ? info[3].ToBoolean().Value() : false;
 
-	uint64_t canvasId = osn::Video::nonCavasId;
+	uint64_t canvasId = osn::common::INVALID_ID;
 	if (info.Length() > 4) {
 		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[4].ToObject());
 		if (video)
@@ -170,7 +171,7 @@ Napi::Value display::OBS_content_createSourcePreviewDisplay(const Napi::Callback
 	std::string key = info[2].ToString().Utf8Value();
 	bool renderAtBottom = (info.Length() > 3) ? info[3].ToBoolean().Value() : false;
 
-	uint64_t canvasId = osn::Video::nonCavasId;
+	uint64_t canvasId = osn::common::INVALID_ID;
 	if (info.Length() > 4) {
 		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[4].ToObject());
 		if (video)

@@ -18,6 +18,7 @@
 
 #include "osn-scene.hpp"
 #include <list>
+#include "osn-common.hpp"
 #include "osn-error.hpp"
 #include "osn-sceneitem.hpp"
 #include "osn-video.hpp"
@@ -38,14 +39,13 @@ void osn::Scene::Register(ipc::server &srv)
 		std::make_shared<ipc::function>("Duplicate", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String, ipc::type::Int32}, Duplicate));
 
 	cls->register_function(std::make_shared<ipc::function>("AsSource", std::vector<ipc::type>{ipc::type::UInt64}, AsSource));
-	cls->register_function(
-		std::make_shared<ipc::function>("AddSource", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::UInt64}, AddSource));
+	cls->register_function(std::make_shared<ipc::function>("AddSource", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64}, AddSource));
 
 	cls->register_function(std::make_shared<ipc::function>(
-		"AddSourceWithTransform",
-		std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::Double, ipc::type::Double, ipc::type::Int32, ipc::type::Double,
-				       ipc::type::Double, ipc::type::Double, ipc::type::Int64, ipc::type::Int64, ipc::type::Int64, ipc::type::Int64,
-				       ipc::type::Int32, ipc::type::Int32, ipc::type::UInt32, ipc::type::UInt32, ipc::type::UInt32, ipc::type::UInt64},
+		"AddSourceWithTransform", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt64, ipc::type::Double, ipc::type::Double, ipc::type::Int32,
+								 ipc::type::Double, ipc::type::Double, ipc::type::Double, ipc::type::Int64,  ipc::type::Int64,
+								 ipc::type::Int64,  ipc::type::Int64,  ipc::type::UInt32, ipc::type::UInt32, ipc::type::Int32,
+								 ipc::type::Int32,  ipc::type::UInt32, ipc::type::UInt32, ipc::type::UInt32, ipc::type::UInt64},
 		AddSource));
 
 	cls->register_function(std::make_shared<ipc::function>("FindItemByName", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, FindItemByName));
@@ -239,6 +239,11 @@ void osn::Scene::Duplicate(void *data, const int64_t id, const std::vector<ipc::
 
 void osn::Scene::AddSource(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	if (args.size() != 2 && args.size() != 20) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Invalid number of arguments to add a source to a scene.");
+	}
+	const bool hasTransform = args.size() == 20;
+
 	obs_source_t *source = osn::Source::Manager::GetInstance().find(args[0].value_union.ui64);
 	if (!source) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Source reference is not valid.");
@@ -254,14 +259,31 @@ void osn::Scene::AddSource(void *data, const int64_t id, const std::vector<ipc::
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Source reference to add is not valid.");
 	}
 
-	obs_sceneitem_t *item = obs_scene_add(scene, added_source);
-
-	utility::unique_id::id_t uid = osn::SceneItem::Manager::GetInstance().allocate(item);
-	if (uid == UINT64_MAX) {
-		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Index list is full.");
+	obs_video_info *canvas = nullptr;
+	if (hasTransform) {
+		const uint64_t canvasId = args[19].value_union.ui64;
+		if (canvasId != osn::common::INVALID_ID) {
+			canvas = osn::Video::Manager::GetInstance().find(canvasId);
+			if (!canvas) {
+				PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
+			}
+		}
 	}
 
-	if (args.size() > 2) {
+	obs_sceneitem_t *item = obs_scene_add(scene, added_source);
+	if (!item) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to add source to scene.");
+	}
+
+	if (hasTransform) {
+		if (canvas) {
+			obs_sceneitem_set_canvas(item, canvas);
+			if (obs_sceneitem_get_canvas(item) != canvas) {
+				obs_sceneitem_remove(item);
+				PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Canvas reference is not valid.");
+			}
+		}
+
 		vec2 scale;
 		scale.x = static_cast<float>(args[2].value_union.fp64);
 		scale.y = static_cast<float>(args[3].value_union.fp64);
@@ -283,19 +305,23 @@ void osn::Scene::AddSource(void *data, const int64_t id, const std::vector<ipc::
 		crop.bottom = static_cast<int>(args[11].value_union.i64);
 
 		obs_sceneitem_set_crop(item, &crop);
+		const uint32_t referenceWidth = args[12].value_union.ui32;
+		const uint32_t referenceHeight = args[13].value_union.ui32;
+		if (referenceWidth != 0 && referenceHeight != 0)
+			obs_sceneitem_set_crop_reference(item, referenceWidth, referenceHeight);
 
-		obs_sceneitem_set_stream_visible(item, !!args[12].value_union.i32);
-		obs_sceneitem_set_recording_visible(item, !!args[13].value_union.i32);
+		obs_sceneitem_set_stream_visible(item, !!args[14].value_union.i32);
+		obs_sceneitem_set_recording_visible(item, !!args[15].value_union.i32);
 
-		obs_sceneitem_set_scale_filter(item, (enum obs_scale_type)args[14].value_union.ui32);
-		obs_sceneitem_set_blending_mode(item, (enum obs_blending_type)args[15].value_union.ui32);
-		obs_sceneitem_set_blending_method(item, (enum obs_blending_method)args[16].value_union.ui32);
+		obs_sceneitem_set_scale_filter(item, (enum obs_scale_type)args[16].value_union.ui32);
+		obs_sceneitem_set_blending_mode(item, (enum obs_blending_type)args[17].value_union.ui32);
+		obs_sceneitem_set_blending_method(item, (enum obs_blending_method)args[18].value_union.ui32);
+	}
 
-		if (args.size() >= 18) {
-			obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[17].value_union.ui64);
-			if (canvas)
-				obs_sceneitem_set_canvas(item, canvas);
-		}
+	utility::unique_id::id_t uid = osn::SceneItem::Manager::GetInstance().allocate(item);
+	if (uid == UINT64_MAX) {
+		obs_sceneitem_remove(item);
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Index list is full.");
 	}
 
 	obs_sceneitem_addref(item);

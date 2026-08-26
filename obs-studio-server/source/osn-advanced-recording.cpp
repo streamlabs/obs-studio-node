@@ -21,7 +21,8 @@
 #include "shared.hpp"
 #include "osn-audio-track.hpp"
 #include "osn-file-output.hpp"
-#include <osn-encoders.hpp>
+#include "osn-encoders.hpp"
+#include <util/platform.h>
 
 void osn::IAdvancedRecording::Register(ipc::server &srv)
 {
@@ -66,6 +67,10 @@ void osn::IAdvancedRecording::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("SetFileResetTimestamps", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::UInt32},
 							       SetFileResetTimestamps));
 	cls->register_function(std::make_shared<ipc::function>("GetAvailableEncoders", std::vector<ipc::type>{ipc::type::UInt64}, GetAvailableEncoders));
+	cls->register_function(std::make_shared<ipc::function>("GetPrefix", std::vector<ipc::type>{ipc::type::UInt64}, GetPrefix));
+	cls->register_function(std::make_shared<ipc::function>("SetPrefix", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetPrefix));
+	cls->register_function(std::make_shared<ipc::function>("GetSuffix", std::vector<ipc::type>{ipc::type::UInt64}, GetSuffix));
+	cls->register_function(std::make_shared<ipc::function>("SetSuffix", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetSuffix));
 
 	srv.register_collection(cls);
 }
@@ -88,6 +93,11 @@ void osn::IAdvancedRecording::Destroy(void *data, const int64_t id, const std::v
 	if (!recording) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
 	}
+
+	// Stop before deregistering. The destructor would do this anyway, but by then the object is out
+	// of the manager, and DeleteOutput() can wait up to 20s for the muxer to drain -- a window where
+	// the file is still being written but its claim is invisible to a concurrent Start.
+	recording->DeleteOutput();
 
 	osn::IAdvancedRecording::Manager::GetInstance().free(recording);
 	delete recording;
@@ -282,16 +292,23 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 
+	if (!recording->path.size()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
+	}
+
+	if (!os_is_path_safe(recording->path.c_str())) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Unsafe recording path: symbolic links and junctions are not allowed.");
+	}
+
 	std::string path = recording->path;
 
 	char lastChar = path.back();
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->fileFormat, recording->GetCanvas());
+	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->DecoratedFileFormat(), recording->GetCanvas());
 
-	if (!recording->overwrite)
-		FindBestFilename(path, recording->noSpace);
+	FindBestFilename(path, recording->noSpace, recording, recording->overwrite);
 
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, "path", path.c_str());

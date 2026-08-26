@@ -21,8 +21,8 @@
 #include "osn-audio-encoder.hpp"
 #include "osn-error.hpp"
 #include "shared.hpp"
-#include "util/platform.h"
 #include "osn-encoders.hpp"
+#include <algorithm>
 
 extern char *osn_generate_formatted_filename(const char *extension, bool space, const char *format, obs_video_info *ovi);
 
@@ -99,6 +99,96 @@ void osn::IRecording::Query(void *data, const int64_t id, const std::vector<ipc:
 	AUTO_DEBUG;
 }
 
+// Mirrors the replay buffer's prefix/suffix handling. Only the caller-supplied parts are stripped
+// of reserved characters; fileFormat is left exactly as configured.
+static void remove_reserved_file_characters(std::string &s)
+{
+	std::replace(s.begin(), s.end(), '/', '_');
+	std::replace(s.begin(), s.end(), '\\', '_');
+	std::replace(s.begin(), s.end(), '*', '_');
+	std::replace(s.begin(), s.end(), '?', '_');
+	std::replace(s.begin(), s.end(), '"', '_');
+	std::replace(s.begin(), s.end(), '|', '_');
+	std::replace(s.begin(), s.end(), ':', '_');
+	std::replace(s.begin(), s.end(), '>', '_');
+	std::replace(s.begin(), s.end(), '<', '_');
+}
+
+std::string osn::Recording::DecoratedFileFormat() const
+{
+	std::string decorated;
+
+	if (prefix.size()) {
+		std::string p = prefix;
+		remove_reserved_file_characters(p);
+		decorated += p;
+		if (decorated.size() && decorated.back() != ' ')
+			decorated += " ";
+	}
+
+	decorated += fileFormat;
+
+	if (suffix.size()) {
+		std::string s = suffix;
+		remove_reserved_file_characters(s);
+		if (s.front() != ' ')
+			decorated += " ";
+		decorated += s;
+	}
+
+	return decorated;
+}
+
+void osn::IRecording::GetPrefix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(recording->prefix));
+	AUTO_DEBUG;
+}
+
+void osn::IRecording::SetPrefix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	recording->prefix = args[1].value_str;
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void osn::IRecording::GetSuffix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(recording->suffix));
+	AUTO_DEBUG;
+}
+
+void osn::IRecording::SetSuffix(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	Recording *recording = static_cast<Recording *>(osn::IFileOutput::Manager::GetInstance().find(args[0].value_union.ui64));
+	if (!recording) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Recording reference is not valid.");
+	}
+
+	recording->suffix = args[1].value_str;
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
 std::string osn::IRecording::GenerateSpecifiedFilename(const std::string &extension, bool noSpace, const std::string &format, obs_video_info *ovi)
 {
 	char *filename = osn_generate_formatted_filename(extension.c_str(), !noSpace, format.c_str(), ovi);
@@ -111,36 +201,6 @@ std::string osn::IRecording::GenerateSpecifiedFilename(const std::string &extens
 	bfree(filename);
 
 	return result;
-}
-
-void osn::IRecording::FindBestFilename(std::string &strPath, bool noSpace)
-{
-	int num = 2;
-
-	if (!os_file_exists(strPath.c_str()))
-		return;
-
-	const char *ext = strrchr(strPath.c_str(), '.');
-	if (!ext)
-		return;
-
-	int extStart = int(ext - strPath.c_str());
-	for (;;) {
-		std::string testPath = strPath;
-		std::string numStr;
-
-		numStr = noSpace ? "_" : " (";
-		numStr += std::to_string(num++);
-		if (!noSpace)
-			numStr += ")";
-
-		testPath.insert(extStart, numStr);
-
-		if (!os_file_exists(testPath.c_str())) {
-			strPath = testPath;
-			break;
-		}
-	}
 }
 
 obs_encoder_t *osn::IRecording::duplicate_encoder(obs_encoder_t *src, uint64_t trackIndex)

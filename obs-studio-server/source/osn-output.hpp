@@ -61,6 +61,11 @@ public:
 	obs_output_t *GetOutput();
 	const obs_output_t *GetOutput() const;
 
+protected:
+	// Runs once per stop, from the libobs "stop" signal and from the StartOutput()
+	// failure path. Called on libobs' capture thread, so keep it short.
+	virtual void OnOutputStopped() {}
+
 private:
 	friend void OutputSignalCallback(void *data, calldata_t *params);
 

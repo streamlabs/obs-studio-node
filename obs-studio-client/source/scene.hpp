@@ -34,6 +34,7 @@ public:
 	static Napi::Value Create(const Napi::CallbackInfo &info);
 	static Napi::Value CreatePrivate(const Napi::CallbackInfo &info);
 	static Napi::Value FromName(const Napi::CallbackInfo &info);
+	static Napi::Value InvalidateItemTransformCache(const Napi::CallbackInfo &info);
 
 	Napi::Value Release(const Napi::CallbackInfo &info);
 	Napi::Value Remove(const Napi::CallbackInfo &info);

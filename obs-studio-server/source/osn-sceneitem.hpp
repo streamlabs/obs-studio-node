@@ -73,6 +73,8 @@ public:
 	static void SetBoundsType(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetCrop(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetCrop(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void GetCropToBounds(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void SetCropToBounds(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetTransformInfo(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void SetTransformInfo(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void GetScaleFilter(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

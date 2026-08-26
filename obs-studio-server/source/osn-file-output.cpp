@@ -20,6 +20,105 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include <osn-video.hpp>
+#include <util/platform.h>
+#include <algorithm>
+#include <mutex>
+
+// Serialises resolve-and-claim against the release in OnOutputStopped(). Start() runs on an IPC
+// worker thread and the release on libobs' capture thread, and the check-then-set has to be atomic
+// as a unit -- the manager's own lock is dropped when for_each returns, so it is not enough.
+static std::mutex s_filenameClaimMutex;
+
+// Windows paths are case-insensitive and accept either separator, so compare on a folded key while
+// the claim itself keeps the exact string the muxer was given. Elsewhere the comparison is exact:
+// on POSIX a backslash is an ordinary filename character, so folding it into a separator would make
+// two different files look like one.
+static std::string claim_key(const std::string &path)
+{
+#ifdef WIN32
+	std::string key = path;
+	std::replace(key.begin(), key.end(), '\\', '/');
+	std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c) { return (char)tolower(c); });
+	return key;
+#else
+	return path;
+#endif
+}
+
+// Caller must hold s_filenameClaimMutex.
+static bool path_claimed_by_other(const std::string &candidate, const osn::FileOutput *owner)
+{
+	const std::string wanted = claim_key(candidate);
+	bool claimed = false;
+
+	osn::IFileOutput::Manager::GetInstance().for_each([&](osn::FileOutput *output) {
+		// Idle outputs, replay buffers (which never claim) and GetLegacySettings' throwaway
+		// objects all carry an empty claim.
+		if (claimed || !output || output == owner || output->claimedFilePath.empty())
+			return;
+
+		if (claim_key(output->claimedFilePath) == wanted)
+			claimed = true;
+	});
+
+	return claimed;
+}
+
+void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, FileOutput *owner, bool allowOverwrite)
+{
+	std::lock_guard<std::mutex> lock(s_filenameClaimMutex);
+
+	// Insert before the extension, or at the very end when there is none. Only the final component
+	// counts: a dot in a directory name is not an extension. An extensionless name is reachable --
+	// osn_generate_formatted_filename() appends the extension and then truncates the whole thing to
+	// 255 bytes -- and giving up there would hand two live outputs the same path.
+	const size_t sep = strPath.find_last_of("/\\");
+	const size_t nameStart = (sep == std::string::npos) ? 0 : sep + 1;
+	const size_t dot = strPath.find_last_of('.');
+	const size_t insertAt = (dot != std::string::npos && dot > nameStart) ? dot : strPath.size();
+
+	std::string candidate = strPath;
+	int num = 2;
+	bool blockedByLiveOutput = false;
+
+	for (;;) {
+		const bool onDisk = !allowOverwrite && os_file_exists(candidate.c_str());
+		const bool heldByPeer = path_claimed_by_other(candidate, owner);
+
+		if (!onDisk && !heldByPeer)
+			break;
+		if (heldByPeer)
+			blockedByLiveOutput = true;
+
+		std::string numStr = noSpace ? "_" : " (";
+		numStr += std::to_string(num++);
+		if (!noSpace)
+			numStr += ")";
+
+		candidate = strPath;
+		candidate.insert(insertAt, numStr);
+	}
+
+	// Stepping over a file left on disk is ordinary and stays quiet. Stepping over a path another
+	// running output holds is not: it means a client pointed two outputs at one file -- dual output
+	// without distinct prefix/suffix, most likely -- and got a name it did not ask for.
+	if (blockedByLiveOutput)
+		blog(LOG_WARNING, "Recording path '%s' is in use by another active output, writing to '%s' instead.", strPath.c_str(), candidate.c_str());
+
+	strPath = candidate;
+
+	// Never move the claim of an output that is already running. A duplicate start() resolves a
+	// fresh name -- the timestamp has moved on -- but obs_output_start() then refuses and the muxer
+	// stays on its original file. Reassigning here would unclaim the file actually being written.
+	if (owner && !obs_output_active(owner->GetOutput()))
+		owner->claimedFilePath = strPath;
+}
+
+void osn::FileOutput::OnOutputStopped()
+{
+	std::lock_guard<std::mutex> lock(s_filenameClaimMutex);
+	claimedFilePath.clear();
+}
 
 void osn::IFileOutput::Register(ipc::server &srv)
 {

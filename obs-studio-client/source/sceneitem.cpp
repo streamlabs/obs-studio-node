@@ -21,6 +21,7 @@
 #include <string>
 
 #include "controller.hpp"
+#include "osn-common.hpp"
 #include "osn-error.hpp"
 #include "input.hpp"
 #include "ipc-value.hpp"
@@ -54,6 +55,7 @@ Napi::Object osn::SceneItem::Init(Napi::Env env, Napi::Object exports)
 				    InstanceAccessor("transformInfo", &osn::SceneItem::GetTransformInfo, &osn::SceneItem::SetTransformInfo),
 				    InstanceAccessor("boundsType", &osn::SceneItem::GetBoundsType, &osn::SceneItem::SetBoundsType),
 				    InstanceAccessor("crop", &osn::SceneItem::GetCrop, &osn::SceneItem::SetCrop),
+				    InstanceAccessor("cropToBounds", &osn::SceneItem::GetCropToBounds, &osn::SceneItem::SetCropToBounds),
 				    InstanceAccessor("scaleFilter", &osn::SceneItem::GetScaleFilter, &osn::SceneItem::SetScaleFilter),
 				    InstanceAccessor("id", &osn::SceneItem::GetId, nullptr),
 				    InstanceAccessor("blendingMethod", &osn::SceneItem::GetBlendingMethod, &osn::SceneItem::SetBlendingMethod),
@@ -391,7 +393,7 @@ void osn::SceneItem::SetPosition(const Napi::CallbackInfo &info, const Napi::Val
 
 	if (sid == nullptr)
 		return;
-	if (x == sid->posX && y == sid->posY)
+	if (!sid->posChanged && x == sid->posX && y == sid->posY)
 		return;
 
 	auto conn = GetConnection(info);
@@ -405,6 +407,7 @@ void osn::SceneItem::SetPosition(const Napi::CallbackInfo &info, const Napi::Val
 
 	sid->posX = x;
 	sid->posY = y;
+	sid->posChanged = false;
 }
 
 Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
@@ -417,6 +420,8 @@ Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
 
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
+	if (response[1].value_union.ui64 == osn::common::INVALID_ID)
+		return info.Env().Null();
 
 	auto instance = osn::Video::constructor.New({Napi::Number::New(info.Env(), static_cast<double>(response[1].value_union.ui64))});
 
@@ -425,10 +430,15 @@ Napi::Value osn::SceneItem::GetCanvas(const Napi::CallbackInfo &info)
 
 void osn::SceneItem::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value &value)
 {
+	if (!value.IsObject() || !value.ToObject().InstanceOf(osn::Video::constructor.Value())) {
+		Napi::TypeError::New(info.Env(), "Video canvas must be a Video instance.").ThrowAsJavaScriptException();
+		return;
+	}
+
 	osn::Video *canvas = Napi::ObjectWrap<osn::Video>::Unwrap(value.ToObject());
 
-	if (!canvas) {
-		Napi::TypeError::New(info.Env(), "Invalid canvas argument").ThrowAsJavaScriptException();
+	if (!canvas || canvas->canvasId == osn::common::INVALID_ID) {
+		Napi::Error::New(info.Env(), "Canvas reference is not valid.").ThrowAsJavaScriptException();
 		return;
 	}
 
@@ -437,7 +447,15 @@ void osn::SceneItem::SetCanvas(const Napi::CallbackInfo &info, const Napi::Value
 		return;
 
 	auto response = conn->call_synchronous_helper("SceneItem", "SetCanvas", {ipc::value(this->itemId), ipc::value(canvas->canvasId)});
-	ValidateResponse(info, response);
+	if (!ValidateResponse(info, response))
+		return;
+
+	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
+	if (sid) {
+		sid->posChanged = true;
+		sid->scaleChanged = true;
+		sid->cropChanged = true;
+	}
 }
 
 Napi::Value osn::SceneItem::GetRotation(const Napi::CallbackInfo &info)
@@ -532,7 +550,7 @@ void osn::SceneItem::SetScale(const Napi::CallbackInfo &info, const Napi::Value 
 
 	if (sid == nullptr)
 		return;
-	if (x == sid->scaleX && y == sid->scaleY)
+	if (!sid->scaleChanged && x == sid->scaleX && y == sid->scaleY)
 		return;
 
 	auto conn = GetConnection(info);
@@ -545,6 +563,7 @@ void osn::SceneItem::SetScale(const Napi::CallbackInfo &info, const Napi::Value 
 
 	sid->scaleX = x;
 	sid->scaleY = y;
+	sid->scaleChanged = false;
 }
 
 Napi::Value osn::SceneItem::GetScaleFilter(const Napi::CallbackInfo &info)
@@ -724,6 +743,10 @@ Napi::Value osn::SceneItem::GetCrop(const Napi::CallbackInfo &info)
 		obj.Set("top", Napi::Number::New(info.Env(), sid->cropTop));
 		obj.Set("right", Napi::Number::New(info.Env(), sid->cropRight));
 		obj.Set("bottom", Napi::Number::New(info.Env(), sid->cropBottom));
+		if (sid->cropReferenceWidth != 0 && sid->cropReferenceHeight != 0) {
+			obj.Set("referenceWidth", Napi::Number::New(info.Env(), sid->cropReferenceWidth));
+			obj.Set("referenceHeight", Napi::Number::New(info.Env(), sid->cropReferenceHeight));
+		}
 		return obj;
 	}
 
@@ -736,21 +759,29 @@ Napi::Value osn::SceneItem::GetCrop(const Napi::CallbackInfo &info)
 	if (!ValidateResponse(info, response))
 		return info.Env().Undefined();
 
-	uint32_t left = response[1].value_union.i32;
-	uint32_t top = response[2].value_union.i32;
-	uint32_t right = response[3].value_union.i32;
-	uint32_t bottom = response[4].value_union.i32;
+	int32_t left = response[1].value_union.i32;
+	int32_t top = response[2].value_union.i32;
+	int32_t right = response[3].value_union.i32;
+	int32_t bottom = response[4].value_union.i32;
+	uint32_t referenceWidth = response[5].value_union.ui32;
+	uint32_t referenceHeight = response[6].value_union.ui32;
 
 	Napi::Object obj = Napi::Object::New(info.Env());
 	obj.Set("left", Napi::Number::New(info.Env(), left));
 	obj.Set("top", Napi::Number::New(info.Env(), top));
 	obj.Set("right", Napi::Number::New(info.Env(), right));
 	obj.Set("bottom", Napi::Number::New(info.Env(), bottom));
+	if (referenceWidth != 0 && referenceHeight != 0) {
+		obj.Set("referenceWidth", Napi::Number::New(info.Env(), referenceWidth));
+		obj.Set("referenceHeight", Napi::Number::New(info.Env(), referenceHeight));
+	}
 
 	sid->cropLeft = left;
 	sid->cropTop = top;
 	sid->cropRight = right;
 	sid->cropBottom = bottom;
+	sid->cropReferenceWidth = referenceWidth;
+	sid->cropReferenceHeight = referenceHeight;
 	sid->cropChanged = false;
 
 	return obj;
@@ -763,12 +794,17 @@ void osn::SceneItem::SetCrop(const Napi::CallbackInfo &info, const Napi::Value &
 	int32_t top = vector.Get("top").ToNumber().Int32Value();
 	int32_t right = vector.Get("right").ToNumber().Int32Value();
 	int32_t bottom = vector.Get("bottom").ToNumber().Int32Value();
+	const Napi::Value referenceWidthValue = vector.Get("referenceWidth");
+	const Napi::Value referenceHeightValue = vector.Get("referenceHeight");
+	uint32_t referenceWidth = referenceWidthValue.IsNumber() ? referenceWidthValue.ToNumber().Uint32Value() : 0;
+	uint32_t referenceHeight = referenceHeightValue.IsNumber() ? referenceHeightValue.ToNumber().Uint32Value() : 0;
 
 	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
 
 	if (sid == nullptr)
 		return;
-	if (left == sid->cropLeft && top == sid->cropTop && right == sid->cropRight && bottom == sid->cropBottom)
+	if (!sid->cropChanged && left == sid->cropLeft && top == sid->cropTop && right == sid->cropRight && bottom == sid->cropBottom &&
+	    referenceWidth == sid->cropReferenceWidth && referenceHeight == sid->cropReferenceHeight)
 		return;
 
 	auto conn = GetConnection(info);
@@ -777,14 +813,45 @@ void osn::SceneItem::SetCrop(const Napi::CallbackInfo &info, const Napi::Value &
 
 	auto response = conn->call_synchronous_helper("SceneItem", "SetCrop",
 						      std::vector<ipc::value>{ipc::value(this->itemId), ipc::value(left), ipc::value(top), ipc::value(right),
-									      ipc::value(bottom)});
+									      ipc::value(bottom), ipc::value(referenceWidth), ipc::value(referenceHeight)});
 	if (!ValidateResponse(info, response))
 		return;
 
-	sid->cropLeft = left;
-	sid->cropTop = top;
-	sid->cropRight = right;
-	sid->cropBottom = bottom;
+	sid->cropLeft = response[1].value_union.i32;
+	sid->cropTop = response[2].value_union.i32;
+	sid->cropRight = response[3].value_union.i32;
+	sid->cropBottom = response[4].value_union.i32;
+	sid->cropReferenceWidth = response[5].value_union.ui32;
+	sid->cropReferenceHeight = response[6].value_union.ui32;
+	sid->cropChanged = false;
+}
+
+Napi::Value osn::SceneItem::GetCropToBounds(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	auto response = conn->call_synchronous_helper("SceneItem", "GetCropToBounds", {ipc::value(this->itemId)});
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	return Napi::Boolean::New(info.Env(), !!response[1].value_union.ui32);
+}
+
+void osn::SceneItem::SetCropToBounds(const Napi::CallbackInfo &info, const Napi::Value &value)
+{
+	if (!value.IsBoolean()) {
+		Napi::TypeError::New(info.Env(), "cropToBounds must be a boolean").ThrowAsJavaScriptException();
+		return;
+	}
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return;
+
+	auto response = conn->call_synchronous_helper("SceneItem", "SetCropToBounds", {ipc::value(this->itemId), ipc::value(value.ToBoolean().Value())});
+	ValidateResponse(info, response);
 }
 
 Napi::Value osn::SceneItem::GetTransformInfo(const Napi::CallbackInfo &info)
@@ -820,6 +887,7 @@ Napi::Value osn::SceneItem::GetTransformInfo(const Napi::CallbackInfo &info)
 	boundsObj.Set("x", Napi::Number::New(info.Env(), response[9].value_union.fp32));
 	boundsObj.Set("y", Napi::Number::New(info.Env(), response[10].value_union.fp32));
 	obj.Set("bounds", boundsObj);
+	obj.Set("cropToBounds", Napi::Boolean::New(info.Env(), !!response[11].value_union.ui32));
 
 	return obj;
 }
@@ -834,6 +902,7 @@ void osn::SceneItem::SetTransformInfo(const Napi::CallbackInfo &info, const Napi
 	const auto boundsType = vector.Get("boundsType").ToNumber().Uint32Value();
 	const auto boundsAlignment = vector.Get("boundsAlignment").ToNumber().Uint32Value();
 	const auto bounds = vector.Get("bounds").ToObject();
+	const auto cropToBounds = vector.Get("cropToBounds").ToBoolean().Value();
 
 	auto conn = GetConnection(info);
 	if (!conn) {
@@ -852,9 +921,19 @@ void osn::SceneItem::SetTransformInfo(const Napi::CallbackInfo &info, const Napi
 		boundsAlignment,
 		bounds.Get("x").ToNumber().FloatValue(),
 		bounds.Get("y").ToNumber().FloatValue(),
+		cropToBounds,
 	};
 	auto response = conn->call_synchronous_helper("SceneItem", "SetTransformInfo", std::move(params));
-	ValidateResponse(info, response);
+	if (!ValidateResponse(info, response))
+		return;
+
+	SceneItemData *sid = CacheManager<SceneItemData *>::getInstance().Retrieve(this->itemId);
+	if (sid) {
+		sid->posChanged = true;
+		sid->scaleChanged = true;
+		sid->rotationChanged = true;
+		sid->cropChanged = true;
+	}
 }
 
 Napi::Value osn::SceneItem::GetId(const Napi::CallbackInfo &info)

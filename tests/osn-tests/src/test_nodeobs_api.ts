@@ -9,6 +9,60 @@ import { showHideInputHotkeys, slideshowHotkeys, ffmpeg_sourceHotkeys,
 
 const testName = 'nodeobs_api';
 
+const validInitializationOptions: osn.IOBSAPIInitializationOptions = {
+    language: 'en-US',
+    appDataPath: 'test-app-data',
+    version: '0.00.00-preview.0',
+    crashServerUrl: '',
+};
+
+function callInitialize(...args: unknown[]): unknown {
+    return Reflect.apply(
+        osn.NodeObs.OBS_API_initAPI as (...values: unknown[]) => unknown,
+        osn.NodeObs,
+        args,
+    );
+}
+
+describe(`${testName} initialization validation`, function() {
+    it('requires exactly one non-array options object', function() {
+        const invalidArgumentLists: unknown[][] = [
+            [],
+            [null],
+            [undefined],
+            ['options'],
+            [[]],
+            [validInitializationOptions, validInitializationOptions],
+        ];
+
+        for (const args of invalidArgumentLists) {
+            expect(() => callInitialize(...args)).to.throw(
+                TypeError,
+                'OBS_API_initAPI expects exactly one initialization options object',
+            );
+        }
+    });
+
+    const requiredStringOptions: Array<keyof osn.IOBSAPIInitializationOptions> = [
+        'language',
+        'appDataPath',
+        'version',
+        'crashServerUrl',
+    ];
+
+    for (const optionName of requiredStringOptions) {
+        it(`requires ${optionName} to be a string`, function() {
+            const expectedMessage = `OBS_API_initAPI option '${optionName}' must be a string`;
+            const missingOption: Partial<osn.IOBSAPIInitializationOptions> = { ...validInitializationOptions };
+            delete missingOption[optionName];
+            const invalidOption = { ...validInitializationOptions, [optionName]: 42 };
+
+            expect(() => callInitialize(missingOption)).to.throw(TypeError, expectedMessage);
+            expect(() => callInitialize(invalidOption)).to.throw(TypeError, expectedMessage);
+        });
+    }
+});
+
 describe(testName, function() {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;

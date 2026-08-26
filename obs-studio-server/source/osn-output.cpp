@@ -40,6 +40,11 @@ void osn::Output::InitOutput(obs_output_t *output)
 void osn::Output::OnStopped(void *data, calldata_t *)
 {
 	osn::Output *context = reinterpret_cast<osn::Output *>(data);
+
+	// Before m_mtxOutputStop: DeleteOutput() holds that lock for up to 20s waiting
+	// on m_cvStop, and nothing should queue behind it.
+	context->OnOutputStopped();
+
 	std::unique_lock lock(context->m_mtxOutputStop);
 	context->m_outputStopped = true;
 	context->m_cvStop.notify_one();
@@ -173,6 +178,13 @@ void osn::Output::StartOutput()
 		}
 		code = OBS_OUTPUT_ERROR;
 	}
+
+	// libobs emits no "stop" here, so OnStopped() never runs for a failed start. But a failed start
+	// does not imply an idle output: obs_output_can_begin_data_capture() refuses while the output is
+	// already active, so starting twice lands here with the first muxer still writing. Releasing then
+	// would unclaim a file that is still being written to.
+	if (!obs_output_active(m_output))
+		OnOutputStopped();
 
 	PushReceivedSignal("stop", code, errorMessage);
 }
