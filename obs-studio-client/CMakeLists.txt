@@ -171,8 +171,6 @@ add_nodejs_module(
     ${osn-client_SOURCES}
 )
 
-set_property(TARGET obs_studio_client PROPERTY CXX_STANDARD 20)
-
 if(BUILD_TESTING)
     include(Catch)
 
