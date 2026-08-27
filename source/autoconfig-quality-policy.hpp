@@ -116,6 +116,11 @@ struct Selection {
 	bool insufficientBandwidth = false;
 };
 
+enum class QualityProfile {
+	Generic,
+	Twitch,
+};
+
 struct HardwareTier {
 	int longEdge = 0;
 	int shortEdge = 0;
@@ -348,6 +353,22 @@ inline long double bitrateComplexity(const VideoTuple &video)
 	return std::pow(area, 0.85L) * std::sqrt(std::pow(fps, 1.1L));
 }
 
+inline int twitchMinimumBitrateKbps(const VideoTuple &video)
+{
+	// Product ladder for any locally encoded leg containing Twitch. The
+	// 1080p60 floor deliberately tolerates a small shortfall from Twitch's
+	// published 6000 Kbps recommendation; lower rungs use explicit product
+	// transitions instead of the generic OBS complexity estimate.
+	const int longEdge = std::max(video.width, video.height);
+	const int shortEdge = std::min(video.width, video.height);
+	const bool highFps = fpsGreaterThan(video, 30);
+	if (longEdge == 1920 && shortEdge == 1080)
+		return highFps ? 5500 : 5000;
+	if (longEdge == 1280 && shortEdge == 720)
+		return highFps ? 4500 : 3000;
+	return 0;
+}
+
 inline int roundedMinimumBitrateKbps(const VideoTuple &video, const std::string &encoderFamily)
 {
 	const VideoTuple reference{1920, 1080, 60, 1};
@@ -359,12 +380,22 @@ inline int roundedMinimumBitrateKbps(const VideoTuple &video, const std::string 
 	return std::max(1, (int)(std::ceil(minimum / 50.0L) * 50.0L));
 }
 
+inline int profileMinimumBitrateKbps(const VideoTuple &video, const std::string &encoderFamily, QualityProfile profile)
+{
+	if (profile == QualityProfile::Twitch) {
+		const int twitchMinimum = twitchMinimumBitrateKbps(video);
+		if (twitchMinimum > 0)
+			return twitchMinimum;
+	}
+	return roundedMinimumBitrateKbps(video, encoderFamily);
+}
+
 inline bool supports(const VideoTuple &video, int safeVideoBitrateKbps, const std::string &encoderFamily)
 {
 	return safeVideoBitrateKbps >= roundedMinimumBitrateKbps(video, encoderFamily);
 }
 
-inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, const std::string &encoderFamily)
+inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, const std::string &encoderFamily, QualityProfile profile = QualityProfile::Generic)
 {
 	Selection result;
 	const auto options = candidates(ceiling);
@@ -377,7 +408,7 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 
 	std::vector<size_t> eligible;
 	for (size_t index = 0; index < options.size(); index++) {
-		if (supports(options[index], safeVideoBitrateKbps, encoderFamily))
+		if (safeVideoBitrateKbps >= profileMinimumBitrateKbps(options[index], encoderFamily, profile))
 			eligible.push_back(index);
 	}
 
@@ -387,7 +418,9 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 		// Mirror OBS's high-FPS preference: when bandwidth rejects a higher
 		// resolution at high FPS but admits it at low FPS, prefer the next lower
 		// high-FPS tier as long as that tier is at least 960x540.
-		if (eligible.size() > 1) {
+		// The Twitch profile already defines the preferred resolution/cadence at
+		// each boundary. Do not let the generic high-FPS override reorder it.
+		if (profile == QualityProfile::Generic && eligible.size() > 1) {
 			const VideoTuple &first = options[eligible[0]];
 			const VideoTuple &second = options[eligible[1]];
 			const bool firstLow = !fpsGreaterThan(first, 30);
@@ -398,7 +431,7 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 	}
 
 	result.video = options[selectedIndex];
-	result.minimumBitrateKbps = roundedMinimumBitrateKbps(result.video, encoderFamily);
+	result.minimumBitrateKbps = profileMinimumBitrateKbps(result.video, encoderFamily, profile);
 	result.insufficientBandwidth = eligible.empty();
 	result.bandwidthConstrained = !sameVideo(result.video, ceiling);
 	// The provider-safe budget remains the recommended bitrate. Resolution and

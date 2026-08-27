@@ -6,9 +6,11 @@ using autoConfig::probePolicy::YoutubeRampEvidence;
 using autoConfig::probePolicy::YoutubeBaselineAssessment;
 using autoConfig::probePolicy::YoutubeBaselineDecision;
 using autoConfig::probePolicy::YoutubeConfirmationDecision;
+using autoConfig::probePolicy::YoutubeExtendedValidationDecision;
 using autoConfig::probePolicy::YoutubeProbeLoadResult;
 using autoConfig::probePolicy::YoutubeProbeSampleClass;
 using autoConfig::probePolicy::YoutubeProbeSampleMetrics;
+using autoConfig::probePolicy::YoutubeRecoveryGate;
 using autoConfig::probePolicy::YoutubeSourceUnderfillState;
 using autoConfig::probePolicy::ProviderProbeCoverage;
 using autoConfig::probePolicy::assessYoutubeBaseline;
@@ -20,6 +22,7 @@ using autoConfig::probePolicy::classifyYoutubeProbeTransport;
 using autoConfig::probePolicy::clampEstimateToObservedSafe;
 using autoConfig::probePolicy::decideTwitchProbe;
 using autoConfig::probePolicy::decideYoutubeConfirmation;
+using autoConfig::probePolicy::decideYoutubeExtendedValidation;
 using autoConfig::probePolicy::effectiveProbeCeilingKbps;
 using autoConfig::probePolicy::hasProbeThroughputMetrics;
 using autoConfig::probePolicy::makeYoutubeProbeSampleMetrics;
@@ -27,8 +30,11 @@ using autoConfig::probePolicy::nextYoutubeValidationCeilingKbps;
 using autoConfig::probePolicy::probeSubstepProgress;
 using autoConfig::probePolicy::reachedEffectiveProbeCeiling;
 using autoConfig::probePolicy::resolveYoutubeBaseline;
+using autoConfig::probePolicy::roundDownRecommendationBitrateKbps;
 using autoConfig::probePolicy::shouldValidateYoutubeAboveSharedCap;
+using autoConfig::probePolicy::twitchCongestionIsSustained;
 using autoConfig::probePolicy::youtubeLowControlRecovered;
+using autoConfig::probePolicy::youtubeConfirmedPressureCapacityKbps;
 using autoConfig::probePolicy::youtubeRequiresCapacityConfirmation;
 using autoConfig::probePolicy::youtubeSampleAccepted;
 
@@ -49,6 +55,17 @@ TEST_CASE("Provider probe coverage distinguishes absent, partial, and complete e
 	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(true, true, 6000, 0));
 }
 
+TEST_CASE("Final bitrate recommendations round down to whole hundreds")
+{
+	CHECK(roundDownRecommendationBitrateKbps(0) == 0);
+	CHECK(roundDownRecommendationBitrateKbps(99) == 99);
+	CHECK(roundDownRecommendationBitrateKbps(100) == 100);
+	CHECK(roundDownRecommendationBitrateKbps(199) == 100);
+	CHECK(roundDownRecommendationBitrateKbps(5070) == 5000);
+	CHECK(roundDownRecommendationBitrateKbps(5679) == 5600);
+	CHECK(roundDownRecommendationBitrateKbps(6000) == 6000);
+}
+
 TEST_CASE("YouTube probe metrics use deterministic basis-point ratios")
 {
 	const YoutubeProbeSampleMetrics sample = makeYoutubeProbeSampleMetrics(900, 1000, 3, 150, 10, 2, 100);
@@ -58,6 +75,25 @@ TEST_CASE("YouTube probe metrics use deterministic basis-point ratios")
 	CHECK(sample.congestionHighBasisPoints == 1000);
 	CHECK(sample.congestionSevereBasisPoints == 200);
 	CHECK(classifyYoutubeProbeTransport(sample) == YoutubeProbeSampleClass::Clean);
+}
+
+TEST_CASE("YouTube recovery drain requires one uninterrupted healthy window")
+{
+	YoutubeRecoveryGate gate(5);
+
+	for (int index = 0; index < 4; index++)
+		CHECK_FALSE(gate.observe(true, true));
+	CHECK(gate.observe(true, true));
+
+	CHECK_FALSE(gate.observe(false, true));
+	for (int index = 0; index < 4; index++)
+		CHECK_FALSE(gate.observe(true, true));
+	CHECK(gate.observe(true, true));
+
+	CHECK_FALSE(gate.observe(true, false));
+	for (int index = 0; index < 4; index++)
+		CHECK_FALSE(gate.observe(true, true));
+	CHECK(gate.observe(true, true));
 }
 
 TEST_CASE("YouTube probe load classification separates source underfill from transport pressure")
@@ -178,6 +214,13 @@ TEST_CASE("YouTube high-low-high confirmation distinguishes all four outcomes")
 	      YoutubeConfirmationDecision::TransientRecovered);
 }
 
+TEST_CASE("YouTube transient recovery requires a transport-aware extended window")
+{
+	CHECK(decideYoutubeExtendedValidation(YoutubeProbeLoadResult::Accepted) == YoutubeExtendedValidationDecision::TargetAccepted);
+	CHECK(decideYoutubeExtendedValidation(YoutubeProbeLoadResult::SourceUnderfill) == YoutubeExtendedValidationDecision::SourceUnderfill);
+	CHECK(decideYoutubeExtendedValidation(YoutubeProbeLoadResult::TransportPressure) == YoutubeExtendedValidationDecision::CapacityKnee);
+}
+
 TEST_CASE("YouTube terminal source-underfill state follows the strongest latest evidence")
 {
 	YoutubeSourceUnderfillState state;
@@ -196,22 +239,57 @@ TEST_CASE("A clean Twitch sample recommends the validated target without a fixed
 {
 	const auto exactTarget = decideTwitchProbe(6013, 6000, 0);
 	CHECK(exactTarget.targetPassed);
+	CHECK_FALSE(exactTarget.extendSample);
 	CHECK(exactTarget.recommendedVideoKbps == 6000);
 
 	const auto healthyUnderfill = decideTwitchProbe(5868, 6000, 0);
 	CHECK(healthyUnderfill.targetPassed);
+	CHECK_FALSE(healthyUnderfill.extendSample);
 	CHECK(healthyUnderfill.recommendedVideoKbps == 6000);
+
+	const auto threshold = decideTwitchProbe(5700, 6000, 0);
+	CHECK(threshold.targetPassed);
+	CHECK_FALSE(threshold.extendSample);
+	CHECK(threshold.recommendedVideoKbps == 6000);
 }
 
-TEST_CASE("Only a genuinely degraded Twitch sample uses the upstream fallback")
+TEST_CASE("A materially underfilled clean Twitch sample requests one extended window")
 {
-	const auto throughputFailure = decideTwitchProbe(4000, 6000, 0);
-	CHECK_FALSE(throughputFailure.targetPassed);
-	CHECK(throughputFailure.recommendedVideoKbps == 2800);
+	const auto justBelowThreshold = decideTwitchProbe(5699, 6000, 0);
+	CHECK_FALSE(justBelowThreshold.targetPassed);
+	CHECK(justBelowThreshold.extendSample);
+	CHECK(justBelowThreshold.recommendedVideoKbps == 0);
+
+	const auto initial = decideTwitchProbe(5568, 6000, 0);
+	CHECK_FALSE(initial.targetPassed);
+	CHECK(initial.extendSample);
+	CHECK(initial.recommendedVideoKbps == 0);
+
+	const auto extendedClean = decideTwitchProbe(5000, 6000, 0, false, true);
+	CHECK(extendedClean.targetPassed);
+	CHECK_FALSE(extendedClean.extendSample);
+	CHECK(extendedClean.recommendedVideoKbps == 6000);
+}
+
+TEST_CASE("Twitch transport pressure uses the raw sustained observation without a reservation")
+{
+	const auto extendedPressure = decideTwitchProbe(5000, 6000, 0, true, true);
+	CHECK_FALSE(extendedPressure.targetPassed);
+	CHECK_FALSE(extendedPressure.extendSample);
+	CHECK(extendedPressure.recommendedVideoKbps == 5000);
 
 	const auto droppedFrames = decideTwitchProbe(6000, 6000, 1);
 	CHECK_FALSE(droppedFrames.targetPassed);
-	CHECK(droppedFrames.recommendedVideoKbps == 4200);
+	CHECK_FALSE(droppedFrames.extendSample);
+	CHECK(droppedFrames.recommendedVideoKbps == 6000);
+}
+
+TEST_CASE("Twitch congestion must be sustained before it becomes transport pressure")
+{
+	CHECK_FALSE(twitchCongestionIsSustained(10, 2, 100));
+	CHECK(twitchCongestionIsSustained(11, 2, 100));
+	CHECK(twitchCongestionIsSustained(10, 3, 100));
+	CHECK_FALSE(twitchCongestionIsSustained(0, 0, 0));
 }
 
 TEST_CASE("A clean YouTube rung recommends its validated video target")
@@ -234,6 +312,35 @@ TEST_CASE("YouTube source-underfilled rungs preserve the highest transport-clean
 	CHECK(evidence.passedStep);
 	CHECK(evidence.recommendationBasisKbps == 1899);
 	CHECK(evidence.recommendedVideoKbps() == 1899);
+}
+
+TEST_CASE("YouTube confirmed capacity uses the sustained delivered bitrate without a reservation")
+{
+	YoutubeRampEvidence evidence;
+	evidence.observeAcceptedTarget(4000, 4000);
+	evidence.observeConfirmedCapacity(5037, 8000);
+
+	CHECK(evidence.passedStep);
+	CHECK(evidence.recommendationBasisKbps == 5037);
+	CHECK(evidence.recommendedVideoKbps() == 5037);
+
+	evidence.observeConfirmedCapacity(9000, 8000);
+	CHECK(evidence.recommendationBasisKbps == 9000);
+	CHECK(evidence.recommendedVideoKbps() == 8000);
+}
+
+TEST_CASE("YouTube double-pressure confirmation uses the lower delivered high-target rate")
+{
+	const uint64_t confirmedCapacity = youtubeConfirmedPressureCapacityKbps(5162, 5070, 8000);
+	CHECK(confirmedCapacity == 5070);
+
+	YoutubeRampEvidence evidence;
+	evidence.observeConfirmedCapacity(confirmedCapacity, 8000);
+	CHECK(evidence.recommendationBasisKbps == 5070);
+	CHECK(evidence.recommendedVideoKbps() == 5070);
+
+	CHECK(youtubeConfirmedPressureCapacityKbps(9000, 8500, 8000) == 8000);
+	CHECK(youtubeConfirmedPressureCapacityKbps(7800, 7600, 7500) == 7500);
 }
 
 TEST_CASE("YouTube can verify one rung above a shared recommendation cap")

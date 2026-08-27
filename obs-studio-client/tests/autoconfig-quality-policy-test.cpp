@@ -2,6 +2,7 @@
 
 #include "autoconfig-quality-policy.hpp"
 
+using autoConfig::qualityPolicy::QualityProfile;
 using autoConfig::qualityPolicy::VideoTuple;
 using autoConfig::qualityPolicy::benchmarkCeiling;
 using autoConfig::qualityPolicy::boundCurrentToV1Tier;
@@ -408,6 +409,74 @@ TEST_CASE("High FPS preference intentionally chooses 540p60 over 720p30 when bot
 	CHECK(result.video.width == 960);
 	CHECK(result.video.height == 540);
 	CHECK(result.video.fpsNum == 60);
+}
+
+TEST_CASE("Twitch quality profile follows the product bitrate ladder at every boundary")
+{
+	const VideoTuple ceiling{1920, 1080, 60, 1};
+	struct Expectation {
+		int bitrateKbps;
+		int width;
+		int height;
+		int fpsNum;
+	};
+	const Expectation expectations[] = {
+		{6000, 1920, 1080, 60}, {5500, 1920, 1080, 60}, {5499, 1920, 1080, 30}, {5000, 1920, 1080, 30}, {4999, 1280, 720, 60}, {4500, 1280, 720, 60},
+		{4499, 1280, 720, 30},  {3968, 1280, 720, 30},  {3145, 1280, 720, 30},  {3000, 1280, 720, 30},  {2999, 960, 540, 60},
+	};
+
+	for (const auto &expectation : expectations) {
+		CAPTURE(expectation.bitrateKbps);
+		const auto result = select(ceiling, expectation.bitrateKbps, "obs_nvenc_h264_tex", QualityProfile::Twitch);
+		CHECK(result.video.width == expectation.width);
+		CHECK(result.video.height == expectation.height);
+		CHECK(result.video.fpsNum == expectation.fpsNum);
+	}
+}
+
+TEST_CASE("Generic quality profile keeps the upstream high frame-rate preference")
+{
+	for (const int bitrateKbps : {3145, 2999}) {
+		CAPTURE(bitrateKbps);
+		const auto result = select({1920, 1080, 60, 1}, bitrateKbps, "obs_nvenc_h264_tex", QualityProfile::Generic);
+		CHECK(result.video.width == 1280);
+		CHECK(result.video.height == 720);
+		CHECK(result.video.fpsNum == 60);
+	}
+}
+
+TEST_CASE("Twitch quality profile respects the tested video ceiling")
+{
+	const auto result = select({1280, 720, 60, 1}, 6000, "obs_nvenc_h264_tex", QualityProfile::Twitch);
+	CHECK(result.video.width == 1280);
+	CHECK(result.video.height == 720);
+	CHECK(result.video.fpsNum == 60);
+}
+
+TEST_CASE("Twitch quality profile is independent of the selected H264 encoder family")
+{
+	for (const char *encoderFamily : {"obs_nvenc_h264_tex", "qsv", "amd", "x264"}) {
+		CAPTURE(encoderFamily);
+		const auto result = select({1920, 1080, 60, 1}, 3145, encoderFamily, QualityProfile::Twitch);
+		CHECK(result.video.width == 1280);
+		CHECK(result.video.height == 720);
+		CHECK(result.video.fpsNum == 30);
+	}
+}
+
+TEST_CASE("Twitch quality profile preserves orientation and broadcast-rate families")
+{
+	const auto portrait = select({1080, 1920, 60000, 1001}, 4499, "obs_nvenc_h264_tex", QualityProfile::Twitch);
+	CHECK(portrait.video.width == 720);
+	CHECK(portrait.video.height == 1280);
+	CHECK(portrait.video.fpsNum == 30000);
+	CHECK(portrait.video.fpsDen == 1001);
+
+	const auto pal = select({1920, 1080, 50, 1}, 5499, "obs_nvenc_h264_tex", QualityProfile::Twitch);
+	CHECK(pal.video.width == 1920);
+	CHECK(pal.video.height == 1080);
+	CHECK(pal.video.fpsNum == 25);
+	CHECK(pal.video.fpsDen == 1);
 }
 
 TEST_CASE("Auto Config quality policy reports bandwidth below its minimum tier")

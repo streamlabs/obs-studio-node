@@ -15,8 +15,9 @@ constexpr uint32_t kYoutubeCleanCongestionSevereMaximumBasisPoints = 200;
 constexpr uint32_t kYoutubeHardDropMaximumBasisPoints = 500;
 constexpr uint32_t kYoutubeHardCongestionHighMaximumBasisPoints = 3000;
 constexpr uint32_t kYoutubeHardCongestionSevereMaximumBasisPoints = 1000;
-constexpr uint32_t kTwitchTargetMinimumBasisPoints = 7500;
-constexpr uint32_t kTwitchDegradedFallbackBasisPoints = 7000;
+constexpr uint32_t kTwitchDirectPassMinimumBasisPoints = 9500;
+constexpr uint32_t kTwitchCongestionHighMaximumBasisPoints = 1000;
+constexpr uint32_t kTwitchCongestionSevereMaximumBasisPoints = 200;
 
 struct YoutubeProbeSampleMetrics {
 	// The observed-output/target ratio is useful for identifying source or
@@ -39,7 +40,27 @@ struct YoutubeBaselineAssessment {
 	YoutubeProbeSampleMetrics reference;
 };
 
+struct YoutubeRecoveryGate {
+	explicit YoutubeRecoveryGate(uint32_t requiredHealthySamples_) : requiredHealthySamples(std::max(1U, requiredHealthySamples_)) {}
+
+	bool observe(bool congestionHealthy, bool droppedFramesUnchanged)
+	{
+		if (!congestionHealthy || !droppedFramesUnchanged) {
+			consecutiveHealthySamples = 0;
+			return false;
+		}
+
+		consecutiveHealthySamples++;
+		return consecutiveHealthySamples >= requiredHealthySamples;
+	}
+
+	uint32_t requiredHealthySamples = 1;
+	uint32_t consecutiveHealthySamples = 0;
+};
+
 enum class YoutubeConfirmationDecision { CapacityKnee, TransientRecovered, PathUnstable, Inconsistent };
+
+enum class YoutubeExtendedValidationDecision { TargetAccepted, SourceUnderfill, CapacityKnee };
 
 enum class ProviderProbeCoverage { None, Partial, Complete };
 
@@ -66,6 +87,16 @@ inline bool providerProbeCoverageAllowsQualityPromotion(bool activeMeasurement, 
 inline bool probeSafeValueContributesToActiveRecommendation(bool success, bool observedThroughputReliable, uint64_t measuredKbps, uint64_t safeKbps)
 {
 	return safeKbps > 0 && (success || (observedThroughputReliable && measuredKbps > 0));
+}
+
+inline uint64_t roundDownRecommendationBitrateKbps(uint64_t bitrateKbps)
+{
+	constexpr uint64_t quantumKbps = 100;
+	// A positive value below one quantum cannot be rounded upward safely or
+	// rounded down to a valid positive bitrate, so preserve it unchanged.
+	if (bitrateKbps < quantumKbps)
+		return bitrateKbps;
+	return bitrateKbps - bitrateKbps % quantumKbps;
 }
 
 inline uint32_t ratioBasisPoints(uint32_t numerator, uint32_t denominator)
@@ -226,6 +257,24 @@ inline YoutubeConfirmationDecision decideYoutubeConfirmation(bool lowControlReco
 	return highRetryAccepted ? YoutubeConfirmationDecision::Inconsistent : YoutubeConfirmationDecision::PathUnstable;
 }
 
+inline YoutubeExtendedValidationDecision decideYoutubeExtendedValidation(YoutubeProbeLoadResult loadResult)
+{
+	switch (loadResult) {
+	case YoutubeProbeLoadResult::Accepted:
+		return YoutubeExtendedValidationDecision::TargetAccepted;
+	case YoutubeProbeLoadResult::SourceUnderfill:
+		return YoutubeExtendedValidationDecision::SourceUnderfill;
+	case YoutubeProbeLoadResult::TransportPressure:
+		return YoutubeExtendedValidationDecision::CapacityKnee;
+	}
+	return YoutubeExtendedValidationDecision::CapacityKnee;
+}
+
+inline uint64_t youtubeConfirmedPressureCapacityKbps(uint64_t firstMeasuredKbps, uint64_t retryMeasuredKbps, uint64_t testedTargetKbps)
+{
+	return std::min({firstMeasuredKbps, retryMeasuredKbps, testedTargetKbps});
+}
+
 struct YoutubeRampEvidence {
 	bool passedStep = false;
 	uint64_t recommendationBasisKbps = 0;
@@ -249,26 +298,48 @@ struct YoutubeRampEvidence {
 		validatedVideoKbps = std::max(validatedVideoKbps, std::min(measuredAggregateKbps, targetVideoKbps));
 	}
 
+	void observeConfirmedCapacity(uint64_t measuredAggregateKbps, uint64_t targetVideoKbps)
+	{
+		passedStep = true;
+		// A sustained pressure window measures the path's delivered capacity.
+		// Use it directly, without a fixed percentage reservation, while never
+		// recommending more video bitrate than the tested target.
+		recommendationBasisKbps = measuredAggregateKbps;
+		validatedVideoKbps = std::min(measuredAggregateKbps, targetVideoKbps);
+	}
+
 	uint64_t recommendedVideoKbps() const { return validatedVideoKbps; }
 };
 
 struct TwitchProbeDecision {
 	bool targetPassed = false;
+	bool extendSample = false;
 	uint64_t recommendedVideoKbps = 0;
 };
 
-// Match upstream OBS's successful-test behavior: a target that was sustained
-// without dropped frames is recommended exactly. The legacy 70% calculation
-// is retained only for an actually degraded sample and never subtracts probe
-// audio from a video-bitrate setting.
-inline TwitchProbeDecision decideTwitchProbe(uint64_t measuredAggregateKbps, uint64_t targetVideoKbps, uint32_t droppedFrames)
+inline bool twitchCongestionIsSustained(uint32_t congestionHighSamples, uint32_t congestionSevereSamples, uint32_t congestionSamples)
+{
+	return ratioBasisPoints(congestionHighSamples, congestionSamples) > kTwitchCongestionHighMaximumBasisPoints ||
+	       ratioBasisPoints(congestionSevereSamples, congestionSamples) > kTwitchCongestionSevereMaximumBasisPoints;
+}
+
+// A materially underfilled but transport-clean initial window is ambiguous:
+// socket buffering can temporarily hide a path limit, while sender underfill
+// alone is not transport evidence. Ask the caller for one longer same-target
+// window. A clean extended window validates the target; explicit pressure uses
+// the sustained observed rate directly, without a percentage reservation.
+inline TwitchProbeDecision decideTwitchProbe(uint64_t measuredAggregateKbps, uint64_t targetVideoKbps, uint32_t droppedFrames, bool sustainedCongestion = false,
+					     bool extendedSample = false)
 {
 	if (measuredAggregateKbps == 0 || targetVideoKbps == 0)
 		return {};
-	const bool throughputAtTarget = measuredAggregateKbps * kBasisPointsScale >= targetVideoKbps * kTwitchTargetMinimumBasisPoints;
-	if (droppedFrames == 0 && throughputAtTarget)
-		return {true, targetVideoKbps};
-	return {false, measuredAggregateKbps * kTwitchDegradedFallbackBasisPoints / kBasisPointsScale};
+	const bool transportPressure = droppedFrames > 0 || sustainedCongestion;
+	const bool directPass = measuredAggregateKbps * kBasisPointsScale >= targetVideoKbps * kTwitchDirectPassMinimumBasisPoints;
+	if (!transportPressure && !extendedSample && !directPass)
+		return {false, true, 0};
+	if (!transportPressure)
+		return {true, false, targetVideoKbps};
+	return {false, false, std::min(measuredAggregateKbps, targetVideoKbps)};
 }
 
 inline bool hasProbeThroughputMetrics(bool success, uint64_t measuredKbps)

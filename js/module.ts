@@ -2190,7 +2190,10 @@ export interface IAutoConfigEvent {
      * resolution and frame rate through the hardware encoder's synthetic
      * raw-input counterpart. hardware_target_cadence_rejected means only that
      * quality candidate was rejected; OSN continues testing lower cadences and
-     * keeps the public hardware encoder eligible.
+     * keeps the public hardware encoder eligible. During bandwidth testing,
+     * twitch_probe_confirming_capacity means the initial Twitch window was
+     * underfilled without transport pressure and OSN is running one extended
+     * same-target window on the existing connection.
      */
     code?: string;
     legId?: string;
