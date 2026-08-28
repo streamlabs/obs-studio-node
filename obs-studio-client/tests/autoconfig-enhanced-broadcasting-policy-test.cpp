@@ -27,6 +27,46 @@ TEST_CASE("Enhanced Broadcasting candidates obey request limits")
 	CHECK(result[1].width == 960);
 }
 
+TEST_CASE("Enhanced Broadcasting pairs horizontal candidates with an exact vertical cadence")
+{
+	const policy::VideoCandidate primary{1920, 1080, 60000, 1001};
+	const auto vertical = policy::pairedVerticalCandidate(primary);
+	CHECK(vertical.width == 1080);
+	CHECK(vertical.height == 1920);
+	CHECK(vertical.fpsNum == 60000);
+	CHECK(vertical.fpsDen == 1001);
+	CHECK(policy::candidateFitsLimits(vertical, 1080, 1920, 60000, 1001));
+	CHECK_FALSE(policy::candidateFitsLimits(vertical, 720, 1280, 60000, 1001));
+	CHECK_FALSE(policy::candidateFitsLimits(vertical, 1080, 1920, 30000, 1001));
+}
+
+TEST_CASE("Enhanced Broadcasting requires coverage for every requested canvas")
+{
+	CHECK(policy::canvasIndexIsValid(0, 2));
+	CHECK(policy::canvasIndexIsValid(1, 2));
+	CHECK_FALSE(policy::canvasIndexIsValid(2, 2));
+	CHECK(policy::everyCanvasCovered({true, true}));
+	CHECK_FALSE(policy::everyCanvasCovered({true, false}));
+	CHECK_FALSE(policy::everyCanvasCovered({}));
+	CHECK(policy::everyCanvasHasSampledInput({0, 0, 1, 1}, 2));
+	CHECK(policy::everyCanvasHasSampledInput({0, 0}, 1));
+	CHECK_FALSE(policy::everyCanvasHasSampledInput({0, 0}, 2));
+	CHECK_FALSE(policy::everyCanvasHasSampledInput({0, 2}, 2));
+	CHECK_FALSE(policy::everyCanvasHasSampledInput({}, 2));
+	CHECK_FALSE(policy::everyCanvasHasSampledInput({}, 0));
+}
+
+TEST_CASE("Enhanced Broadcasting accepts canvas identity zero and requires distinct live identities")
+{
+	const auto firstTwoCanvasesExist = [](uint64_t canvasId) { return canvasId == 0 || canvasId == 1; };
+	CHECK(policy::canvasReferencesAreValid(0, std::nullopt, firstTwoCanvasesExist));
+	CHECK(policy::canvasReferencesAreValid(0, 1, firstTwoCanvasesExist));
+	CHECK_FALSE(policy::canvasReferencesAreValid(osn::common::INVALID_ID, std::nullopt, firstTwoCanvasesExist));
+	CHECK_FALSE(policy::canvasReferencesAreValid(0, osn::common::INVALID_ID, firstTwoCanvasesExist));
+	CHECK_FALSE(policy::canvasReferencesAreValid(0, 0, firstTwoCanvasesExist));
+	CHECK_FALSE(policy::canvasReferencesAreValid(0, 2, firstTwoCanvasesExist));
+}
+
 TEST_CASE("Enhanced Broadcasting candidates preserve a fractional 60000/1001 cadence family")
 {
 	const auto result = policy::candidates(1920, 1080, 60000, 1001, 1001);

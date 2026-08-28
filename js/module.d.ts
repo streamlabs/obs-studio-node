@@ -1022,6 +1022,7 @@ export interface IAutoConfigDestination {
     platform: AutoConfigPlatform;
 }
 export interface IAutoConfigCurrentSettings {
+    canvasId?: number;
     width: number;
     height: number;
     fpsNum: number;
@@ -1030,6 +1031,11 @@ export interface IAutoConfigCurrentSettings {
     encoderId: string;
     codec: string;
     preset?: string;
+}
+export interface IAutoConfigAdditionalVideoRequest {
+    display: 'vertical';
+    current: IAutoConfigCurrentSettings;
+    limits?: IAutoConfigLimits;
 }
 export interface IAutoConfigLimits {
     maxBitrateKbps?: number;
@@ -1044,6 +1050,7 @@ export interface IAutoConfigLegRequest {
     destinations: IAutoConfigDestination[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
+    additionalVideo?: IAutoConfigAdditionalVideoRequest;
     estimateReason?: AutoConfigEstimateReason;
 }
 export interface IAutoConfigTwitchActiveProbe {
@@ -1080,6 +1087,13 @@ export interface IAutoConfigRequest {
 export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
 export type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
 export type AutoConfigMeasurementMode = 'active' | 'estimated';
+export interface IAutoConfigAdditionalVideoTuple {
+    display: 'vertical';
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+}
 export interface IAutoConfigEvent {
     schemaVersion: 1;
     sessionId: string;
@@ -1100,6 +1114,7 @@ export interface IAutoConfigEvent {
     height?: number;
     fpsNum?: number;
     fpsDen?: number;
+    additionalVideo?: IAutoConfigAdditionalVideoTuple;
     selectedBitrateKbps?: number;
     availableBitrateKbps?: number;
 }
@@ -1115,6 +1130,7 @@ export interface IAutoConfigProbeMeasurement {
     testedHeight?: number;
     testedFpsNum?: number;
     testedFpsDen?: number;
+    testedAdditionalVideo?: IAutoConfigAdditionalVideoTuple;
     videoTrackCount?: number;
     configuredAggregateBitrateKbps?: number;
 }
@@ -1135,6 +1151,7 @@ export interface IAutoConfigRecommendation {
     encoderTitle: string;
     codec: string;
     preset?: string;
+    additionalVideo?: IAutoConfigAdditionalVideoTuple;
 }
 export interface IAutoConfigResultDestination {
     platform: string;

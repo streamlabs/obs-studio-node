@@ -13,11 +13,13 @@
 #include "autoconfig-enhanced-broadcasting-policy.hpp"
 #include "autoconfig-quality-policy.hpp"
 #include "osn-audio-bitrate.hpp"
+#include "osn-common.hpp"
 #include "osn-encoders.hpp"
 #include "osn-error.hpp"
 #include "osn-multitrack-video-configuration.hpp"
 #include "osn-multitrack-video-output.hpp"
 #include "osn-multitrack-video.hpp"
+#include "osn-video.hpp"
 #include "shared.hpp"
 
 #include <obs.h>
@@ -170,6 +172,7 @@ struct Limits {
 };
 
 struct CurrentSettings {
+	uint64_t canvasId = osn::common::INVALID_ID;
 	int width = 0;
 	int height = 0;
 	int fpsNum = 0;
@@ -202,12 +205,19 @@ struct Destination {
 	std::string platform;
 };
 
+struct AdditionalVideoRequest {
+	std::string display;
+	CurrentSettings current;
+	Limits limits;
+};
+
 struct LegRequest {
 	std::string legId;
 	std::string display;
 	std::vector<Destination> destinations;
 	CurrentSettings current;
 	Limits limits;
+	std::optional<AdditionalVideoRequest> additionalVideo;
 	std::string estimateReason;
 };
 
@@ -235,6 +245,7 @@ struct MeasurementProvenance {
 	uint32_t testedHeight = 0;
 	uint32_t testedFpsNum = 0;
 	uint32_t testedFpsDen = 0;
+	std::optional<CurrentSettings> testedAdditionalVideo;
 	uint32_t videoTrackCount = 0;
 	uint64_t configuredAggregateBitrateKbps = 0;
 };
@@ -248,6 +259,7 @@ struct Recommendation {
 	std::string confidence = "medium";
 	std::string reason;
 	CurrentSettings value;
+	std::optional<CurrentSettings> additionalVideo;
 	std::vector<MeasurementProvenance> probes;
 };
 
@@ -269,6 +281,7 @@ struct SessionEvent {
 	uint32_t height = 0;
 	uint32_t fpsNum = 0;
 	uint32_t fpsDen = 0;
+	std::optional<CurrentSettings> additionalVideo;
 	uint32_t selectedBitrateKbps = 0;
 	uint32_t availableBitrateKbps = 0;
 };
@@ -446,6 +459,57 @@ static bool providerOwnsEncoding(const std::string &topology, const LegRequest &
 	       std::any_of(leg.destinations.begin(), leg.destinations.end(), [](const Destination &destination) { return destination.platform == "twitch"; });
 }
 
+static bool parseCurrentSettings(obs_data_t *object, CurrentSettings &current)
+{
+	if (!object)
+		return false;
+	if (obs_data_has_user_value(object, "canvasId")) {
+		obs_data_item_t *canvasIdItem = obs_data_item_byname(object, "canvasId");
+		const bool integerCanvasId = canvasIdItem && obs_data_item_gettype(canvasIdItem) == OBS_DATA_NUMBER &&
+					     obs_data_item_numtype(canvasIdItem) == OBS_DATA_NUM_INT;
+		const int64_t canvasId = integerCanvasId ? obs_data_item_get_int(canvasIdItem) : -1;
+		if (canvasIdItem)
+			obs_data_item_release(&canvasIdItem);
+		constexpr int64_t kMaximumJavascriptSafeInteger = 9007199254740991LL;
+		if (!integerCanvasId || canvasId < 0 || canvasId > kMaximumJavascriptSafeInteger)
+			return false;
+		current.canvasId = static_cast<uint64_t>(canvasId);
+	}
+	current.width = (int)obs_data_get_int(object, "width");
+	current.height = (int)obs_data_get_int(object, "height");
+	current.fpsNum = (int)obs_data_get_int(object, "fpsNum");
+	current.fpsDen = (int)obs_data_get_int(object, "fpsDen");
+	current.bitrateKbps = (int)obs_data_get_int(object, "bitrateKbps");
+	current.encoderId = obs_data_get_string(object, "encoderId");
+	current.codec = obs_data_get_string(object, "codec");
+	current.preset = obs_data_get_string(object, "preset");
+	return current.width >= 64 && current.width <= 8192 && current.height >= 64 && current.height <= 8192 && current.fpsNum > 0 &&
+	       current.fpsNum <= 240000 && current.fpsDen > 0 && current.fpsDen <= 10000 && current.bitrateKbps >= 0 && current.bitrateKbps <= 100000;
+}
+
+static bool parseLimits(obs_data_t *object, Limits &limits)
+{
+	if (!object)
+		return true;
+	const int64_t maxBitrateKbps = obs_data_get_int(object, "maxBitrateKbps");
+	const int64_t maxWidth = obs_data_get_int(object, "maxWidth");
+	const int64_t maxHeight = obs_data_get_int(object, "maxHeight");
+	const int64_t maxFpsNum = obs_data_get_int(object, "maxFpsNum");
+	const int64_t maxFpsDen = obs_data_get_int(object, "maxFpsDen");
+	const bool hasPartialResolutionLimit = (maxWidth > 0) != (maxHeight > 0);
+	const bool hasOrphanFpsDenominator = maxFpsNum == 0 && maxFpsDen > 0;
+	if (maxBitrateKbps < 0 || maxBitrateKbps > 100000 || maxWidth < 0 || maxWidth > 8192 || maxHeight < 0 || maxHeight > 8192 ||
+	    (maxWidth > 0 && maxWidth < 64) || (maxHeight > 0 && maxHeight < 64) || hasPartialResolutionLimit || maxFpsNum < 0 || maxFpsNum > 240000 ||
+	    maxFpsDen < 0 || maxFpsDen > 10000 || hasOrphanFpsDenominator)
+		return false;
+	limits.maxBitrateKbps = (int)maxBitrateKbps;
+	limits.maxWidth = (int)maxWidth;
+	limits.maxHeight = (int)maxHeight;
+	limits.maxFpsNum = (int)maxFpsNum;
+	limits.maxFpsDen = maxFpsNum > 0 && maxFpsDen == 0 ? 1 : (int)maxFpsDen;
+	return true;
+}
+
 static bool parseRequest(const std::string &json, Session &session, std::string &error)
 {
 	obs_data_t *root = obs_data_create_from_json(json.c_str());
@@ -491,17 +555,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 			error = "missing_autoconfig_current_settings";
 			valid = false;
 		} else {
-			leg.current.width = (int)obs_data_get_int(current, "width");
-			leg.current.height = (int)obs_data_get_int(current, "height");
-			leg.current.fpsNum = (int)obs_data_get_int(current, "fpsNum");
-			leg.current.fpsDen = (int)obs_data_get_int(current, "fpsDen");
-			leg.current.bitrateKbps = (int)obs_data_get_int(current, "bitrateKbps");
-			leg.current.encoderId = obs_data_get_string(current, "encoderId");
-			leg.current.codec = obs_data_get_string(current, "codec");
-			leg.current.preset = obs_data_get_string(current, "preset");
-			if (leg.current.width < 64 || leg.current.width > 8192 || leg.current.height < 64 || leg.current.height > 8192 ||
-			    leg.current.fpsNum <= 0 || leg.current.fpsNum > 240000 || leg.current.fpsDen <= 0 || leg.current.fpsDen > 10000 ||
-			    leg.current.bitrateKbps < 0 || leg.current.bitrateKbps > 100000) {
+			if (!parseCurrentSettings(current, leg.current)) {
 				error = "invalid_autoconfig_current_settings";
 				valid = false;
 			}
@@ -510,28 +564,33 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 		obs_data_t *limits = obs_data_get_obj(item, "limits");
 		if (limits) {
-			const int64_t maxBitrateKbps = obs_data_get_int(limits, "maxBitrateKbps");
-			const int64_t maxWidth = obs_data_get_int(limits, "maxWidth");
-			const int64_t maxHeight = obs_data_get_int(limits, "maxHeight");
-			const int64_t maxFpsNum = obs_data_get_int(limits, "maxFpsNum");
-			const int64_t maxFpsDen = obs_data_get_int(limits, "maxFpsDen");
-			const bool hasPartialResolutionLimit = (maxWidth > 0) != (maxHeight > 0);
-			const bool hasOrphanFpsDenominator = maxFpsNum == 0 && maxFpsDen > 0;
-			const bool invalidLimits = maxBitrateKbps < 0 || maxBitrateKbps > 100000 || maxWidth < 0 || maxWidth > 8192 || maxHeight < 0 ||
-						   maxHeight > 8192 || (maxWidth > 0 && maxWidth < 64) || (maxHeight > 0 && maxHeight < 64) ||
-						   hasPartialResolutionLimit || maxFpsNum < 0 || maxFpsNum > 240000 || maxFpsDen < 0 || maxFpsDen > 10000 ||
-						   hasOrphanFpsDenominator;
-			if (invalidLimits) {
+			if (!parseLimits(limits, leg.limits)) {
 				error = "invalid_autoconfig_limits";
 				valid = false;
-			} else {
-				leg.limits.maxBitrateKbps = (int)maxBitrateKbps;
-				leg.limits.maxWidth = (int)maxWidth;
-				leg.limits.maxHeight = (int)maxHeight;
-				leg.limits.maxFpsNum = (int)maxFpsNum;
-				leg.limits.maxFpsDen = maxFpsNum > 0 && maxFpsDen == 0 ? 1 : (int)maxFpsDen;
 			}
 			obs_data_release(limits);
+		}
+
+		obs_data_t *additionalVideo = obs_data_get_obj(item, "additionalVideo");
+		if (additionalVideo) {
+			AdditionalVideoRequest parsed;
+			parsed.display = obs_data_get_string(additionalVideo, "display");
+			obs_data_t *additionalCurrent = obs_data_get_obj(additionalVideo, "current");
+			obs_data_t *additionalLimits = obs_data_get_obj(additionalVideo, "limits");
+			const bool settingsValid = parseCurrentSettings(additionalCurrent, parsed.current);
+			const bool limitsValid = parseLimits(additionalLimits, parsed.limits);
+			if (additionalCurrent)
+				obs_data_release(additionalCurrent);
+			if (additionalLimits)
+				obs_data_release(additionalLimits);
+			obs_data_release(additionalVideo);
+			if (session.topology != "enhanced-broadcasting" || leg.display != "both" || parsed.display != "vertical" || !settingsValid ||
+			    !limitsValid) {
+				error = "invalid_autoconfig_additional_video";
+				valid = false;
+			} else {
+				leg.additionalVideo = std::move(parsed);
+			}
 		}
 
 		obs_data_array_t *destinations = obs_data_get_array(item, "destinations");
@@ -614,8 +673,23 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		const bool directEligible = session.topology == "direct-single" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
 		const bool dualEligible = session.topology == "dual-output" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
 		const bool cloudEligible = session.topology == "cloud-multistream" && session.legs.size() == 1 && legFound;
+		std::optional<uint64_t> additionalCanvasId;
+		if (legFound && legIt->additionalVideo)
+			additionalCanvasId = legIt->additionalVideo->current.canvasId;
+		const bool canvasReferencesValid =
+			legFound && enhancedBroadcastingPolicy::canvasReferencesAreValid(legIt->current.canvasId, additionalCanvasId, [](uint64_t canvasId) {
+				return osn::Video::Manager::GetInstance().find(canvasId) != nullptr;
+			});
+		if (probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" && legFound && !canvasReferencesValid) {
+			error = "invalid_autoconfig_enhanced_broadcasting_canvas";
+			return false;
+		}
+		const bool enhancedBroadcastingCanvasEligible =
+			legFound && canvasReferencesValid &&
+			((legIt->display == "horizontal" && !legIt->additionalVideo.has_value()) ||
+			 (legIt->display == "both" && legIt->additionalVideo.has_value() && legIt->additionalVideo->display == "vertical"));
 		const bool enhancedBroadcastingEligible = probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" &&
-							  session.legs.size() == 1 && probeCount == 1 && legFound && legIt->display == "horizontal" &&
+							  session.legs.size() == 1 && probeCount == 1 && enhancedBroadcastingCanvasEligible &&
 							  legIt->destinations.size() == 1 && legIt->destinations.front().platform == "twitch";
 		const bool providerValid = (probe.kind == "twitch-standard" && probe.provider == "twitch" && probe.serviceName == "Twitch" &&
 					    isOfficialTwitchServer(probe.server) && isBoundedTwitchKey(probe.streamKey)) ||
@@ -644,7 +718,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 static void pushEvent(const std::shared_ptr<Session> &session, const char *type, const char *phase, double progress, const std::string &code = {},
 		      const std::string &legId = {}, const std::string &measurementMode = {}, const std::string &probeId = {}, const std::string &provider = {},
 		      uint32_t targetBitrateKbps = 0, const CurrentSettings *video = nullptr, uint32_t selectedBitrateKbps = 0,
-		      uint32_t availableBitrateKbps = 0)
+		      uint32_t availableBitrateKbps = 0, const CurrentSettings *additionalVideo = nullptr)
 {
 	std::lock_guard<std::mutex> lock(session->mutex);
 	SessionEvent event;
@@ -668,6 +742,8 @@ static void pushEvent(const std::shared_ptr<Session> &session, const char *type,
 		event.fpsDen = (uint32_t)std::max(0, video->fpsDen);
 		event.selectedBitrateKbps = selectedBitrateKbps;
 	}
+	if (additionalVideo)
+		event.additionalVideo = *additionalVideo;
 	event.availableBitrateKbps = availableBitrateKbps;
 	session->events.push(std::move(event));
 }
@@ -943,6 +1019,18 @@ static void putLimits(obs_data_t *parent, const Limits &limits)
 	obs_data_release(obj);
 }
 
+static void putAdditionalVideoTuple(obs_data_t *parent, const char *key, const CurrentSettings &video)
+{
+	obs_data_t *value = obs_data_create();
+	obs_data_set_string(value, "display", "vertical");
+	obs_data_set_int(value, "width", video.width);
+	obs_data_set_int(value, "height", video.height);
+	obs_data_set_int(value, "fpsNum", video.fpsNum);
+	obs_data_set_int(value, "fpsDen", video.fpsDen);
+	obs_data_set_obj(parent, key, value);
+	obs_data_release(value);
+}
+
 static std::string serializeResult(const Session &session, const char *status, const std::vector<Recommendation> &recommendations,
 				   const std::string &errorCode = {})
 {
@@ -1000,6 +1088,8 @@ static std::string serializeResult(const Session &session, const char *status, c
 					obs_data_set_int(probe, "testedFpsNum", provenance.testedFpsNum);
 				if (provenance.testedFpsDen > 0)
 					obs_data_set_int(probe, "testedFpsDen", provenance.testedFpsDen);
+				if (provenance.testedAdditionalVideo)
+					putAdditionalVideoTuple(probe, "testedAdditionalVideo", *provenance.testedAdditionalVideo);
 				if (provenance.videoTrackCount > 0)
 					obs_data_set_int(probe, "videoTrackCount", provenance.videoTrackCount);
 				if (provenance.configuredAggregateBitrateKbps > 0)
@@ -1025,6 +1115,8 @@ static std::string serializeResult(const Session &session, const char *status, c
 		obs_data_set_string(value, "codec", recommendation.value.codec.c_str());
 		if (!recommendation.value.preset.empty())
 			obs_data_set_string(value, "preset", recommendation.value.preset.c_str());
+		if (recommendation.additionalVideo)
+			putAdditionalVideoTuple(value, "additionalVideo", *recommendation.additionalVideo);
 		obs_data_set_obj(leg, "recommendation", value);
 		obs_data_release(value);
 
@@ -1077,6 +1169,7 @@ struct ProbeResult {
 	uint32_t testedHeight = 0;
 	uint32_t testedFpsNum = 0;
 	uint32_t testedFpsDen = 0;
+	std::optional<CurrentSettings> testedAdditionalVideo;
 	uint32_t videoTrackCount = 0;
 	uint64_t configuredAggregateBitrateKbps = 0;
 	bool pairedCadenceEvidence = false;
@@ -2565,8 +2658,13 @@ static uint64_t configuredAggregateBitrateKbps(const osn::Config &config)
 	return result;
 }
 
-static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const enhancedBroadcastingPolicy::VideoCandidate &candidate, std::string &errorCode)
+static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const std::vector<enhancedBroadcastingPolicy::VideoCandidate> &candidates,
+					       std::string &errorCode)
 {
+	if (candidates.empty() || candidates.size() > 2) {
+		errorCode = "enhanced_broadcasting_invalid_canvas_topology";
+		return false;
+	}
 	if (config.encoder_configurations.empty() || config.encoder_configurations.size() > MAX_OUTPUT_VIDEO_ENCODERS) {
 		errorCode = "enhanced_broadcasting_invalid_video_ladder";
 		return false;
@@ -2581,13 +2679,14 @@ static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const 
 			return false;
 		}
 	}
-	bool candidateCovered = false;
+	std::vector<bool> candidateCovered(candidates.size(), false);
 	for (const auto &video : config.encoder_configurations) {
 		const char *codec = obs_get_encoder_codec(video.type.c_str());
-		if (video.canvas_index != 0 || !codec || lowerCopy(codec) != "h264") {
+		if (!enhancedBroadcastingPolicy::canvasIndexIsValid(video.canvas_index, candidates.size()) || !codec || lowerCopy(codec) != "h264") {
 			errorCode = "enhanced_broadcasting_unsupported_video_ladder";
 			return false;
 		}
+		const auto &candidate = candidates[video.canvas_index];
 		if (video.width == 0 || video.height == 0 || configuredBitrateKbps(video.settings) == 0) {
 			errorCode = "enhanced_broadcasting_invalid_video_ladder";
 			return false;
@@ -2601,10 +2700,11 @@ static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const 
 			errorCode = "enhanced_broadcasting_ladder_exceeds_candidate";
 			return false;
 		}
-		candidateCovered = candidateCovered || enhancedBroadcastingPolicy::renditionCoversCandidate(candidate, video.width, video.height,
-													    cadence.numerator, cadence.denominator);
+		candidateCovered[video.canvas_index] =
+			candidateCovered[video.canvas_index] ||
+			enhancedBroadcastingPolicy::renditionCoversCandidate(candidate, video.width, video.height, cadence.numerator, cadence.denominator);
 	}
-	if (!candidateCovered) {
+	if (!enhancedBroadcastingPolicy::everyCanvasCovered(candidateCovered)) {
 		errorCode = "enhanced_broadcasting_ladder_below_candidate";
 		return false;
 	}
@@ -2620,56 +2720,84 @@ static media_frames_per_second effectiveTrackCadence(const osn::VideoEncoderConf
 }
 
 static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> &session, const ProbeRequest &probe, const osn::Config &config,
-						 const std::string &normalizedKey, const enhancedBroadcastingPolicy::VideoCandidate &candidate,
-						 uint32_t sourceFpsNum, uint32_t sourceFpsDen, bool usePrivateTextureMix, EnhancedBroadcastingAttempt &attempt)
+						 const std::string &normalizedKey, const std::vector<enhancedBroadcastingPolicy::VideoCandidate> &candidates,
+						 const std::vector<uint64_t> &canvasIds, uint32_t sourceFpsNum, uint32_t sourceFpsDen,
+						 bool usePrivateTextureMix, EnhancedBroadcastingAttempt &attempt)
 {
+	if (candidates.empty() || candidates.size() != canvasIds.size() || candidates.size() > 2) {
+		attempt.errorCode = "enhanced_broadcasting_invalid_canvas_topology";
+		return false;
+	}
+	// Declare the additional canvas owner first so the primary resource (which
+	// owns the shared output) is destroyed first on every early-return path.
+	std::unique_ptr<ScratchResources> additionalResources;
 	ScratchResources resources(*session);
 	attempt.videoTrackCount = (uint32_t)config.encoder_configurations.size();
 	attempt.configuredAggregateBitrateKbps = configuredAggregateBitrateKbps(config);
-	obs_core_video_mix_t *identitySourceMix = nullptr;
+	std::vector<obs_core_video_mix_t *> identitySourceMixes(candidates.size(), nullptr);
 	if (usePrivateTextureMix) {
 		const bool multipleRendering = obs_get_multiple_rendering();
 		obs_video_rendering_mode identityMode = multipleRendering ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING;
-		identitySourceMix = obs_video_mix_get(nullptr, identityMode);
-		if (!identitySourceMix && multipleRendering) {
-			identityMode = OBS_MAIN_VIDEO_RENDERING;
-			identitySourceMix = obs_video_mix_get(nullptr, OBS_MAIN_VIDEO_RENDERING);
+		for (size_t index = 0; index < canvasIds.size(); index++) {
+			obs_video_info *canvasIdentity = osn::Video::Manager::GetInstance().find(canvasIds[index]);
+			if (canvasIdentity)
+				identitySourceMixes[index] = obs_video_mix_get(canvasIdentity, identityMode);
+			blog(LOG_INFO,
+			     "[Auto Optimizer][Enhanced Broadcasting] Auxiliary mix identity %zu: canvas_id=%llu, mode=%s, "
+			     "multiple_rendering=%s, available=%s",
+			     index, (unsigned long long)canvasIds[index], identityMode == OBS_STREAMING_VIDEO_RENDERING ? "streaming" : "main",
+			     multipleRendering ? "true" : "false", identitySourceMixes[index] ? "true" : "false");
 		}
-		blog(LOG_INFO, "[Auto Optimizer][Enhanced Broadcasting] Auxiliary mix identity: mode=%s, multiple_rendering=%s, available=%s",
-		     identityMode == OBS_STREAMING_VIDEO_RENDERING ? "streaming" : "main", multipleRendering ? "true" : "false",
-		     identitySourceMix ? "true" : "false");
 	}
-	if (usePrivateTextureMix && !identitySourceMix) {
+	if (usePrivateTextureMix && std::any_of(identitySourceMixes.begin(), identitySourceMixes.end(), [](obs_core_video_mix_t *mix) { return !mix; })) {
 		attempt.errorCode = "enhanced_broadcasting_canvas_identity_unavailable";
 		return false;
 	}
-	if (!resources.createSyntheticVideo(candidate.width, candidate.height, sourceFpsNum, sourceFpsDen, usePrivateTextureMix, usePrivateTextureMix,
-					    identitySourceMix)) {
+	if (!resources.createSyntheticVideo(candidates[0].width, candidates[0].height, sourceFpsNum, sourceFpsDen, usePrivateTextureMix, usePrivateTextureMix,
+					    identitySourceMixes[0])) {
 		attempt.errorCode = "enhanced_broadcasting_video_create_failed";
 		return false;
 	}
+	if (candidates.size() == 2) {
+		additionalResources = std::make_unique<ScratchResources>(*session);
+		if (!additionalResources->createSyntheticVideo(candidates[1].width, candidates[1].height, sourceFpsNum, sourceFpsDen, usePrivateTextureMix,
+							       usePrivateTextureMix, identitySourceMixes[1])) {
+			attempt.errorCode = "enhanced_broadcasting_additional_video_create_failed";
+			return false;
+		}
+	}
 	if (!usePrivateTextureMix)
 		resources.startFeeder();
+	if (!usePrivateTextureMix && additionalResources)
+		additionalResources->startFeeder();
 	if (!resources.createSyntheticAudio(true)) {
 		attempt.errorCode = "enhanced_broadcasting_audio_create_failed";
 		return false;
 	}
 
 	obs_video_info rawCanvas{};
-	rawCanvas.base_width = candidate.width;
-	rawCanvas.base_height = candidate.height;
-	rawCanvas.output_width = candidate.width;
-	rawCanvas.output_height = candidate.height;
-	rawCanvas.fps_num = sourceFpsNum;
-	rawCanvas.fps_den = std::max(1U, sourceFpsDen);
-	rawCanvas.fps_type = 1;
-	rawCanvas.output_format = VIDEO_FORMAT_NV12;
-	rawCanvas.colorspace = VIDEO_CS_709;
-	rawCanvas.range = VIDEO_RANGE_PARTIAL;
-	rawCanvas.scale_type = OBS_SCALE_BILINEAR;
-	rawCanvas.adapter = 0;
-	rawCanvas.gpu_conversion = usePrivateTextureMix;
+	obs_video_info rawAdditionalCanvas{};
+	auto configureRawCanvas = [&](obs_video_info &canvas, const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
+		canvas.base_width = candidate.width;
+		canvas.base_height = candidate.height;
+		canvas.output_width = candidate.width;
+		canvas.output_height = candidate.height;
+		canvas.fps_num = sourceFpsNum;
+		canvas.fps_den = std::max(1U, sourceFpsDen);
+		canvas.fps_type = 1;
+		canvas.output_format = VIDEO_FORMAT_NV12;
+		canvas.colorspace = VIDEO_CS_709;
+		canvas.range = VIDEO_RANGE_PARTIAL;
+		canvas.scale_type = OBS_SCALE_BILINEAR;
+		canvas.adapter = 0;
+		canvas.gpu_conversion = usePrivateTextureMix;
+	};
+	configureRawCanvas(rawCanvas, candidates[0]);
 	std::vector<obs_video_info *> canvases{usePrivateTextureMix ? resources.scratchViewInfo.get() : &rawCanvas};
+	if (additionalResources) {
+		configureRawCanvas(rawAdditionalCanvas, candidates[1]);
+		canvases.push_back(usePrivateTextureMix ? additionalResources->scratchViewInfo.get() : &rawAdditionalCanvas);
+	}
 
 	const int audioBitrate = osn::GetMultitrackAudioBitrate();
 	const char *audioEncoderId = osn::GetSimpleAACEncoderForBitrate(audioBitrate);
@@ -2697,16 +2825,32 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		return false;
 	}
 
+	std::vector<bool> canvasInputsBound(candidates.size(), false);
 	for (size_t index = 0; index < config.encoder_configurations.size(); index++) {
 		obs_encoder_t *encoder = obs_output_get_video_encoder2(resources.output, index);
 		if (!encoder) {
 			attempt.errorCode = "enhanced_broadcasting_video_encoder_missing";
 			return false;
 		}
+		const size_t canvasIndex = config.encoder_configurations[index].canvas_index;
+		ScratchResources *videoResources = canvasIndex == 0 ? &resources : additionalResources.get();
+		if (!videoResources) {
+			attempt.errorCode = "enhanced_broadcasting_video_canvas_missing";
+			return false;
+		}
 		if (usePrivateTextureMix)
-			obs_encoder_set_video_mix(encoder, resources.scratchMix);
+			obs_encoder_set_video_mix(encoder, videoResources->scratchMix);
 		else
-			obs_encoder_set_video(encoder, resources.syntheticVideo);
+			obs_encoder_set_video(encoder, videoResources->syntheticVideo);
+		if (obs_encoder_parent_video(encoder) != videoResources->syntheticVideo) {
+			attempt.errorCode = "enhanced_broadcasting_video_canvas_binding_failed";
+			return false;
+		}
+		canvasInputsBound[canvasIndex] = true;
+	}
+	if (!enhancedBroadcastingPolicy::everyCanvasCovered(canvasInputsBound)) {
+		attempt.errorCode = "enhanced_broadcasting_video_canvas_missing";
+		return false;
 	}
 
 	for (const auto &encoder : resources.multitrackAudioEncoders) {
@@ -2776,6 +2920,7 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 
 	struct VideoInputSample {
 		video_t *video = nullptr;
+		size_t canvasIndex = 0;
 		uint32_t totalFrames = 0;
 		uint32_t skippedFrames = 0;
 	};
@@ -2797,11 +2942,27 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 			attempt.errorCode = "enhanced_broadcasting_video_input_missing";
 			return false;
 		}
+		const size_t canvasIndex = config.encoder_configurations[index].canvas_index;
 		const auto existingInput = std::find_if(videoInputSamples.begin(), videoInputSamples.end(),
 							[encoderVideo](const VideoInputSample &sample) { return sample.video == encoderVideo; });
 		if (existingInput == videoInputSamples.end()) {
-			videoInputSamples.push_back({encoderVideo, video_output_get_total_frames(encoderVideo), video_output_get_skipped_frames(encoderVideo)});
+			videoInputSamples.push_back(
+				{encoderVideo, canvasIndex, video_output_get_total_frames(encoderVideo), video_output_get_skipped_frames(encoderVideo)});
+		} else if (existingInput->canvasIndex != canvasIndex) {
+			attempt.errorCode = "enhanced_broadcasting_video_canvas_binding_failed";
+			return false;
 		}
+	}
+	// A ladder may create multiple post-rescale parent inputs for one canvas.
+	// Require coverage, not an exact input-to-canvas count, while rejecting a
+	// parent input that was attributed to two different canvas identities above.
+	std::vector<size_t> sampledCanvasIndexes;
+	sampledCanvasIndexes.reserve(videoInputSamples.size());
+	for (const VideoInputSample &sample : videoInputSamples)
+		sampledCanvasIndexes.push_back(sample.canvasIndex);
+	if (!enhancedBroadcastingPolicy::everyCanvasHasSampledInput(sampledCanvasIndexes, candidates.size())) {
+		attempt.errorCode = "enhanced_broadcasting_video_canvas_missing";
+		return false;
 	}
 	const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
 	const uint32_t startDropped = obs_output_get_frames_dropped(resources.output);
@@ -2822,7 +2983,8 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 
 	attempt.outputBytes = obs_output_get_total_bytes(resources.output) - startBytes;
 	attempt.outputDroppedFrames = obs_output_get_frames_dropped(resources.output) - startDropped;
-	bool mixPassed = !videoInputSamples.empty();
+	// Render health is assessed independently for every unique parent input.
+	bool mixPassed = true;
 	for (size_t index = 0; index < videoInputSamples.size(); index++) {
 		const VideoInputSample &sample = videoInputSamples[index];
 		const uint32_t totalFrames = video_output_get_total_frames(sample.video) - sample.totalFrames;
@@ -2831,8 +2993,9 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		attempt.inputFrames += totalFrames;
 		attempt.inputSkippedFrames += skippedFrames;
 		mixPassed = mixPassed && inputPassed;
-		blog(inputPassed ? LOG_INFO : LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Video input %zu sample: frames=%u, skipped=%u, passed=%s",
-		     index, totalFrames, skippedFrames, inputPassed ? "true" : "false");
+		blog(inputPassed ? LOG_INFO : LOG_WARNING,
+		     "[Auto Optimizer][Enhanced Broadcasting] Video input %zu sample: canvas=%zu, frames=%u, skipped=%u, passed=%s", index, sample.canvasIndex,
+		     totalFrames, skippedFrames, inputPassed ? "true" : "false");
 	}
 	for (size_t index = 0; index < config.encoder_configurations.size(); index++) {
 		obs_encoder_t *encoder = obs_output_get_video_encoder2(resources.output, index);
@@ -2916,8 +3079,9 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		return result;
 	}
 
-	obs_video_info mainVideo{};
-	if (!obs_get_video_info(&mainVideo) || mainVideo.fps_num == 0) {
+	obs_video_info *primaryIdentity = osn::Video::Manager::GetInstance().find(leg.current.canvasId);
+	obs_video_info *additionalIdentity = leg.additionalVideo ? osn::Video::Manager::GetInstance().find(leg.additionalVideo->current.canvasId) : nullptr;
+	if (!primaryIdentity || primaryIdentity->fps_num == 0 || (leg.additionalVideo && (!additionalIdentity || additionalIdentity->fps_num == 0))) {
 		result.errorCode = "enhanced_broadcasting_video_unavailable";
 		return result;
 	}
@@ -2925,7 +3089,23 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 	const uint32_t maxHeight = leg.limits.maxHeight > 0 ? (uint32_t)std::min(1080, leg.limits.maxHeight) : 1080U;
 	const uint32_t maxFpsNum = leg.limits.maxFpsNum > 0 ? (uint32_t)leg.limits.maxFpsNum : 0U;
 	const uint32_t maxFpsDen = leg.limits.maxFpsNum > 0 ? (uint32_t)std::max(1, leg.limits.maxFpsDen) : 0U;
-	const auto candidates = enhancedBroadcastingPolicy::candidates(maxWidth, maxHeight, maxFpsNum, maxFpsDen, (uint32_t)std::max(1, leg.current.fpsDen));
+	const bool fractionalCadenceFamily =
+		leg.current.fpsDen == 1001 || leg.limits.maxFpsDen == 1001 ||
+		(leg.additionalVideo && (leg.additionalVideo->current.fpsDen == 1001 || leg.additionalVideo->limits.maxFpsDen == 1001));
+	auto candidates = enhancedBroadcastingPolicy::candidates(maxWidth, maxHeight, maxFpsNum, maxFpsDen, fractionalCadenceFamily ? 1001U : 1U);
+	if (leg.additionalVideo) {
+		const Limits &additionalLimits = leg.additionalVideo->limits;
+		candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+						[&](const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
+							const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
+							return !enhancedBroadcastingPolicy::candidateFitsLimits(
+								vertical, (uint32_t)std::max(0, additionalLimits.maxWidth),
+								(uint32_t)std::max(0, additionalLimits.maxHeight),
+								(uint32_t)std::max(0, additionalLimits.maxFpsNum),
+								(uint32_t)std::max(0, additionalLimits.maxFpsDen));
+						}),
+				 candidates.end());
+	}
 	if (candidates.empty()) {
 		result.errorCode = "enhanced_broadcasting_no_candidate";
 		return result;
@@ -2938,29 +3118,49 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		eventVideo.height = (int)candidate.height;
 		eventVideo.fpsNum = (int)candidate.fpsNum;
 		eventVideo.fpsDen = (int)candidate.fpsDen;
+		CurrentSettings eventAdditionalVideo;
+		const CurrentSettings *eventAdditionalVideoPtr = nullptr;
+		if (leg.additionalVideo) {
+			eventAdditionalVideo = leg.additionalVideo->current;
+			eventAdditionalVideo.width = (int)candidate.height;
+			eventAdditionalVideo.height = (int)candidate.width;
+			eventAdditionalVideo.fpsNum = (int)candidate.fpsNum;
+			eventAdditionalVideo.fpsDen = (int)candidate.fpsDen;
+			eventAdditionalVideoPtr = &eventAdditionalVideo;
+		}
 		const double candidateStart = slotStartProgress + (slotEndProgress - slotStartProgress) * (double)index / (double)candidates.size();
 		const double candidateEnd = slotStartProgress + (slotEndProgress - slotStartProgress) * (double)(index + 1) / (double)candidates.size();
 		pushEvent(session, "progress", "bandwidth", candidateStart, "enhanced_broadcasting_requesting_ladder", probe.legId, "active", probe.probeId,
-			  probe.provider, 0, &eventVideo);
+			  probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 
-		obs_video_info requestCanvas{};
-		requestCanvas.base_width = candidate.width;
-		requestCanvas.base_height = candidate.height;
-		requestCanvas.output_width = candidate.width;
-		requestCanvas.output_height = candidate.height;
-		requestCanvas.fps_num = candidate.fpsNum;
-		requestCanvas.fps_den = candidate.fpsDen;
-		requestCanvas.fps_type = 1;
-		requestCanvas.output_format = VIDEO_FORMAT_NV12;
-		requestCanvas.colorspace = VIDEO_CS_709;
-		requestCanvas.range = VIDEO_RANGE_PARTIAL;
-		requestCanvas.scale_type = OBS_SCALE_BILINEAR;
-		requestCanvas.adapter = mainVideo.adapter;
-		requestCanvas.gpu_conversion = true;
+		std::vector<enhancedBroadcastingPolicy::VideoCandidate> candidateCanvases{candidate};
+		if (leg.additionalVideo)
+			candidateCanvases.push_back(enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate));
+		std::vector<obs_video_info> requestCanvases(candidateCanvases.size());
+		std::vector<obs_video_info *> requestCanvasPointers;
+		requestCanvasPointers.reserve(requestCanvases.size());
+		for (size_t canvasIndex = 0; canvasIndex < candidateCanvases.size(); canvasIndex++) {
+			const auto &canvasCandidate = candidateCanvases[canvasIndex];
+			obs_video_info &requestCanvas = requestCanvases[canvasIndex];
+			requestCanvas.base_width = canvasCandidate.width;
+			requestCanvas.base_height = canvasCandidate.height;
+			requestCanvas.output_width = canvasCandidate.width;
+			requestCanvas.output_height = canvasCandidate.height;
+			requestCanvas.fps_num = canvasCandidate.fpsNum;
+			requestCanvas.fps_den = canvasCandidate.fpsDen;
+			requestCanvas.fps_type = 1;
+			requestCanvas.output_format = VIDEO_FORMAT_NV12;
+			requestCanvas.colorspace = VIDEO_CS_709;
+			requestCanvas.range = VIDEO_RANGE_PARTIAL;
+			requestCanvas.scale_type = OBS_SCALE_BILINEAR;
+			requestCanvas.adapter = canvasIndex == 0 ? primaryIdentity->adapter : additionalIdentity->adapter;
+			requestCanvas.gpu_conversion = true;
+			requestCanvasPointers.push_back(&requestCanvas);
+		}
 
 		osn::Config config;
 		try {
-			auto post = osn::constructGoLivePost({&requestCanvas}, normalizedKey, std::nullopt, std::nullopt, false);
+			auto post = osn::constructGoLivePost(requestCanvasPointers, normalizedKey, std::nullopt, std::nullopt, false);
 			post.client.supported_codecs.clear();
 			post.client.supported_codecs.emplace("h264");
 			config = osn::DownloadGoLiveConfig(autoConfigUrl, post);
@@ -2970,22 +3170,34 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 			result.errorCode = "enhanced_broadcasting_config_request_failed";
 			return result;
 		}
-		if (!validateEnhancedBroadcastingConfig(config, candidate, result.errorCode)) {
+		if (!validateEnhancedBroadcastingConfig(config, candidateCanvases, result.errorCode)) {
 			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 				return result;
 			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
-				  probe.probeId, probe.provider, 0, &eventVideo);
+				  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 			continue;
 		}
 
 		pushEvent(session, "progress", "bandwidth", candidateStart + (candidateEnd - candidateStart) * 0.25, "enhanced_broadcasting_testing_candidate",
-			  probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo);
-		const bool targetAboveMainCadence =
-			!enhancedBroadcastingPolicy::cadenceCanBeProvenByPrivateMix(candidate, mainVideo.fps_num, std::max(1U, mainVideo.fps_den));
-		const uint32_t smokeFpsNum = targetAboveMainCadence ? mainVideo.fps_num : candidate.fpsNum;
-		const uint32_t smokeFpsDen = targetAboveMainCadence ? std::max(1U, mainVideo.fps_den) : candidate.fpsDen;
+			  probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
+		const bool primaryCadenceInsufficient = !enhancedBroadcastingPolicy::cadenceCanBeProvenByPrivateMix(candidate, primaryIdentity->fps_num,
+														    std::max(1U, primaryIdentity->fps_den));
+		const bool additionalCadenceInsufficient =
+			leg.additionalVideo && !enhancedBroadcastingPolicy::cadenceCanBeProvenByPrivateMix(candidateCanvases[1], additionalIdentity->fps_num,
+													   std::max(1U, additionalIdentity->fps_den));
+		const bool targetAboveMainCadence = primaryCadenceInsufficient || additionalCadenceInsufficient;
+		const obs_video_info *smokeIdentity = primaryIdentity;
+		if (additionalIdentity &&
+		    (uint64_t)additionalIdentity->fps_num * primaryIdentity->fps_den < (uint64_t)primaryIdentity->fps_num * additionalIdentity->fps_den)
+			smokeIdentity = additionalIdentity;
+		const uint32_t smokeFpsNum = targetAboveMainCadence ? smokeIdentity->fps_num : candidate.fpsNum;
+		const uint32_t smokeFpsDen = targetAboveMainCadence ? std::max(1U, smokeIdentity->fps_den) : candidate.fpsDen;
+		std::vector<uint64_t> canvasIds{leg.current.canvasId};
+		if (leg.additionalVideo)
+			canvasIds.push_back(leg.additionalVideo->current.canvasId);
 		EnhancedBroadcastingAttempt textureAttempt;
-		if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidate, smokeFpsNum, smokeFpsDen, true, textureAttempt)) {
+		if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidateCanvases, canvasIds, smokeFpsNum, smokeFpsDen, true,
+							  textureAttempt)) {
 			if (textureAttempt.cancelled) {
 				result.cancelled = true;
 				return result;
@@ -2994,17 +3206,18 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 				return result;
 			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
-				  probe.probeId, probe.provider, 0, &eventVideo);
+				  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 			continue;
 		}
 
 		EnhancedBroadcastingAttempt exactAttempt = textureAttempt;
 		if (targetAboveMainCadence) {
 			pushEvent(session, "progress", "bandwidth", candidateStart + (candidateEnd - candidateStart) * 0.65,
-				  "enhanced_broadcasting_validating_target_cadence", probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo);
+				  "enhanced_broadcasting_validating_target_cadence", probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo, 0, 0,
+				  eventAdditionalVideoPtr);
 			exactAttempt = {};
-			if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidate, candidate.fpsNum, candidate.fpsDen, false,
-								  exactAttempt)) {
+			if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidateCanvases, canvasIds, candidate.fpsNum,
+								  candidate.fpsDen, false, exactAttempt)) {
 				if (exactAttempt.cancelled) {
 					result.cancelled = true;
 					return result;
@@ -3013,7 +3226,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 				if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 					return result;
 				pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
-					  probe.probeId, probe.provider, 0, &eventVideo);
+					  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 				continue;
 			}
 		}
@@ -3024,11 +3237,19 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		result.testedHeight = candidate.height;
 		result.testedFpsNum = candidate.fpsNum;
 		result.testedFpsDen = candidate.fpsDen;
+		if (leg.additionalVideo) {
+			CurrentSettings testedAdditionalVideo;
+			testedAdditionalVideo.width = (int)candidateCanvases[1].width;
+			testedAdditionalVideo.height = (int)candidateCanvases[1].height;
+			testedAdditionalVideo.fpsNum = (int)candidateCanvases[1].fpsNum;
+			testedAdditionalVideo.fpsDen = (int)candidateCanvases[1].fpsDen;
+			result.testedAdditionalVideo = std::move(testedAdditionalVideo);
+		}
 		result.videoTrackCount = exactAttempt.videoTrackCount;
 		result.configuredAggregateBitrateKbps = exactAttempt.configuredAggregateBitrateKbps;
 		result.pairedCadenceEvidence = targetAboveMainCadence;
 		pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_selected", probe.legId, "active", probe.probeId,
-			  probe.provider, 0, &eventVideo);
+			  probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 		blog(LOG_INFO, "[Auto Optimizer][Enhanced Broadcasting] Candidate selected: %ux%u %u/%u FPS, tracks=%u, configured_aggregate=%llu Kbps",
 		     result.testedWidth, result.testedHeight, result.testedFpsNum, result.testedFpsDen, result.videoTrackCount,
 		     (unsigned long long)result.configuredAggregateBitrateKbps);
@@ -3806,6 +4027,8 @@ static void runSession(const std::shared_ptr<Session> &session)
 		recommendation.destinations = leg.destinations;
 		recommendation.limits = leg.limits;
 		recommendation.value = estimateRecommendation(leg, hardware);
+		if (leg.additionalVideo)
+			recommendation.additionalVideo = leg.additionalVideo->current;
 		recommendation.reason = defaultEstimateReason(session->topology, leg);
 		if (hardware.attempted && (!hardware.passed || hardware.constrained)) {
 			recommendation.confidence = hardware.passed ? "medium" : "low";
@@ -3840,6 +4063,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 			provenance.testedHeight = result->testedHeight;
 			provenance.testedFpsNum = result->testedFpsNum;
 			provenance.testedFpsDen = result->testedFpsDen;
+			provenance.testedAdditionalVideo = result->testedAdditionalVideo;
 			provenance.videoTrackCount = result->videoTrackCount;
 			provenance.configuredAggregateBitrateKbps = result->configuredAggregateBitrateKbps;
 			recommendation.probes.push_back(std::move(provenance));
@@ -3857,6 +4081,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.value.height = (int)tested.testedHeight;
 			recommendation.value.fpsNum = (int)tested.testedFpsNum;
 			recommendation.value.fpsDen = (int)tested.testedFpsDen;
+			recommendation.additionalVideo = tested.testedAdditionalVideo;
 		} else if (hasSuccessfulProbe) {
 			recommendation.measurementMode = "active";
 			if (hasPartialProviderCoverage) {
@@ -4205,6 +4430,10 @@ void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, st
 	rval.push_back(ipc::value(event.fpsDen));
 	rval.push_back(ipc::value(event.selectedBitrateKbps));
 	rval.push_back(ipc::value(event.availableBitrateKbps));
+	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->width) : 0U));
+	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->height) : 0U));
+	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->fpsNum) : 0U));
+	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->fpsDen) : 0U));
 	session->events.pop();
 }
 

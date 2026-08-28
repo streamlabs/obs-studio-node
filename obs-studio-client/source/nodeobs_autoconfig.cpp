@@ -50,6 +50,10 @@ struct AutoConfigEvent {
 	uint32_t fpsDen = 0;
 	uint32_t selectedBitrateKbps = 0;
 	uint32_t availableBitrateKbps = 0;
+	uint32_t additionalVideoWidth = 0;
+	uint32_t additionalVideoHeight = 0;
+	uint32_t additionalVideoFpsNum = 0;
+	uint32_t additionalVideoFpsDen = 0;
 };
 
 std::atomic<bool> workerStop{true};
@@ -169,6 +173,15 @@ void DispatchEvent(AutoConfigEvent *event)
 				result.Set("selectedBitrateKbps", Napi::Number::New(env, eventData->selectedBitrateKbps));
 			if (eventData->availableBitrateKbps > 0)
 				result.Set("availableBitrateKbps", Napi::Number::New(env, eventData->availableBitrateKbps));
+			if (eventData->additionalVideoWidth > 0) {
+				Napi::Object additionalVideo = Napi::Object::New(env);
+				additionalVideo.Set("display", Napi::String::New(env, "vertical"));
+				additionalVideo.Set("width", Napi::Number::New(env, eventData->additionalVideoWidth));
+				additionalVideo.Set("height", Napi::Number::New(env, eventData->additionalVideoHeight));
+				additionalVideo.Set("fpsNum", Napi::Number::New(env, eventData->additionalVideoFpsNum));
+				additionalVideo.Set("fpsDen", Napi::Number::New(env, eventData->additionalVideoFpsDen));
+				result.Set("additionalVideo", additionalVideo);
+			}
 
 			jsCallback.Call({result});
 		} catch (...) {
@@ -218,6 +231,12 @@ void Worker()
 						event->fpsDen = static_cast<uint32_t>(ReadUnsigned(response[19]));
 						event->selectedBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[20]));
 						event->availableBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[21]));
+					}
+					if (response.size() >= 26) {
+						event->additionalVideoWidth = static_cast<uint32_t>(ReadUnsigned(response[22]));
+						event->additionalVideoHeight = static_cast<uint32_t>(ReadUnsigned(response[23]));
+						event->additionalVideoFpsNum = static_cast<uint32_t>(ReadUnsigned(response[24]));
+						event->additionalVideoFpsDen = static_cast<uint32_t>(ReadUnsigned(response[25]));
 					}
 
 					if (event->sessionId == sessionId)

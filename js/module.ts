@@ -2087,6 +2087,13 @@ export interface IAutoConfigDestination {
 }
 
 export interface IAutoConfigCurrentSettings {
+    /**
+     * Zero-based server-side canvas identity from IVideo.canvasId; `0` is
+     * valid. Active Enhanced Broadcasting requires a registered, nonnegative
+     * JavaScript-safe integer that remains live for the native probe. Other
+     * request modes may omit the identity.
+     */
+    canvasId?: number;
     width: number;
     height: number;
     fpsNum: number;
@@ -2095,6 +2102,13 @@ export interface IAutoConfigCurrentSettings {
     encoderId: string;
     codec: string;
     preset?: string;
+}
+
+export interface IAutoConfigAdditionalVideoRequest {
+    /** V1 paired Enhanced Broadcasting supports only the vertical canvas. */
+    display: 'vertical';
+    current: IAutoConfigCurrentSettings;
+    limits?: IAutoConfigLimits;
 }
 
 export interface IAutoConfigLimits {
@@ -2127,6 +2141,13 @@ export interface IAutoConfigLegRequest {
     destinations: IAutoConfigDestination[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
+    /**
+     * Second canvas on the same Twitch Enhanced Broadcasting upload. Valid
+     * only when display is `both`. Active probing is default-denied unless the
+     * request has one Twitch destination, one Enhanced Broadcasting probe, and
+     * two valid, distinct registered canvas identities.
+     */
+    additionalVideo?: IAutoConfigAdditionalVideoRequest;
     estimateReason?: AutoConfigEstimateReason;
 }
 
@@ -2194,6 +2215,15 @@ export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'c
 export type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
 export type AutoConfigMeasurementMode = 'active' | 'estimated';
 
+/** A paired vertical canvas tuple tested and applied with the primary canvas. */
+export interface IAutoConfigAdditionalVideoTuple {
+    display: 'vertical';
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+}
+
 export interface IAutoConfigEvent {
     schemaVersion: 1;
     sessionId: string;
@@ -2231,6 +2261,8 @@ export interface IAutoConfigEvent {
     height?: number;
     fpsNum?: number;
     fpsDen?: number;
+    /** Vertical canvas tuple tested concurrently with the primary tuple. */
+    additionalVideo?: IAutoConfigAdditionalVideoTuple;
     /** Final video bitrate selected with the quality tuple. */
     selectedBitrateKbps?: number;
     /** Effective safe video bandwidth used to select the quality tuple. */
@@ -2282,6 +2314,8 @@ export interface IAutoConfigProbeMeasurement {
     testedFpsNum?: number;
     /** Exact frame-rate denominator validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
     testedFpsDen?: number;
+    /** Exact vertical tuple exercised concurrently with the primary Enhanced Broadcasting tuple. */
+    testedAdditionalVideo?: IAutoConfigAdditionalVideoTuple;
     /** Returned video tracks exercised concurrently by a successful Enhanced Broadcasting probe; omitted otherwise. */
     videoTrackCount?: number;
     /**
@@ -2315,6 +2349,8 @@ export interface IAutoConfigRecommendation {
     encoderTitle: string;
     codec: string;
     preset?: string;
+    /** Paired vertical canvas recommendation validated in the same Enhanced Broadcasting output. */
+    additionalVideo?: IAutoConfigAdditionalVideoTuple;
 }
 
 export interface IAutoConfigResultDestination {

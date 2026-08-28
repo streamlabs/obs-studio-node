@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
+
+#include "osn-common.hpp"
 
 namespace autoConfig::enhancedBroadcastingPolicy {
 
@@ -22,6 +25,61 @@ inline bool fpsAtMost(const VideoCandidate &candidate, uint32_t maxNum, uint32_t
 	return (uint64_t)candidate.fpsNum * maxDen <= (uint64_t)maxNum * candidate.fpsDen;
 }
 
+inline VideoCandidate pairedVerticalCandidate(const VideoCandidate &primary)
+{
+	return {primary.height, primary.width, primary.fpsNum, primary.fpsDen};
+}
+
+inline bool candidateFitsLimits(const VideoCandidate &candidate, uint32_t maxWidth, uint32_t maxHeight, uint32_t maxFpsNum, uint32_t maxFpsDen)
+{
+	return (maxWidth == 0 || candidate.width <= maxWidth) && (maxHeight == 0 || candidate.height <= maxHeight) &&
+	       fpsAtMost(candidate, maxFpsNum, maxFpsDen);
+}
+
+inline bool canvasIndexIsValid(size_t canvasIndex, size_t canvasCount)
+{
+	return canvasIndex < canvasCount;
+}
+
+inline bool everyCanvasCovered(const std::vector<bool> &covered)
+{
+	return !covered.empty() && std::all_of(covered.begin(), covered.end(), [](bool value) { return value; });
+}
+
+/**
+ * Validates the canvas coverage represented by distinct sampled video inputs.
+ * A Twitch ladder may expose multiple post-rescale inputs for one canvas, so
+ * the number of sampled inputs is not required to equal the canvas count.
+ */
+inline bool everyCanvasHasSampledInput(const std::vector<size_t> &sampledCanvasIndexes, size_t canvasCount)
+{
+	if (canvasCount == 0)
+		return false;
+	std::vector<bool> covered(canvasCount, false);
+	for (const size_t canvasIndex : sampledCanvasIndexes) {
+		if (!canvasIndexIsValid(canvasIndex, canvasCount))
+			return false;
+		covered[canvasIndex] = true;
+	}
+	return everyCanvasCovered(covered);
+}
+
+/**
+ * Validates the registered canvas identities used by an Enhanced Broadcasting
+ * workload. Zero is a valid OSN object identity; INVALID_ID is the only
+ * missing-identity sentinel. A paired workload must use two distinct live
+ * canvas identities.
+ */
+template<typename CanvasExists>
+inline bool canvasReferencesAreValid(uint64_t primaryCanvasId, std::optional<uint64_t> additionalCanvasId, CanvasExists &&canvasExists)
+{
+	if (primaryCanvasId == osn::common::INVALID_ID || !canvasExists(primaryCanvasId))
+		return false;
+	if (!additionalCanvasId)
+		return true;
+	return *additionalCanvasId != osn::common::INVALID_ID && *additionalCanvasId != primaryCanvasId && canvasExists(*additionalCanvasId);
+}
+
 inline std::vector<VideoCandidate> candidates(uint32_t maxWidth, uint32_t maxHeight, uint32_t maxFpsNum, uint32_t maxFpsDen, uint32_t cadenceFamilyDen = 1)
 {
 	const bool fractionalCadence = maxFpsDen == 1001 || cadenceFamilyDen == 1001;
@@ -35,8 +93,7 @@ inline std::vector<VideoCandidate> candidates(uint32_t maxWidth, uint32_t maxHei
 
 	std::vector<VideoCandidate> result;
 	for (const auto &candidate : ordered) {
-		if ((maxWidth > 0 && candidate.width > maxWidth) || (maxHeight > 0 && candidate.height > maxHeight) ||
-		    !fpsAtMost(candidate, maxFpsNum, maxFpsDen))
+		if (!candidateFitsLimits(candidate, maxWidth, maxHeight, maxFpsNum, maxFpsDen))
 			continue;
 		result.push_back(candidate);
 	}

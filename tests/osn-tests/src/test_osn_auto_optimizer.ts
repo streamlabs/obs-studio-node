@@ -57,6 +57,7 @@ describe(testName, function() {
             display: 'horizontal',
             destinations: [{ platform: 'custom' }],
             current: {
+                canvasId: obs.defaultVideoContext.canvasId,
                 width: 1280,
                 height: 720,
                 fpsNum: 30,
@@ -67,6 +68,36 @@ describe(testName, function() {
                 preset: 'veryfast',
             },
             ...overrides,
+        };
+    }
+
+    function pairedEnhancedBroadcastingRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoConfigRequest {
+        return {
+            schemaVersion: 1,
+            topology: 'enhanced-broadcasting',
+            legs: [leg({
+                display: 'both',
+                destinations: [{ platform: 'twitch' }],
+                current: { ...leg().current, canvasId: primaryCanvasId },
+                additionalVideo: {
+                    display: 'vertical',
+                    current: {
+                        ...leg().current,
+                        canvasId: additionalCanvasId,
+                        width: 720,
+                        height: 1280,
+                        fpsNum: 60,
+                    },
+                },
+            })],
+            activeProbes: [{
+                probeId: 'enhanced-broadcasting-primary',
+                kind: 'twitch-enhanced-broadcasting',
+                legId: 'primary',
+                serviceName: 'Twitch',
+                server: 'auto',
+                streamKey: 'integration-test-key',
+            }],
         };
     }
 
@@ -160,8 +191,90 @@ describe(testName, function() {
             perUploadLegResults: true,
             desktopOwnedApply: true,
             multipleActiveProbes: true,
-            bandwidthModes: ['twitch-standard-active', 'youtube-unbound-active', 'estimate'],
+            bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'],
         });
+    });
+
+    it('accepts registered Enhanced Broadcasting canvas identities 0 and 1', function() {
+        const verticalCanvas = osn.VideoFactory.create();
+        let sessionId = '';
+        try {
+            expect(obs.defaultVideoContext.canvasId).to.equal(0);
+            expect(verticalCanvas.canvasId).to.equal(1);
+            sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify(
+                pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId)), () => undefined);
+            expect(sessionId).to.be.a('string').and.not.equal('');
+        } finally {
+            if (sessionId) osn.NodeObs.CloseAutoConfigSession(sessionId);
+            verticalCanvas.destroy();
+        }
+    });
+
+    it('allows estimate-only requests to omit a canvas identity', function() {
+        const request = {
+            schemaVersion: 1,
+            topology: 'custom-rtmp',
+            legs: [leg()],
+        } as any;
+        delete request.legs[0].current.canvasId;
+        const sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify(request), () => undefined);
+        expect(sessionId).to.be.a('string').and.not.equal('');
+        osn.NodeObs.CloseAutoConfigSession(sessionId);
+    });
+
+    it('rejects missing, negative, equal, and unknown Enhanced Broadcasting canvas identities', function() {
+        const verticalCanvas = osn.VideoFactory.create();
+        try {
+            const missingPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
+            delete missingPrimary.legs[0].current.canvasId;
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(missingPrimary), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+
+            const negativePrimary = pairedEnhancedBroadcastingRequest(-1, verticalCanvas.canvasId);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(negativePrimary), () => undefined))
+                .to.throw('invalid_autoconfig_current_settings');
+
+            const missingAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
+            delete missingAdditional.legs[0].additionalVideo.current.canvasId;
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(missingAdditional), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+
+            const negativeAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, -1);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(negativeAdditional), () => undefined))
+                .to.throw('invalid_autoconfig_additional_video');
+
+            const fractionalPrimary = pairedEnhancedBroadcastingRequest(0.5, verticalCanvas.canvasId);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(fractionalPrimary), () => undefined))
+                .to.throw('invalid_autoconfig_current_settings');
+
+            const stringPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
+            stringPrimary.legs[0].current.canvasId = '0';
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(stringPrimary), () => undefined))
+                .to.throw('invalid_autoconfig_current_settings');
+
+            const nullPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
+            nullPrimary.legs[0].current.canvasId = null;
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(nullPrimary), () => undefined))
+                .to.throw('invalid_autoconfig_current_settings');
+
+            const unsafeIntegerPrimary = pairedEnhancedBroadcastingRequest(Number.MAX_SAFE_INTEGER + 1, verticalCanvas.canvasId);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(unsafeIntegerPrimary), () => undefined))
+                .to.throw('invalid_autoconfig_current_settings');
+
+            const equalCanvasIds = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, obs.defaultVideoContext.canvasId);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(equalCanvasIds), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+
+            const unknownPrimary = pairedEnhancedBroadcastingRequest(999999, verticalCanvas.canvasId);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(unknownPrimary), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+
+            const unknownAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, 999999);
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(unknownAdditional), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+        } finally {
+            verticalCanvas.destroy();
+        }
     });
 
     it('never dials an ineligible custom RTMP active-probe request', async function() {
@@ -452,6 +565,43 @@ describe(testName, function() {
         expect(response.result.legs[0].recommendation.codec).to.equal('av1');
     });
 
+    it('preserves a paired vertical recommendation when Enhanced Broadcasting is estimate-only', async function() {
+        const response = await run({
+            schemaVersion: 1,
+            topology: 'enhanced-broadcasting',
+            legs: [leg({
+                display: 'both',
+                destinations: [{ platform: 'twitch' }],
+                estimateReason: 'enhanced_broadcasting',
+                additionalVideo: {
+                    display: 'vertical',
+                    current: {
+                        ...leg().current,
+                        width: 720,
+                        height: 1280,
+                        fpsNum: 60,
+                    },
+                    limits: {
+                        maxWidth: 1080,
+                        maxHeight: 1920,
+                        maxFpsNum: 60,
+                        maxFpsDen: 1,
+                    },
+                },
+            })],
+        });
+
+        expect(response.result.legs[0].measurement.mode).to.equal('estimated');
+        expect(response.result.legs[0].recommendation.additionalVideo).to.deep.equal({
+            display: 'vertical',
+            width: 720,
+            height: 1280,
+            fpsNum: 60,
+            fpsDen: 1,
+        });
+        expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
+    });
+
     it('cancels a prepared session and makes cleanup observable before returning', async function() {
         const events: IAutoConfigEvent[] = [];
         const sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
@@ -548,6 +698,31 @@ describe(testName, function() {
             topology: 'direct-single',
             legs: [leg({ limits: { maxFpsDen: 1 } })],
         }), () => undefined)).to.throw('invalid_autoconfig_limits');
+
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'enhanced-broadcasting',
+            legs: [leg({
+                display: 'horizontal',
+                additionalVideo: {
+                    display: 'vertical',
+                    current: { ...leg().current, width: 720, height: 1280 },
+                },
+            })],
+        }), () => undefined)).to.throw('invalid_autoconfig_additional_video');
+
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+            schemaVersion: 1,
+            topology: 'enhanced-broadcasting',
+            legs: [leg({
+                display: 'both',
+                additionalVideo: {
+                    display: 'vertical',
+                    current: { ...leg().current, width: 720, height: 1280 },
+                    limits: { maxWidth: 1080 },
+                },
+            })],
+        }), () => undefined)).to.throw('invalid_autoconfig_additional_video');
     });
 
     it('rejects more upload legs than Desktop can create', function() {
