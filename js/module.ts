@@ -2048,7 +2048,7 @@ export interface IAutoConfigCapabilities {
     perUploadLegResults: true;
     desktopOwnedApply: true;
     multipleActiveProbes: true;
-    bandwidthModes: ['twitch-standard-active', 'youtube-unbound-active', 'estimate'];
+    bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
 }
 
 export type AutoConfigTopology =
@@ -2139,6 +2139,22 @@ export interface IAutoConfigTwitchActiveProbe {
     streamKey: string;
 }
 
+/** A safe full-ladder Twitch Enhanced Broadcasting capacity probe. */
+export interface IAutoConfigTwitchEnhancedBroadcastingProbe {
+    probeId: string;
+    kind: 'twitch-enhanced-broadcasting';
+    legId: string;
+    serviceName: 'Twitch';
+    server: 'auto';
+    /**
+     * Twitch credential supplied only by Desktop's trusted worker. OSN
+     * normalizes the bandwidth-test parameter, validates the final
+     * Twitch-returned authentication before output starts, and clears its
+     * request copy after probe setup.
+     */
+    streamKey: string;
+}
+
 export interface IAutoConfigYoutubeActiveProbe {
     /**
      * Security contract: Desktop's trusted worker must create an exact-marked,
@@ -2155,7 +2171,10 @@ export interface IAutoConfigYoutubeActiveProbe {
     streamKey: string;
 }
 
-export type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigYoutubeActiveProbe;
+export type IAutoConfigActiveProbe =
+    | IAutoConfigTwitchActiveProbe
+    | IAutoConfigTwitchEnhancedBroadcastingProbe
+    | IAutoConfigYoutubeActiveProbe;
 
 export interface IAutoConfigRequest {
     schemaVersion: 1;
@@ -2220,11 +2239,13 @@ export interface IAutoConfigEvent {
 
 export interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
-    method: 'twitch-bandwidth-test' | 'youtube-unbound-ramp';
+    method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     /**
-     * True when the probe produced sufficient evidence for a usable safeKbps
-     * recommendation. This does not assert that the physical upload path was
-     * saturated or that its full capacity was measured.
+     * True when the probe produced sufficient evidence for its recommendation.
+     * Standard Twitch and YouTube probes validate a usable safeKbps value. An
+     * Enhanced Broadcasting probe instead validates that the complete returned
+     * video ladder sustained the exact tested canvas tuple; it does not imply a
+     * measured or safe upload-bandwidth value.
      */
     success: boolean;
     /**
@@ -2253,6 +2274,22 @@ export interface IAutoConfigProbeMeasurement {
      * imply that the physical upload path was saturated.
      */
     ceilingReached: boolean;
+    /** Exact canvas width validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
+    testedWidth?: number;
+    /** Exact canvas height validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
+    testedHeight?: number;
+    /** Exact frame-rate numerator validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
+    testedFpsNum?: number;
+    /** Exact frame-rate denominator validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
+    testedFpsDen?: number;
+    /** Returned video tracks exercised concurrently by a successful Enhanced Broadcasting probe; omitted otherwise. */
+    videoTrackCount?: number;
+    /**
+     * Sum of the configured video and live-audio bitrates in the validated
+     * Enhanced Broadcasting ladder. This is requested workload, not observed
+     * throughput or path capacity, and is omitted for other or failed probes.
+     */
+    configuredAggregateBitrateKbps?: number;
 }
 
 export interface IAutoConfigMeasurement {

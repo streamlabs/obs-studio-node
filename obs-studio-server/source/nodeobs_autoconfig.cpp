@@ -10,9 +10,14 @@
 #include "nodeobs_autoconfig.h"
 
 #include "autoconfig-probe-policy.hpp"
+#include "autoconfig-enhanced-broadcasting-policy.hpp"
 #include "autoconfig-quality-policy.hpp"
+#include "osn-audio-bitrate.hpp"
 #include "osn-encoders.hpp"
 #include "osn-error.hpp"
+#include "osn-multitrack-video-configuration.hpp"
+#include "osn-multitrack-video-output.hpp"
+#include "osn-multitrack-video.hpp"
 #include "shared.hpp"
 
 #include <obs.h>
@@ -50,6 +55,9 @@ constexpr int kProbeSampleMs = 5000;
 constexpr int kProbeExtendedSampleMs = 10000;
 constexpr int kProbeSubwindowMs = 1000;
 constexpr int kProbeStopTimeoutMs = 3000;
+constexpr int kEnhancedBroadcastingWarmupMs = 1000;
+constexpr int kEnhancedBroadcastingSampleMs = 5000;
+constexpr uint64_t kEnhancedBroadcastingMaximumTrackBitrateKbps = 100000;
 constexpr int kYoutubeIngestConfirmationTimeoutMs = 15000;
 constexpr int kCancelTimeoutMs = 8000;
 constexpr uint64_t kProbeMaxBytes = 25ULL * 1024ULL * 1024ULL;
@@ -223,6 +231,12 @@ struct MeasurementProvenance {
 	int headroomPercent = 0;
 	bool success = false;
 	bool ceilingReached = false;
+	uint32_t testedWidth = 0;
+	uint32_t testedHeight = 0;
+	uint32_t testedFpsNum = 0;
+	uint32_t testedFpsDen = 0;
+	uint32_t videoTrackCount = 0;
+	uint64_t configuredAggregateBitrateKbps = 0;
 };
 
 struct Recommendation {
@@ -375,49 +389,6 @@ static bool isOfficialYoutubeRtmpsServer(const std::string &server)
 		host = authority.substr(0, portSeparator);
 	}
 	return host == "a.rtmps.youtube.com";
-}
-
-static void trim(std::string &value)
-{
-	while (!value.empty() && std::isspace((unsigned char)value.back()))
-		value.pop_back();
-	size_t first = 0;
-	while (first < value.size() && std::isspace((unsigned char)value[first]))
-		first++;
-	if (first)
-		value.erase(0, first);
-}
-
-static std::string normalizeTwitchBandwidthKey(std::string key)
-{
-	trim(key);
-	const size_t queryPos = key.find('?');
-	const std::string base = key.substr(0, queryPos);
-	std::vector<std::string> retained;
-
-	if (queryPos != std::string::npos) {
-		std::string query = key.substr(queryPos + 1);
-		size_t offset = 0;
-		while (offset <= query.size()) {
-			const size_t next = query.find('&', offset);
-			std::string item = query.substr(offset, next == std::string::npos ? std::string::npos : next - offset);
-			const size_t equals = item.find('=');
-			const std::string name = lowerCopy(item.substr(0, equals));
-			if (!item.empty() && name != "bandwidthtest")
-				retained.push_back(item);
-			if (next == std::string::npos)
-				break;
-			offset = next + 1;
-		}
-	}
-
-	std::string result = base + "?";
-	for (const auto &item : retained) {
-		result += item;
-		result += "&";
-	}
-	result += "bandwidthtest=true";
-	return result;
 }
 
 static std::string defaultEstimateReason(const std::string &topology, const LegRequest &leg)
@@ -615,7 +586,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 			valid = false;
 			break;
 		}
-		if (probe.kind == "twitch-standard")
+		if (probe.kind == "twitch-standard" || probe.kind == "twitch-enhanced-broadcasting")
 			probe.provider = "twitch";
 		else if (probe.kind == "youtube-unbound")
 			probe.provider = "youtube";
@@ -643,12 +614,20 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		const bool directEligible = session.topology == "direct-single" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
 		const bool dualEligible = session.topology == "dual-output" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
 		const bool cloudEligible = session.topology == "cloud-multistream" && session.legs.size() == 1 && legFound;
-		const bool providerValid = (probe.provider == "twitch" && probe.serviceName == "Twitch" && isOfficialTwitchServer(probe.server) &&
-					    isBoundedTwitchKey(probe.streamKey)) ||
+		const bool enhancedBroadcastingEligible = probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" &&
+							  session.legs.size() == 1 && probeCount == 1 && legFound && legIt->display == "horizontal" &&
+							  legIt->destinations.size() == 1 && legIt->destinations.front().platform == "twitch";
+		const bool providerValid = (probe.kind == "twitch-standard" && probe.provider == "twitch" && probe.serviceName == "Twitch" &&
+					    isOfficialTwitchServer(probe.server) && isBoundedTwitchKey(probe.streamKey)) ||
+					   (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.serviceName == "Twitch" &&
+					    probe.server == "auto" && isBoundedTwitchKey(probe.streamKey) &&
+					    osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
 					   (probe.provider == "youtube" && probe.serviceName == "YouTube - RTMPS" &&
 					    isOfficialYoutubeRtmpsServer(probe.server) && isBoundedYoutubeKey(probe.streamKey));
 
-		probe.eligible = !probe.provider.empty() && destinationFound && (directEligible || dualEligible || cloudEligible) && providerValid &&
+		const bool topologyEligible = enhancedBroadcastingEligible ||
+					      (probe.kind != "twitch-enhanced-broadcasting" && (directEligible || dualEligible || cloudEligible));
+		probe.eligible = !probe.provider.empty() && destinationFound && topologyEligible && providerValid &&
 				 probePairCounts[probe.legId + "\n" + probe.provider] == 1;
 		if (!probe.eligible) {
 			probe.denialReason = multipleDualOutputLegs ? "dual_output_multiple_active_legs" : "active_probe_not_eligible";
@@ -1013,6 +992,18 @@ static std::string serializeResult(const Session &session, const char *status, c
 				if (provenance.success || provenance.headroomPercent > 0)
 					obs_data_set_int(probe, "headroomPercent", provenance.headroomPercent);
 				obs_data_set_bool(probe, "ceilingReached", provenance.ceilingReached);
+				if (provenance.testedWidth > 0)
+					obs_data_set_int(probe, "testedWidth", provenance.testedWidth);
+				if (provenance.testedHeight > 0)
+					obs_data_set_int(probe, "testedHeight", provenance.testedHeight);
+				if (provenance.testedFpsNum > 0)
+					obs_data_set_int(probe, "testedFpsNum", provenance.testedFpsNum);
+				if (provenance.testedFpsDen > 0)
+					obs_data_set_int(probe, "testedFpsDen", provenance.testedFpsDen);
+				if (provenance.videoTrackCount > 0)
+					obs_data_set_int(probe, "videoTrackCount", provenance.videoTrackCount);
+				if (provenance.configuredAggregateBitrateKbps > 0)
+					obs_data_set_int(probe, "configuredAggregateBitrateKbps", (long long)provenance.configuredAggregateBitrateKbps);
 				obs_data_array_push_back(probes, probe);
 				obs_data_release(probe);
 			}
@@ -1082,6 +1073,13 @@ struct ProbeResult {
 	std::string errorCode;
 	ProbeStability stability = ProbeStability::Stable;
 	bool observedThroughputReliable = true;
+	uint32_t testedWidth = 0;
+	uint32_t testedHeight = 0;
+	uint32_t testedFpsNum = 0;
+	uint32_t testedFpsDen = 0;
+	uint32_t videoTrackCount = 0;
+	uint64_t configuredAggregateBitrateKbps = 0;
+	bool pairedCadenceEvidence = false;
 };
 
 static bool silentAudioCallback(void *, uint64_t startTimestamp, uint64_t, uint64_t *outputTimestamp, uint32_t, struct audio_data_mixes_outputs *)
@@ -1139,12 +1137,15 @@ public:
 	std::unique_ptr<obs_video_info> scratchViewInfo;
 	obs_core_video_mix_t *scratchMix = nullptr;
 	bool coreVideoMix = false;
+	bool auxiliaryVideoMix = false;
 	bool borrowedVideo = false;
 	audio_t *syntheticAudio = nullptr;
 	obs_encoder_t *videoEncoder = nullptr;
 	obs_encoder_t *audioEncoder = nullptr;
 	obs_service_t *service = nullptr;
 	obs_output_t *output = nullptr;
+	std::vector<OBSEncoderAutoRelease> multitrackAudioEncoders;
+	std::shared_ptr<obs_encoder_group_t> multitrackVideoEncoderGroup;
 	std::atomic<bool> stopFeeder{false};
 	std::atomic<uint32_t> scheduledFrames{0};
 	std::atomic<uint32_t> submittedFrames{0};
@@ -1155,7 +1156,8 @@ public:
 	std::vector<uint8_t> framePatternB;
 	uint32_t audioNoiseState = 0xa341316cU;
 
-	bool createSyntheticVideo(uint32_t width, uint32_t height, uint32_t fpsNum, uint32_t fpsDen, bool useCoreVideoMix = false)
+	bool createSyntheticVideo(uint32_t width, uint32_t height, uint32_t fpsNum, uint32_t fpsDen, bool useCoreVideoMix = false, bool useCurrentScene = false,
+				  obs_core_video_mix_t *identitySourceMix = nullptr)
 	{
 		videoWidth = width;
 		videoHeight = height;
@@ -1164,11 +1166,11 @@ public:
 		coreVideoMix = useCoreVideoMix;
 		if (coreVideoMix) {
 			// Hardware texture encoders require a real OBS video mix. Create an
-			// isolated, source-free view for an availability and frame-throughput
-			// smoke test. Reusing a scene from another canvas can impose that
-			// canvas's cadence and falsely reject an otherwise healthy encoder.
-			// obs_view_add2 creates only a private mix and does not reset the
-			// application's existing video contexts.
+			// isolated view for the requested candidate. Hardware-only smoke tests
+			// leave it source-free; Enhanced Broadcasting renders the current scene
+			// through the auxiliary identity path below.
+			// The private view does not reset the application's existing video
+			// contexts.
 			scratchViewInfo = std::make_unique<obs_video_info>();
 			scratchViewInfo->base_width = width;
 			scratchViewInfo->base_height = height;
@@ -1184,13 +1186,31 @@ public:
 			scratchViewInfo->adapter = 0;
 			scratchViewInfo->gpu_conversion = true;
 			scratchView = obs_view_create();
-			syntheticVideo = scratchView ? obs_view_add2(scratchView, scratchViewInfo.get()) : nullptr;
-			// obs_encoder_set_video() is not sufficient for texture encoders in
-			// the packaged libobs build: GPU startup resolves its mix again and
-			// can observe no mix. Acquire the just-published private mix by this
-			// unique video-info identity and keep that identity alive until the
-			// render thread has removed the mix.
-			scratchMix = syntheticVideo ? obs_video_mix_get(scratchViewInfo.get(), OBS_MAIN_VIDEO_RENDERING) : nullptr;
+			if (scratchView && useCurrentScene) {
+				OBSSourceAutoRelease currentScene = obs_get_output_source(0);
+				if (!currentScene)
+					return false;
+				obs_view_set_source(scratchView, 0, currentScene);
+			}
+			if (identitySourceMix) {
+				// The Enhanced Broadcasting probe renders the current scene at
+				// candidate settings without registering another application
+				// canvas. Its mix must nevertheless use the registered horizontal
+				// canvas identity: scene-item filtering and the paired AAC routing
+				// both match on that identity. The auxiliary API keeps the render
+				// settings private while deriving the safe identity alias in libobs.
+				scratchMix = scratchView ? obs_view_add_auxiliary_mix(scratchView, scratchViewInfo.get(), identitySourceMix) : nullptr;
+				auxiliaryVideoMix = scratchMix != nullptr;
+				syntheticVideo = scratchMix ? obs_video_mix_get_video(scratchMix) : nullptr;
+			} else {
+				syntheticVideo = scratchView ? obs_view_add2(scratchView, scratchViewInfo.get()) : nullptr;
+				// obs_encoder_set_video() is not sufficient for texture encoders
+				// in the packaged libobs build: GPU startup resolves its mix again
+				// and can observe no mix. Acquire the just-published private mix by
+				// this unique video-info identity and keep that identity alive until
+				// the render thread has removed the mix.
+				scratchMix = syntheticVideo ? obs_video_mix_get(scratchViewInfo.get(), OBS_MAIN_VIDEO_RENDERING) : nullptr;
+			}
 			if (!syntheticVideo || !scratchMix)
 				return false;
 			return true;
@@ -1323,6 +1343,8 @@ public:
 		stopFeeder.store(true);
 		if (feeder.joinable())
 			feeder.join();
+		multitrackAudioEncoders.clear();
+		multitrackVideoEncoderGroup.reset();
 
 		if (videoEncoder) {
 			obs_encoder_release(videoEncoder);
@@ -1339,25 +1361,33 @@ public:
 		}
 		if (scratchView) {
 			obs_video_info *removedViewInfo = scratchViewInfo.get();
+			const bool removedAuxiliaryMix = auxiliaryVideoMix;
 			obs_view_remove(scratchView);
 			obs_view_destroy(scratchView);
 			scratchView = nullptr;
 			syntheticVideo = nullptr;
 			scratchMix = nullptr;
-			// The render thread removes orphaned mixes on a later tick. Do not
-			// release/reuse the identity used by obs_video_mix_get until the
-			// exact private mix is no longer published.
-			const auto mixRemovalDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(1000, stopTimeoutMs));
-			while (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING) &&
-			       std::chrono::steady_clock::now() < mixRemovalDeadline)
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
-			if (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING)) {
-				// Preserve the identity rather than leaving an asynchronous mix
-				// with a dangling canvas_ovi pointer during abnormal shutdown.
-				blog(LOG_WARNING, "[Auto Optimizer][Hardware] timed out waiting for the private video mix to be removed");
-				(void)scratchViewInfo.release();
-			} else {
+			auxiliaryVideoMix = false;
+			if (removedAuxiliaryMix) {
+				// Auxiliary mix creation copies the render settings and retains its
+				// registered identity independently of this request object.
 				scratchViewInfo.reset();
+			} else {
+				// The render thread removes ordinary private mixes on a later tick.
+				// Keep their caller-owned identity alive until the exact mix is no
+				// longer published.
+				const auto mixRemovalDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(1000, stopTimeoutMs));
+				while (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING) &&
+				       std::chrono::steady_clock::now() < mixRemovalDeadline)
+					std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				if (removedViewInfo && obs_video_mix_get(removedViewInfo, OBS_MAIN_VIDEO_RENDERING)) {
+					// Preserve the identity rather than leaving an asynchronous mix
+					// with a dangling canvas_ovi pointer during abnormal shutdown.
+					blog(LOG_WARNING, "[Auto Optimizer][Hardware] timed out waiting for the private video mix to be removed");
+					(void)scratchViewInfo.release();
+				} else {
+					scratchViewInfo.reset();
+				}
 			}
 		}
 		if (syntheticAudio) {
@@ -2493,6 +2523,523 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 	return true;
 }
 
+struct EnhancedBroadcastingAttempt {
+	bool success = false;
+	bool cancelled = false;
+	uint32_t videoTrackCount = 0;
+	uint64_t configuredAggregateBitrateKbps = 0;
+	uint64_t outputBytes = 0;
+	uint32_t outputDroppedFrames = 0;
+	uint32_t inputFrames = 0;
+	uint32_t inputSkippedFrames = 0;
+	float maximumCongestion = 0.0f;
+	std::vector<uint32_t> encodedFrames;
+	std::vector<uint32_t> minimumEncodedFrames;
+	std::string errorCode;
+};
+
+static uint64_t configuredBitrateKbps(const nlohmann::json &settings)
+{
+	const auto bitrate = settings.find("bitrate");
+	if (bitrate == settings.end() || (!bitrate->is_number_integer() && !bitrate->is_number_unsigned()))
+		return 0;
+	uint64_t value = 0;
+	if (bitrate->is_number_unsigned()) {
+		value = bitrate->get<uint64_t>();
+	} else {
+		const int64_t signedValue = bitrate->get<int64_t>();
+		if (signedValue <= 0)
+			return 0;
+		value = (uint64_t)signedValue;
+	}
+	return value <= kEnhancedBroadcastingMaximumTrackBitrateKbps ? value : 0;
+}
+
+static uint64_t configuredAggregateBitrateKbps(const osn::Config &config)
+{
+	uint64_t result = 0;
+	for (const auto &video : config.encoder_configurations)
+		result += configuredBitrateKbps(video.settings);
+	for (const auto &audio : config.audio_configurations.live)
+		result += configuredBitrateKbps(audio.settings);
+	return result;
+}
+
+static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const enhancedBroadcastingPolicy::VideoCandidate &candidate, std::string &errorCode)
+{
+	if (config.encoder_configurations.empty() || config.encoder_configurations.size() > MAX_OUTPUT_VIDEO_ENCODERS) {
+		errorCode = "enhanced_broadcasting_invalid_video_ladder";
+		return false;
+	}
+	if (config.audio_configurations.live.empty() || config.audio_configurations.live.size() > MAX_OUTPUT_AUDIO_ENCODERS) {
+		errorCode = "enhanced_broadcasting_invalid_audio_ladder";
+		return false;
+	}
+	for (const auto &audio : config.audio_configurations.live) {
+		if (audio.channels == 0 || configuredBitrateKbps(audio.settings) == 0) {
+			errorCode = "enhanced_broadcasting_invalid_audio_ladder";
+			return false;
+		}
+	}
+	bool candidateCovered = false;
+	for (const auto &video : config.encoder_configurations) {
+		const char *codec = obs_get_encoder_codec(video.type.c_str());
+		if (video.canvas_index != 0 || !codec || lowerCopy(codec) != "h264") {
+			errorCode = "enhanced_broadcasting_unsupported_video_ladder";
+			return false;
+		}
+		if (video.width == 0 || video.height == 0 || configuredBitrateKbps(video.settings) == 0) {
+			errorCode = "enhanced_broadcasting_invalid_video_ladder";
+			return false;
+		}
+		if (video.framerate && (video.framerate->numerator == 0 || video.framerate->denominator == 0)) {
+			errorCode = "enhanced_broadcasting_invalid_video_ladder";
+			return false;
+		}
+		const auto cadence = video.framerate.value_or(media_frames_per_second{candidate.fpsNum, candidate.fpsDen});
+		if (enhancedBroadcastingPolicy::renditionExceedsCandidate(candidate, video.width, video.height, cadence.numerator, cadence.denominator)) {
+			errorCode = "enhanced_broadcasting_ladder_exceeds_candidate";
+			return false;
+		}
+		candidateCovered = candidateCovered || enhancedBroadcastingPolicy::renditionCoversCandidate(candidate, video.width, video.height,
+													    cadence.numerator, cadence.denominator);
+	}
+	if (!candidateCovered) {
+		errorCode = "enhanced_broadcasting_ladder_below_candidate";
+		return false;
+	}
+	return true;
+}
+
+static media_frames_per_second effectiveTrackCadence(const osn::VideoEncoderConfiguration &configuration, uint32_t sourceFpsNum, uint32_t sourceFpsDen)
+{
+	media_frames_per_second result = configuration.framerate.value_or(media_frames_per_second{sourceFpsNum, std::max(1U, sourceFpsDen)});
+	if ((uint64_t)result.numerator * sourceFpsDen > (uint64_t)sourceFpsNum * result.denominator)
+		result = {sourceFpsNum, std::max(1U, sourceFpsDen)};
+	return result;
+}
+
+static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> &session, const ProbeRequest &probe, const osn::Config &config,
+						 const std::string &normalizedKey, const enhancedBroadcastingPolicy::VideoCandidate &candidate,
+						 uint32_t sourceFpsNum, uint32_t sourceFpsDen, bool usePrivateTextureMix, EnhancedBroadcastingAttempt &attempt)
+{
+	ScratchResources resources(*session);
+	attempt.videoTrackCount = (uint32_t)config.encoder_configurations.size();
+	attempt.configuredAggregateBitrateKbps = configuredAggregateBitrateKbps(config);
+	obs_core_video_mix_t *identitySourceMix = nullptr;
+	if (usePrivateTextureMix) {
+		const bool multipleRendering = obs_get_multiple_rendering();
+		obs_video_rendering_mode identityMode = multipleRendering ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING;
+		identitySourceMix = obs_video_mix_get(nullptr, identityMode);
+		if (!identitySourceMix && multipleRendering) {
+			identityMode = OBS_MAIN_VIDEO_RENDERING;
+			identitySourceMix = obs_video_mix_get(nullptr, OBS_MAIN_VIDEO_RENDERING);
+		}
+		blog(LOG_INFO, "[Auto Optimizer][Enhanced Broadcasting] Auxiliary mix identity: mode=%s, multiple_rendering=%s, available=%s",
+		     identityMode == OBS_STREAMING_VIDEO_RENDERING ? "streaming" : "main", multipleRendering ? "true" : "false",
+		     identitySourceMix ? "true" : "false");
+	}
+	if (usePrivateTextureMix && !identitySourceMix) {
+		attempt.errorCode = "enhanced_broadcasting_canvas_identity_unavailable";
+		return false;
+	}
+	if (!resources.createSyntheticVideo(candidate.width, candidate.height, sourceFpsNum, sourceFpsDen, usePrivateTextureMix, usePrivateTextureMix,
+					    identitySourceMix)) {
+		attempt.errorCode = "enhanced_broadcasting_video_create_failed";
+		return false;
+	}
+	if (!usePrivateTextureMix)
+		resources.startFeeder();
+	if (!resources.createSyntheticAudio(true)) {
+		attempt.errorCode = "enhanced_broadcasting_audio_create_failed";
+		return false;
+	}
+
+	obs_video_info rawCanvas{};
+	rawCanvas.base_width = candidate.width;
+	rawCanvas.base_height = candidate.height;
+	rawCanvas.output_width = candidate.width;
+	rawCanvas.output_height = candidate.height;
+	rawCanvas.fps_num = sourceFpsNum;
+	rawCanvas.fps_den = std::max(1U, sourceFpsDen);
+	rawCanvas.fps_type = 1;
+	rawCanvas.output_format = VIDEO_FORMAT_NV12;
+	rawCanvas.colorspace = VIDEO_CS_709;
+	rawCanvas.range = VIDEO_RANGE_PARTIAL;
+	rawCanvas.scale_type = OBS_SCALE_BILINEAR;
+	rawCanvas.adapter = 0;
+	rawCanvas.gpu_conversion = usePrivateTextureMix;
+	std::vector<obs_video_info *> canvases{usePrivateTextureMix ? resources.scratchViewInfo.get() : &rawCanvas};
+
+	const int audioBitrate = osn::GetMultitrackAudioBitrate();
+	const char *audioEncoderId = osn::GetSimpleAACEncoderForBitrate(audioBitrate);
+	if (!audioEncoderId) {
+		attempt.errorCode = "enhanced_broadcasting_audio_encoder_unavailable";
+		return false;
+	}
+
+	OBSOutputAutoRelease output;
+	try {
+		output = osn::SetupOBSOutput("Auto Optimizer Enhanced Broadcasting", config, resources.multitrackAudioEncoders,
+					     resources.multitrackVideoEncoderGroup, audioEncoderId, 0, std::nullopt, canvases, true);
+	} catch (const std::exception &exception) {
+		blog(LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Output setup failed: %s", boundedLogValue(exception.what()).c_str());
+		attempt.errorCode = "enhanced_broadcasting_output_setup_failed";
+		return false;
+	}
+	if (!output) {
+		attempt.errorCode = "enhanced_broadcasting_output_setup_failed";
+		return false;
+	}
+	resources.output = obs_output_get_ref(output);
+	if (!resources.output) {
+		attempt.errorCode = "enhanced_broadcasting_output_setup_failed";
+		return false;
+	}
+
+	for (size_t index = 0; index < config.encoder_configurations.size(); index++) {
+		obs_encoder_t *encoder = obs_output_get_video_encoder2(resources.output, index);
+		if (!encoder) {
+			attempt.errorCode = "enhanced_broadcasting_video_encoder_missing";
+			return false;
+		}
+		if (usePrivateTextureMix)
+			obs_encoder_set_video_mix(encoder, resources.scratchMix);
+		else
+			obs_encoder_set_video(encoder, resources.syntheticVideo);
+	}
+
+	for (const auto &encoder : resources.multitrackAudioEncoders) {
+		if (!encoder) {
+			attempt.errorCode = "enhanced_broadcasting_audio_encoder_missing";
+			return false;
+		}
+		// Never route the user's microphone or desktop audio into a bandwidth
+		// test. Non-silent probe-owned audio also lets the output interleaver
+		// establish the primary A/V stream before it releases video packets.
+		obs_encoder_set_audio(encoder, resources.syntheticAudio);
+	}
+
+	OBSServiceAutoRelease service;
+	try {
+		service = osn::create_service(config, std::nullopt, normalizedKey);
+	} catch (const std::exception &exception) {
+		blog(LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Service setup failed: %s", boundedLogValue(exception.what()).c_str());
+		attempt.errorCode = "enhanced_broadcasting_service_create_failed";
+		return false;
+	}
+	if (!service) {
+		attempt.errorCode = "enhanced_broadcasting_service_create_failed";
+		return false;
+	}
+	OBSDataAutoRelease serviceSettings = obs_service_get_settings(service);
+	const std::string effectiveKey = obs_data_get_string(serviceSettings, "key");
+	if (effectiveKey.empty() || effectiveKey.front() == '?' || !osn::HasExactlyOneTwitchBandwidthTestParameter(effectiveKey)) {
+		attempt.errorCode = "enhanced_broadcasting_unsafe_stream_key";
+		return false;
+	}
+	resources.service = obs_service_get_ref(service);
+	obs_output_set_service(resources.output, resources.service);
+	obs_output_set_reconnect_settings(resources.output, 0, 0);
+	resources.publishOutput();
+
+	if (session->cancelRequested.load()) {
+		attempt.cancelled = true;
+		return false;
+	}
+	if (!obs_output_start(resources.output)) {
+		attempt.errorCode = "enhanced_broadcasting_output_start_failed";
+		return false;
+	}
+	const auto connectDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kProbeConnectTimeoutMs);
+	while (!obs_output_active(resources.output) && std::chrono::steady_clock::now() < connectDeadline) {
+		if (session->cancelRequested.load()) {
+			attempt.cancelled = true;
+			obs_output_force_stop(resources.output);
+			return false;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+	if (!obs_output_active(resources.output)) {
+		attempt.errorCode = "enhanced_broadcasting_output_connect_failed";
+		return false;
+	}
+
+	ProbeResult intervalResult;
+	intervalResult.provider = "twitch";
+	if (!waitForProbeInterval(session, resources.output, std::chrono::steady_clock::now() + std::chrono::milliseconds(kEnhancedBroadcastingWarmupMs),
+				  intervalResult)) {
+		attempt.cancelled = intervalResult.cancelled;
+		attempt.errorCode = attempt.cancelled ? std::string{} : "enhanced_broadcasting_output_stopped";
+		return false;
+	}
+
+	struct VideoInputSample {
+		video_t *video = nullptr;
+		uint32_t totalFrames = 0;
+		uint32_t skippedFrames = 0;
+	};
+	std::vector<VideoInputSample> videoInputSamples;
+	std::vector<uint32_t> encodedStart;
+	encodedStart.reserve(config.encoder_configurations.size());
+	for (size_t index = 0; index < config.encoder_configurations.size(); index++) {
+		obs_encoder_t *encoder = obs_output_get_video_encoder2(resources.output, index);
+		if (!encoder) {
+			attempt.errorCode = "enhanced_broadcasting_video_encoder_missing";
+			return false;
+		}
+		encodedStart.push_back(obs_encoder_get_encoded_frames(encoder));
+		/* Sample the post-rescale parent mix rather than obs_encoder_video().
+		 * Divisor tracks expose an FPS-override child whose public counters do
+		 * not resolve to the root mix that receives texture frames. */
+		video_t *encoderVideo = obs_encoder_parent_video(encoder);
+		if (!encoderVideo) {
+			attempt.errorCode = "enhanced_broadcasting_video_input_missing";
+			return false;
+		}
+		const auto existingInput = std::find_if(videoInputSamples.begin(), videoInputSamples.end(),
+							[encoderVideo](const VideoInputSample &sample) { return sample.video == encoderVideo; });
+		if (existingInput == videoInputSamples.end()) {
+			videoInputSamples.push_back({encoderVideo, video_output_get_total_frames(encoderVideo), video_output_get_skipped_frames(encoderVideo)});
+		}
+	}
+	const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
+	const uint32_t startDropped = obs_output_get_frames_dropped(resources.output);
+	const auto sampleDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kEnhancedBroadcastingSampleMs);
+	while (std::chrono::steady_clock::now() < sampleDeadline) {
+		if (session->cancelRequested.load()) {
+			attempt.cancelled = true;
+			obs_output_force_stop(resources.output);
+			return false;
+		}
+		if (!obs_output_active(resources.output)) {
+			attempt.errorCode = "enhanced_broadcasting_output_stopped";
+			return false;
+		}
+		attempt.maximumCongestion = std::max(attempt.maximumCongestion, obs_output_get_congestion(resources.output));
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+
+	attempt.outputBytes = obs_output_get_total_bytes(resources.output) - startBytes;
+	attempt.outputDroppedFrames = obs_output_get_frames_dropped(resources.output) - startDropped;
+	bool mixPassed = !videoInputSamples.empty();
+	for (size_t index = 0; index < videoInputSamples.size(); index++) {
+		const VideoInputSample &sample = videoInputSamples[index];
+		const uint32_t totalFrames = video_output_get_total_frames(sample.video) - sample.totalFrames;
+		const uint32_t skippedFrames = video_output_get_skipped_frames(sample.video) - sample.skippedFrames;
+		const bool inputPassed = totalFrames > 0 && skippedFrames <= enhancedBroadcastingPolicy::allowedSkippedFrames(totalFrames);
+		attempt.inputFrames += totalFrames;
+		attempt.inputSkippedFrames += skippedFrames;
+		mixPassed = mixPassed && inputPassed;
+		blog(inputPassed ? LOG_INFO : LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Video input %zu sample: frames=%u, skipped=%u, passed=%s",
+		     index, totalFrames, skippedFrames, inputPassed ? "true" : "false");
+	}
+	for (size_t index = 0; index < config.encoder_configurations.size(); index++) {
+		obs_encoder_t *encoder = obs_output_get_video_encoder2(resources.output, index);
+		const uint32_t encoded = obs_encoder_get_encoded_frames(encoder) - encodedStart[index];
+		const auto cadence = effectiveTrackCadence(config.encoder_configurations[index], sourceFpsNum, sourceFpsDen);
+		const uint32_t expected =
+			(uint32_t)((uint64_t)kEnhancedBroadcastingSampleMs * cadence.numerator / (1000ULL * std::max(1U, cadence.denominator)));
+		attempt.encodedFrames.push_back(encoded);
+		attempt.minimumEncodedFrames.push_back(enhancedBroadcastingPolicy::minimumEncodedFrames(expected));
+	}
+
+	const char *outputError = obs_output_get_last_error(resources.output);
+	const bool encoderFramesPassed = std::equal(attempt.encodedFrames.begin(), attempt.encodedFrames.end(), attempt.minimumEncodedFrames.begin(),
+						    [](uint32_t encoded, uint32_t minimum) { return encoded >= minimum; });
+	const bool transportPassed = attempt.outputDroppedFrames == 0 && attempt.maximumCongestion < kProbeCongestionHigh;
+	attempt.success = attempt.outputBytes > 0 && encoderFramesPassed && mixPassed && transportPassed && (!outputError || !*outputError);
+	if (!attempt.success) {
+		attempt.errorCode = attempt.outputBytes == 0 ? "enhanced_broadcasting_no_output"
+				    : !encoderFramesPassed   ? "enhanced_broadcasting_encoder_underload"
+				    : !mixPassed             ? "enhanced_broadcasting_render_overload"
+				    : !transportPassed       ? "enhanced_broadcasting_transport_pressure"
+							     : "enhanced_broadcasting_output_error";
+	}
+	for (size_t index = 0; index < attempt.encodedFrames.size(); index++) {
+		blog(attempt.encodedFrames[index] >= attempt.minimumEncodedFrames[index] ? LOG_INFO : LOG_WARNING,
+		     "[Auto Optimizer][Enhanced Broadcasting] Track %zu cadence sample: encoded=%u, minimum=%u", index, attempt.encodedFrames[index],
+		     attempt.minimumEncodedFrames[index]);
+	}
+	blog(attempt.success ? LOG_INFO : LOG_WARNING,
+	     "[Auto Optimizer][Enhanced Broadcasting] Workload sample: feed=%s, source=%u/%u FPS, tracks=%u, configured_aggregate=%llu Kbps, "
+	     "output_bytes=%llu, output_dropped=%u, max_congestion=%.3f, input_mixes=%zu, input_frames=%u, input_skipped=%u, success=%s, "
+	     "error=%s",
+	     usePrivateTextureMix ? "private-texture" : "synthetic-raw-exact", sourceFpsNum, sourceFpsDen, attempt.videoTrackCount,
+	     (unsigned long long)attempt.configuredAggregateBitrateKbps, (unsigned long long)attempt.outputBytes, attempt.outputDroppedFrames,
+	     (double)attempt.maximumCongestion, videoInputSamples.size(), attempt.inputFrames, attempt.inputSkippedFrames, attempt.success ? "true" : "false",
+	     attempt.errorCode.empty() ? "none" : attempt.errorCode.c_str());
+
+	obs_output_stop(resources.output);
+	if (!waitForOutputInactive(resources.output, kProbeStopTimeoutMs)) {
+		obs_output_force_stop(resources.output);
+		if (!waitForOutputInactive(resources.output, kProbeStopTimeoutMs)) {
+			attempt.success = false;
+			attempt.errorCode = "enhanced_broadcasting_cleanup_timeout";
+		}
+	}
+	return attempt.success;
+}
+
+static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
+						double slotEndProgress)
+{
+	ProbeResult result;
+	result.provider = "twitch";
+	result.legId = probe.legId;
+	result.method = "twitch-enhanced-broadcasting-test";
+	result.observedThroughputReliable = false;
+	result.ceilingReached = false;
+
+	std::string normalizedKey = osn::NormalizeTwitchBandwidthTestKey(probe.streamKey);
+	probe.streamKey.clear();
+	if (!osn::HasExactlyOneTwitchBandwidthTestParameter(normalizedKey)) {
+		result.errorCode = "enhanced_broadcasting_unsafe_stream_key";
+		return result;
+	}
+
+	obs_data_t *serviceSettings = obs_data_create();
+	obs_data_set_string(serviceSettings, "service", "Twitch");
+	obs_data_set_string(serviceSettings, "server", "auto");
+	obs_data_set_string(serviceSettings, "key", normalizedKey.c_str());
+	OBSServiceAutoRelease configurationService =
+		obs_service_create_private("rtmp_common", "auto_optimizer_enhanced_broadcasting_config_service", serviceSettings);
+	obs_data_release(serviceSettings);
+	probe.server.clear();
+	if (!configurationService) {
+		result.errorCode = "enhanced_broadcasting_service_create_failed";
+		return result;
+	}
+	const std::string autoConfigUrl = osn::MultitrackVideoAutoConfigURL(configurationService);
+	if (autoConfigUrl.empty()) {
+		result.errorCode = "enhanced_broadcasting_config_url_missing";
+		return result;
+	}
+
+	obs_video_info mainVideo{};
+	if (!obs_get_video_info(&mainVideo) || mainVideo.fps_num == 0) {
+		result.errorCode = "enhanced_broadcasting_video_unavailable";
+		return result;
+	}
+	const uint32_t maxWidth = leg.limits.maxWidth > 0 ? (uint32_t)std::min(1920, leg.limits.maxWidth) : 1920U;
+	const uint32_t maxHeight = leg.limits.maxHeight > 0 ? (uint32_t)std::min(1080, leg.limits.maxHeight) : 1080U;
+	const uint32_t maxFpsNum = leg.limits.maxFpsNum > 0 ? (uint32_t)leg.limits.maxFpsNum : 0U;
+	const uint32_t maxFpsDen = leg.limits.maxFpsNum > 0 ? (uint32_t)std::max(1, leg.limits.maxFpsDen) : 0U;
+	const auto candidates = enhancedBroadcastingPolicy::candidates(maxWidth, maxHeight, maxFpsNum, maxFpsDen, (uint32_t)std::max(1, leg.current.fpsDen));
+	if (candidates.empty()) {
+		result.errorCode = "enhanced_broadcasting_no_candidate";
+		return result;
+	}
+
+	for (size_t index = 0; index < candidates.size(); index++) {
+		const auto &candidate = candidates[index];
+		CurrentSettings eventVideo = leg.current;
+		eventVideo.width = (int)candidate.width;
+		eventVideo.height = (int)candidate.height;
+		eventVideo.fpsNum = (int)candidate.fpsNum;
+		eventVideo.fpsDen = (int)candidate.fpsDen;
+		const double candidateStart = slotStartProgress + (slotEndProgress - slotStartProgress) * (double)index / (double)candidates.size();
+		const double candidateEnd = slotStartProgress + (slotEndProgress - slotStartProgress) * (double)(index + 1) / (double)candidates.size();
+		pushEvent(session, "progress", "bandwidth", candidateStart, "enhanced_broadcasting_requesting_ladder", probe.legId, "active", probe.probeId,
+			  probe.provider, 0, &eventVideo);
+
+		obs_video_info requestCanvas{};
+		requestCanvas.base_width = candidate.width;
+		requestCanvas.base_height = candidate.height;
+		requestCanvas.output_width = candidate.width;
+		requestCanvas.output_height = candidate.height;
+		requestCanvas.fps_num = candidate.fpsNum;
+		requestCanvas.fps_den = candidate.fpsDen;
+		requestCanvas.fps_type = 1;
+		requestCanvas.output_format = VIDEO_FORMAT_NV12;
+		requestCanvas.colorspace = VIDEO_CS_709;
+		requestCanvas.range = VIDEO_RANGE_PARTIAL;
+		requestCanvas.scale_type = OBS_SCALE_BILINEAR;
+		requestCanvas.adapter = mainVideo.adapter;
+		requestCanvas.gpu_conversion = true;
+
+		osn::Config config;
+		try {
+			auto post = osn::constructGoLivePost({&requestCanvas}, normalizedKey, std::nullopt, std::nullopt, false);
+			post.client.supported_codecs.clear();
+			post.client.supported_codecs.emplace("h264");
+			config = osn::DownloadGoLiveConfig(autoConfigUrl, post);
+		} catch (const std::exception &exception) {
+			blog(LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Ladder request failed for %ux%u %u/%u FPS: %s", candidate.width,
+			     candidate.height, candidate.fpsNum, candidate.fpsDen, boundedLogValue(exception.what()).c_str());
+			result.errorCode = "enhanced_broadcasting_config_request_failed";
+			return result;
+		}
+		if (!validateEnhancedBroadcastingConfig(config, candidate, result.errorCode)) {
+			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
+				return result;
+			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
+				  probe.probeId, probe.provider, 0, &eventVideo);
+			continue;
+		}
+
+		pushEvent(session, "progress", "bandwidth", candidateStart + (candidateEnd - candidateStart) * 0.25, "enhanced_broadcasting_testing_candidate",
+			  probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo);
+		const bool targetAboveMainCadence =
+			!enhancedBroadcastingPolicy::cadenceCanBeProvenByPrivateMix(candidate, mainVideo.fps_num, std::max(1U, mainVideo.fps_den));
+		const uint32_t smokeFpsNum = targetAboveMainCadence ? mainVideo.fps_num : candidate.fpsNum;
+		const uint32_t smokeFpsDen = targetAboveMainCadence ? std::max(1U, mainVideo.fps_den) : candidate.fpsDen;
+		EnhancedBroadcastingAttempt textureAttempt;
+		if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidate, smokeFpsNum, smokeFpsDen, true, textureAttempt)) {
+			if (textureAttempt.cancelled) {
+				result.cancelled = true;
+				return result;
+			}
+			result.errorCode = textureAttempt.errorCode;
+			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
+				return result;
+			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
+				  probe.probeId, probe.provider, 0, &eventVideo);
+			continue;
+		}
+
+		EnhancedBroadcastingAttempt exactAttempt = textureAttempt;
+		if (targetAboveMainCadence) {
+			pushEvent(session, "progress", "bandwidth", candidateStart + (candidateEnd - candidateStart) * 0.65,
+				  "enhanced_broadcasting_validating_target_cadence", probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo);
+			exactAttempt = {};
+			if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidate, candidate.fpsNum, candidate.fpsDen, false,
+								  exactAttempt)) {
+				if (exactAttempt.cancelled) {
+					result.cancelled = true;
+					return result;
+				}
+				result.errorCode = exactAttempt.errorCode;
+				if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
+					return result;
+				pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
+					  probe.probeId, probe.provider, 0, &eventVideo);
+				continue;
+			}
+		}
+
+		result.success = true;
+		result.errorCode.clear();
+		result.testedWidth = candidate.width;
+		result.testedHeight = candidate.height;
+		result.testedFpsNum = candidate.fpsNum;
+		result.testedFpsDen = candidate.fpsDen;
+		result.videoTrackCount = exactAttempt.videoTrackCount;
+		result.configuredAggregateBitrateKbps = exactAttempt.configuredAggregateBitrateKbps;
+		result.pairedCadenceEvidence = targetAboveMainCadence;
+		pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_selected", probe.legId, "active", probe.probeId,
+			  probe.provider, 0, &eventVideo);
+		blog(LOG_INFO, "[Auto Optimizer][Enhanced Broadcasting] Candidate selected: %ux%u %u/%u FPS, tracks=%u, configured_aggregate=%llu Kbps",
+		     result.testedWidth, result.testedHeight, result.testedFpsNum, result.testedFpsDen, result.videoTrackCount,
+		     (unsigned long long)result.configuredAggregateBitrateKbps);
+		return result;
+	}
+
+	if (result.errorCode.empty())
+		result.errorCode = "enhanced_broadcasting_no_passing_candidate";
+	return result;
+}
+
 static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
 				double slotEndProgress, int youtubeProbeCeilingOverrideKbps = 0)
 {
@@ -2505,7 +3052,7 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 	obs_data_t *serviceSettings = obs_data_create();
 	obs_data_set_string(serviceSettings, "service", probe.provider == "youtube" ? "YouTube - RTMPS" : "Twitch");
 	obs_data_set_string(serviceSettings, "server", probe.server.c_str());
-	std::string serviceKey = probe.provider == "youtube" ? probe.streamKey : normalizeTwitchBandwidthKey(probe.streamKey);
+	std::string serviceKey = probe.provider == "youtube" ? probe.streamKey : osn::NormalizeTwitchBandwidthTestKey(probe.streamKey);
 	obs_data_set_string(serviceSettings, "key", serviceKey.c_str());
 	resources.service = obs_service_create_private("rtmp_common", "auto_optimizer_probe_service", serviceSettings);
 	obs_data_release(serviceSettings);
@@ -3160,8 +3707,9 @@ static void runSession(const std::shared_ptr<Session> &session)
 			continue;
 		const double startProgress = 30.0 + (35.0 * (double)completedProbeCount / (double)std::max<size_t>(1, eligibleProbeCount));
 		const double endProgress = 30.0 + (35.0 * (double)(completedProbeCount + 1) / (double)std::max<size_t>(1, eligibleProbeCount));
-		pushEvent(session, "phase", "bandwidth", startProgress, probe.provider + "_probe_started", probe.legId, "active", probe.probeId,
-			  probe.provider);
+		const std::string startCode = probe.kind == "twitch-enhanced-broadcasting" ? "enhanced_broadcasting_requesting_ladder"
+											   : probe.provider + "_probe_started";
+		pushEvent(session, "phase", "bandwidth", startProgress, startCode, probe.legId, "active", probe.probeId, probe.provider);
 		int youtubeProbeCeilingOverrideKbps = 0;
 		if (probe.provider == "youtube") {
 			const bool hasTwitchDestination = std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
@@ -3187,7 +3735,9 @@ static void runSession(const std::shared_ptr<Session> &session)
 			}
 		}
 		const auto probeRunStarted = std::chrono::steady_clock::now();
-		ProbeResult result = runRtmpProbe(session, probe, *legIt, startProgress, endProgress, youtubeProbeCeilingOverrideKbps);
+		ProbeResult result = probe.kind == "twitch-enhanced-broadcasting"
+					     ? runEnhancedBroadcastingProbe(session, probe, *legIt, startProgress, endProgress)
+					     : runRtmpProbe(session, probe, *legIt, startProgress, endProgress, youtubeProbeCeilingOverrideKbps);
 		const auto probeRunElapsedMs =
 			std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - probeRunStarted).count();
 		if (result.provider == "youtube") {
@@ -3199,6 +3749,13 @@ static void runSession(const std::shared_ptr<Session> &session)
 			     (unsigned long long)result.safeKbps, result.ceilingReached ? "true" : "false", probeStabilityName(result.stability),
 			     result.observedThroughputReliable ? "true" : "false", (long long)probeRunElapsedMs,
 			     result.errorCode.empty() ? "none" : result.errorCode.c_str());
+		} else if (result.method == "twitch-enhanced-broadcasting-test") {
+			blog(result.success ? LOG_INFO : LOG_WARNING,
+			     "[Auto Optimizer][Enhanced Broadcasting] Probe summary: success=%s, cancelled=%s, tested=%ux%u %u/%u FPS, "
+			     "tracks=%u, configured_aggregate=%llu Kbps, elapsed=%lld ms, error=%s",
+			     result.success ? "true" : "false", result.cancelled ? "true" : "false", result.testedWidth, result.testedHeight,
+			     result.testedFpsNum, result.testedFpsDen, result.videoTrackCount, (unsigned long long)result.configuredAggregateBitrateKbps,
+			     (long long)probeRunElapsedMs, result.errorCode.empty() ? "none" : result.errorCode.c_str());
 		} else if (result.provider == "twitch") {
 			blog(result.success ? LOG_INFO : LOG_WARNING,
 			     "[Auto Optimizer][Twitch Probe] Probe summary: success=%s, cancelled=%s, measured_aggregate=%llu Kbps, "
@@ -3218,11 +3775,13 @@ static void runSession(const std::shared_ptr<Session> &session)
 			completeCancelled(session);
 			return;
 		}
-		const std::string completionCode = result.success && result.stability == ProbeStability::SourceUnderfill
-							   ? result.provider + "_probe_source_underfill_completed"
-						   : result.success                               ? result.provider + "_probe_completed"
-						   : result.stability == ProbeStability::Unstable ? result.provider + "_probe_unstable_estimate_used"
-												  : result.provider + "_probe_failed_estimate_used";
+		const std::string completionCode =
+			result.method == "twitch-enhanced-broadcasting-test"
+				? (result.success ? "enhanced_broadcasting_candidate_selected" : "enhanced_broadcasting_candidate_rejected")
+			: result.success && result.stability == ProbeStability::SourceUnderfill ? result.provider + "_probe_source_underfill_completed"
+			: result.success                                                        ? result.provider + "_probe_completed"
+			: result.stability == ProbeStability::Unstable                          ? result.provider + "_probe_unstable_estimate_used"
+												: result.provider + "_probe_failed_estimate_used";
 		pushEvent(session, "progress", "bandwidth", endProgress, completionCode, result.legId, result.success ? "active" : "estimated", probe.probeId,
 			  probe.provider);
 		probeResults.push_back(std::move(result));
@@ -3269,11 +3828,36 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const bool hasSuccessfulProbe = !successfulProbeProviders.empty();
 		const bool hasPartialProviderCoverage = coverage == probePolicy::ProviderProbeCoverage::Partial;
 		for (const ProbeResult *result : legProbeResults) {
-			recommendation.probes.push_back({result->provider, result->method, result->measuredKbps, result->safeKbps, result->headroomPercent,
-							 result->success, result->ceilingReached});
+			MeasurementProvenance provenance;
+			provenance.provider = result->provider;
+			provenance.method = result->method;
+			provenance.measuredKbps = result->measuredKbps;
+			provenance.safeKbps = result->safeKbps;
+			provenance.headroomPercent = result->headroomPercent;
+			provenance.success = result->success;
+			provenance.ceilingReached = result->ceilingReached;
+			provenance.testedWidth = result->testedWidth;
+			provenance.testedHeight = result->testedHeight;
+			provenance.testedFpsNum = result->testedFpsNum;
+			provenance.testedFpsDen = result->testedFpsDen;
+			provenance.videoTrackCount = result->videoTrackCount;
+			provenance.configuredAggregateBitrateKbps = result->configuredAggregateBitrateKbps;
+			recommendation.probes.push_back(std::move(provenance));
 		}
+		const auto enhancedResult = std::find_if(legProbeResults.begin(), legProbeResults.end(), [](const ProbeResult *result) {
+			return result->success && result->method == "twitch-enhanced-broadcasting-test";
+		});
 
-		if (hasSuccessfulProbe) {
+		if (enhancedResult != legProbeResults.end()) {
+			const ProbeResult &tested = **enhancedResult;
+			recommendation.measurementMode = "active";
+			recommendation.confidence = tested.pairedCadenceEvidence ? "medium" : "high";
+			recommendation.reason.clear();
+			recommendation.value.width = (int)tested.testedWidth;
+			recommendation.value.height = (int)tested.testedHeight;
+			recommendation.value.fpsNum = (int)tested.testedFpsNum;
+			recommendation.value.fpsDen = (int)tested.testedFpsDen;
+		} else if (hasSuccessfulProbe) {
 			recommendation.measurementMode = "active";
 			if (hasPartialProviderCoverage) {
 				recommendation.confidence = "low";
@@ -3354,8 +3938,9 @@ static void runSession(const std::shared_ptr<Session> &session)
 		// Keep exact probe throughput in provenance and logs, but present and
 		// apply a stable, conservative bitrate recommendation. Round before
 		// quality selection so the chosen video tuple fits the applied budget.
-		recommendation.value.bitrateKbps =
-			(int)probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(0, recommendation.value.bitrateKbps));
+		if (!providerOwnsEncoding(session->topology, leg))
+			recommendation.value.bitrateKbps =
+				(int)probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(0, recommendation.value.bitrateKbps));
 
 		const double selectingProgress = 75.0 + 19.0 * (double)index / (double)std::max<size_t>(1, preparedLegs.size());
 		const double selectedProgress = 75.0 + 19.0 * (double)(index + 1) / (double)std::max<size_t>(1, preparedLegs.size());
@@ -3471,7 +4056,7 @@ void Register(ipc::server &srv)
 void GetCapabilities(void *, const int64_t, const std::vector<ipc::value> &, std::vector<ipc::value> &rval)
 {
 	static const char *capabilities =
-		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"bandwidthModes":["twitch-standard-active","youtube-unbound-active","estimate"]})";
+		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"bandwidthModes":["twitch-standard-active","twitch-enhanced-broadcasting-active","youtube-unbound-active","estimate"]})";
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(capabilities));
 }

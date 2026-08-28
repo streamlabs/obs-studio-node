@@ -5,7 +5,10 @@
 #include <obs.hpp>
 #include <util/dstr.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <inttypes.h>
+#include <string_view>
 
 // Codec profile strings
 static const char *h264_main = "Main";
@@ -38,6 +41,177 @@ static const char *av1_main = "Main";
 #endif
 
 namespace osn {
+
+namespace {
+
+std::string trimCopy(std::string value)
+{
+	while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+		value.pop_back();
+
+	size_t first = 0;
+	while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first])))
+		first++;
+	if (first)
+		value.erase(0, first);
+
+	return value;
+}
+
+std::vector<std::string> queryItems(const std::string &value)
+{
+	std::vector<std::string> result;
+	const size_t queryStart = value.find('?');
+	if (queryStart == std::string::npos)
+		return result;
+
+	const size_t fragmentStart = value.find('#', queryStart + 1);
+	const std::string query = value.substr(queryStart + 1, fragmentStart == std::string::npos ? std::string::npos : fragmentStart - queryStart - 1);
+	size_t offset = 0;
+	while (offset <= query.size()) {
+		const size_t next = query.find('&', offset);
+		std::string item = query.substr(offset, next == std::string::npos ? std::string::npos : next - offset);
+		if (!item.empty())
+			result.emplace_back(std::move(item));
+		if (next == std::string::npos)
+			break;
+		offset = next + 1;
+	}
+
+	return result;
+}
+
+int hexValue(char value)
+{
+	if (value >= '0' && value <= '9')
+		return value - '0';
+	if (value >= 'a' && value <= 'f')
+		return value - 'a' + 10;
+	if (value >= 'A' && value <= 'F')
+		return value - 'A' + 10;
+	return -1;
+}
+
+std::string decodeQueryComponent(std::string_view value)
+{
+	std::string decoded;
+	decoded.reserve(value.size());
+	for (size_t index = 0; index < value.size(); index++) {
+		if (value[index] == '+') {
+			decoded += ' ';
+			continue;
+		}
+		if (value[index] == '%' && index + 2 < value.size()) {
+			const int high = hexValue(value[index + 1]);
+			const int low = hexValue(value[index + 2]);
+			if (high >= 0 && low >= 0) {
+				decoded += static_cast<char>((high << 4) | low);
+				index += 2;
+				continue;
+			}
+		}
+		decoded += value[index];
+	}
+	return decoded;
+}
+
+std::string lowerAscii(std::string value)
+{
+	for (char &character : value)
+		character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+	return value;
+}
+
+std::string parameterName(const std::string &item)
+{
+	const size_t equals = item.find('=');
+	return lowerAscii(decodeQueryComponent(std::string_view(item).substr(0, equals)));
+}
+
+std::string parameterValue(const std::string &item)
+{
+	const size_t equals = item.find('=');
+	if (equals == std::string::npos)
+		return {};
+	return lowerAscii(decodeQueryComponent(std::string_view(item).substr(equals + 1)));
+}
+
+std::string withoutQuery(const std::string &value)
+{
+	const size_t queryStart = value.find('?');
+	const size_t fragmentStart = value.find('#');
+	const size_t end = std::min(queryStart, fragmentStart);
+	return value.substr(0, end);
+}
+
+std::string withQueryItems(std::string base, const std::vector<std::string> &items)
+{
+	if (items.empty())
+		return base;
+
+	base += '?';
+	for (size_t index = 0; index < items.size(); index++) {
+		if (index)
+			base += '&';
+		base += items[index];
+	}
+	return base;
+}
+
+} // namespace
+
+std::string NormalizeTwitchBandwidthTestKey(std::string stream_key)
+{
+	stream_key = trimCopy(std::move(stream_key));
+	std::vector<std::string> retained;
+	for (auto &item : queryItems(stream_key)) {
+		if (parameterName(item) != "bandwidthtest")
+			retained.emplace_back(std::move(item));
+	}
+	retained.emplace_back("bandwidthtest=true");
+	return withQueryItems(withoutQuery(stream_key), retained);
+}
+
+std::string MergeTwitchBandwidthTestKey(std::string effective_stream_key, const std::string &requested_stream_key, const std::string &selected_url,
+					const std::string &client_config_id)
+{
+	std::vector<std::string> merged;
+	auto appendWithOverride = [&](const std::vector<std::string> &items) {
+		for (const auto &item : items) {
+			const std::string name = parameterName(item);
+			merged.erase(std::remove_if(merged.begin(), merged.end(), [&](const std::string &existing) { return parameterName(existing) == name; }),
+				     merged.end());
+			merged.push_back(item);
+		}
+	};
+
+	// Match upstream's selected-ingest query propagation, while additionally
+	// preserving authentication queries returned by Twitch. Later sources win,
+	// so the caller's normalized bandwidthtest=true cannot be replaced by a
+	// returned false/duplicate value.
+	appendWithOverride(queryItems(selected_url));
+	appendWithOverride(queryItems(effective_stream_key));
+	appendWithOverride(queryItems(requested_stream_key));
+	if (!client_config_id.empty())
+		appendWithOverride({"clientConfigId=" + client_config_id});
+	return withQueryItems(withoutQuery(trimCopy(std::move(effective_stream_key))), merged);
+}
+
+bool HasExactlyOneTwitchBandwidthTestParameter(const std::string &stream_key)
+{
+	if (withoutQuery(trimCopy(stream_key)).empty())
+		return false;
+
+	size_t bandwidthTestParameters = 0;
+	bool enabled = false;
+	for (const auto &item : queryItems(stream_key)) {
+		if (parameterName(item) != "bandwidthtest")
+			continue;
+		bandwidthTestParameters++;
+		enabled = enabled || parameterValue(item) == "true";
+	}
+	return bandwidthTestParameters == 1 && enabled;
+}
 
 static bool encoder_available(const char *type)
 {
@@ -173,7 +347,7 @@ static OBSEncoderAutoRelease create_video_encoder(DStr &name_buffer, std::size_t
 }
 
 static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<obs_encoder_group_t> &video_encoder_group, obs_output_t *output,
-				  const std::vector<obs_video_info *> &canvases)
+				  const std::vector<obs_video_info *> &canvases, bool force_main_video_mix)
 {
 	DStr video_encoder_name_buffer;
 	if (go_live_config.encoder_configurations.empty()) {
@@ -207,7 +381,7 @@ static bool create_video_encoders(const Config &go_live_config, std::shared_ptr<
 			return false;
 		}
 
-		if (obs_get_multiple_rendering()) {
+		if (obs_get_multiple_rendering() && !force_main_video_mix) {
 			obs_encoder_set_video_mix(encoder, obs_video_mix_get(ovi, OBS_STREAMING_VIDEO_RENDERING));
 		}
 
@@ -321,12 +495,12 @@ static OBSOutputAutoRelease create_output()
 
 OBSOutputAutoRelease SetupOBSOutput(const std::string &multitrack_video_name, const Config &go_live_config, std::vector<OBSEncoderAutoRelease> &audio_encoders,
 				    std::shared_ptr<obs_encoder_group_t> &video_encoder_group, const char *audio_encoder_id, size_t main_audio_mixer,
-				    std::optional<size_t> vod_track_mixer, const std::vector<obs_video_info *> &canvases)
+				    std::optional<size_t> vod_track_mixer, const std::vector<obs_video_info *> &canvases, bool force_main_video_mix)
 {
 
 	auto output = create_output();
 
-	if (!create_video_encoders(go_live_config, video_encoder_group, output, canvases))
+	if (!create_video_encoders(go_live_config, video_encoder_group, output, canvases, force_main_video_mix))
 		return nullptr;
 
 	std::vector<speaker_layout> requested_speaker_layouts;
@@ -344,6 +518,8 @@ OBSServiceAutoRelease create_service(const Config &go_live_config, const std::op
 {
 	const char *url = nullptr;
 	auto stream_key = in_stream_key;
+	const auto userKeyQueryItems = queryItems(in_stream_key);
+	const bool propagateUserKeyQuery = !userKeyQueryItems.empty();
 
 	const auto &ingest_endpoints = go_live_config.ingest_endpoints;
 
@@ -388,7 +564,14 @@ OBSServiceAutoRelease create_service(const Config &go_live_config, const std::op
 	}
 
 	std::string final_url = str->array;
-	if (!go_live_config.meta.config_id.empty()) {
+	if (propagateUserKeyQuery) {
+		// Twitch can replace the submitted key with endpoint.authentication.
+		// Carry user-key query parameters (notably bandwidthtest) to that
+		// returned authentication, matching upstream OBS. Keep this branch
+		// conditional so ordinary Streamlabs starts retain their existing
+		// service-settings layout.
+		stream_key = MergeTwitchBandwidthTestKey(std::move(stream_key), in_stream_key, url, go_live_config.meta.config_id);
+	} else if (!go_live_config.meta.config_id.empty()) {
 		final_url += "?";
 		final_url += "clientConfigId=";
 		final_url += go_live_config.meta.config_id;

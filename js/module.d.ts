@@ -1012,7 +1012,7 @@ export interface IAutoConfigCapabilities {
     perUploadLegResults: true;
     desktopOwnedApply: true;
     multipleActiveProbes: true;
-    bandwidthModes: ['twitch-standard-active', 'youtube-unbound-active', 'estimate'];
+    bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
 }
 export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'stream-shift' | 'mixed';
 export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
@@ -1054,6 +1054,14 @@ export interface IAutoConfigTwitchActiveProbe {
     server: string;
     streamKey: string;
 }
+export interface IAutoConfigTwitchEnhancedBroadcastingProbe {
+    probeId: string;
+    kind: 'twitch-enhanced-broadcasting';
+    legId: string;
+    serviceName: 'Twitch';
+    server: 'auto';
+    streamKey: string;
+}
 export interface IAutoConfigYoutubeActiveProbe {
     probeId: string;
     kind: 'youtube-unbound';
@@ -1062,7 +1070,7 @@ export interface IAutoConfigYoutubeActiveProbe {
     server: string;
     streamKey: string;
 }
-export type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigYoutubeActiveProbe;
+export type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigTwitchEnhancedBroadcastingProbe | IAutoConfigYoutubeActiveProbe;
 export interface IAutoConfigRequest {
     schemaVersion: 1;
     topology: AutoConfigTopology;
@@ -1097,12 +1105,18 @@ export interface IAutoConfigEvent {
 }
 export interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
-    method: 'twitch-bandwidth-test' | 'youtube-unbound-ramp';
+    method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     success: boolean;
     measuredKbps?: number;
     safeKbps?: number;
     headroomPercent?: number;
     ceilingReached: boolean;
+    testedWidth?: number;
+    testedHeight?: number;
+    testedFpsNum?: number;
+    testedFpsDen?: number;
+    videoTrackCount?: number;
+    configuredAggregateBitrateKbps?: number;
 }
 export interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;

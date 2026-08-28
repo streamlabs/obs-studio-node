@@ -182,6 +182,7 @@ if(BUILD_TESTING)
         "tests/polling-pacer-best-effort-gate-test.cpp"
         "tests/autoconfig-probe-policy-test.cpp"
         "tests/autoconfig-quality-policy-test.cpp"
+        "tests/autoconfig-enhanced-broadcasting-policy-test.cpp"
         ${OSN_CLIENT_CORE_SOURCES}
     )
 
