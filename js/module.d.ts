@@ -1013,12 +1013,14 @@ export interface IAutoConfigCapabilities {
     desktopOwnedApply: true;
     multipleActiveProbes: true;
     dualOutputActiveProbes: true;
+    enhancedBroadcastingDualOutputWorkload: true;
     bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
 }
-export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'stream-shift' | 'mixed';
+export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
 export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
+export type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
 export type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
-export type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
+export type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'enhanced_broadcasting_dual_output' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
 export interface IAutoConfigDestination {
     platform: AutoConfigPlatform;
 }
@@ -1048,6 +1050,7 @@ export interface IAutoConfigLimits {
 export interface IAutoConfigLegRequest {
     legId: string;
     display: AutoConfigDisplay;
+    outputKind: AutoConfigOutputKind;
     destinations: IAutoConfigDestination[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
@@ -1160,6 +1163,7 @@ export interface IAutoConfigResultDestination {
 export interface IAutoConfigLegResult {
     legId: string;
     display: AutoConfigDisplay;
+    outputKind: AutoConfigOutputKind;
     destinations: IAutoConfigResultDestination[];
     measurement: IAutoConfigMeasurement;
     recommendation: IAutoConfigRecommendation;
@@ -1171,6 +1175,23 @@ export interface IAutoConfigAggregateUpload {
     allocatedVideoKbps: number;
     concurrentHardwareValidated: true;
 }
+export interface IAutoConfigCombinedWorkloadCompanionLeg {
+    legId: string;
+    display: 'horizontal' | 'vertical';
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+    bitrateKbps: number;
+    encoderId: string;
+    preset?: string;
+}
+export interface IAutoConfigCombinedWorkload {
+    method: 'enhanced-broadcasting-dual-output-concurrent';
+    enhancedBroadcastingLegId: string;
+    validated: true;
+    companionLegs: IAutoConfigCombinedWorkloadCompanionLeg[];
+}
 export type AutoConfigFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'autoconfig_worker_failed' | 'autoconfig_worker_launch_failed';
 export interface IAutoConfigError {
     code: AutoConfigFatalErrorCode;
@@ -1181,6 +1202,7 @@ export interface IAutoConfigResult {
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
     error?: IAutoConfigError;
     aggregateUpload?: IAutoConfigAggregateUpload;
+    combinedWorkload?: IAutoConfigCombinedWorkload;
     legs: IAutoConfigLegResult[];
 }
 export interface IAutoConfigNativeApi {

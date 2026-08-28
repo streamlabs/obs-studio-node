@@ -372,25 +372,6 @@ inline int effectiveProbeCeilingKbps(int probeMaximumKbps, int platformMaximumKb
 	return effective;
 }
 
-inline int nextYoutubeValidationCeilingKbps(int recommendationCapKbps, int probeMaximumKbps)
-{
-	if (recommendationCapKbps <= 0 || probeMaximumKbps <= recommendationCapKbps)
-		return recommendationCapKbps;
-	constexpr int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
-	for (int target : ladder) {
-		if (target > recommendationCapKbps)
-			return std::min(target, probeMaximumKbps);
-	}
-	return probeMaximumKbps;
-}
-
-inline bool shouldValidateYoutubeAboveSharedCap(bool sharedTwitchYoutubeLeg, bool twitchSucceeded, bool twitchStable, uint64_t twitchRecommendedKbps,
-						int recommendationCapKbps)
-{
-	return sharedTwitchYoutubeLeg && twitchSucceeded && twitchStable && recommendationCapKbps > 0 &&
-	       twitchRecommendedKbps >= (uint64_t)recommendationCapKbps;
-}
-
 inline bool reachedEffectiveProbeCeiling(int targetKbps, int effectiveCeilingKbps)
 {
 	return targetKbps > 0 && effectiveCeilingKbps > 0 && targetKbps >= effectiveCeilingKbps;

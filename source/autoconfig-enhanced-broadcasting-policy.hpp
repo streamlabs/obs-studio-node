@@ -134,10 +134,24 @@ inline uint32_t allowedSkippedFrames(uint32_t totalFrames)
 	return totalFrames * 5U / 100U;
 }
 
+// These failures occur only after the composite candidate has begun allocating
+// or running its additional Desktop-owned encoder workload. They may be caused
+// by the candidate exhausting local encoder/GPU resources, so the composite
+// probe may retry a lower rung. Legacy Enhanced Broadcasting and transport or
+// configuration failures keep their existing fail-closed behavior.
+inline bool isCompositeCandidateLoadFailure(std::string_view errorCode)
+{
+	return errorCode == "enhanced_broadcasting_companion_encoder_create_failed" ||
+	       errorCode == "enhanced_broadcasting_companion_output_start_failed" ||
+	       errorCode == "enhanced_broadcasting_companion_output_stopped" ||
+	       errorCode == "enhanced_broadcasting_output_start_failed";
+}
+
 inline bool allowsCandidateDescent(std::string_view errorCode)
 {
 	return errorCode == "enhanced_broadcasting_ladder_below_candidate" || errorCode == "enhanced_broadcasting_encoder_underload" ||
-	       errorCode == "enhanced_broadcasting_render_overload" || errorCode == "enhanced_broadcasting_transport_pressure";
+	       errorCode == "enhanced_broadcasting_render_overload" || errorCode == "enhanced_broadcasting_transport_pressure" ||
+	       errorCode == "enhanced_broadcasting_companion_overload";
 }
 
 } // namespace autoConfig::enhancedBroadcastingPolicy

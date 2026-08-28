@@ -21,6 +21,14 @@
 namespace autoConfig::qualityPolicy {
 
 inline constexpr size_t kMaximumUploadLegs = 2;
+inline constexpr size_t kMaximumEnhancedBroadcastingDualOutputLegs = 3;
+inline constexpr int kMaximumRecommendedBitrateKbps = 8000;
+
+/** Keep measured capacity separate from the bitrate Desktop may apply. */
+inline int clampRecommendedBitrateKbps(uint64_t bitrateKbps)
+{
+	return (int)std::clamp<uint64_t>(bitrateKbps, 1, kMaximumRecommendedBitrateKbps);
+}
 
 enum class HardwareFailureScope {
 	Workload,
@@ -151,13 +159,11 @@ inline SharedTwoLegAllocation allocateSharedTwoLegBandwidth(uint64_t firstSafeVi
 // lower bounds. An invalid allocation is the caller's all-or-nothing signal to
 // keep both recommendations estimated; one successful leg must never escape as
 // an independently active result.
-inline SharedTwoLegAllocation assembleSharedTwoLegAllocation(bool exactTopologyEligible, bool concurrentHardwareValidated,
-						      bool allHardwareWorkloadsPassed, bool firstProviderProbeUsable,
-						      uint64_t firstSafeVideoKbps, bool secondProviderProbeUsable,
-						      uint64_t secondSafeVideoKbps)
+inline SharedTwoLegAllocation assembleSharedTwoLegAllocation(bool exactTopologyEligible, bool concurrentHardwareValidated, bool allHardwareWorkloadsPassed,
+							     bool firstProviderProbeUsable, uint64_t firstSafeVideoKbps, bool secondProviderProbeUsable,
+							     uint64_t secondSafeVideoKbps)
 {
-	if (!exactTopologyEligible || !concurrentHardwareValidated || !allHardwareWorkloadsPassed || !firstProviderProbeUsable ||
-	    !secondProviderProbeUsable)
+	if (!exactTopologyEligible || !concurrentHardwareValidated || !allHardwareWorkloadsPassed || !firstProviderProbeUsable || !secondProviderProbeUsable)
 		return {};
 
 	return allocateSharedTwoLegBandwidth(firstSafeVideoKbps, secondSafeVideoKbps);
@@ -180,8 +186,7 @@ struct HardwareTier {
 // validated as two incompatible output rates.
 inline void applySharedMinimumCadence(VideoTuple &first, VideoTuple &second)
 {
-	const bool firstIsLowerOrEqual =
-		(int64_t)first.fpsNum * std::max(1, second.fpsDen) <= (int64_t)second.fpsNum * std::max(1, first.fpsDen);
+	const bool firstIsLowerOrEqual = (int64_t)first.fpsNum * std::max(1, second.fpsDen) <= (int64_t)second.fpsNum * std::max(1, first.fpsDen);
 	const int sharedFpsNum = firstIsLowerOrEqual ? first.fpsNum : second.fpsNum;
 	const int sharedFpsDen = std::max(1, firstIsLowerOrEqual ? first.fpsDen : second.fpsDen);
 	first.fpsNum = sharedFpsNum;
@@ -461,17 +466,18 @@ inline bool supports(const VideoTuple &video, int safeVideoBitrateKbps, const st
 inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, const std::string &encoderFamily, QualityProfile profile = QualityProfile::Generic)
 {
 	Selection result;
+	const int recommendedBitrateKbps = clampRecommendedBitrateKbps((uint64_t)std::max(1, safeVideoBitrateKbps));
 	const auto options = candidates(ceiling);
 	if (options.empty()) {
 		result.video = ceiling;
-		result.bitrateKbps = std::max(1, safeVideoBitrateKbps);
+		result.bitrateKbps = recommendedBitrateKbps;
 		result.insufficientBandwidth = true;
 		return result;
 	}
 
 	std::vector<size_t> eligible;
 	for (size_t index = 0; index < options.size(); index++) {
-		if (safeVideoBitrateKbps >= profileMinimumBitrateKbps(options[index], encoderFamily, profile))
+		if (recommendedBitrateKbps >= profileMinimumBitrateKbps(options[index], encoderFamily, profile))
 			eligible.push_back(index);
 	}
 
@@ -497,10 +503,9 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 	result.minimumBitrateKbps = profileMinimumBitrateKbps(result.video, encoderFamily, profile);
 	result.insufficientBandwidth = eligible.empty();
 	result.bandwidthConstrained = !sameVideo(result.video, ceiling);
-	// The provider-safe budget remains the recommended bitrate. Resolution and
-	// frame rate are the variables selected here; useful-maximum bitrate caps are
-	// a separate product policy and must not silently discard measured capacity.
-	result.bitrateKbps = std::max(1, safeVideoBitrateKbps);
+	// Preserve larger measured capacity in probe provenance while applying the
+	// product-wide ceiling only to the Desktop-owned recommendation.
+	result.bitrateKbps = recommendedBitrateKbps;
 	return result;
 }
 

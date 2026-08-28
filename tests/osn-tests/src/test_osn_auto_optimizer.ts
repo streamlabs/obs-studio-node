@@ -55,6 +55,7 @@ describe(testName, function() {
         return {
             legId: 'primary',
             display: 'horizontal',
+            outputKind: 'standard',
             destinations: [{ platform: 'custom' }],
             current: {
                 canvasId: obs.defaultVideoContext.canvasId,
@@ -77,6 +78,7 @@ describe(testName, function() {
             topology: 'enhanced-broadcasting',
             legs: [leg({
                 display: 'both',
+                outputKind: 'twitch-enhanced-broadcasting',
                 destinations: [{ platform: 'twitch' }],
                 current: { ...leg().current, canvasId: primaryCanvasId },
                 additionalVideo: {
@@ -98,6 +100,34 @@ describe(testName, function() {
                 server: 'auto',
                 streamKey: 'integration-test-key',
             }],
+        };
+    }
+
+    function enhancedBroadcastingDualOutputRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoConfigRequest {
+        const paired = pairedEnhancedBroadcastingRequest(primaryCanvasId, additionalCanvasId);
+        const enhanced = paired.legs[0];
+        enhanced.legId = 'enhanced';
+        paired.activeProbes![0].legId = enhanced.legId;
+        return {
+            ...paired,
+            topology: 'enhanced-broadcasting-dual-output',
+            legs: [
+                enhanced,
+                leg({
+                    legId: 'horizontal-companion',
+                    display: 'horizontal',
+                    outputKind: 'standard',
+                    destinations: [{ platform: 'kick' }],
+                    current: { ...enhanced.current },
+                }),
+                leg({
+                    legId: 'vertical-companion',
+                    display: 'vertical',
+                    outputKind: 'standard',
+                    destinations: [{ platform: 'facebook' }],
+                    current: { ...enhanced.additionalVideo!.current },
+                }),
+            ],
         };
     }
 
@@ -192,6 +222,7 @@ describe(testName, function() {
             desktopOwnedApply: true,
             multipleActiveProbes: true,
             dualOutputActiveProbes: true,
+            enhancedBroadcastingDualOutputWorkload: true,
             bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'],
         });
     });
@@ -207,6 +238,67 @@ describe(testName, function() {
             expect(sessionId).to.be.a('string').and.not.equal('');
         } finally {
             if (sessionId) osn.NodeObs.CloseAutoConfigSession(sessionId);
+            verticalCanvas.destroy();
+        }
+    });
+
+    it('rejects provider-owned output kinds outside Enhanced Broadcasting topologies', function() {
+        const direct = {
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({ outputKind: 'twitch-enhanced-broadcasting' })],
+        } as IAutoConfigRequest;
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(direct), () => undefined))
+            .to.throw('invalid_autoconfig_output_kind');
+
+        const enhanced = {
+            schemaVersion: 1,
+            topology: 'enhanced-broadcasting',
+            legs: [leg({
+                outputKind: 'standard',
+                destinations: [{ platform: 'twitch' }],
+            })],
+        } as IAutoConfigRequest;
+        expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(enhanced), () => undefined))
+            .to.throw('invalid_autoconfig_output_kind');
+    });
+
+    it('accepts the exact Enhanced Broadcasting plus two companion output topology', function() {
+        const verticalCanvas = osn.VideoFactory.create();
+        let sessionId = '';
+        try {
+            sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify(
+                enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId)), () => undefined);
+            expect(sessionId).to.be.a('string').and.not.equal('');
+        } finally {
+            if (sessionId) osn.NodeObs.CloseAutoConfigSession(sessionId);
+            verticalCanvas.destroy();
+        }
+    });
+
+    it('rejects unsafe or inexact Enhanced Broadcasting companion outputs', function() {
+        const verticalCanvas = osn.VideoFactory.create();
+        try {
+            const wrongCanvas = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
+            wrongCanvas.legs[1].current.canvasId = verticalCanvas.canvasId;
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(wrongCanvas), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+
+            const custom = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
+            custom.legs[1].destinations = [{ platform: 'custom' }];
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(custom), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+
+            const providerOwnedCompanion = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
+            providerOwnedCompanion.legs[1].outputKind = 'twitch-enhanced-broadcasting';
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(providerOwnedCompanion), () => undefined))
+                .to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+
+            const implicitOwnership = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
+            delete implicitOwnership.legs[1].outputKind;
+            expect(() => osn.NodeObs.CreateAutoConfigSession(JSON.stringify(implicitOwnership), () => undefined))
+                .to.throw('invalid_autoconfig_output_kind');
+        } finally {
             verticalCanvas.destroy();
         }
     });
@@ -519,6 +611,18 @@ describe(testName, function() {
             })],
         });
         expect(alreadyConservative.result.legs[0].recommendation.bitrateKbps).to.equal(2500);
+
+        const globallyCapped = await run({
+            schemaVersion: 1,
+            topology: 'direct-single',
+            legs: [leg({
+                destinations: [{ platform: 'other' }],
+                current: { ...leg().current, bitrateKbps: 12000 },
+                estimateReason: 'probe_disabled',
+            })],
+        });
+        expect(globallyCapped.result.legs[0].measurement.mode).to.equal('estimated');
+        expect(globallyCapped.result.legs[0].recommendation.bitrateKbps).to.equal(8000);
     });
 
     it('uses the strictest destination/request cap and replaces an unavailable encoder', async function() {
@@ -575,6 +679,7 @@ describe(testName, function() {
             topology: 'enhanced-broadcasting',
             legs: [leg({
                 display: 'both',
+                outputKind: 'twitch-enhanced-broadcasting',
                 destinations: [{ platform: 'twitch' }],
                 estimateReason: 'enhanced_broadcasting',
                 additionalVideo: {
@@ -784,6 +889,7 @@ describe(testName, function() {
             topology: 'enhanced-broadcasting',
             legs: [leg({
                 display: 'horizontal',
+                outputKind: 'twitch-enhanced-broadcasting',
                 additionalVideo: {
                     display: 'vertical',
                     current: { ...leg().current, width: 720, height: 1280 },
@@ -796,6 +902,7 @@ describe(testName, function() {
             topology: 'enhanced-broadcasting',
             legs: [leg({
                 display: 'both',
+                outputKind: 'twitch-enhanced-broadcasting',
                 additionalVideo: {
                     display: 'vertical',
                     current: { ...leg().current, width: 720, height: 1280 },

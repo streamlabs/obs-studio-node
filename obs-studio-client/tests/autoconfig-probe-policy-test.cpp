@@ -27,12 +27,10 @@ using autoConfig::probePolicy::dualOutputProviderProbeIsUsable;
 using autoConfig::probePolicy::effectiveProbeCeilingKbps;
 using autoConfig::probePolicy::hasProbeThroughputMetrics;
 using autoConfig::probePolicy::makeYoutubeProbeSampleMetrics;
-using autoConfig::probePolicy::nextYoutubeValidationCeilingKbps;
 using autoConfig::probePolicy::probeSubstepProgress;
 using autoConfig::probePolicy::reachedEffectiveProbeCeiling;
 using autoConfig::probePolicy::resolveYoutubeBaseline;
 using autoConfig::probePolicy::roundDownRecommendationBitrateKbps;
-using autoConfig::probePolicy::shouldValidateYoutubeAboveSharedCap;
 using autoConfig::probePolicy::twitchCongestionIsSustained;
 using autoConfig::probePolicy::youtubeLowControlRecovered;
 using autoConfig::probePolicy::youtubeConfirmedPressureCapacityKbps;
@@ -310,7 +308,7 @@ TEST_CASE("A clean YouTube rung recommends its validated video target")
 	CHECK(evidence.passedStep);
 	CHECK(evidence.recommendationBasisKbps == 5868);
 	CHECK(evidence.recommendedVideoKbps() == 6000);
-	CHECK(clampEstimateToObservedSafe(7000, evidence.recommendedVideoKbps(), 12000) == 6000);
+	CHECK(clampEstimateToObservedSafe(7000, evidence.recommendedVideoKbps(), 10000) == 6000);
 }
 
 TEST_CASE("YouTube source-underfilled rungs preserve the highest transport-clean lower bound")
@@ -353,20 +351,6 @@ TEST_CASE("YouTube double-pressure confirmation uses the lower delivered high-ta
 	CHECK(youtubeConfirmedPressureCapacityKbps(7800, 7600, 7500) == 7500);
 }
 
-TEST_CASE("YouTube can verify one rung above a shared recommendation cap")
-{
-	CHECK(nextYoutubeValidationCeilingKbps(6000, 12000) == 8000);
-	CHECK(nextYoutubeValidationCeilingKbps(8000, 12000) == 10000);
-	CHECK(nextYoutubeValidationCeilingKbps(12000, 12000) == 12000);
-	CHECK(nextYoutubeValidationCeilingKbps(6000, 6000) == 6000);
-
-	CHECK(shouldValidateYoutubeAboveSharedCap(true, true, true, 6000, 6000));
-	CHECK_FALSE(shouldValidateYoutubeAboveSharedCap(false, true, true, 6000, 6000));
-	CHECK_FALSE(shouldValidateYoutubeAboveSharedCap(true, false, true, 6000, 6000));
-	CHECK_FALSE(shouldValidateYoutubeAboveSharedCap(true, true, false, 6000, 6000));
-	CHECK_FALSE(shouldValidateYoutubeAboveSharedCap(true, true, true, 5999, 6000));
-}
-
 TEST_CASE("Successful zero-safe probe metrics remain present in result provenance")
 {
 	CHECK(hasProbeThroughputMetrics(true, 0));
@@ -374,14 +358,18 @@ TEST_CASE("Successful zero-safe probe metrics remain present in result provenanc
 	CHECK_FALSE(hasProbeThroughputMetrics(false, 0));
 }
 
-TEST_CASE("YouTube reports the exact effective probe cap as ceiling reached")
+TEST_CASE("YouTube retains a 10000 Kbps stability probe above recommendation caps")
 {
-	const int requestCeiling = effectiveProbeCeilingKbps(12000, 0, 6000);
+	const int stabilityCeiling = effectiveProbeCeilingKbps(10000, 0, 0);
+	CHECK(stabilityCeiling == 10000);
+	CHECK(reachedEffectiveProbeCeiling(10000, stabilityCeiling));
+
+	const int requestCeiling = effectiveProbeCeilingKbps(10000, 0, 6000);
 	CHECK(requestCeiling == 6000);
 	CHECK_FALSE(reachedEffectiveProbeCeiling(4000, requestCeiling));
 	CHECK(reachedEffectiveProbeCeiling(6000, requestCeiling));
 
-	const int platformCeiling = effectiveProbeCeilingKbps(12000, 4500, 6000);
+	const int platformCeiling = effectiveProbeCeilingKbps(10000, 4500, 6000);
 	CHECK(platformCeiling == 4500);
 	CHECK(reachedEffectiveProbeCeiling(4500, platformCeiling));
 }

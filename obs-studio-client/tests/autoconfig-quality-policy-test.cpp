@@ -62,7 +62,7 @@ TEST_CASE("Auto Config allocates a shared uplink equally across two direct legs"
 		uint64_t expectedPerLegVideoKbps;
 	};
 	const Expectation expectations[] = {
-		{6000, 12000, 6000}, {6000, 10000, 5000}, {6000, 9000, 4500}, {5000, 12000, 5000}, {4000, 10000, 4000}, {5000, 5000, 2500},
+		{6000, 10000, 5000}, {6000, 9000, 4500}, {5000, 10000, 5000}, {4000, 10000, 4000}, {5000, 5000, 2500},
 	};
 
 	for (const auto &expectation : expectations) {
@@ -137,23 +137,18 @@ TEST_CASE("Auto Config keeps both Dual Output legs estimated when any joint proo
 		uint64_t secondSafeVideoKbps;
 	};
 	const Evidence incompleteEvidence[] = {
-		{false, true, true, true, 6000, true, 10000},
-		{true, false, true, true, 6000, true, 10000},
-		{true, true, false, true, 6000, true, 10000},
-		{true, true, true, false, 6000, true, 10000},
-		{true, true, true, true, 6000, false, 10000},
-		{true, true, true, true, 0, true, 10000},
+		{false, true, true, true, 6000, true, 10000}, {true, false, true, true, 6000, true, 10000}, {true, true, false, true, 6000, true, 10000},
+		{true, true, true, false, 6000, true, 10000}, {true, true, true, true, 6000, false, 10000}, {true, true, true, true, 0, true, 10000},
 		{true, true, true, true, 6000, true, 0},
 	};
 
 	for (const auto &evidence : incompleteEvidence) {
 		CAPTURE(evidence.exactTopologyEligible, evidence.concurrentHardwareValidated, evidence.allHardwareWorkloadsPassed,
-			evidence.firstProviderProbeUsable, evidence.firstSafeVideoKbps, evidence.secondProviderProbeUsable,
-			evidence.secondSafeVideoKbps);
-		const auto result = assembleSharedTwoLegAllocation(
-			evidence.exactTopologyEligible, evidence.concurrentHardwareValidated, evidence.allHardwareWorkloadsPassed,
-			evidence.firstProviderProbeUsable, evidence.firstSafeVideoKbps, evidence.secondProviderProbeUsable,
-			evidence.secondSafeVideoKbps);
+			evidence.firstProviderProbeUsable, evidence.firstSafeVideoKbps, evidence.secondProviderProbeUsable, evidence.secondSafeVideoKbps);
+		const auto result = assembleSharedTwoLegAllocation(evidence.exactTopologyEligible, evidence.concurrentHardwareValidated,
+								   evidence.allHardwareWorkloadsPassed, evidence.firstProviderProbeUsable,
+								   evidence.firstSafeVideoKbps, evidence.secondProviderProbeUsable,
+								   evidence.secondSafeVideoKbps);
 		CHECK_FALSE(result.valid);
 		CHECK(result.aggregateSafeVideoKbps == 0);
 		CHECK(result.perLegVideoKbps == 0);
@@ -332,6 +327,15 @@ TEST_CASE("Auto Config quality policy never upscales the tested ceiling")
 	CHECK(result.front().height == 720);
 	CHECK(result.front().fpsNum == 30);
 	CHECK(select({1280, 720, 30, 1}, 10000, "obs_nvenc_h264_tex").video.width == 1280);
+}
+
+TEST_CASE("Auto Config preserves probe headroom while capping the recommended bitrate")
+{
+	const auto stableHeadroom = select({1920, 1080, 60, 1}, 10000, "obs_nvenc_h264_tex");
+	CHECK(stableHeadroom.bitrateKbps == autoConfig::qualityPolicy::kMaximumRecommendedBitrateKbps);
+	CHECK(stableHeadroom.video.width == 1920);
+	CHECK(stableHeadroom.video.height == 1080);
+	CHECK(select({1920, 1080, 60, 1}, 7900, "obs_nvenc_h264_tex").bitrateKbps == 7900);
 }
 
 TEST_CASE("Auto Config benchmark ceiling explicitly permits isolated promotion above the current canvas")

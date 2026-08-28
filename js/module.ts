@@ -2055,6 +2055,12 @@ export interface IAutoConfigCapabilities {
      * probed for that upload leg.
      */
     dualOutputActiveProbes: true;
+    /**
+     * Supports the exact `enhanced-broadcasting-dual-output` topology: one
+     * Twitch-owned paired horizontal/vertical ladder plus one or two standard
+     * video encoders sustained in the same sample window.
+     */
+    enhancedBroadcastingDualOutputWorkload: true;
     bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
 }
 
@@ -2064,10 +2070,12 @@ export type AutoConfigTopology =
     'custom-rtmp' |
     'dual-output' |
     'enhanced-broadcasting' |
+    'enhanced-broadcasting-dual-output' |
     'stream-shift' |
     'mixed';
 
 export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
+export type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
 
 export type AutoConfigPlatform =
     'twitch' |
@@ -2084,6 +2092,7 @@ export type AutoConfigEstimateReason =
     'cloud_multistream' |
     'dual_output' |
     'enhanced_broadcasting' |
+    'enhanced_broadcasting_dual_output' |
     'stream_shift' |
     'mixed_topology' |
     'probe_disabled' |
@@ -2120,6 +2129,13 @@ export interface IAutoConfigAdditionalVideoRequest {
 }
 
 export interface IAutoConfigLimits {
+    /**
+     * Highest bitrate native may return for this Desktop-owned output. A
+     * provider probe may intentionally test above this ceiling and preserve
+     * the higher measured/safe capacity as stability or shared-uplink
+     * evidence; that evidence never raises the returned bitrate above this
+     * limit.
+     */
     maxBitrateKbps?: number;
     /**
      * Complete attempt-scoped output ceiling eligible for isolated hardware
@@ -2146,6 +2162,13 @@ export interface IAutoConfigLimits {
 export interface IAutoConfigLegRequest {
     legId: string;
     display: AutoConfigDisplay;
+    /**
+     * Physical output ownership. Composite Enhanced Broadcasting requests must
+     * set this explicitly on every leg. Their single provider-owned leg is
+     * Twitch-only and uses `display: 'both'`; each standard leg represents one
+     * non-Twitch horizontal or vertical output.
+     */
+    outputKind: AutoConfigOutputKind;
     destinations: IAutoConfigDestination[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
@@ -2220,6 +2243,14 @@ export interface IAutoConfigRequest {
      * probe bound to the other leg containing YouTube. Either leg may contain
      * additional unprobed destinations. The probes execute sequentially, and
      * both must produce usable evidence before either leg is promoted.
+     *
+     * `enhanced-broadcasting-dual-output` is a separate exact topology. It
+     * requires one Twitch Enhanced Broadcasting probe plus one or two standard
+     * companion legs whose canvas identity and current video tuple exactly
+     * match the corresponding primary or additional Twitch canvas. A companion
+     * may optionally carry one YouTube probe; unsupported destinations remain
+     * estimate-only, and custom RTMP is rejected. Standard probes finish before
+     * the combined workload is tested.
      */
     activeProbes?: IAutoConfigActiveProbe[];
 }
@@ -2260,6 +2291,10 @@ export interface IAutoConfigEvent {
      * twitch_probe_confirming_capacity means the initial Twitch window was
      * underfilled without transport pressure and OSN is running one extended
      * same-target window on the existing connection.
+     * enhanced_broadcasting_testing_concurrent_outputs means Twitch's complete
+     * returned ladder and every standard companion encoder are running in one
+     * common five-second workload window. Companion sinks are video-only and
+     * establish encoder/render capacity; they are not network bandwidth probes.
      */
     code?: string;
     legId?: string;
@@ -2305,10 +2340,11 @@ export interface IAutoConfigProbeMeasurement {
      */
     measuredKbps?: number;
     /**
-     * Recommended video bitrate derived from usable probe evidence and
-     * applicable platform or request caps. A clean probe reports the validated
-     * video target; only explicit degradation or transport evidence can lower
-     * it. This is not necessarily the raw observed aggregate payload rate.
+     * Validated video capacity derived from usable probe evidence and
+     * applicable platform caps. It can exceed the final recommendation when a
+     * higher stability rung was tested; only explicit degradation or transport
+     * evidence can lower it. This is not necessarily the raw observed aggregate
+     * payload rate.
      */
     safeKbps?: number;
     /**
@@ -2379,6 +2415,8 @@ export interface IAutoConfigResultDestination {
 export interface IAutoConfigLegResult {
     legId: string;
     display: AutoConfigDisplay;
+    /** Echoes request ownership so callers can reject mismatched or reclassified legs. */
+    outputKind: AutoConfigOutputKind;
     destinations: IAutoConfigResultDestination[];
     measurement: IAutoConfigMeasurement;
     recommendation: IAutoConfigRecommendation;
@@ -2394,6 +2432,31 @@ export interface IAutoConfigAggregateUpload {
     allocatedVideoKbps: number;
     /** True only when both leg encoder workloads passed concurrently in the same benchmark window. */
     concurrentHardwareValidated: true;
+}
+
+export interface IAutoConfigCombinedWorkloadCompanionLeg {
+    legId: string;
+    display: 'horizontal' | 'vertical';
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+    /** Desktop-owned outputs never exceed 8000 Kbps; provider-owned ladders ignore this field. */
+    bitrateKbps: number;
+    encoderId: string;
+    preset?: string;
+}
+
+/**
+ * Exact video-encoder workloads sustained concurrently with Twitch's returned
+ * ladder. This proves local render/encoder capacity only; provider bandwidth
+ * provenance remains in each leg's `measurement.probes`.
+ */
+export interface IAutoConfigCombinedWorkload {
+    method: 'enhanced-broadcasting-dual-output-concurrent';
+    enhancedBroadcastingLegId: string;
+    validated: true;
+    companionLegs: IAutoConfigCombinedWorkloadCompanionLeg[];
 }
 
 export type AutoConfigFatalErrorCode =
@@ -2416,6 +2479,12 @@ export interface IAutoConfigResult {
     error?: IAutoConfigError;
     /** Present only for a fully successful active Twitch + YouTube Dual Output recommendation. */
     aggregateUpload?: IAutoConfigAggregateUpload;
+    /**
+     * Present only after the full Enhanced Broadcasting plus every companion
+     * workload passes one common sample window. Standard leg recommendations
+     * reuse these exact tuples, encoder IDs, presets, and bitrates.
+     */
+    combinedWorkload?: IAutoConfigCombinedWorkload;
     legs: IAutoConfigLegResult[];
 }
 

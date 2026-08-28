@@ -40,6 +40,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <numeric>
 #include <queue>
 #include <set>
 #include <string>
@@ -64,8 +65,8 @@ constexpr int kYoutubeIngestConfirmationTimeoutMs = 15000;
 constexpr int kCancelTimeoutMs = 8000;
 constexpr uint64_t kProbeMaxBytes = 25ULL * 1024ULL * 1024ULL;
 constexpr uint64_t kYoutubeProbeMaxBytes = 64ULL * 1024ULL * 1024ULL;
-constexpr int kProbeMaximumBitrateKbps = 10000;
-constexpr int kYoutubeProbeMaximumBitrateKbps = 12000;
+constexpr int kProbeMaximumBitrateKbps = qualityPolicy::kMaximumRecommendedBitrateKbps;
+constexpr int kYoutubeProbeMaximumBitrateKbps = 10000;
 constexpr int kYoutubeProbeInitialBitrateKbps = 1000;
 constexpr int kYoutubeProbeSettleMs = 500;
 constexpr int kYoutubeProbeSampleMs = 5000;
@@ -214,6 +215,7 @@ struct AdditionalVideoRequest {
 struct LegRequest {
 	std::string legId;
 	std::string display;
+	std::string outputKind;
 	std::vector<Destination> destinations;
 	CurrentSettings current;
 	Limits limits;
@@ -253,6 +255,7 @@ struct MeasurementProvenance {
 struct Recommendation {
 	std::string legId;
 	std::string display;
+	std::string outputKind;
 	std::vector<Destination> destinations;
 	Limits limits;
 	std::string measurementMode = "estimated";
@@ -266,6 +269,17 @@ struct Recommendation {
 struct AggregateUploadResult {
 	uint64_t safeVideoKbps = 0;
 	uint64_t allocatedVideoKbps = 0;
+};
+
+struct CompanionWorkload {
+	std::string legId;
+	std::string display;
+	CurrentSettings value;
+};
+
+struct CombinedWorkloadResult {
+	std::string enhancedBroadcastingLegId;
+	std::vector<CompanionWorkload> companionLegs;
 };
 
 struct SessionEvent {
@@ -298,6 +312,7 @@ struct Session : std::enable_shared_from_this<Session> {
 	std::vector<ProbeRequest> probes;
 	bool dualOutputActiveProbePair = false;
 	bool concurrentHardwareValidated = false;
+	bool enhancedBroadcastingDualOutputWorkload = false;
 
 	std::atomic<SessionState> state{SessionState::Created};
 	std::atomic<bool> cancelRequested{false};
@@ -415,11 +430,10 @@ static bool isOfficialYoutubeRtmpsServer(const std::string &server)
 
 static bool probeProviderContractIsValid(const ProbeRequest &probe)
 {
-	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && probe.serviceName == "Twitch" &&
-		isOfficialTwitchServer(probe.server) && isBoundedTwitchKey(probe.streamKey)) ||
-	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.serviceName == "Twitch" &&
-		probe.server == "auto" && isBoundedTwitchKey(probe.streamKey) &&
-		osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
+	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && probe.serviceName == "Twitch" && isOfficialTwitchServer(probe.server) &&
+		isBoundedTwitchKey(probe.streamKey)) ||
+	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.serviceName == "Twitch" && probe.server == "auto" &&
+		isBoundedTwitchKey(probe.streamKey) && osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
 	       (probe.kind == "youtube-unbound" && probe.provider == "youtube" && probe.serviceName == "YouTube - RTMPS" &&
 		isOfficialYoutubeRtmpsServer(probe.server) && isBoundedYoutubeKey(probe.streamKey));
 }
@@ -466,6 +480,69 @@ static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
 	return probeProviders == std::set<std::string>{"twitch", "youtube"} && probedLegs.size() == 2;
 }
 
+static bool sameVideoTuple(const CurrentSettings &left, const CurrentSettings &right)
+{
+	return left.canvasId == right.canvasId && left.width == right.width && left.height == right.height && left.fpsNum == right.fpsNum &&
+	       left.fpsDen == right.fpsDen;
+}
+
+static bool isSupportedEnhancedBroadcastingDualOutputWorkload(const Session &session)
+{
+	if (session.topology != "enhanced-broadcasting-dual-output" || session.legs.size() < 2 || session.legs.size() > 3)
+		return false;
+
+	const LegRequest *enhancedLeg = nullptr;
+	std::set<std::string> companionDisplays;
+	for (const auto &leg : session.legs) {
+		if (leg.outputKind == "twitch-enhanced-broadcasting") {
+			if (enhancedLeg || leg.display != "both" || !leg.additionalVideo || leg.additionalVideo->display != "vertical" ||
+			    leg.destinations.size() != 1 || leg.destinations.front().platform != "twitch")
+				return false;
+			enhancedLeg = &leg;
+			continue;
+		}
+		if (leg.outputKind != "standard" || (leg.display != "horizontal" && leg.display != "vertical") || leg.additionalVideo ||
+		    !companionDisplays.insert(leg.display).second || leg.destinations.empty() ||
+		    std::any_of(leg.destinations.begin(), leg.destinations.end(),
+				[](const Destination &destination) { return destination.platform == "twitch" || destination.platform == "custom"; }))
+			return false;
+	}
+	if (!enhancedLeg || companionDisplays.empty())
+		return false;
+
+	const std::optional<uint64_t> additionalCanvasId = enhancedLeg->additionalVideo->current.canvasId;
+	if (!enhancedBroadcastingPolicy::canvasReferencesAreValid(enhancedLeg->current.canvasId, additionalCanvasId, [](uint64_t canvasId) {
+		    return osn::Video::Manager::GetInstance().find(canvasId) != nullptr;
+	    }))
+		return false;
+	for (const auto &leg : session.legs) {
+		if (leg.outputKind != "standard")
+			continue;
+		const CurrentSettings &identity = leg.display == "horizontal" ? enhancedLeg->current : enhancedLeg->additionalVideo->current;
+		if (!sameVideoTuple(leg.current, identity))
+			return false;
+	}
+
+	size_t enhancedProbeCount = 0;
+	std::set<std::string> probedCompanionLegs;
+	for (const auto &probe : session.probes) {
+		const auto leg =
+			std::find_if(session.legs.begin(), session.legs.end(), [&](const LegRequest &candidate) { return candidate.legId == probe.legId; });
+		if (leg == session.legs.end() || !probeProviderContractIsValid(probe))
+			return false;
+		if (leg->outputKind == "twitch-enhanced-broadcasting") {
+			if (probe.kind != "twitch-enhanced-broadcasting" || ++enhancedProbeCount != 1)
+				return false;
+		} else {
+			const bool youtubeDestination = std::any_of(leg->destinations.begin(), leg->destinations.end(),
+								    [](const Destination &destination) { return destination.platform == "youtube"; });
+			if (probe.kind != "youtube-unbound" || !youtubeDestination || !probedCompanionLegs.insert(leg->legId).second)
+				return false;
+		}
+	}
+	return enhancedProbeCount == 1;
+}
+
 static std::string defaultEstimateReason(const std::string &topology, const LegRequest &leg)
 {
 	if (!leg.estimateReason.empty())
@@ -478,6 +555,8 @@ static std::string defaultEstimateReason(const std::string &topology, const LegR
 		return "dual_output";
 	if (topology == "enhanced-broadcasting")
 		return "enhanced_broadcasting";
+	if (topology == "enhanced-broadcasting-dual-output")
+		return "enhanced_broadcasting_dual_output";
 	if (topology == "stream-shift")
 		return "stream_shift";
 	if (topology == "mixed")
@@ -508,17 +587,22 @@ static bool isKnownPlatform(const std::string &platform)
 
 static bool isKnownTopology(const std::string &topology)
 {
-	static const std::set<std::string> known = {"direct-single",         "cloud-multistream", "custom-rtmp", "dual-output",
-						    "enhanced-broadcasting", "stream-shift",      "mixed"};
+	static const std::set<std::string> known = {"direct-single",         "cloud-multistream",
+						    "custom-rtmp",           "dual-output",
+						    "enhanced-broadcasting", "enhanced-broadcasting-dual-output",
+						    "stream-shift",          "mixed"};
 	return known.count(topology) != 0;
+}
+
+static bool isKnownOutputKind(const std::string &outputKind)
+{
+	return outputKind == "standard" || outputKind == "twitch-enhanced-broadcasting";
 }
 
 static bool providerOwnsEncoding(const std::string &topology, const LegRequest &leg)
 {
-	if (topology == "enhanced-broadcasting")
-		return true;
-	return leg.display == "both" &&
-	       std::any_of(leg.destinations.begin(), leg.destinations.end(), [](const Destination &destination) { return destination.platform == "twitch"; });
+	UNUSED_PARAMETER(topology);
+	return leg.outputKind == "twitch-enhanced-broadcasting";
 }
 
 static bool parseCurrentSettings(obs_data_t *object, CurrentSettings &current)
@@ -594,7 +678,9 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 	obs_data_array_t *legs = obs_data_get_array(root, "legs");
 	const size_t legCount = legs ? obs_data_array_count(legs) : 0;
-	if (valid && (legCount == 0 || legCount > qualityPolicy::kMaximumUploadLegs)) {
+	const size_t maximumLegCount = session.topology == "enhanced-broadcasting-dual-output" ? qualityPolicy::kMaximumEnhancedBroadcastingDualOutputLegs
+											       : qualityPolicy::kMaximumUploadLegs;
+	if (valid && (legCount == 0 || legCount > maximumLegCount)) {
 		error = "invalid_autoconfig_legs";
 		valid = false;
 	}
@@ -605,9 +691,17 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		LegRequest leg;
 		leg.legId = obs_data_get_string(item, "legId");
 		leg.display = obs_data_get_string(item, "display");
+		const bool outputKindExplicit = obs_data_has_user_value(item, "outputKind");
+		leg.outputKind = obs_data_get_string(item, "outputKind");
+		if (leg.outputKind.empty())
+			leg.outputKind = session.topology == "enhanced-broadcasting" ? "twitch-enhanced-broadcasting" : "standard";
 		leg.estimateReason = obs_data_get_string(item, "estimateReason");
 
-		if (leg.legId.empty() || leg.legId.size() > 128 || !legIds.insert(leg.legId).second || !isKnownDisplay(leg.display)) {
+		if (session.topology == "enhanced-broadcasting-dual-output" && !outputKindExplicit) {
+			error = "invalid_autoconfig_output_kind";
+			valid = false;
+		} else if (leg.legId.empty() || leg.legId.size() > 128 || !legIds.insert(leg.legId).second || !isKnownDisplay(leg.display) ||
+			   !isKnownOutputKind(leg.outputKind)) {
 			error = "invalid_autoconfig_leg_identity";
 			valid = false;
 		}
@@ -646,7 +740,8 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 			if (additionalLimits)
 				obs_data_release(additionalLimits);
 			obs_data_release(additionalVideo);
-			if (session.topology != "enhanced-broadcasting" || leg.display != "both" || parsed.display != "vertical" || !settingsValid ||
+			if ((session.topology != "enhanced-broadcasting" && session.topology != "enhanced-broadcasting-dual-output") ||
+			    leg.outputKind != "twitch-enhanced-broadcasting" || leg.display != "both" || parsed.display != "vertical" || !settingsValid ||
 			    !limitsValid) {
 				error = "invalid_autoconfig_additional_video";
 				valid = false;
@@ -682,6 +777,17 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	}
 	if (legs)
 		obs_data_array_release(legs);
+	if (valid && session.topology != "enhanced-broadcasting-dual-output") {
+		const bool legacyEnhanced = session.topology == "enhanced-broadcasting";
+		const bool outputKindsValid = (!legacyEnhanced || session.legs.size() == 1) &&
+					      std::all_of(session.legs.begin(), session.legs.end(), [&](const LegRequest &leg) {
+						      return leg.outputKind == (legacyEnhanced ? "twitch-enhanced-broadcasting" : "standard");
+					      });
+		if (!outputKindsValid) {
+			error = "invalid_autoconfig_output_kind";
+			valid = false;
+		}
+	}
 
 	obs_data_array_t *probes = obs_data_get_array(root, "activeProbes");
 	const size_t probeCount = probes ? obs_data_array_count(probes) : 0;
@@ -720,6 +826,14 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	if (!valid)
 		return false;
 
+	if (session.topology == "enhanced-broadcasting-dual-output") {
+		session.enhancedBroadcastingDualOutputWorkload = isSupportedEnhancedBroadcastingDualOutputWorkload(session);
+		if (!session.enhancedBroadcastingDualOutputWorkload) {
+			error = "invalid_autoconfig_enhanced_broadcasting_dual_output";
+			return false;
+		}
+	}
+
 	// Active probing is deliberately default-deny. Credentials survive parsing
 	// only when the probe, upload leg, topology, and destination all agree.
 	const bool multipleDualOutputLegs = session.topology == "dual-output" && session.legs.size() > 1;
@@ -735,7 +849,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 								      [&](const Destination &destination) { return destination.platform == probe.provider; });
 		const bool directEligible = session.topology == "direct-single" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
 		const bool dualEligible = (session.topology == "dual-output" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1) ||
-				  session.dualOutputActiveProbePair;
+					  session.dualOutputActiveProbePair;
 		const bool cloudEligible = session.topology == "cloud-multistream" && session.legs.size() == 1 && legFound;
 		std::optional<uint64_t> additionalCanvasId;
 		if (legFound && legIt->additionalVideo)
@@ -752,18 +866,22 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 			legFound && canvasReferencesValid &&
 			((legIt->display == "horizontal" && !legIt->additionalVideo.has_value()) ||
 			 (legIt->display == "both" && legIt->additionalVideo.has_value() && legIt->additionalVideo->display == "vertical"));
-		const bool enhancedBroadcastingEligible = probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" &&
-							  session.legs.size() == 1 && probeCount == 1 && enhancedBroadcastingCanvasEligible &&
-							  legIt->destinations.size() == 1 && legIt->destinations.front().platform == "twitch";
+		const bool legacyEnhancedBroadcastingEligible = probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" &&
+								session.legs.size() == 1 && probeCount == 1 && enhancedBroadcastingCanvasEligible &&
+								legIt->destinations.size() == 1 && legIt->destinations.front().platform == "twitch";
+		const bool compositeEnhancedBroadcastingEligible =
+			session.enhancedBroadcastingDualOutputWorkload && legFound &&
+			((probe.kind == "twitch-enhanced-broadcasting" && legIt->outputKind == "twitch-enhanced-broadcasting") ||
+			 (probe.kind == "youtube-unbound" && legIt->outputKind == "standard"));
 		const bool providerValid = probeProviderContractIsValid(probe);
 
-		const bool topologyEligible = enhancedBroadcastingEligible ||
+		const bool topologyEligible = legacyEnhancedBroadcastingEligible || compositeEnhancedBroadcastingEligible ||
 					      (probe.kind != "twitch-enhanced-broadcasting" && (directEligible || dualEligible || cloudEligible));
 		probe.eligible = !probe.provider.empty() && destinationFound && topologyEligible && providerValid &&
 				 probePairCounts[probe.legId + "\n" + probe.provider] == 1;
 		if (!probe.eligible) {
 			probe.denialReason = multipleDualOutputLegs && !session.dualOutputActiveProbePair ? "dual_output_multiple_active_legs"
-											   : "active_probe_not_eligible";
+													  : "active_probe_not_eligible";
 			probe.streamKey.clear();
 			probe.server.clear();
 		}
@@ -1015,6 +1133,8 @@ static CurrentSettings baseRecommendation(const LegRequest &leg)
 		value.bitrateKbps = kDefaultEstimatedBitrateKbps;
 	if (leg.limits.maxBitrateKbps > 0)
 		value.bitrateKbps = std::min(value.bitrateKbps, leg.limits.maxBitrateKbps);
+	if (leg.outputKind == "standard")
+		value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps((uint64_t)value.bitrateKbps);
 	const auto bounded =
 		qualityPolicy::boundCurrentToV1Tier({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
 	value.width = bounded.width;
@@ -1042,6 +1162,7 @@ static CurrentSettings estimateRecommendation(const LegRequest &leg, const Hardw
 		value.fpsNum = hardware.value.fpsNum;
 		value.fpsDen = hardware.value.fpsDen;
 		applyEncoderSelection(value, {hardware.value.encoderId, hardware.value.encoderId != value.encoderId});
+		value.presetKey = hardware.value.presetKey;
 		value.preset = hardware.value.preset;
 	}
 	return value;
@@ -1091,7 +1212,8 @@ static void putAdditionalVideoTuple(obs_data_t *parent, const char *key, const C
 }
 
 static std::string serializeResult(const Session &session, const char *status, const std::vector<Recommendation> &recommendations,
-				   const std::string &errorCode = {}, const std::optional<AggregateUploadResult> &aggregateUpload = {})
+				   const std::string &errorCode = {}, const std::optional<AggregateUploadResult> &aggregateUpload = {},
+				   const std::optional<CombinedWorkloadResult> &combinedWorkload = {})
 {
 	obs_data_t *root = obs_data_create();
 	obs_data_set_int(root, "schemaVersion", kSchemaVersion);
@@ -1112,12 +1234,39 @@ static std::string serializeResult(const Session &session, const char *status, c
 		obs_data_set_obj(root, "aggregateUpload", aggregate);
 		obs_data_release(aggregate);
 	}
+	if (combinedWorkload) {
+		obs_data_t *combined = obs_data_create();
+		obs_data_set_string(combined, "method", "enhanced-broadcasting-dual-output-concurrent");
+		obs_data_set_string(combined, "enhancedBroadcastingLegId", combinedWorkload->enhancedBroadcastingLegId.c_str());
+		obs_data_set_bool(combined, "validated", true);
+		obs_data_array_t *companions = obs_data_array_create();
+		for (const auto &companion : combinedWorkload->companionLegs) {
+			obs_data_t *value = obs_data_create();
+			obs_data_set_string(value, "legId", companion.legId.c_str());
+			obs_data_set_string(value, "display", companion.display.c_str());
+			obs_data_set_int(value, "width", companion.value.width);
+			obs_data_set_int(value, "height", companion.value.height);
+			obs_data_set_int(value, "fpsNum", companion.value.fpsNum);
+			obs_data_set_int(value, "fpsDen", companion.value.fpsDen);
+			obs_data_set_int(value, "bitrateKbps", companion.value.bitrateKbps);
+			obs_data_set_string(value, "encoderId", companion.value.encoderId.c_str());
+			if (!companion.value.preset.empty())
+				obs_data_set_string(value, "preset", companion.value.preset.c_str());
+			obs_data_array_push_back(companions, value);
+			obs_data_release(value);
+		}
+		obs_data_set_array(combined, "companionLegs", companions);
+		obs_data_array_release(companions);
+		obs_data_set_obj(root, "combinedWorkload", combined);
+		obs_data_release(combined);
+	}
 
 	obs_data_array_t *legs = obs_data_array_create();
 	for (const auto &recommendation : recommendations) {
 		obs_data_t *leg = obs_data_create();
 		obs_data_set_string(leg, "legId", recommendation.legId.c_str());
 		obs_data_set_string(leg, "display", recommendation.display.c_str());
+		obs_data_set_string(leg, "outputKind", recommendation.outputKind.c_str());
 
 		obs_data_array_t *destinations = obs_data_array_create();
 		for (const auto &destination : recommendation.destinations) {
@@ -1241,6 +1390,7 @@ struct ProbeResult {
 	uint32_t videoTrackCount = 0;
 	uint64_t configuredAggregateBitrateKbps = 0;
 	bool pairedCadenceEvidence = false;
+	std::vector<CompanionWorkload> companionWorkloads;
 };
 
 static bool silentAudioCallback(void *, uint64_t startTimestamp, uint64_t, uint64_t *outputTimestamp, uint32_t, struct audio_data_mixes_outputs *)
@@ -1495,8 +1645,8 @@ public:
 
 		{
 			std::lock_guard<std::mutex> lock(session.probeMutex);
-			session.activeProbeOutputs.erase(
-				std::remove(session.activeProbeOutputs.begin(), session.activeProbeOutputs.end(), output), session.activeProbeOutputs.end());
+			session.activeProbeOutputs.erase(std::remove(session.activeProbeOutputs.begin(), session.activeProbeOutputs.end(), output),
+							 session.activeProbeOutputs.end());
 			if (output) {
 				obs_output_release(output);
 				output = nullptr;
@@ -1616,9 +1766,8 @@ public:
 		arrived++;
 		if (arrived == participants)
 			condition.notify_all();
-		const bool signalled = condition.wait_until(lock, deadline, [&]() {
-			return aborted || arrived == participants || session->cancelRequested.load();
-		});
+		const bool signalled =
+			condition.wait_until(lock, deadline, [&]() { return aborted || arrived == participants || session->cancelRequested.load(); });
 		if (!signalled) {
 			aborted = true;
 			condition.notify_all();
@@ -1892,8 +2041,7 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	return result;
 }
 
-static std::vector<HardwareAttempt> runEncoderWorkloadsConcurrently(const std::shared_ptr<Session> &session,
-								    const std::vector<CurrentSettings> &candidates,
+static std::vector<HardwareAttempt> runEncoderWorkloadsConcurrently(const std::shared_ptr<Session> &session, const std::vector<CurrentSettings> &candidates,
 								    std::chrono::steady_clock::time_point phaseDeadline,
 								    HardwareWorkloadFeed feed = HardwareWorkloadFeed::Automatic)
 {
@@ -2152,8 +2300,8 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 
 			if (encoder.hardware && exactCadenceValidationRequired) {
 				for (size_t legIndex = 0; legIndex < legs.size(); legIndex++)
-					pushEvent(session, "progress", "hardware", attemptProgress(), "hardware_validating_target_cadence", legs[legIndex].legId,
-						  {}, {}, {}, 0, &selected[legIndex]);
+					pushEvent(session, "progress", "hardware", attemptProgress(), "hardware_validating_target_cadence",
+						  legs[legIndex].legId, {}, {}, {}, 0, &selected[legIndex]);
 				std::vector<HardwareAttempt> cadenceAttempts =
 					runEncoderWorkloadsConcurrently(session, selected, phaseDeadline, HardwareWorkloadFeed::SyntheticRawExact);
 				for (size_t legIndex = 0; legIndex < cadenceAttempts.size(); legIndex++) {
@@ -2176,8 +2324,8 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 						return false;
 					}
 					if (!attempt.success) {
-						pushEvent(session, "progress", "hardware", 29, "hardware_target_cadence_rejected", legs[legIndex].legId, {}, {}, {},
-							  0, &selected[legIndex]);
+						pushEvent(session, "progress", "hardware", 29, "hardware_target_cadence_rejected", legs[legIndex].legId, {}, {},
+							  {}, 0, &selected[legIndex]);
 						return false;
 					}
 				}
@@ -3009,7 +3157,8 @@ static media_frames_per_second effectiveTrackCadence(const osn::VideoEncoderConf
 static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> &session, const ProbeRequest &probe, const osn::Config &config,
 						 const std::string &normalizedKey, const std::vector<enhancedBroadcastingPolicy::VideoCandidate> &candidates,
 						 const std::vector<uint64_t> &canvasIds, uint32_t sourceFpsNum, uint32_t sourceFpsDen,
-						 bool usePrivateTextureMix, EnhancedBroadcastingAttempt &attempt)
+						 bool usePrivateTextureMix, const std::vector<CompanionWorkload> &companionWorkloads,
+						 EnhancedBroadcastingAttempt &attempt)
 {
 	if (candidates.empty() || candidates.size() != canvasIds.size() || candidates.size() > 2) {
 		attempt.errorCode = "enhanced_broadcasting_invalid_canvas_topology";
@@ -3019,6 +3168,7 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	// owns the shared output) is destroyed first on every early-return path.
 	std::unique_ptr<ScratchResources> additionalResources;
 	ScratchResources resources(*session);
+	std::vector<std::unique_ptr<ScratchResources>> companionResources;
 	attempt.videoTrackCount = (uint32_t)config.encoder_configurations.size();
 	attempt.configuredAggregateBitrateKbps = configuredAggregateBitrateKbps(config);
 	std::vector<obs_core_video_mix_t *> identitySourceMixes(candidates.size(), nullptr);
@@ -3140,6 +3290,73 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		return false;
 	}
 
+	struct CompanionSample {
+		const CompanionWorkload *workload = nullptr;
+		ScratchResources *resources = nullptr;
+		uint32_t encodedStart = 0;
+		uint32_t outputFramesStart = 0;
+		uint32_t droppedStart = 0;
+	};
+	std::vector<CompanionSample> companionSamples;
+	companionResources.reserve(companionWorkloads.size());
+	companionSamples.reserve(companionWorkloads.size());
+	for (const auto &workload : companionWorkloads) {
+		const size_t canvasIndex = workload.display == "horizontal" ? 0 : 1;
+		ScratchResources *videoResources = canvasIndex == 0 ? &resources : additionalResources.get();
+		if (!videoResources) {
+			attempt.errorCode = "enhanced_broadcasting_companion_canvas_missing";
+			return false;
+		}
+		const std::string resolvedEncoderId = resolveEncoderId(workload.value.encoderId);
+		const bool useTextureEncoder = usePrivateTextureMix && resolvedEncoderId != ADVANCED_ENCODER_X264;
+		const std::string encoderId = useTextureEncoder ? resolvedEncoderId : scratchEncoderId(workload.value.encoderId);
+		if (encoderId.empty() || !obs_get_encoder_codec(encoderId.c_str())) {
+			attempt.errorCode = "enhanced_broadcasting_companion_encoder_unavailable";
+			return false;
+		}
+
+		auto companion = std::make_unique<ScratchResources>(*session, kHardwareStopTimeoutMs);
+		OBSDataAutoRelease encoderSettings = obs_data_create();
+		// The combined-workload proof is an exact contract consumed by Desktop.
+		// Exercise the bitrate that will be serialized and applied rather than a
+		// hidden probe-only clamp which could understate the live encoder load.
+		obs_data_set_int(encoderSettings, "bitrate", workload.value.bitrateKbps);
+		obs_data_set_string(encoderSettings, "rate_control", "CBR");
+		obs_data_set_int(encoderSettings, "keyint_sec", 2);
+		if (!workload.value.presetKey.empty() && !workload.value.preset.empty() &&
+		    (resolvedEncoderId != ADVANCED_ENCODER_X264 || isX264Preset(workload.value.preset)))
+			obs_data_set_string(encoderSettings, workload.value.presetKey.c_str(), workload.value.preset.c_str());
+		const std::string encoderName = "auto_optimizer_enhanced_broadcasting_companion_encoder_" + workload.legId;
+		companion->videoEncoder = obs_video_encoder_create(encoderId.c_str(), encoderName.c_str(), encoderSettings, nullptr);
+		if (!companion->videoEncoder) {
+			attempt.errorCode = "enhanced_broadcasting_companion_encoder_create_failed";
+			return false;
+		}
+		OBSDataAutoRelease effectiveEncoderSettings = obs_encoder_get_settings(companion->videoEncoder);
+		if (!effectiveEncoderSettings || obs_data_get_int(effectiveEncoderSettings, "bitrate") != workload.value.bitrateKbps) {
+			attempt.errorCode = "enhanced_broadcasting_companion_encoder_settings_mismatch";
+			return false;
+		}
+		if (useTextureEncoder)
+			obs_encoder_set_video_mix(companion->videoEncoder, videoResources->scratchMix);
+		else
+			obs_encoder_set_video(companion->videoEncoder, videoResources->syntheticVideo);
+		if (obs_encoder_parent_video(companion->videoEncoder) != videoResources->syntheticVideo) {
+			attempt.errorCode = "enhanced_broadcasting_companion_canvas_binding_failed";
+			return false;
+		}
+		const std::string outputName = "auto_optimizer_enhanced_broadcasting_companion_output_" + workload.legId;
+		companion->output = obs_output_create(kHardwareBenchmarkOutputId, outputName.c_str(), nullptr, nullptr);
+		if (!companion->output) {
+			attempt.errorCode = "enhanced_broadcasting_companion_output_create_failed";
+			return false;
+		}
+		obs_output_set_video_encoder(companion->output, companion->videoEncoder);
+		companion->publishOutput();
+		companionSamples.push_back({&workload, companion.get()});
+		companionResources.push_back(std::move(companion));
+	}
+
 	for (const auto &encoder : resources.multitrackAudioEncoders) {
 		if (!encoder) {
 			attempt.errorCode = "enhanced_broadcasting_audio_encoder_missing";
@@ -3178,6 +3395,12 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		attempt.cancelled = true;
 		return false;
 	}
+	for (CompanionSample &sample : companionSamples) {
+		if (!obs_output_start(sample.resources->output)) {
+			attempt.errorCode = "enhanced_broadcasting_companion_output_start_failed";
+			return false;
+		}
+	}
 	if (!obs_output_start(resources.output)) {
 		attempt.errorCode = "enhanced_broadcasting_output_start_failed";
 		return false;
@@ -3195,6 +3418,11 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		attempt.errorCode = "enhanced_broadcasting_output_connect_failed";
 		return false;
 	}
+	if (std::any_of(companionSamples.begin(), companionSamples.end(),
+			[](const CompanionSample &sample) { return !obs_output_active(sample.resources->output); })) {
+		attempt.errorCode = "enhanced_broadcasting_companion_output_stopped";
+		return false;
+	}
 
 	ProbeResult intervalResult;
 	intervalResult.provider = "twitch";
@@ -3202,6 +3430,11 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 				  intervalResult)) {
 		attempt.cancelled = intervalResult.cancelled;
 		attempt.errorCode = attempt.cancelled ? std::string{} : "enhanced_broadcasting_output_stopped";
+		return false;
+	}
+	if (std::any_of(companionSamples.begin(), companionSamples.end(),
+			[](const CompanionSample &sample) { return !obs_output_active(sample.resources->output); })) {
+		attempt.errorCode = "enhanced_broadcasting_companion_output_stopped";
 		return false;
 	}
 
@@ -3253,6 +3486,11 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	}
 	const uint64_t startBytes = obs_output_get_total_bytes(resources.output);
 	const uint32_t startDropped = obs_output_get_frames_dropped(resources.output);
+	for (CompanionSample &sample : companionSamples) {
+		sample.encodedStart = obs_encoder_get_encoded_frames(sample.resources->videoEncoder);
+		sample.outputFramesStart = obs_output_get_total_frames(sample.resources->output);
+		sample.droppedStart = obs_output_get_frames_dropped(sample.resources->output);
+	}
 	const auto sampleDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kEnhancedBroadcastingSampleMs);
 	while (std::chrono::steady_clock::now() < sampleDeadline) {
 		if (session->cancelRequested.load()) {
@@ -3262,6 +3500,11 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		}
 		if (!obs_output_active(resources.output)) {
 			attempt.errorCode = "enhanced_broadcasting_output_stopped";
+			return false;
+		}
+		if (std::any_of(companionSamples.begin(), companionSamples.end(),
+				[](const CompanionSample &sample) { return !obs_output_active(sample.resources->output); })) {
+			attempt.errorCode = "enhanced_broadcasting_companion_output_stopped";
 			return false;
 		}
 		attempt.maximumCongestion = std::max(attempt.maximumCongestion, obs_output_get_congestion(resources.output));
@@ -3298,12 +3541,28 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	const bool encoderFramesPassed = std::equal(attempt.encodedFrames.begin(), attempt.encodedFrames.end(), attempt.minimumEncodedFrames.begin(),
 						    [](uint32_t encoded, uint32_t minimum) { return encoded >= minimum; });
 	const bool transportPassed = attempt.outputDroppedFrames == 0 && attempt.maximumCongestion < kProbeCongestionHigh;
-	attempt.success = attempt.outputBytes > 0 && encoderFramesPassed && mixPassed && transportPassed && (!outputError || !*outputError);
+	bool companionsPassed = true;
+	for (const CompanionSample &sample : companionSamples) {
+		const uint32_t encoded = obs_encoder_get_encoded_frames(sample.resources->videoEncoder) - sample.encodedStart;
+		const uint32_t outputFrames = obs_output_get_total_frames(sample.resources->output) - sample.outputFramesStart;
+		const uint32_t dropped = obs_output_get_frames_dropped(sample.resources->output) - sample.droppedStart;
+		const uint32_t expected = (uint32_t)((uint64_t)kEnhancedBroadcastingSampleMs * sourceFpsNum / (1000ULL * std::max(1U, sourceFpsDen)));
+		const uint32_t minimum = enhancedBroadcastingPolicy::minimumEncodedFrames(expected);
+		const char *companionError = obs_output_get_last_error(sample.resources->output);
+		const bool passed = encoded >= minimum && outputFrames >= minimum && dropped == 0 && (!companionError || !*companionError);
+		companionsPassed = companionsPassed && passed;
+		blog(passed ? LOG_INFO : LOG_WARNING,
+		     "[Auto Optimizer][Enhanced Broadcasting] Companion sample: leg=%s display=%s encoder=%s encoded=%u output=%u dropped=%u minimum=%u passed=%s",
+		     sample.workload->legId.c_str(), sample.workload->display.c_str(), sample.workload->value.encoderId.c_str(), encoded, outputFrames, dropped,
+		     minimum, passed ? "true" : "false");
+	}
+	attempt.success = attempt.outputBytes > 0 && encoderFramesPassed && mixPassed && transportPassed && companionsPassed && (!outputError || !*outputError);
 	if (!attempt.success) {
 		attempt.errorCode = attempt.outputBytes == 0 ? "enhanced_broadcasting_no_output"
 				    : !encoderFramesPassed   ? "enhanced_broadcasting_encoder_underload"
 				    : !mixPassed             ? "enhanced_broadcasting_render_overload"
 				    : !transportPassed       ? "enhanced_broadcasting_transport_pressure"
+				    : !companionsPassed      ? "enhanced_broadcasting_companion_overload"
 							     : "enhanced_broadcasting_output_error";
 	}
 	for (size_t index = 0; index < attempt.encodedFrames.size(); index++) {
@@ -3320,7 +3579,18 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	     (double)attempt.maximumCongestion, videoInputSamples.size(), attempt.inputFrames, attempt.inputSkippedFrames, attempt.success ? "true" : "false",
 	     attempt.errorCode.empty() ? "none" : attempt.errorCode.c_str());
 
+	for (CompanionSample &sample : companionSamples)
+		obs_output_stop(sample.resources->output);
 	obs_output_stop(resources.output);
+	for (CompanionSample &sample : companionSamples) {
+		if (!waitForOutputInactive(sample.resources->output, kHardwareStopTimeoutMs)) {
+			obs_output_force_stop(sample.resources->output);
+			if (!waitForOutputInactive(sample.resources->output, kHardwareStopTimeoutMs)) {
+				attempt.success = false;
+				attempt.errorCode = "enhanced_broadcasting_companion_cleanup_timeout";
+			}
+		}
+	}
 	if (!waitForOutputInactive(resources.output, kProbeStopTimeoutMs)) {
 		obs_output_force_stop(resources.output);
 		if (!waitForOutputInactive(resources.output, kProbeStopTimeoutMs)) {
@@ -3331,8 +3601,14 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	return attempt.success;
 }
 
+static bool enhancedCandidateFitsCompanion(const enhancedBroadcastingPolicy::VideoCandidate &candidate, const CompanionWorkload &companion)
+{
+	return candidate.width <= (uint32_t)std::max(0, companion.value.width) && candidate.height <= (uint32_t)std::max(0, companion.value.height) &&
+	       (uint64_t)candidate.fpsNum * std::max(1, companion.value.fpsDen) <= (uint64_t)std::max(0, companion.value.fpsNum) * candidate.fpsDen;
+}
+
 static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
-						double slotEndProgress)
+						double slotEndProgress, const std::vector<CompanionWorkload> &provisionalCompanions = {})
 {
 	ProbeResult result;
 	result.provider = "twitch";
@@ -3393,6 +3669,19 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 						}),
 				 candidates.end());
 	}
+	if (!provisionalCompanions.empty()) {
+		candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
+						[&](const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
+							const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
+							return std::any_of(provisionalCompanions.begin(), provisionalCompanions.end(),
+									   [&](const CompanionWorkload &companion) {
+										   const auto &displayCandidate = companion.display == "horizontal" ? candidate
+																		    : vertical;
+										   return !enhancedCandidateFitsCompanion(displayCandidate, companion);
+									   });
+						}),
+				 candidates.end());
+	}
 	if (candidates.empty()) {
 		result.errorCode = "enhanced_broadcasting_no_candidate";
 		return result;
@@ -3423,6 +3712,14 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		std::vector<enhancedBroadcastingPolicy::VideoCandidate> candidateCanvases{candidate};
 		if (leg.additionalVideo)
 			candidateCanvases.push_back(enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate));
+		std::vector<CompanionWorkload> candidateCompanions = provisionalCompanions;
+		for (auto &companion : candidateCompanions) {
+			const auto &displayCandidate = companion.display == "horizontal" ? candidateCanvases[0] : candidateCanvases[1];
+			companion.value.width = (int)displayCandidate.width;
+			companion.value.height = (int)displayCandidate.height;
+			companion.value.fpsNum = (int)displayCandidate.fpsNum;
+			companion.value.fpsDen = (int)displayCandidate.fpsDen;
+		}
 		std::vector<obs_video_info> requestCanvases(candidateCanvases.size());
 		std::vector<obs_video_info *> requestCanvasPointers;
 		requestCanvasPointers.reserve(requestCanvases.size());
@@ -3465,7 +3762,8 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 			continue;
 		}
 
-		pushEvent(session, "progress", "bandwidth", candidateStart + (candidateEnd - candidateStart) * 0.25, "enhanced_broadcasting_testing_candidate",
+		pushEvent(session, "progress", "bandwidth", candidateStart + (candidateEnd - candidateStart) * 0.25,
+			  candidateCompanions.empty() ? "enhanced_broadcasting_testing_candidate" : "enhanced_broadcasting_testing_concurrent_outputs",
 			  probe.legId, "active", probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 		const bool primaryCadenceInsufficient = !enhancedBroadcastingPolicy::cadenceCanBeProvenByPrivateMix(candidate, primaryIdentity->fps_num,
 														    std::max(1U, primaryIdentity->fps_den));
@@ -3484,12 +3782,14 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 			canvasIds.push_back(leg.additionalVideo->current.canvasId);
 		EnhancedBroadcastingAttempt textureAttempt;
 		if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidateCanvases, canvasIds, smokeFpsNum, smokeFpsDen, true,
-							  textureAttempt)) {
+							  candidateCompanions, textureAttempt)) {
 			if (textureAttempt.cancelled) {
 				result.cancelled = true;
 				return result;
 			}
-			result.errorCode = textureAttempt.errorCode;
+			result.errorCode = !candidateCompanions.empty() && enhancedBroadcastingPolicy::isCompositeCandidateLoadFailure(textureAttempt.errorCode)
+						   ? "enhanced_broadcasting_companion_overload"
+						   : textureAttempt.errorCode;
 			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 				return result;
 			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
@@ -3504,12 +3804,15 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 				  eventAdditionalVideoPtr);
 			exactAttempt = {};
 			if (!runEnhancedBroadcastingOutputAttempt(session, probe, config, normalizedKey, candidateCanvases, canvasIds, candidate.fpsNum,
-								  candidate.fpsDen, false, exactAttempt)) {
+								  candidate.fpsDen, false, candidateCompanions, exactAttempt)) {
 				if (exactAttempt.cancelled) {
 					result.cancelled = true;
 					return result;
 				}
-				result.errorCode = exactAttempt.errorCode;
+				result.errorCode = !candidateCompanions.empty() &&
+								   enhancedBroadcastingPolicy::isCompositeCandidateLoadFailure(exactAttempt.errorCode)
+							   ? "enhanced_broadcasting_companion_overload"
+							   : exactAttempt.errorCode;
 				if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 					return result;
 				pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
@@ -3535,6 +3838,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		result.videoTrackCount = exactAttempt.videoTrackCount;
 		result.configuredAggregateBitrateKbps = exactAttempt.configuredAggregateBitrateKbps;
 		result.pairedCadenceEvidence = targetAboveMainCadence;
+		result.companionWorkloads = std::move(candidateCompanions);
 		pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_selected", probe.legId, "active", probe.probeId,
 			  probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 		blog(LOG_INFO, "[Auto Optimizer][Enhanced Broadcasting] Candidate selected: %ux%u %u/%u FPS, tracks=%u, configured_aggregate=%llu Kbps",
@@ -3549,7 +3853,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 }
 
 static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
-				double slotEndProgress, int youtubeProbeCeilingOverrideKbps = 0)
+				double slotEndProgress)
 {
 	ProbeResult result;
 	result.provider = probe.provider;
@@ -3724,12 +4028,12 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		     extendedSampleUsed ? "true" : "false", decision.targetPassed ? "true" : "false", (unsigned long long)result.safeKbps,
 		     result.platformCapKbps, leg.limits.maxBitrateKbps);
 	} else {
-		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
+		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000};
 		uint64_t totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
 		probePolicy::YoutubeRampEvidence rampEvidence;
-		const int requestProbeCeilingKbps = youtubeProbeCeilingOverrideKbps > 0 ? youtubeProbeCeilingOverrideKbps : leg.limits.maxBitrateKbps;
-		const int effectiveCeilingKbps =
-			probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, requestProbeCeilingKbps);
+		// maxBitrateKbps is the returned/application ceiling. YouTube tests one
+		// higher stability rung and retains that capacity only as provenance.
+		const int effectiveCeilingKbps = probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, 0);
 		std::vector<std::pair<int, int>> plannedTargets;
 		int lastPlannedTarget = 0;
 		for (int ladderTarget : ladder) {
@@ -4137,6 +4441,78 @@ static void completeFailed(const std::shared_ptr<Session> &session, const char *
 	pushEvent(session, "complete", "cleanup", 100, code);
 }
 
+static CurrentSettings provisionalCompositeCompanionValue(const LegRequest &leg, const HardwareAssessment &hardware,
+							  const std::vector<ProbeResult> &probeResults)
+{
+	CurrentSettings value = estimateRecommendation(leg, hardware);
+	std::set<std::string> successfulProviders;
+	uint64_t safeKbps = UINT64_MAX;
+	for (const auto &result : probeResults) {
+		if (result.legId != leg.legId)
+			continue;
+		if (result.success)
+			successfulProviders.insert(result.provider);
+		if (probePolicy::probeSafeValueContributesToActiveRecommendation(result.success, result.observedThroughputReliable, result.measuredKbps,
+										 result.safeKbps))
+			safeKbps = std::min(safeKbps, result.safeKbps);
+	}
+	const size_t expectedProviders = probeableProviderCount(leg);
+	const bool completeActiveCoverage = expectedProviders > 0 && successfulProviders.size() == expectedProviders;
+	if (safeKbps != UINT64_MAX)
+		value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps(safeKbps);
+	if (leg.limits.maxBitrateKbps > 0)
+		value.bitrateKbps = std::min(value.bitrateKbps, leg.limits.maxBitrateKbps);
+	value.bitrateKbps = (int)probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(1, value.bitrateKbps));
+
+	const CurrentSettings current = baseRecommendation(leg);
+	const auto ceiling = qualityPolicy::recommendationCeiling({value.width, value.height, value.fpsNum, value.fpsDen},
+								  {current.width, current.height, current.fpsNum, current.fpsDen}, completeActiveCoverage);
+	const auto selected = qualityPolicy::select(ceiling, value.bitrateKbps, value.encoderFamily, qualityPolicy::QualityProfile::Generic);
+	value.width = selected.video.width;
+	value.height = selected.video.height;
+	value.fpsNum = selected.video.fpsNum;
+	value.fpsDen = selected.video.fpsDen;
+	value.bitrateKbps = selected.bitrateKbps;
+	return value;
+}
+
+static bool buildCompositeCompanionWorkloads(const std::vector<LegRequest> &legs, const std::vector<HardwareAssessment> &hardwareAssessments,
+					     const std::vector<ProbeResult> &probeResults, std::vector<CompanionWorkload> &workloads)
+{
+	workloads.clear();
+	for (size_t index = 0; index < legs.size(); index++) {
+		if (legs[index].outputKind != "standard")
+			continue;
+		if (index >= hardwareAssessments.size() || !hardwareAssessments[index].passed)
+			return false;
+		workloads.push_back(
+			{legs[index].legId, legs[index].display, provisionalCompositeCompanionValue(legs[index], hardwareAssessments[index], probeResults)});
+	}
+	if (workloads.empty())
+		return false;
+
+	const auto &first = workloads.front().value;
+	const int commonBitrate = std::accumulate(workloads.begin(), workloads.end(), first.bitrateKbps,
+						  [](int value, const CompanionWorkload &workload) { return std::min(value, workload.value.bitrateKbps); });
+	for (auto &workload : workloads) {
+		if (workload.value.encoderId != first.encoderId || workload.value.preset != first.preset || workload.value.presetKey != first.presetKey)
+			return false;
+		const auto selected = qualityPolicy::select({workload.value.width, workload.value.height, workload.value.fpsNum, workload.value.fpsDen},
+							    commonBitrate, workload.value.encoderFamily, qualityPolicy::QualityProfile::Generic);
+		workload.value.width = selected.video.width;
+		workload.value.height = selected.video.height;
+		workload.value.fpsNum = selected.video.fpsNum;
+		workload.value.fpsDen = selected.video.fpsDen;
+		workload.value.bitrateKbps = selected.bitrateKbps;
+	}
+	const int exactCommonBitrate =
+		std::accumulate(workloads.begin(), workloads.end(), workloads.front().value.bitrateKbps,
+				[](int value, const CompanionWorkload &workload) { return std::min(value, workload.value.bitrateKbps); });
+	for (auto &workload : workloads)
+		workload.value.bitrateKbps = exactCommonBitrate;
+	return true;
+}
+
 static void runSession(const std::shared_ptr<Session> &session)
 {
 	pushEvent(session, "phase", "preflight", 0);
@@ -4199,12 +4575,16 @@ static void runSession(const std::shared_ptr<Session> &session)
 		else
 			pushEvent(session, "progress", "bandwidth", 30, probe.denialReason, probe.legId, "estimated", probe.probeId, probe.provider);
 	}
-	// A shared-leg YouTube verification can use the preceding clean Twitch
-	// result to decide whether it should test one rung above the final 6000-Kbps
-	// recommendation cap. Do not depend on Desktop's request ordering.
-	std::stable_sort(orderedProbes.begin(), orderedProbes.end(), [](const ProbeRequest *left, const ProbeRequest *right) {
-		const int leftPriority = left->provider == "twitch" ? 0 : left->provider == "youtube" ? 2 : 1;
-		const int rightPriority = right->provider == "twitch" ? 0 : right->provider == "youtube" ? 2 : 1;
+	// Keep provider execution deterministic and leave the provider-managed
+	// Enhanced Broadcasting workload until its companion evidence is ready.
+	std::stable_sort(orderedProbes.begin(), orderedProbes.end(), [&](const ProbeRequest *left, const ProbeRequest *right) {
+		const auto priority = [&](const ProbeRequest *value) {
+			if (session->enhancedBroadcastingDualOutputWorkload && value->kind == "twitch-enhanced-broadcasting")
+				return 3;
+			return value->provider == "twitch" ? 0 : value->provider == "youtube" ? 2 : 1;
+		};
+		const int leftPriority = priority(left);
+		const int rightPriority = priority(right);
 		return leftPriority < rightPriority;
 	});
 	size_t completedProbeCount = 0;
@@ -4218,34 +4598,22 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const std::string startCode = probe.kind == "twitch-enhanced-broadcasting" ? "enhanced_broadcasting_requesting_ladder"
 											   : probe.provider + "_probe_started";
 		pushEvent(session, "phase", "bandwidth", startProgress, startCode, probe.legId, "active", probe.probeId, probe.provider);
-		int youtubeProbeCeilingOverrideKbps = 0;
-		if (probe.provider == "youtube") {
-			const bool hasTwitchDestination = std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
-								      [](const Destination &destination) { return destination.platform == "twitch"; });
-			const bool hasYoutubeDestination = std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
-								       [](const Destination &destination) { return destination.platform == "youtube"; });
-			const auto twitchResultIt = std::find_if(probeResults.rbegin(), probeResults.rend(), [&](const ProbeResult &candidate) {
-				return candidate.legId == probe.legId && candidate.provider == "twitch";
-			});
-			if (twitchResultIt != probeResults.rend()) {
-				const int recommendationCapKbps = legIt->limits.maxBitrateKbps > 0 ? legIt->limits.maxBitrateKbps
-												   : twitchResultIt->platformCapKbps;
-				if (probePolicy::shouldValidateYoutubeAboveSharedCap(hasTwitchDestination && hasYoutubeDestination, twitchResultIt->success,
-										     twitchResultIt->stability == ProbeStability::Stable,
-										     twitchResultIt->safeKbps, recommendationCapKbps)) {
-					youtubeProbeCeilingOverrideKbps =
-						probePolicy::nextYoutubeValidationCeilingKbps(recommendationCapKbps, kYoutubeProbeMaximumBitrateKbps);
-					blog(LOG_INFO,
-					     "[Auto Optimizer][YouTube Probe] Expanding shared-leg verification above recommendation cap: "
-					     "twitch_safe=%llu Kbps, recommendation_cap=%d Kbps, verification_ceiling=%d Kbps",
-					     (unsigned long long)twitchResultIt->safeKbps, recommendationCapKbps, youtubeProbeCeilingOverrideKbps);
-				}
-			}
-		}
 		const auto probeRunStarted = std::chrono::steady_clock::now();
-		ProbeResult result = probe.kind == "twitch-enhanced-broadcasting"
-					     ? runEnhancedBroadcastingProbe(session, probe, *legIt, startProgress, endProgress)
-					     : runRtmpProbe(session, probe, *legIt, startProgress, endProgress, youtubeProbeCeilingOverrideKbps);
+		std::vector<CompanionWorkload> provisionalCompanions;
+		const bool companionWorkloadsReady = !session->enhancedBroadcastingDualOutputWorkload || probe.kind != "twitch-enhanced-broadcasting" ||
+						     buildCompositeCompanionWorkloads(preparedLegs, hardwareAssessments, probeResults, provisionalCompanions);
+		ProbeResult result;
+		if (!companionWorkloadsReady) {
+			result.provider = probe.provider;
+			result.legId = probe.legId;
+			result.method = "twitch-enhanced-broadcasting-test";
+			result.observedThroughputReliable = false;
+			result.errorCode = "enhanced_broadcasting_companion_workload_unavailable";
+		} else {
+			result = probe.kind == "twitch-enhanced-broadcasting"
+					 ? runEnhancedBroadcastingProbe(session, probe, *legIt, startProgress, endProgress, provisionalCompanions)
+					 : runRtmpProbe(session, probe, *legIt, startProgress, endProgress);
+		}
 		const auto probeRunElapsedMs =
 			std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - probeRunStarted).count();
 		if (result.provider == "youtube") {
@@ -4305,24 +4673,22 @@ static void runSession(const std::shared_ptr<Session> &session)
 
 	std::optional<qualityPolicy::SharedTwoLegAllocation> dualOutputAllocation;
 	if (session->dualOutputActiveProbePair) {
-		const auto twitchResult = std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) {
-			return result.provider == "twitch";
-		});
-		const auto youtubeResult = std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) {
-			return result.provider == "youtube";
-		});
+		const auto twitchResult =
+			std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) { return result.provider == "twitch"; });
+		const auto youtubeResult =
+			std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) { return result.provider == "youtube"; });
 		const auto usable = [](const ProbeResult &result) {
-			return probePolicy::dualOutputProviderProbeIsUsable(
-				result.success, result.observedThroughputReliable, result.measuredKbps, result.safeKbps);
+			return probePolicy::dualOutputProviderProbeIsUsable(result.success, result.observedThroughputReliable, result.measuredKbps,
+									    result.safeKbps);
 		};
 		if (twitchResult != probeResults.end() && youtubeResult != probeResults.end()) {
-			const bool allHardwareWorkloadsPassed =
-				hardwareAssessments.size() == preparedLegs.size() &&
-				std::all_of(hardwareAssessments.begin(), hardwareAssessments.end(),
-					    [](const HardwareAssessment &assessment) { return assessment.passed; });
-			const auto allocation = qualityPolicy::assembleSharedTwoLegAllocation(
-				session->dualOutputActiveProbePair, session->concurrentHardwareValidated, allHardwareWorkloadsPassed,
-				usable(*twitchResult), twitchResult->safeKbps, usable(*youtubeResult), youtubeResult->safeKbps);
+			const bool allHardwareWorkloadsPassed = hardwareAssessments.size() == preparedLegs.size() &&
+								std::all_of(hardwareAssessments.begin(), hardwareAssessments.end(),
+									    [](const HardwareAssessment &assessment) { return assessment.passed; });
+			const auto allocation = qualityPolicy::assembleSharedTwoLegAllocation(session->dualOutputActiveProbePair,
+											      session->concurrentHardwareValidated, allHardwareWorkloadsPassed,
+											      usable(*twitchResult), twitchResult->safeKbps,
+											      usable(*youtubeResult), youtubeResult->safeKbps);
 			if (allocation.valid) {
 				dualOutputAllocation = allocation;
 				blog(LOG_INFO,
@@ -4335,6 +4701,15 @@ static void runSession(const std::shared_ptr<Session> &session)
 		}
 	}
 	const bool dualOutputJointActive = dualOutputAllocation.has_value();
+	std::optional<CombinedWorkloadResult> combinedWorkload;
+	if (session->enhancedBroadcastingDualOutputWorkload) {
+		const auto tested = std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) {
+			return result.success && result.method == "twitch-enhanced-broadcasting-test" && !result.companionWorkloads.empty();
+		});
+		if (tested != probeResults.end() && tested->companionWorkloads.size() + 1 == preparedLegs.size())
+			combinedWorkload = CombinedWorkloadResult{tested->legId, tested->companionWorkloads};
+	}
+	const bool compositeWorkloadValidated = combinedWorkload.has_value();
 
 	pushEvent(session, "phase", "recommendation", 75);
 	if (dualOutputJointActive)
@@ -4347,6 +4722,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 		Recommendation recommendation;
 		recommendation.legId = leg.legId;
 		recommendation.display = leg.display;
+		recommendation.outputKind = leg.outputKind;
 		recommendation.destinations = leg.destinations;
 		recommendation.limits = leg.limits;
 		recommendation.value = estimateRecommendation(leg, hardware);
@@ -4405,7 +4781,8 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.value.fpsNum = (int)tested.testedFpsNum;
 			recommendation.value.fpsDen = (int)tested.testedFpsDen;
 			recommendation.additionalVideo = tested.testedAdditionalVideo;
-		} else if (hasSuccessfulProbe && (!session->dualOutputActiveProbePair || dualOutputJointActive)) {
+		} else if (hasSuccessfulProbe && (!session->dualOutputActiveProbePair || dualOutputJointActive) &&
+			   (!session->enhancedBroadcastingDualOutputWorkload || compositeWorkloadValidated)) {
 			recommendation.measurementMode = "active";
 			if (hasPartialProviderCoverage) {
 				recommendation.confidence = "low";
@@ -4424,12 +4801,12 @@ static void runSession(const std::shared_ptr<Session> &session)
 			if (!dualOutputJointActive) {
 				for (const ProbeResult *result : legProbeResults) {
 					if (probePolicy::probeSafeValueContributesToActiveRecommendation(result->success, result->observedThroughputReliable,
-											 result->measuredKbps, result->safeKbps))
+													 result->measuredKbps, result->safeKbps))
 						safeKbps = std::min(safeKbps, result->safeKbps);
 				}
-				if (leg.limits.maxBitrateKbps > 0)
-					safeKbps = std::min<uint64_t>(safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
 			}
+			if (leg.limits.maxBitrateKbps > 0)
+				safeKbps = std::min<uint64_t>(safeKbps, (uint64_t)leg.limits.maxBitrateKbps);
 			// Never turn a low measurement into a higher recommendation merely to
 			// satisfy a nominal bitrate floor. Surface the low-confidence result and
 			// let Desktop decide how to explain an insufficient connection.
@@ -4457,12 +4834,14 @@ static void runSession(const std::shared_ptr<Session> &session)
 				recommendation.confidence = "low";
 				recommendation.reason = "insufficient_bandwidth";
 			}
-			recommendation.value.bitrateKbps = (int)std::clamp<uint64_t>(safeKbps, 1, kYoutubeProbeMaximumBitrateKbps);
+			recommendation.value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps(safeKbps);
 		} else if (requiredProbeCount > 0) {
 			recommendation.confidence = "low";
 			const bool hasUnstableProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(),
 								  [](const ProbeResult *result) { return result->stability == ProbeStability::Unstable; });
-			recommendation.reason = hasUnstableProbe                           ? "unstable_connection"
+			recommendation.reason = session->enhancedBroadcastingDualOutputWorkload && !compositeWorkloadValidated
+							? "enhanced_broadcasting_combined_workload_failed"
+						: hasUnstableProbe                         ? "unstable_connection"
 						: session->topology == "cloud-multistream" ? "indirect_provider_probe_failed"
 											   : "probe_failed";
 			// A failed probe can still have trustworthy throughput evidence.
@@ -4479,7 +4858,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 			if (hasObservedThroughput) {
 				const uint64_t representableSafeKbps = std::max<uint64_t>(1, observedSafeKbps);
 				recommendation.value.bitrateKbps = probePolicy::clampEstimateToObservedSafe(
-					recommendation.value.bitrateKbps, representableSafeKbps, kYoutubeProbeMaximumBitrateKbps);
+					recommendation.value.bitrateKbps, representableSafeKbps, qualityPolicy::kMaximumRecommendedBitrateKbps);
 				if (observedSafeKbps < 500)
 					recommendation.reason = "insufficient_bandwidth";
 			}
@@ -4488,9 +4867,10 @@ static void runSession(const std::shared_ptr<Session> &session)
 		// Keep exact probe throughput in provenance and logs, but present and
 		// apply a stable, conservative bitrate recommendation. Round before
 		// quality selection so the chosen video tuple fits the applied budget.
-		if (!providerOwnsEncoding(session->topology, leg))
-			recommendation.value.bitrateKbps =
-				(int)probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(0, recommendation.value.bitrateKbps));
+		if (!providerOwnsEncoding(session->topology, leg)) {
+			recommendation.value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps(
+				probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(0, recommendation.value.bitrateKbps)));
+		}
 
 		const double selectingProgress = 75.0 + 19.0 * (double)index / (double)std::max<size_t>(1, preparedLegs.size());
 		const double selectedProgress = 75.0 + 19.0 * (double)(index + 1) / (double)std::max<size_t>(1, preparedLegs.size());
@@ -4510,7 +4890,8 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.value.fpsDen = eligibleCeiling.fpsDen;
 			pushEvent(session, "progress", "recommendation", selectingProgress, "recommendation_selecting_quality", leg.legId,
 				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, 0, (uint32_t)std::max(0, recommendation.value.bitrateKbps));
-			const bool hasTwitchDestination = dualOutputJointActive || std::any_of(leg.destinations.begin(), leg.destinations.end(),
+			const bool hasTwitchDestination = dualOutputJointActive ||
+							  std::any_of(leg.destinations.begin(), leg.destinations.end(),
 								      [](const Destination &destination) { return destination.platform == "twitch"; });
 			const auto qualityProfile = hasTwitchDestination ? qualityPolicy::QualityProfile::Twitch : qualityPolicy::QualityProfile::Generic;
 			const auto selected = qualityPolicy::select({recommendation.value.width, recommendation.value.height, recommendation.value.fpsNum,
@@ -4539,6 +4920,12 @@ static void runSession(const std::shared_ptr<Session> &session)
 			pushEvent(session, "progress", "recommendation", selectedProgress, "recommendation_provider_managed", leg.legId,
 				  recommendation.measurementMode, {}, {}, 0, &recommendation.value);
 		}
+		if (combinedWorkload && leg.outputKind == "standard") {
+			const auto tested = std::find_if(combinedWorkload->companionLegs.begin(), combinedWorkload->companionLegs.end(),
+							 [&](const CompanionWorkload &companion) { return companion.legId == leg.legId; });
+			if (tested != combinedWorkload->companionLegs.end())
+				recommendation.value = tested->value;
+		}
 
 		recommendations.push_back(std::move(recommendation));
 	}
@@ -4548,7 +4935,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 		aggregateUpload = AggregateUploadResult{dualOutputAllocation->aggregateSafeVideoKbps, dualOutputAllocation->allocatedVideoKbps};
 	{
 		std::lock_guard<std::mutex> lock(session->mutex);
-		session->resultJson = serializeResult(*session, "complete", recommendations, {}, aggregateUpload);
+		session->resultJson = serializeResult(*session, "complete", recommendations, {}, aggregateUpload, combinedWorkload);
 	}
 	session->state.store(SessionState::Complete);
 	pushEvent(session, "result", "recommendation", 95);
@@ -4611,7 +4998,7 @@ void Register(ipc::server &srv)
 void GetCapabilities(void *, const int64_t, const std::vector<ipc::value> &, std::vector<ipc::value> &rval)
 {
 	static const char *capabilities =
-		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"dualOutputActiveProbes":true,"bandwidthModes":["twitch-standard-active","twitch-enhanced-broadcasting-active","youtube-unbound-active","estimate"]})";
+		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"dualOutputActiveProbes":true,"enhancedBroadcastingDualOutputWorkload":true,"bandwidthModes":["twitch-standard-active","twitch-enhanced-broadcasting-active","youtube-unbound-active","estimate"]})";
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(capabilities));
 }

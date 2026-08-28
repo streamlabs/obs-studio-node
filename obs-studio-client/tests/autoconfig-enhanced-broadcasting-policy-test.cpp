@@ -121,8 +121,20 @@ TEST_CASE("Enhanced Broadcasting descends only after candidate-specific evidence
 	CHECK(policy::allowsCandidateDescent("enhanced_broadcasting_encoder_underload"));
 	CHECK(policy::allowsCandidateDescent("enhanced_broadcasting_render_overload"));
 	CHECK(policy::allowsCandidateDescent("enhanced_broadcasting_transport_pressure"));
+	CHECK(policy::allowsCandidateDescent("enhanced_broadcasting_companion_overload"));
 	CHECK_FALSE(policy::allowsCandidateDescent("enhanced_broadcasting_invalid_video_ladder"));
 	CHECK_FALSE(policy::allowsCandidateDescent("enhanced_broadcasting_output_start_failed"));
 	CHECK_FALSE(policy::allowsCandidateDescent("enhanced_broadcasting_unsafe_stream_key"));
 	CHECK_FALSE(policy::allowsCandidateDescent("enhanced_broadcasting_cleanup_timeout"));
+}
+
+TEST_CASE("Composite Enhanced Broadcasting maps only local joint-load failures to candidate descent")
+{
+	CHECK(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_companion_encoder_create_failed"));
+	CHECK(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_companion_output_start_failed"));
+	CHECK(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_companion_output_stopped"));
+	CHECK(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_output_start_failed"));
+	CHECK_FALSE(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_companion_encoder_settings_mismatch"));
+	CHECK_FALSE(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_output_connect_failed"));
+	CHECK_FALSE(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_transport_pressure"));
 }
