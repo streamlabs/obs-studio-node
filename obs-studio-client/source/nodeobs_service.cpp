@@ -187,6 +187,16 @@ Napi::Value service::OBS_service_stopRecording(const Napi::CallbackInfo &info)
 	return info.Env().Undefined();
 }
 
+Napi::Value service::OBS_service_stopRecordingForce(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	conn->call("NodeOBS_Service", "OBS_service_stopRecordingForce", {});
+	return info.Env().Undefined();
+}
+
 Napi::Value service::OBS_service_stopReplayBuffer(const Napi::CallbackInfo &info)
 {
 	bool forceStop = info[0].ToBoolean().Value();
@@ -559,6 +569,7 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_startRecording"), Napi::Function::New(env, service::OBS_service_startRecording));
 	exports.Set(Napi::String::New(env, "OBS_service_startReplayBuffer"), Napi::Function::New(env, service::OBS_service_startReplayBuffer));
 	exports.Set(Napi::String::New(env, "OBS_service_stopRecording"), Napi::Function::New(env, service::OBS_service_stopRecording));
+	exports.Set(Napi::String::New(env, "OBS_service_stopRecordingForce"), Napi::Function::New(env, service::OBS_service_stopRecordingForce));
 	exports.Set(Napi::String::New(env, "OBS_service_stopStreaming"), Napi::Function::New(env, service::OBS_service_stopStreaming));
 	exports.Set(Napi::String::New(env, "OBS_service_stopReplayBuffer"), Napi::Function::New(env, service::OBS_service_stopReplayBuffer));
 	exports.Set(Napi::String::New(env, "OBS_service_connectOutputSignals"), Napi::Function::New(env, service::OBS_service_connectOutputSignals));
@@ -573,6 +584,5 @@ void service::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_service_updateVirtualCam"), Napi::Function::New(env, service::OBS_service_updateVirtualCam));
 	exports.Set(Napi::String::New(env, "OBS_service_installVirtualCamPlugin"), Napi::Function::New(env, service::OBS_service_installVirtualCamPlugin));
 	exports.Set(Napi::String::New(env, "OBS_service_uninstallVirtualCamPlugin"), Napi::Function::New(env, service::OBS_service_uninstallVirtualCamPlugin));
-	exports.Set(Napi::String::New(env, "OBS_service_isVirtualCamPluginInstalled"),
-		    Napi::Function::New(env, service::OBS_service_isVirtualCamPluginInstalled));
+	exports.Set(Napi::String::New(env, "OBS_service_isVirtualCamPluginInstalled"), Napi::Function::New(env, service::OBS_service_isVirtualCamPluginInstalled));
 }
