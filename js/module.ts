@@ -2048,6 +2048,13 @@ export interface IAutoConfigCapabilities {
     perUploadLegResults: true;
     desktopOwnedApply: true;
     multipleActiveProbes: true;
+    /**
+     * Supports the isolated two-leg Dual Output contract when one leg contains
+     * Twitch and the other contains YouTube. A leg may also contain additional
+     * destinations; only the selected Twitch or YouTube provider is actively
+     * probed for that upload leg.
+     */
+    dualOutputActiveProbes: true;
     bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
 }
 
@@ -2089,9 +2096,10 @@ export interface IAutoConfigDestination {
 export interface IAutoConfigCurrentSettings {
     /**
      * Zero-based server-side canvas identity from IVideo.canvasId; `0` is
-     * valid. Active Enhanced Broadcasting requires a registered, nonnegative
-     * JavaScript-safe integer that remains live for the native probe. Other
-     * request modes may omit the identity.
+     * valid. Active Enhanced Broadcasting and active two-leg Dual Output
+     * require registered, distinct, nonnegative JavaScript-safe identities
+     * that remain live for the native probe. Other request modes may omit the
+     * identity.
      */
     canvasId?: number;
     width: number;
@@ -2206,7 +2214,12 @@ export interface IAutoConfigRequest {
      * independently. A shared cloud leg may contain a subset of its probeable
      * destinations. A subset that succeeds during setup or execution produces
      * active evidence with low confidence rather than disabling every provider
-     * measurement.
+     * measurement. Active Dual Output requires exactly one horizontal and one
+     * vertical upload leg with distinct live canvas identities, one Twitch-
+     * standard probe bound to a leg containing Twitch, and one YouTube-unbound
+     * probe bound to the other leg containing YouTube. Either leg may contain
+     * additional unprobed destinations. The probes execute sequentially, and
+     * both must produce usable evidence before either leg is promoted.
      */
     activeProbes?: IAutoConfigActiveProbe[];
 }
@@ -2239,7 +2252,11 @@ export interface IAutoConfigEvent {
      * resolution and frame rate through the hardware encoder's synthetic
      * raw-input counterpart. hardware_target_cadence_rejected means only that
      * quality candidate was rejected; OSN continues testing lower cadences and
-     * keeps the public hardware encoder eligible. During bandwidth testing,
+     * keeps the public hardware encoder eligible. dual_output_testing_workload
+     * marks the start of one concurrent two-leg encoder sample, while
+     * dual_output_allocating_upload means both isolated provider probes and the
+     * concurrent hardware sample passed and OSN is splitting their demonstrated
+     * shared-uplink lower bound equally. During bandwidth testing,
      * twitch_probe_confirming_capacity means the initial Twitch window was
      * underfilled without transport pressure and OSN is running one extended
      * same-target window on the existing connection.
@@ -2332,8 +2349,10 @@ export interface IAutoConfigMeasurement {
     reason?: string;
     /**
      * Evidence only for providers whose probes were attempted. For a
-     * partial_provider_probes result, compare these providers with the leg's
-     * destinations to identify destinations that were estimated.
+     * partial_provider_probes result, compare these providers only with the
+     * leg's probe-capable Twitch and YouTube destinations to identify which
+     * supported providers were estimated. Other co-destinations are outside
+     * the V1 bandwidth-probing contract and must not be labelled as estimated.
      */
     probes?: IAutoConfigProbeMeasurement[];
 }
@@ -2366,6 +2385,17 @@ export interface IAutoConfigLegResult {
     limits?: IAutoConfigLimits;
 }
 
+export interface IAutoConfigAggregateUpload {
+    /** Two isolated provider probes establish a lower bound for one shared uplink. */
+    method: 'dual-output-isolated-lower-bound';
+    /** Larger isolated safe result: the aggregate video budget demonstrated across the two sequential probes. */
+    safeVideoKbps: number;
+    /** Sum of the equal, 100-Kbps-rounded video allocations returned for both legs. */
+    allocatedVideoKbps: number;
+    /** True only when both leg encoder workloads passed concurrently in the same benchmark window. */
+    concurrentHardwareValidated: true;
+}
+
 export type AutoConfigFatalErrorCode =
     | 'cancelled'
     | 'hardware_no_usable_encoder'
@@ -2384,6 +2414,8 @@ export interface IAutoConfigResult {
     sessionId: string;
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
     error?: IAutoConfigError;
+    /** Present only for a fully successful active Twitch + YouTube Dual Output recommendation. */
+    aggregateUpload?: IAutoConfigAggregateUpload;
     legs: IAutoConfigLegResult[];
 }
 

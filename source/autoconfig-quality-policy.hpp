@@ -116,6 +116,53 @@ struct Selection {
 	bool insufficientBandwidth = false;
 };
 
+// Desktop applies one streaming bitrate to both direct Dual Output legs. A
+// successful provider probe is an isolated lower bound on the shared uplink,
+// so the larger of the two bounds is the aggregate budget that was actually
+// demonstrated. Split that budget evenly while keeping each leg at or below
+// both provider-safe values. No additional percentage reservation is applied.
+struct SharedTwoLegAllocation {
+	bool valid = false;
+	uint64_t aggregateSafeVideoKbps = 0;
+	uint64_t perLegVideoKbps = 0;
+	uint64_t allocatedVideoKbps = 0;
+};
+
+inline SharedTwoLegAllocation allocateSharedTwoLegBandwidth(uint64_t firstSafeVideoKbps, uint64_t secondSafeVideoKbps)
+{
+	if (firstSafeVideoKbps == 0 || secondSafeVideoKbps == 0)
+		return {};
+
+	const uint64_t aggregateSafeVideoKbps = std::max(firstSafeVideoKbps, secondSafeVideoKbps);
+	const uint64_t unroundedPerLegVideoKbps = std::min({firstSafeVideoKbps, secondSafeVideoKbps, aggregateSafeVideoKbps / 2});
+	constexpr uint64_t quantumKbps = 100;
+	const uint64_t perLegVideoKbps = unroundedPerLegVideoKbps - unroundedPerLegVideoKbps % quantumKbps;
+	if (perLegVideoKbps == 0)
+		return {};
+
+	// perLegVideoKbps is bounded by floor(aggregateSafeVideoKbps / 2), so
+	// doubling cannot overflow uint64_t.
+	return {true, aggregateSafeVideoKbps, perLegVideoKbps, perLegVideoKbps * 2};
+}
+
+// A mixed-provider Dual Output result is active only when the complete joint
+// proof is present: the exact topology was admitted, both encoder workloads
+// sustained one shared cadence, and both provider probes produced usable
+// lower bounds. An invalid allocation is the caller's all-or-nothing signal to
+// keep both recommendations estimated; one successful leg must never escape as
+// an independently active result.
+inline SharedTwoLegAllocation assembleSharedTwoLegAllocation(bool exactTopologyEligible, bool concurrentHardwareValidated,
+						      bool allHardwareWorkloadsPassed, bool firstProviderProbeUsable,
+						      uint64_t firstSafeVideoKbps, bool secondProviderProbeUsable,
+						      uint64_t secondSafeVideoKbps)
+{
+	if (!exactTopologyEligible || !concurrentHardwareValidated || !allHardwareWorkloadsPassed || !firstProviderProbeUsable ||
+	    !secondProviderProbeUsable)
+		return {};
+
+	return allocateSharedTwoLegBandwidth(firstSafeVideoKbps, secondSafeVideoKbps);
+}
+
 enum class QualityProfile {
 	Generic,
 	Twitch,
@@ -126,6 +173,22 @@ struct HardwareTier {
 	int shortEdge = 0;
 	bool lowerFps = false;
 };
+
+// Dual Output applies one cadence to both independently rendered legs. Keep
+// each leg's geometry, but benchmark and recommend the lower exact rational
+// cadence so a 60/30 or 60000/1001 vs 30000/1001 pair cannot accidentally be
+// validated as two incompatible output rates.
+inline void applySharedMinimumCadence(VideoTuple &first, VideoTuple &second)
+{
+	const bool firstIsLowerOrEqual =
+		(int64_t)first.fpsNum * std::max(1, second.fpsDen) <= (int64_t)second.fpsNum * std::max(1, first.fpsDen);
+	const int sharedFpsNum = firstIsLowerOrEqual ? first.fpsNum : second.fpsNum;
+	const int sharedFpsDen = std::max(1, firstIsLowerOrEqual ? first.fpsDen : second.fpsDen);
+	first.fpsNum = sharedFpsNum;
+	first.fpsDen = sharedFpsDen;
+	second.fpsNum = sharedFpsNum;
+	second.fpsDen = sharedFpsDen;
+}
 
 // Hardware capacity is tested in product-priority order. At each resolution,
 // the input frame-rate ceiling is preserved unless lowerFps is true. Keeping

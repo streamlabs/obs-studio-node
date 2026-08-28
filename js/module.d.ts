@@ -1012,6 +1012,7 @@ export interface IAutoConfigCapabilities {
     perUploadLegResults: true;
     desktopOwnedApply: true;
     multipleActiveProbes: true;
+    dualOutputActiveProbes: true;
     bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
 }
 export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'stream-shift' | 'mixed';
@@ -1164,6 +1165,12 @@ export interface IAutoConfigLegResult {
     recommendation: IAutoConfigRecommendation;
     limits?: IAutoConfigLimits;
 }
+export interface IAutoConfigAggregateUpload {
+    method: 'dual-output-isolated-lower-bound';
+    safeVideoKbps: number;
+    allocatedVideoKbps: number;
+    concurrentHardwareValidated: true;
+}
 export type AutoConfigFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'autoconfig_worker_failed' | 'autoconfig_worker_launch_failed';
 export interface IAutoConfigError {
     code: AutoConfigFatalErrorCode;
@@ -1173,6 +1180,7 @@ export interface IAutoConfigResult {
     sessionId: string;
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
     error?: IAutoConfigError;
+    aggregateUpload?: IAutoConfigAggregateUpload;
     legs: IAutoConfigLegResult[];
 }
 export interface IAutoConfigNativeApi {

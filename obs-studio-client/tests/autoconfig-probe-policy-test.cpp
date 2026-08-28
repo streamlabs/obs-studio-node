@@ -23,6 +23,7 @@ using autoConfig::probePolicy::clampEstimateToObservedSafe;
 using autoConfig::probePolicy::decideTwitchProbe;
 using autoConfig::probePolicy::decideYoutubeConfirmation;
 using autoConfig::probePolicy::decideYoutubeExtendedValidation;
+using autoConfig::probePolicy::dualOutputProviderProbeIsUsable;
 using autoConfig::probePolicy::effectiveProbeCeilingKbps;
 using autoConfig::probePolicy::hasProbeThroughputMetrics;
 using autoConfig::probePolicy::makeYoutubeProbeSampleMetrics;
@@ -53,6 +54,15 @@ TEST_CASE("Provider probe coverage distinguishes absent, partial, and complete e
 	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(false, false, 1800, 1600));
 	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(false, true, 0, 1600));
 	CHECK_FALSE(probeSafeValueContributesToActiveRecommendation(true, true, 6000, 0));
+}
+
+TEST_CASE("Dual Output requires two conclusive provider measurements")
+{
+	CHECK(dualOutputProviderProbeIsUsable(true, true, 6000, 6000));
+	CHECK_FALSE(dualOutputProviderProbeIsUsable(false, true, 6000, 6000));
+	CHECK_FALSE(dualOutputProviderProbeIsUsable(true, false, 6000, 6000));
+	CHECK_FALSE(dualOutputProviderProbeIsUsable(true, true, 0, 6000));
+	CHECK_FALSE(dualOutputProviderProbeIsUsable(true, true, 6000, 0));
 }
 
 TEST_CASE("Final bitrate recommendations round down to whole hundreds")

@@ -1,9 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <initializer_list>
+#include <limits>
+#include <utility>
+
 #include "autoconfig-quality-policy.hpp"
 
 using autoConfig::qualityPolicy::QualityProfile;
 using autoConfig::qualityPolicy::VideoTuple;
+using autoConfig::qualityPolicy::allocateSharedTwoLegBandwidth;
+using autoConfig::qualityPolicy::applySharedMinimumCadence;
+using autoConfig::qualityPolicy::assembleSharedTwoLegAllocation;
 using autoConfig::qualityPolicy::benchmarkCeiling;
 using autoConfig::qualityPolicy::boundCurrentToV1Tier;
 using autoConfig::qualityPolicy::candidates;
@@ -21,6 +28,138 @@ using autoConfig::qualityPolicy::roundedMinimumBitrateKbps;
 using autoConfig::qualityPolicy::select;
 using autoConfig::qualityPolicy::shouldAdoptHardwareControl;
 using autoConfig::qualityPolicy::supports;
+
+TEST_CASE("Auto Config Dual Output uses one shared minimum cadence")
+{
+	SECTION("integer 60 and 30 FPS")
+	{
+		VideoTuple horizontal{1920, 1080, 60, 1};
+		VideoTuple vertical{1080, 1920, 30, 1};
+		applySharedMinimumCadence(horizontal, vertical);
+		CHECK(horizontal.fpsNum == 30);
+		CHECK(horizontal.fpsDen == 1);
+		CHECK(vertical.fpsNum == 30);
+		CHECK(vertical.fpsDen == 1);
+	}
+
+	SECTION("NTSC 59.94 and 29.97 FPS")
+	{
+		VideoTuple horizontal{1920, 1080, 60000, 1001};
+		VideoTuple vertical{1080, 1920, 30000, 1001};
+		applySharedMinimumCadence(horizontal, vertical);
+		CHECK(horizontal.fpsNum == 30000);
+		CHECK(horizontal.fpsDen == 1001);
+		CHECK(vertical.fpsNum == 30000);
+		CHECK(vertical.fpsDen == 1001);
+	}
+}
+
+TEST_CASE("Auto Config allocates a shared uplink equally across two direct legs")
+{
+	struct Expectation {
+		uint64_t firstSafeVideoKbps;
+		uint64_t secondSafeVideoKbps;
+		uint64_t expectedPerLegVideoKbps;
+	};
+	const Expectation expectations[] = {
+		{6000, 12000, 6000}, {6000, 10000, 5000}, {6000, 9000, 4500}, {5000, 12000, 5000}, {4000, 10000, 4000}, {5000, 5000, 2500},
+	};
+
+	for (const auto &expectation : expectations) {
+		CAPTURE(expectation.firstSafeVideoKbps, expectation.secondSafeVideoKbps);
+		const auto allocation = allocateSharedTwoLegBandwidth(expectation.firstSafeVideoKbps, expectation.secondSafeVideoKbps);
+		CHECK(allocation.valid);
+		CHECK(allocation.aggregateSafeVideoKbps == std::max(expectation.firstSafeVideoKbps, expectation.secondSafeVideoKbps));
+		CHECK(allocation.perLegVideoKbps == expectation.expectedPerLegVideoKbps);
+		CHECK(allocation.allocatedVideoKbps == expectation.expectedPerLegVideoKbps * 2);
+	}
+}
+
+TEST_CASE("Auto Config shared two-leg allocation is symmetric")
+{
+	const auto forward = allocateSharedTwoLegBandwidth(6000, 10000);
+	const auto reversed = allocateSharedTwoLegBandwidth(10000, 6000);
+	CHECK(forward.valid);
+	CHECK(reversed.valid);
+	CHECK(forward.aggregateSafeVideoKbps == reversed.aggregateSafeVideoKbps);
+	CHECK(forward.perLegVideoKbps == reversed.perLegVideoKbps);
+	CHECK(forward.allocatedVideoKbps == reversed.allocatedVideoKbps);
+}
+
+TEST_CASE("Auto Config shared two-leg allocation rejects zero and sub-quantum budgets")
+{
+	for (const auto &[firstSafeVideoKbps, secondSafeVideoKbps] :
+	     std::initializer_list<std::pair<uint64_t, uint64_t>>{{0, 10000}, {10000, 0}, {0, 0}, {1, 1}, {199, 199}}) {
+		CAPTURE(firstSafeVideoKbps, secondSafeVideoKbps);
+		const auto allocation = allocateSharedTwoLegBandwidth(firstSafeVideoKbps, secondSafeVideoKbps);
+		CHECK_FALSE(allocation.valid);
+		CHECK(allocation.aggregateSafeVideoKbps == 0);
+		CHECK(allocation.perLegVideoKbps == 0);
+		CHECK(allocation.allocatedVideoKbps == 0);
+	}
+
+	const auto minimum = allocateSharedTwoLegBandwidth(200, 200);
+	CHECK(minimum.valid);
+	CHECK(minimum.aggregateSafeVideoKbps == 200);
+	CHECK(minimum.perLegVideoKbps == 100);
+	CHECK(minimum.allocatedVideoKbps == 200);
+}
+
+TEST_CASE("Auto Config shared two-leg allocation cannot overflow its aggregate budget")
+{
+	const uint64_t maximum = std::numeric_limits<uint64_t>::max();
+	const auto allocation = allocateSharedTwoLegBandwidth(maximum, maximum);
+	REQUIRE(allocation.valid);
+	CHECK(allocation.aggregateSafeVideoKbps == maximum);
+	CHECK(allocation.perLegVideoKbps % 100 == 0);
+	CHECK(allocation.allocatedVideoKbps == allocation.perLegVideoKbps * 2);
+	CHECK(allocation.allocatedVideoKbps <= allocation.aggregateSafeVideoKbps);
+}
+
+TEST_CASE("Auto Config assembles an active Dual Output result only from a complete joint proof")
+{
+	const auto result = assembleSharedTwoLegAllocation(true, true, true, true, 6000, true, 10000);
+	REQUIRE(result.valid);
+	CHECK(result.aggregateSafeVideoKbps == 10000);
+	CHECK(result.perLegVideoKbps == 5000);
+	CHECK(result.allocatedVideoKbps == 10000);
+}
+
+TEST_CASE("Auto Config keeps both Dual Output legs estimated when any joint proof is missing")
+{
+	struct Evidence {
+		bool exactTopologyEligible;
+		bool concurrentHardwareValidated;
+		bool allHardwareWorkloadsPassed;
+		bool firstProviderProbeUsable;
+		uint64_t firstSafeVideoKbps;
+		bool secondProviderProbeUsable;
+		uint64_t secondSafeVideoKbps;
+	};
+	const Evidence incompleteEvidence[] = {
+		{false, true, true, true, 6000, true, 10000},
+		{true, false, true, true, 6000, true, 10000},
+		{true, true, false, true, 6000, true, 10000},
+		{true, true, true, false, 6000, true, 10000},
+		{true, true, true, true, 6000, false, 10000},
+		{true, true, true, true, 0, true, 10000},
+		{true, true, true, true, 6000, true, 0},
+	};
+
+	for (const auto &evidence : incompleteEvidence) {
+		CAPTURE(evidence.exactTopologyEligible, evidence.concurrentHardwareValidated, evidence.allHardwareWorkloadsPassed,
+			evidence.firstProviderProbeUsable, evidence.firstSafeVideoKbps, evidence.secondProviderProbeUsable,
+			evidence.secondSafeVideoKbps);
+		const auto result = assembleSharedTwoLegAllocation(
+			evidence.exactTopologyEligible, evidence.concurrentHardwareValidated, evidence.allHardwareWorkloadsPassed,
+			evidence.firstProviderProbeUsable, evidence.firstSafeVideoKbps, evidence.secondProviderProbeUsable,
+			evidence.secondSafeVideoKbps);
+		CHECK_FALSE(result.valid);
+		CHECK(result.aggregateSafeVideoKbps == 0);
+		CHECK(result.perLegVideoKbps == 0);
+		CHECK(result.allocatedVideoKbps == 0);
+	}
+}
 
 TEST_CASE("Auto Config quality policy exposes only the three approved tiers")
 {

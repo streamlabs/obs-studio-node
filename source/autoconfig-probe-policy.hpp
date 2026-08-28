@@ -89,6 +89,14 @@ inline bool probeSafeValueContributesToActiveRecommendation(bool success, bool o
 	return safeKbps > 0 && (success || (observedThroughputReliable && measuredKbps > 0));
 }
 
+// Isolated two-leg probes are combined into one shared-uplink allocation. A
+// merely conservative or failed observation can remain useful for a single-leg
+// estimate, but cannot prove that two simultaneous outputs are safe.
+inline bool dualOutputProviderProbeIsUsable(bool success, bool observedThroughputReliable, uint64_t measuredKbps, uint64_t safeKbps)
+{
+	return success && observedThroughputReliable && measuredKbps > 0 && safeKbps > 0;
+}
+
 inline uint64_t roundDownRecommendationBitrateKbps(uint64_t bitrateKbps)
 {
 	constexpr uint64_t quantumKbps = 100;

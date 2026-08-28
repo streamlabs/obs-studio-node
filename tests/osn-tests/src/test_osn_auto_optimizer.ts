@@ -191,6 +191,7 @@ describe(testName, function() {
             perUploadLegResults: true,
             desktopOwnedApply: true,
             multipleActiveProbes: true,
+            dualOutputActiveProbes: true,
             bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'],
         });
     });
@@ -437,7 +438,7 @@ describe(testName, function() {
         expect(JSON.stringify(response.events)).not.to.contain('incomplete-cloud-secret');
     });
 
-    it('default-denies independent dual-output active probes instead of recommending full uplink per leg', async function() {
+    it('default-denies dual-output active probes whose two legs reuse one canvas identity', async function() {
         const twitchSecret = 'dual-twitch-secret';
         const youtubeSecret = 'dual-youtube-secret';
         const response = await run({
@@ -482,6 +483,9 @@ describe(testName, function() {
         expect(response.result.legs).to.have.length(2);
         expect(response.result.legs.every(resultLeg => resultLeg.measurement.mode === 'estimated')).to.equal(true);
         expect(response.result.legs.every(resultLeg => resultLeg.measurement.reason === 'dual_output')).to.equal(true);
+        expect(response.result.aggregateUpload).to.equal(undefined);
+        expect(response.events.some(event => event.code === 'dual_output_testing_workload')).to.equal(false);
+        expect(response.events.some(event => event.code === 'dual_output_allocating_upload')).to.equal(false);
         expect(response.events.filter(event => event.code === 'dual_output_multiple_active_legs')).to.have.length(2);
         expect(response.events.some(event => event.code === 'twitch_probe_started' || event.code === 'youtube_probe_started')).to.equal(false);
         expect(new Set(response.result.legs.map(resultLeg => resultLeg.recommendation.encoderId)).size).to.equal(1);
@@ -635,6 +639,82 @@ describe(testName, function() {
         expect(result.status).to.equal('cancelled');
         expect(result.error.code).to.equal('cancelled');
         osn.NodeObs.CloseAutoConfigSession(sessionId);
+    });
+
+    it('accepts additional unprobed destinations and cancels both concurrent Dual Output hardware workloads before returning', async function() {
+        const verticalCanvas = osn.VideoFactory.create();
+        let sessionId = '';
+        try {
+            const started = new Promise<void>((resolve, reject) => {
+                const eventCodes: string[] = [];
+                const timeout = setTimeout(() => reject(new Error(
+                    `Timed out waiting for the concurrent Dual Output workload; events=${eventCodes.join(',')}`)), 15000);
+                sessionId = osn.NodeObs.CreateAutoConfigSession(JSON.stringify({
+                    schemaVersion: 1,
+                    topology: 'dual-output',
+                    legs: [
+                        leg({
+                            legId: 'horizontal',
+                            display: 'horizontal',
+                            destinations: [{ platform: 'twitch' }, { platform: 'kick' }],
+                        }),
+                        leg({
+                            legId: 'vertical',
+                            display: 'vertical',
+                            destinations: [{ platform: 'youtube' }],
+                            current: {
+                                ...leg().current,
+                                canvasId: verticalCanvas.canvasId,
+                                width: 720,
+                                height: 1280,
+                            },
+                        }),
+                    ],
+                    activeProbes: [
+                        {
+                            probeId: 'dual-cancel-twitch',
+                            kind: 'twitch-standard',
+                            legId: 'horizontal',
+                            serviceName: 'Twitch',
+                            server: 'rtmp://live.twitch.tv/app',
+                            streamKey: 'integration-test-twitch-key',
+                        },
+                        {
+                            probeId: 'dual-cancel-youtube',
+                            kind: 'youtube-unbound',
+                            legId: 'vertical',
+                            serviceName: 'YouTube - RTMPS',
+                            server: 'rtmps://a.rtmps.youtube.com/live2',
+                            streamKey: 'integration-test-youtube-key',
+                        },
+                    ],
+                } as IAutoConfigRequest), (event: IAutoConfigEvent) => {
+                    if (event.code) eventCodes.push(event.code);
+                    if (event.code === 'dual_output_testing_workload') {
+                        clearTimeout(timeout);
+                        resolve();
+                    } else if (event.type === 'complete' || event.type === 'cancelled') {
+                        clearTimeout(timeout);
+                        reject(new Error(`Auto Optimizer stopped before the concurrent Dual Output workload; events=${eventCodes.join(',')}`));
+                    }
+                });
+                osn.NodeObs.StartAutoConfigSession(sessionId);
+            });
+            await started;
+            await new Promise(resolve => setTimeout(resolve, 100));
+            osn.NodeObs.CancelAutoConfigSession(sessionId);
+            const result = JSON.parse(osn.NodeObs.GetAutoConfigResult(sessionId)) as IAutoConfigResult;
+            expect(result.status).to.equal('cancelled');
+            expect(result.error.code).to.equal('cancelled');
+            osn.NodeObs.CloseAutoConfigSession(sessionId);
+            sessionId = '';
+        } finally {
+            if (sessionId) {
+                try { osn.NodeObs.CancelAutoConfigSession(sessionId); } catch (_) { /* best effort */ }
+                try { osn.NodeObs.CloseAutoConfigSession(sessionId); } catch (_) { /* best effort */ }
+            }
+            verticalCanvas.destroy();
+        }
     });
 
     it('cancels an active session before the legacy service resets its video context', async function() {
