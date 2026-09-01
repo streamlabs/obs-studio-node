@@ -141,10 +141,8 @@ inline uint32_t allowedSkippedFrames(uint32_t totalFrames)
 // configuration failures keep their existing fail-closed behavior.
 inline bool isCompositeCandidateLoadFailure(std::string_view errorCode)
 {
-	return errorCode == "enhanced_broadcasting_companion_encoder_create_failed" ||
-	       errorCode == "enhanced_broadcasting_companion_output_start_failed" ||
-	       errorCode == "enhanced_broadcasting_companion_output_stopped" ||
-	       errorCode == "enhanced_broadcasting_output_start_failed";
+	return errorCode == "enhanced_broadcasting_companion_encoder_create_failed" || errorCode == "enhanced_broadcasting_companion_output_start_failed" ||
+	       errorCode == "enhanced_broadcasting_companion_output_stopped" || errorCode == "enhanced_broadcasting_output_start_failed";
 }
 
 inline bool allowsCandidateDescent(std::string_view errorCode)
