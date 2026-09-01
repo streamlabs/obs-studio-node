@@ -423,7 +423,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
-          repository: stream-labs/symsrv-scripts
+          repository: streamlabs/symsrv-scripts
           # Pinned so a push to symsrv-scripts cannot change this build without a PR here
           ref: v1.1.1
           path: symsrv-scripts
@@ -439,7 +439,7 @@ jobs:
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: pwsh
       - name: Run symbol server scripts
-        run: ./symsrv-scripts/main.bat "${{ github.workspace }}/symsrv-scripts" ".\main.ps1 -pdbPaths '${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\lib-streamlabs-ipc,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-client,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-server' -localSourceDir '${{ github.workspace }}' -repo_userId 'stream-labs' -repo_name 'obs-studio-node' -repo_branch '${{ github.sha }}' -subModules 'lib-streamlabs-ipc,stream-labs,lib-streamlabs-ipc,streamlabs'"
+        run: ./symsrv-scripts/main.bat "${{ github.workspace }}/symsrv-scripts" ".\main.ps1 -pdbPaths '${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\lib-streamlabs-ipc,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-client,${{ github.workspace }}\${{env.SLBUILDDIRECTORY}}\obs-studio-server' -localSourceDir '${{ github.workspace }}' -repo_userId 'streamlabs' -repo_name 'obs-studio-node' -repo_branch '${{ github.sha }}' -subModules 'lib-streamlabs-ipc,streamlabs,lib-streamlabs-ipc,streamlabs'"
         env:
           AWS_SYMB_ACCESS_KEY_ID: ${{secrets.AWS_SYMB_ACCESS_KEY_ID}}
           AWS_SYMB_SECRET_ACCESS_KEY: ${{secrets.AWS_SYMB_SECRET_ACCESS_KEY}}
