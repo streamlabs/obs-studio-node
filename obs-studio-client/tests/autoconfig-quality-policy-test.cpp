@@ -287,6 +287,12 @@ TEST_CASE("Auto Config derives only exact frame-rate divisors")
 
 	result = policy::frameRateDivisor(60000, 1001, 30, 1);
 	CHECK_FALSE(result.supported);
+
+	result = policy::frameRateDivisor(30, 1, 60, 1);
+	CHECK_FALSE(result.supported);
+
+	result = policy::frameRateDivisor(60, 1, 50, 1);
+	CHECK_FALSE(result.supported);
 }
 
 TEST_CASE("Auto Config native contract supports the two Desktop upload legs")

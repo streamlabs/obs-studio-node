@@ -257,3 +257,40 @@ TEST_CASE("Encoder GPU rescale retains a registered identity until teardown", "[
 	CHECK(resources.cleanup() == OBS_VIDEO_SUCCESS);
 	CHECK(obs_get_video_info_by_index2(0) == nullptr);
 }
+
+TEST_CASE("Auxiliary video mixes use the shared render cadence", "[video-mix][frame-rate]")
+{
+	osn::tests::ObsSetup setup;
+
+	obs_video_info info = makeVideoInfo();
+	REQUIRE(obs_reset_video(&info) == OBS_VIDEO_SUCCESS);
+	obs_video_info *canvas = obs_get_video_info_by_index2(0);
+	REQUIRE(canvas);
+	obs_core_video_mix_t *identityMix = obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING);
+	REQUIRE(identityMix);
+
+	obs_view_t *view = obs_view_create();
+	REQUIRE(view);
+
+	obs_video_info auxiliaryInfo = makeVideoInfo();
+	auxiliaryInfo.fps_num = 30;
+	CHECK(obs_view_add_auxiliary_mix(view, &auxiliaryInfo, identityMix) == nullptr);
+
+	// Equivalent rational rates are accepted even when represented differently.
+	auxiliaryInfo.fps_num = 60000;
+	auxiliaryInfo.fps_den = 1000;
+	obs_core_video_mix_t *auxiliaryMix = obs_view_add_auxiliary_mix(view, &auxiliaryInfo, identityMix);
+	REQUIRE(auxiliaryMix);
+
+	video_t *auxiliaryVideo = obs_video_mix_get_video(auxiliaryMix);
+	REQUIRE(auxiliaryVideo);
+	const video_output_info *outputInfo = video_output_get_info(auxiliaryVideo);
+	REQUIRE(outputInfo);
+	CHECK(outputInfo->fps_num == 60);
+	CHECK(outputInfo->fps_den == 1);
+
+	obs_view_remove(view);
+	obs_view_destroy(view);
+	obs_wait_for_destroy_queue();
+	CHECK(obs_remove_video_info(canvas) == OBS_VIDEO_SUCCESS);
+}

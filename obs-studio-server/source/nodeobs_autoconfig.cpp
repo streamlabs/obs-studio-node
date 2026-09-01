@@ -1470,6 +1470,14 @@ public:
 	bool createSyntheticVideo(uint32_t width, uint32_t height, uint32_t fpsNum, uint32_t fpsDen, bool useCoreVideoMix = false, bool useCurrentScene = false,
 				  obs_core_video_mix_t *identitySourceMix = nullptr)
 	{
+		if (identitySourceMix) {
+			video_t *identityVideo = obs_video_mix_get_video(identitySourceMix);
+			const video_output_info *identityInfo = identityVideo ? video_output_get_info(identityVideo) : nullptr;
+			if (!identityInfo || !identityInfo->fps_num || !identityInfo->fps_den)
+				return false;
+			fpsNum = identityInfo->fps_num;
+			fpsDen = identityInfo->fps_den;
+		}
 		videoWidth = width;
 		videoHeight = height;
 		videoFpsNum = fpsNum;
@@ -3145,12 +3153,18 @@ static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const 
 	return true;
 }
 
-static media_frames_per_second effectiveTrackCadence(const osn::VideoEncoderConfiguration &configuration, uint32_t sourceFpsNum, uint32_t sourceFpsDen)
+static media_frames_per_second effectiveEncoderCadence(uint32_t sourceFpsNum, uint32_t sourceFpsDen, uint32_t targetFpsNum, uint32_t targetFpsDen)
 {
-	media_frames_per_second result = configuration.framerate.value_or(media_frames_per_second{sourceFpsNum, std::max(1U, sourceFpsDen)});
+	media_frames_per_second result{targetFpsNum, std::max(1U, targetFpsDen)};
 	if ((uint64_t)result.numerator * sourceFpsDen > (uint64_t)sourceFpsNum * result.denominator)
 		result = {sourceFpsNum, std::max(1U, sourceFpsDen)};
 	return result;
+}
+
+static media_frames_per_second effectiveTrackCadence(const osn::VideoEncoderConfiguration &configuration, uint32_t sourceFpsNum, uint32_t sourceFpsDen)
+{
+	const auto requested = configuration.framerate.value_or(media_frames_per_second{sourceFpsNum, std::max(1U, sourceFpsDen)});
+	return effectiveEncoderCadence(sourceFpsNum, sourceFpsDen, requested.numerator, requested.denominator);
 }
 
 static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> &session, const ProbeRequest &probe, const osn::Config &config,
@@ -3194,11 +3208,20 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		attempt.errorCode = "enhanced_broadcasting_video_create_failed";
 		return false;
 	}
+	if (usePrivateTextureMix) {
+		sourceFpsNum = resources.videoFpsNum;
+		sourceFpsDen = resources.videoFpsDen;
+	}
 	if (candidates.size() == 2) {
 		additionalResources = std::make_unique<ScratchResources>(*session);
 		if (!additionalResources->createSyntheticVideo(candidates[1].width, candidates[1].height, sourceFpsNum, sourceFpsDen, usePrivateTextureMix,
 							       usePrivateTextureMix, identitySourceMixes[1])) {
 			attempt.errorCode = "enhanced_broadcasting_additional_video_create_failed";
+			return false;
+		}
+		if (usePrivateTextureMix &&
+		    (uint64_t)additionalResources->videoFpsNum * sourceFpsDen != (uint64_t)sourceFpsNum * additionalResources->videoFpsDen) {
+			attempt.errorCode = "enhanced_broadcasting_canvas_cadence_mismatch";
 			return false;
 		}
 	}
@@ -3233,6 +3256,17 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	if (additionalResources) {
 		configureRawCanvas(rawAdditionalCanvas, candidates[1]);
 		canvases.push_back(usePrivateTextureMix ? additionalResources->scratchViewInfo.get() : &rawAdditionalCanvas);
+	}
+	std::vector<uint32_t> trackFrameRateDivisors;
+	trackFrameRateDivisors.reserve(config.encoder_configurations.size());
+	for (const auto &configuration : config.encoder_configurations) {
+		const auto cadence = effectiveTrackCadence(configuration, sourceFpsNum, sourceFpsDen);
+		const auto divisor = qualityPolicy::frameRateDivisor(sourceFpsNum, sourceFpsDen, cadence.numerator, cadence.denominator);
+		if (!divisor.supported) {
+			attempt.errorCode = "enhanced_broadcasting_frame_rate_unsupported";
+			return false;
+		}
+		trackFrameRateDivisors.push_back(divisor.value);
 	}
 
 	const int audioBitrate = osn::GetMultitrackAudioBitrate();
@@ -3282,6 +3316,10 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 			attempt.errorCode = "enhanced_broadcasting_video_canvas_binding_failed";
 			return false;
 		}
+		if (obs_encoder_get_frame_rate_divisor(encoder) != trackFrameRateDivisors[index]) {
+			attempt.errorCode = "enhanced_broadcasting_frame_rate_divisor_failed";
+			return false;
+		}
 		canvasInputsBound[canvasIndex] = true;
 	}
 	if (!enhancedBroadcastingPolicy::everyCanvasCovered(canvasInputsBound)) {
@@ -3292,6 +3330,7 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	struct CompanionSample {
 		const CompanionWorkload *workload = nullptr;
 		ScratchResources *resources = nullptr;
+		media_frames_per_second cadence{0, 1};
 		uint32_t encodedStart = 0;
 		uint32_t outputFramesStart = 0;
 		uint32_t droppedStart = 0;
@@ -3344,6 +3383,17 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 			attempt.errorCode = "enhanced_broadcasting_companion_canvas_binding_failed";
 			return false;
 		}
+		const auto cadence = effectiveEncoderCadence(sourceFpsNum, sourceFpsDen, (uint32_t)std::max(1, workload.value.fpsNum),
+							     (uint32_t)std::max(1, workload.value.fpsDen));
+		const auto divisor = qualityPolicy::frameRateDivisor(sourceFpsNum, sourceFpsDen, cadence.numerator, cadence.denominator);
+		if (!divisor.supported) {
+			attempt.errorCode = "enhanced_broadcasting_companion_frame_rate_unsupported";
+			return false;
+		}
+		if (divisor.value > 1 && !obs_encoder_set_frame_rate_divisor(companion->videoEncoder, divisor.value)) {
+			attempt.errorCode = "enhanced_broadcasting_companion_frame_rate_divisor_failed";
+			return false;
+		}
 		const std::string outputName = "auto_optimizer_enhanced_broadcasting_companion_output_" + workload.legId;
 		companion->output = obs_output_create(kHardwareBenchmarkOutputId, outputName.c_str(), nullptr, nullptr);
 		if (!companion->output) {
@@ -3352,7 +3402,7 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		}
 		obs_output_set_video_encoder(companion->output, companion->videoEncoder);
 		companion->publishOutput();
-		companionSamples.push_back({&workload, companion.get()});
+		companionSamples.push_back({&workload, companion.get(), cadence});
 		companionResources.push_back(std::move(companion));
 	}
 
@@ -3545,7 +3595,8 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		const uint32_t encoded = obs_encoder_get_encoded_frames(sample.resources->videoEncoder) - sample.encodedStart;
 		const uint32_t outputFrames = obs_output_get_total_frames(sample.resources->output) - sample.outputFramesStart;
 		const uint32_t dropped = obs_output_get_frames_dropped(sample.resources->output) - sample.droppedStart;
-		const uint32_t expected = (uint32_t)((uint64_t)kEnhancedBroadcastingSampleMs * sourceFpsNum / (1000ULL * std::max(1U, sourceFpsDen)));
+		const uint32_t expected =
+			(uint32_t)((uint64_t)kEnhancedBroadcastingSampleMs * sample.cadence.numerator / (1000ULL * std::max(1U, sample.cadence.denominator)));
 		const uint32_t minimum = enhancedBroadcastingPolicy::minimumEncodedFrames(expected);
 		const char *companionError = obs_output_get_last_error(sample.resources->output);
 		const bool passed = encoded >= minimum && outputFrames >= minimum && dropped == 0 && (!companionError || !*companionError);
@@ -3767,8 +3818,12 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		if (additionalIdentity &&
 		    (uint64_t)additionalIdentity->fps_num * primaryIdentity->fps_den < (uint64_t)primaryIdentity->fps_num * additionalIdentity->fps_den)
 			smokeIdentity = additionalIdentity;
-		const uint32_t smokeFpsNum = targetAboveMainCadence ? smokeIdentity->fps_num : candidate.fpsNum;
-		const uint32_t smokeFpsDen = targetAboveMainCadence ? std::max(1U, smokeIdentity->fps_den) : candidate.fpsDen;
+		// Auxiliary mixes share the graphics thread's render cadence. Lower
+		// Twitch renditions and companion outputs are exercised with exact
+		// encoder frame-rate divisors; a higher candidate still receives the
+		// separate exact-cadence raw-input attempt below.
+		const uint32_t smokeFpsNum = smokeIdentity->fps_num;
+		const uint32_t smokeFpsDen = std::max(1U, smokeIdentity->fps_den);
 		std::vector<uint64_t> canvasIds{leg.current.canvasId};
 		if (leg.additionalVideo)
 			canvasIds.push_back(leg.additionalVideo->current.canvasId);
