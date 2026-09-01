@@ -651,14 +651,25 @@ describe(testName, function() {
     it('does not test or replace provider-owned Twitch both-display encoding', async function() {
         const response = await run({
             schemaVersion: 1,
-            topology: 'direct-single',
+            topology: 'enhanced-broadcasting',
             legs: [leg({
                 display: 'both',
+                outputKind: 'twitch-enhanced-broadcasting',
                 destinations: [{ platform: 'twitch' }],
                 current: {
                     ...leg().current,
                     encoderId: 'obs_nvenc_av1_tex',
                     codec: 'av1',
+                },
+                additionalVideo: {
+                    display: 'vertical',
+                    current: {
+                        ...leg().current,
+                        width: 720,
+                        height: 1280,
+                        encoderId: 'obs_nvenc_av1_tex',
+                        codec: 'av1',
+                    },
                 },
                 estimateReason: 'enhanced_broadcasting',
             })],
