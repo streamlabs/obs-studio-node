@@ -42,8 +42,8 @@ public:
 	std::string customEncSettings;
 
 	void updateEncoders();
-	void start() override;
-	void checkOutput() override;
+	void start();
+	void checkOutput();
 };
 
 class ISimpleStreaming : public IStreaming {

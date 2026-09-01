@@ -6,6 +6,7 @@
 #include <util/dstr.hpp>
 
 #include <algorithm>
+#include <charconv>
 #include <cctype>
 #include <inttypes.h>
 #include <string_view>
@@ -46,14 +47,9 @@ namespace {
 
 std::string trimCopy(std::string value)
 {
-	while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
-		value.pop_back();
-
-	size_t first = 0;
-	while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first])))
-		first++;
-	if (first)
-		value.erase(0, first);
+	const auto isSpace = [](unsigned char character) { return std::isspace(character); };
+	value.erase(value.begin(), std::find_if_not(value.begin(), value.end(), isSpace));
+	value.erase(std::find_if_not(value.rbegin(), value.rend(), isSpace).base(), value.end());
 
 	return value;
 }
@@ -62,10 +58,10 @@ std::vector<std::string> queryItems(const std::string &value)
 {
 	std::vector<std::string> result;
 	const size_t queryStart = value.find('?');
-	if (queryStart == std::string::npos)
+	const size_t fragmentStart = value.find('#');
+	if (queryStart == std::string::npos || (fragmentStart != std::string::npos && fragmentStart < queryStart))
 		return result;
 
-	const size_t fragmentStart = value.find('#', queryStart + 1);
 	const std::string query = value.substr(queryStart + 1, fragmentStart == std::string::npos ? std::string::npos : fragmentStart - queryStart - 1);
 	size_t offset = 0;
 	while (offset <= query.size()) {
@@ -81,17 +77,6 @@ std::vector<std::string> queryItems(const std::string &value)
 	return result;
 }
 
-int hexValue(char value)
-{
-	if (value >= '0' && value <= '9')
-		return value - '0';
-	if (value >= 'a' && value <= 'f')
-		return value - 'a' + 10;
-	if (value >= 'A' && value <= 'F')
-		return value - 'A' + 10;
-	return -1;
-}
-
 std::string decodeQueryComponent(std::string_view value)
 {
 	std::string decoded;
@@ -102,10 +87,12 @@ std::string decodeQueryComponent(std::string_view value)
 			continue;
 		}
 		if (value[index] == '%' && index + 2 < value.size()) {
-			const int high = hexValue(value[index + 1]);
-			const int low = hexValue(value[index + 2]);
-			if (high >= 0 && low >= 0) {
-				decoded += static_cast<char>((high << 4) | low);
+			unsigned int byte = 0;
+			const char *first = value.data() + index + 1;
+			const char *last = first + 2;
+			const auto [end, error] = std::from_chars(first, last, byte, 16);
+			if (error == std::errc{} && end == last) {
+				decoded += static_cast<char>(byte);
 				index += 2;
 				continue;
 			}
@@ -117,8 +104,10 @@ std::string decodeQueryComponent(std::string_view value)
 
 std::string lowerAscii(std::string value)
 {
-	for (char &character : value)
-		character = static_cast<char>(std::tolower(static_cast<unsigned char>(character)));
+	for (char &character : value) {
+		if (character >= 'A' && character <= 'Z')
+			character = static_cast<char>(character + ('a' - 'A'));
+	}
 	return value;
 }
 
@@ -138,10 +127,7 @@ std::string parameterValue(const std::string &item)
 
 std::string withoutQuery(const std::string &value)
 {
-	const size_t queryStart = value.find('?');
-	const size_t fragmentStart = value.find('#');
-	const size_t end = std::min(queryStart, fragmentStart);
-	return value.substr(0, end);
+	return value.substr(0, value.find_first_of("?#"));
 }
 
 std::string withQueryItems(std::string base, const std::vector<std::string> &items)
@@ -163,11 +149,8 @@ std::string withQueryItems(std::string base, const std::vector<std::string> &ite
 std::string NormalizeTwitchBandwidthTestKey(std::string stream_key)
 {
 	stream_key = trimCopy(std::move(stream_key));
-	std::vector<std::string> retained;
-	for (auto &item : queryItems(stream_key)) {
-		if (parameterName(item) != "bandwidthtest")
-			retained.emplace_back(std::move(item));
-	}
+	std::vector<std::string> retained = queryItems(stream_key);
+	std::erase_if(retained, [](const std::string &item) { return parameterName(item) == "bandwidthtest"; });
 	retained.emplace_back("bandwidthtest=true");
 	return withQueryItems(withoutQuery(stream_key), retained);
 }
@@ -179,8 +162,7 @@ std::string MergeTwitchBandwidthTestKey(std::string effective_stream_key, const 
 	auto appendWithOverride = [&](const std::vector<std::string> &items) {
 		for (const auto &item : items) {
 			const std::string name = parameterName(item);
-			merged.erase(std::remove_if(merged.begin(), merged.end(), [&](const std::string &existing) { return parameterName(existing) == name; }),
-				     merged.end());
+			std::erase_if(merged, [&](const std::string &existing) { return parameterName(existing) == name; });
 			merged.push_back(item);
 		}
 	};
@@ -477,8 +459,6 @@ static void create_audio_encoders(const Config &go_live_config, std::vector<OBSE
 	// we already check for empty inside of `create_encoders`
 	encoder_configs_type empty = {};
 	create_encoders("multitrack video vod audio", go_live_config.audio_configurations.vod.value_or(empty), *vod_track_mixer);
-
-	return;
 }
 
 static OBSOutputAutoRelease create_output()
@@ -582,7 +562,5 @@ OBSServiceAutoRelease create_service(const Config &go_live_config, const std::op
 	obs_data_set_string(settings, "key", stream_key.c_str());
 
 	return obs_service_create("rtmp_custom", "multitrack video service", settings, nullptr);
-	;
 }
-
 }

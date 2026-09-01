@@ -44,6 +44,7 @@
 #include <queue>
 #include <set>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -352,34 +353,33 @@ static void returnError(std::vector<ipc::value> &rval, const char *message)
 	rval.push_back(ipc::value(message));
 }
 
-static std::string lowerCopy(std::string value)
+static std::string asciiLowerCopy(std::string value)
 {
-	std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return (char)std::tolower(ch); });
+	for (char &character : value)
+		character = character >= 'A' && character <= 'Z' ? static_cast<char>(character + ('a' - 'A')) : character;
 	return value;
-}
-
-static bool hasSuffix(const std::string &value, const std::string &suffix)
-{
-	return value.size() >= suffix.size() && value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 static bool isOfficialTwitchServer(const std::string &server)
 {
-	std::string value = lowerCopy(server);
+	const std::string value = asciiLowerCopy(server);
 	if (value == "auto")
 		return true;
 
-	const size_t scheme = value.find("://");
-	if (scheme == std::string::npos || (value.compare(0, 7, "rtmp://") != 0 && value.compare(0, 8, "rtmps://") != 0))
+	size_t hostStart = 0;
+	if (value.starts_with("rtmp://"))
+		hostStart = 7;
+	else if (value.starts_with("rtmps://"))
+		hostStart = 8;
+	else
 		return false;
 
-	const size_t hostStart = scheme + 3;
 	const size_t hostEnd = value.find_first_of("/:?#", hostStart);
 	const std::string host = value.substr(hostStart, hostEnd == std::string::npos ? std::string::npos : hostEnd - hostStart);
 	if (host.empty() || host.find('@') != std::string::npos)
 		return false;
 
-	return host == "live.twitch.tv" || hasSuffix(host, ".twitch.tv") || host == "live-video.net" || hasSuffix(host, ".live-video.net");
+	return host == "live.twitch.tv" || host.ends_with(".twitch.tv") || host == "live-video.net" || host.ends_with(".live-video.net");
 }
 
 static bool containsWhitespaceOrControl(const std::string &value)
@@ -404,12 +404,12 @@ static bool isOfficialYoutubeRtmpsServer(const std::string &server)
 	if (server.empty() || server.size() > 2048 || containsWhitespaceOrControl(server))
 		return false;
 
-	const std::string value = lowerCopy(server);
-	constexpr const char *scheme = "rtmps://";
-	if (value.compare(0, std::strlen(scheme), scheme) != 0 || value.find_first_of("?#") != std::string::npos)
+	const std::string value = asciiLowerCopy(server);
+	constexpr std::string_view scheme = "rtmps://";
+	if (!value.starts_with(scheme) || value.find_first_of("?#") != std::string::npos)
 		return false;
 
-	const size_t authorityStart = std::strlen(scheme);
+	const size_t authorityStart = scheme.size();
 	const size_t pathStart = value.find('/', authorityStart);
 	if (pathStart == std::string::npos || value.substr(pathStart) != "/live2")
 		return false;
@@ -468,7 +468,7 @@ static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
 	std::set<std::string> probedLegs;
 	for (const auto &probe : session.probes) {
 		const auto destinations = destinationProvidersByLeg.find(probe.legId);
-		if (destinations == destinationProvidersByLeg.end() || destinations->second.count(probe.provider) == 0)
+		if (destinations == destinationProvidersByLeg.end() || !destinations->second.contains(probe.provider))
 			return reject("each probe must bind to a leg carrying the same provider");
 		if (probe.kind != "twitch-standard" && probe.kind != "youtube-unbound")
 			return reject("only standard Twitch and unbound YouTube probes are supported");
@@ -582,7 +582,7 @@ static bool isKnownDisplay(const std::string &display)
 static bool isKnownPlatform(const std::string &platform)
 {
 	static const std::set<std::string> known = {"twitch", "youtube", "facebook", "kick", "tiktok", "custom", "other"};
-	return known.count(platform) != 0;
+	return known.contains(platform);
 }
 
 static bool isKnownTopology(const std::string &topology)
@@ -591,7 +591,7 @@ static bool isKnownTopology(const std::string &topology)
 						    "custom-rtmp",           "dual-output",
 						    "enhanced-broadcasting", "enhanced-broadcasting-dual-output",
 						    "stream-shift",          "mixed"};
-	return known.count(topology) != 0;
+	return known.contains(topology);
 }
 
 static bool isKnownOutputKind(const std::string &outputKind)
@@ -758,7 +758,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		} else {
 			for (size_t di = 0; di < destinationCount; di++) {
 				obs_data_t *destination = obs_data_array_item(destinations, di);
-				Destination parsed{lowerCopy(obs_data_get_string(destination, "platform"))};
+				Destination parsed{asciiLowerCopy(obs_data_get_string(destination, "platform"))};
 				obs_data_release(destination);
 				if (!isKnownPlatform(parsed.platform)) {
 					error = "invalid_autoconfig_platform";
@@ -969,7 +969,7 @@ struct EncoderPreset {
 static bool isH264Encoder(const std::string &id)
 {
 	const char *codec = id.empty() ? nullptr : obs_get_encoder_codec(id.c_str());
-	return codec && lowerCopy(codec) == "h264";
+	return codec && asciiLowerCopy(codec) == "h264";
 }
 
 static bool isModernHardwareH264(const std::string &id)
@@ -1046,7 +1046,7 @@ static bool isX264Preset(const std::string &preset)
 {
 	static const std::set<std::string> supported = {"ultrafast", "superfast", "veryfast", "faster",   "fast",
 							"medium",    "slow",      "slower",   "veryslow", "placebo"};
-	return supported.count(lowerCopy(preset)) != 0;
+	return supported.contains(asciiLowerCopy(preset));
 }
 
 static int offlinePlatformCapKbps(const std::string &platform)
@@ -1645,8 +1645,7 @@ public:
 
 		{
 			std::lock_guard<std::mutex> lock(session.probeMutex);
-			session.activeProbeOutputs.erase(std::remove(session.activeProbeOutputs.begin(), session.activeProbeOutputs.end(), output),
-							 session.activeProbeOutputs.end());
+			std::erase(session.activeProbeOutputs, output);
 			if (output) {
 				obs_output_release(output);
 				output = nullptr;
@@ -3117,7 +3116,7 @@ static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const 
 	std::vector<bool> candidateCovered(candidates.size(), false);
 	for (const auto &video : config.encoder_configurations) {
 		const char *codec = obs_get_encoder_codec(video.type.c_str());
-		if (!enhancedBroadcastingPolicy::canvasIndexIsValid(video.canvas_index, candidates.size()) || !codec || lowerCopy(codec) != "h264") {
+		if (!enhancedBroadcastingPolicy::canvasIndexIsValid(video.canvas_index, candidates.size()) || !codec || asciiLowerCopy(codec) != "h264") {
 			errorCode = "enhanced_broadcasting_unsupported_video_ladder";
 			return false;
 		}
@@ -3658,29 +3657,22 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 	auto candidates = enhancedBroadcastingPolicy::candidates(maxWidth, maxHeight, maxFpsNum, maxFpsDen, fractionalCadenceFamily ? 1001U : 1U);
 	if (leg.additionalVideo) {
 		const Limits &additionalLimits = leg.additionalVideo->limits;
-		candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
-						[&](const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
-							const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
-							return !enhancedBroadcastingPolicy::candidateFitsLimits(
-								vertical, (uint32_t)std::max(0, additionalLimits.maxWidth),
-								(uint32_t)std::max(0, additionalLimits.maxHeight),
-								(uint32_t)std::max(0, additionalLimits.maxFpsNum),
-								(uint32_t)std::max(0, additionalLimits.maxFpsDen));
-						}),
-				 candidates.end());
+		std::erase_if(candidates, [&](const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
+			const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
+			return !enhancedBroadcastingPolicy::candidateFitsLimits(vertical, (uint32_t)std::max(0, additionalLimits.maxWidth),
+										(uint32_t)std::max(0, additionalLimits.maxHeight),
+										(uint32_t)std::max(0, additionalLimits.maxFpsNum),
+										(uint32_t)std::max(0, additionalLimits.maxFpsDen));
+		});
 	}
 	if (!provisionalCompanions.empty()) {
-		candidates.erase(std::remove_if(candidates.begin(), candidates.end(),
-						[&](const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
-							const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
-							return std::any_of(provisionalCompanions.begin(), provisionalCompanions.end(),
-									   [&](const CompanionWorkload &companion) {
-										   const auto &displayCandidate = companion.display == "horizontal" ? candidate
-																		    : vertical;
-										   return !enhancedCandidateFitsCompanion(displayCandidate, companion);
-									   });
-						}),
-				 candidates.end());
+		std::erase_if(candidates, [&](const enhancedBroadcastingPolicy::VideoCandidate &candidate) {
+			const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
+			return std::any_of(provisionalCompanions.begin(), provisionalCompanions.end(), [&](const CompanionWorkload &companion) {
+				const auto &displayCandidate = companion.display == "horizontal" ? candidate : vertical;
+				return !enhancedCandidateFitsCompanion(displayCandidate, companion);
+			});
+		});
 	}
 	if (candidates.empty()) {
 		result.errorCode = "enhanced_broadcasting_no_candidate";
