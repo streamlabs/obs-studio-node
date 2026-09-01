@@ -27,13 +27,13 @@ The entire dependency check will be skipped for Debug targets as it can have dif
 The simplest way is to add a custom post build command.
 
 Example:
-https://github.com/stream-labs/a-files-updater/blob/5ef0900cd05c330988a95a87053fe0bf29e0bddf/CMakeLists.txt#L123
+https://github.com/streamlabs/a-files-updater/blob/5ef0900cd05c330988a95a87053fe0bf29e0bddf/CMakeLists.txt#L123
 
 ## Advanced way: additional build target
 
 If there are too many binaries to check it will take noticeable amount of time, in this case it is better to move the script to a separate target.
 
 Example:
-https://github.com/stream-labs/obs-studio/blob/03442ce67f35566963bc73a1ad00be2ccb9e50e5/CMakeLists.txt#L320
+https://github.com/streamlabs/obs-studio/blob/03442ce67f35566963bc73a1ad00be2ccb9e50e5/CMakeLists.txt#L320
 
 It can then be ran by executing the following `cmake --build build --target check_dependencies --config RelWithDebInfo`

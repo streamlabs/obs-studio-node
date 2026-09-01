@@ -106,7 +106,7 @@ if (WIN32)
 	# StackWalker (Callstack rewind
 	FetchContent_Declare(
 	stackwalker
-	GIT_REPOSITORY https://github.com/stream-labs/StackWalker
+	GIT_REPOSITORY https://github.com/streamlabs/StackWalker
 	)
 
 	FetchContent_GetProperties(stackwalker)

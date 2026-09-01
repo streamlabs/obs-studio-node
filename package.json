@@ -6,12 +6,12 @@
   "license": "GPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stream-labs/obs-studio-node.git"
+    "url": "git+https://github.com/streamlabs/obs-studio-node.git"
   },
   "bugs": {
-    "url": "https://github.com/stream-labs/obs-studio-node/issues"
+    "url": "https://github.com/streamlabs/obs-studio-node/issues"
   },
-  "homepage": "https://github.com/stream-labs/obs-studio-node#readme",
+  "homepage": "https://github.com/streamlabs/obs-studio-node#readme",
   "main": "./index.js",
   "types": "./index.d.ts",
   "scripts": {

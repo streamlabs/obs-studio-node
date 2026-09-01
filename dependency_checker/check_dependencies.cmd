@@ -42,7 +42,7 @@ IF EXIST %depsFile% (
       "Write-Output '  Dependencies changed for %BinaryName%';" ^
       "Write-Output '  Saved dependencies %depsFile%';" ^
       "Write-Output '  New dependencies %depsCurrent%.txt';" ^
-      "Write-Output '  More info https://github.com/stream-labs/obs-studio-node/blob/staging/dependency_checker/README.md';" ^
+      "Write-Output '  More info https://github.com/streamlabs/obs-studio-node/blob/staging/dependency_checker/README.md';" ^
       "Write-Host '!! !! !! !! !! !!' -ForegroundColor Green;" ^
       "Write-Output '';" ^
       "Write-Error 'Alarm: Dependencies changed. Please review changes.' " ^
