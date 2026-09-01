@@ -5045,7 +5045,7 @@ void Register(ipc::server &srv)
 void GetCapabilities(void *, const int64_t, const std::vector<ipc::value> &, std::vector<ipc::value> &rval)
 {
 	static const char *capabilities =
-		R"({"apiVersion":2,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"dualOutputActiveProbes":true,"enhancedBroadcastingDualOutputWorkload":true,"bandwidthModes":["twitch-standard-active","twitch-enhanced-broadcasting-active","youtube-unbound-active","estimate"]})";
+		R"({"apiVersion":1,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"dualOutputActiveProbes":true,"enhancedBroadcastingDualOutputWorkload":true,"bandwidthModes":["twitch-standard-active","twitch-enhanced-broadcasting-active","youtube-unbound-active","estimate"]})";
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(capabilities));
 }

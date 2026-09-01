@@ -1005,7 +1005,7 @@ export interface IAudioTrackFactory {
     saveLegacySettings(): void;
 }
 export interface IAutoConfigCapabilities {
-    apiVersion: 2;
+    apiVersion: 1;
     resultSchemaVersion: 1;
     previewApplySplit: true;
     awaitableCancel: true;

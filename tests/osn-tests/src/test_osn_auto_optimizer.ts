@@ -214,7 +214,7 @@ describe(testName, function() {
         expect(osn.NodeObs.ConfirmAutoConfigProbeIngest).to.be.a('function');
         const capabilities = JSON.parse(osn.NodeObs.GetAutoConfigCapabilities()) as IAutoConfigCapabilities;
         expect(capabilities).to.deep.equal({
-            apiVersion: 2,
+            apiVersion: 1,
             resultSchemaVersion: 1,
             previewApplySplit: true,
             awaitableCancel: true,

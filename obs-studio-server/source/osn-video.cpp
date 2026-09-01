@@ -29,7 +29,7 @@
 #include "nodeobs_api.h"
 
 namespace {
-// APIv2 replacement for the legacy OBS_service::stopConnectingOutputs() guard.
+// Auto Optimizer session API replacement for the legacy OBS_service::stopConnectingOutputs() guard.
 // obs_set_video_info / obs_remove_video_info must not run while a streaming output
 // is still connecting, or libobs races on the video pointer.
 void stopConnectingStreamingOutputs()

@@ -2041,7 +2041,7 @@ export interface IAudioTrackFactory {
 // ---- Auto Optimizer API ----
 
 export interface IAutoConfigCapabilities {
-    apiVersion: 2;
+    apiVersion: 1;
     resultSchemaVersion: 1;
     previewApplySplit: true;
     awaitableCancel: true;
