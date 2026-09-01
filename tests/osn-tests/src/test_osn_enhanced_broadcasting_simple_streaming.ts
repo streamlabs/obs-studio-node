@@ -8,7 +8,7 @@ import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import * as inputSettings from '../util/input_settings';
 
-import path = require('path');
+import * as path from 'path';
 
 const testName = 'osn-enhanced-broadcasting-simple-streaming';
 

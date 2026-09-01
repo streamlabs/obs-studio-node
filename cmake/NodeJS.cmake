@@ -639,8 +639,8 @@ function(add_nodejs_module NAME)
         C_VISIBILITY_PRESET hidden
         CXX_VISIBILITY_PRESET hidden
         POSITION_INDEPENDENT_CODE TRUE
-        CMAKE_CXX_STANDARD_REQUIRED TRUE
-        CXX_STANDARD 17
+        CXX_STANDARD 20
+        CXX_STANDARD_REQUIRED ON
     )
 
     # Handle link flag cases properly

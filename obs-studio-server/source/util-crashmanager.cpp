@@ -448,8 +448,8 @@ std::wstring util::CrashManager::GetMemoryDumpName()
 
 	auto randomCharacter = [&]() {
 		auto crand = [&](char min, char max) {
-			std::uniform_int_distribution<char> distribution(min, max);
-			return distribution(rangen);
+			std::uniform_int_distribution<int> distribution(min, max);
+			return static_cast<char>(distribution(rangen));
 		};
 
 		// ascinum for simplicity
@@ -494,7 +494,7 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 #ifdef ENABLE_CRASHREPORT
 	globalAppData_path = utf8_to_wstring(appdata);
 	std::ostringstream oss;
-	oss << appdata << std::filesystem::path::preferred_separator << "appState";
+	oss << appdata << static_cast<char>(std::filesystem::path::preferred_separator) << "appState";
 	appStateFile = oss.str();
 
 	annotations.insert({{"crashpad_status", "internal crash handler missed"}});

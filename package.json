@@ -38,7 +38,7 @@
     "chai-subset": "^1.6.0",
     "colors": "^1.4.0",
     "dotenv": "^17.4.2",
-    "electron": "29.4.3",
+    "electron": "43.2.0",
     "electron-mocha": "^12.1.0",
     "get-func-name": "^3.0.0",
     "mocha": "^11.0.0",

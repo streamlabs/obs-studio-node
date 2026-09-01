@@ -7,7 +7,7 @@ import { deleteConfigFiles } from '../util/general';
 import { EOBSSettingsCategories } from '../util/obs_enums';
 import { ERecordingFormat } from '../osn';
 
-import path = require('path');
+import * as path from 'path';
 
 const testName = 'osn-get-available-encoders';
 const av1EncoderNames = new Set([

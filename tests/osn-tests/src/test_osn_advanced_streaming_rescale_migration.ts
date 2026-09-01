@@ -6,7 +6,7 @@ import { logEmptyLine, logInfo } from '../util/logger';
 import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles } from '../util/general';
 
-import path = require('path');
+import * as path from 'path';
 
 const testName = 'osn-advanced-streaming-rescale-migration';
 

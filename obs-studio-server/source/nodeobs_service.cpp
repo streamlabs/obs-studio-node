@@ -1696,7 +1696,7 @@ bool isConfiguredRecordingEncoderValid(bool checkReplayBuffer)
 	}
 
 	//check encoder for recording compatibility with the configured recording format
-	char *field = "RecEncoder";
+	const char *field = "RecEncoder";
 	if (advancedUsesStream)
 		field = "Encoder";
 	else if (simpleUsesStream)

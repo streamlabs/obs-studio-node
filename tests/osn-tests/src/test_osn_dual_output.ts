@@ -12,7 +12,7 @@ import { EFPSType } from '../osn';
 import { UserPoolHandler } from '../util/user_pool_handler';
 import * as inputSettings from '../util/input_settings';
 
-import path = require('path');
+import * as path from 'path';
 import { randomUUID } from 'crypto';
 
 const testName = 'osn-dual-output';
