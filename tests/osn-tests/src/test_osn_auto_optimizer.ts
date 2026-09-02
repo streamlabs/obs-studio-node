@@ -6,53 +6,20 @@ import type {
     IAutoConfigRequest,
     IAutoConfigResult,
 } from '../../../js/module';
-import * as net from 'net';
 import { OBSHandler } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
 
 const testName = 'osn-auto-optimizer';
-const mockPort = 11937;
-const lightweightVideoWidth = 320;
-const lightweightVideoHeight = 180;
-const lightweightVideoFps = 30;
-const lightweightVideoInfo: Partial<osn.IVideoInfo> = {
-    fpsNum: lightweightVideoFps,
-    fpsDen: 1,
-    baseWidth: lightweightVideoWidth,
-    baseHeight: lightweightVideoHeight,
-    outputWidth: lightweightVideoWidth,
-    outputHeight: lightweightVideoHeight,
-};
 
 describe(testName, function() {
     this.timeout(340000);
 
     let obs: OBSHandler;
 
-    async function startConnectionSink(port: number) {
-        let connections = 0;
-        let bytes = 0;
-        const server = net.createServer(socket => {
-            connections++;
-            socket.on('data', chunk => bytes += chunk.length);
-        });
-        await new Promise<void>((resolve, reject) => {
-            server.once('error', reject);
-            server.listen(port, '127.0.0.1', resolve);
-        });
-        return {
-            getConnections: () => connections,
-            getBytes: () => bytes,
-            close: () => new Promise<void>(resolve => server.close(() => resolve())),
-        };
-    }
-
     before(function() {
         deleteConfigFiles();
         obs = new OBSHandler(testName, false);
-        // Match the live canvas to the 320x180@30 policy requests so the
-        // independent OBS render loop does not add an unrelated 720p60 workload.
-        obs.createDefaultVideoContext(lightweightVideoInfo);
+        obs.createDefaultVideoContext();
     });
 
     after(function() {
@@ -64,7 +31,6 @@ describe(testName, function() {
     });
 
     type AutoConfigOutputRequest = IAutoConfigRequest['outputs'][number];
-    type AutoConfigCurrentSettings = AutoConfigOutputRequest['current'];
     interface AutoConfigRun {
         readonly result: Promise<IAutoConfigResult>;
         confirmProbeIngest(probeId: string, received: boolean): void;
@@ -90,20 +56,6 @@ describe(testName, function() {
                 encoderId: 'obs_x264',
                 preset: 'veryfast',
             },
-            ...overrides,
-        };
-    }
-
-    // These requests exercise eligibility and recommendation policy rather than
-    // encoder throughput. Keep their real encoder workload small enough to be
-    // deterministic on hosted runners while retaining the end-to-end boundary.
-    function lightweightCurrent(overrides: Partial<AutoConfigCurrentSettings> = {}): AutoConfigCurrentSettings {
-        return {
-            ...output().current,
-            width: lightweightVideoWidth,
-            height: lightweightVideoHeight,
-            fpsNum: lightweightVideoFps,
-            fpsDen: 1,
             ...overrides,
         };
     }
@@ -385,252 +337,6 @@ describe(testName, function() {
         } finally {
             verticalCanvas.destroy();
         }
-    });
-
-    it('never dials an ineligible custom RTMP active-probe request', async function() {
-        const mock = await startConnectionSink(mockPort);
-        const secret = 'must-not-appear-in-result';
-        try {
-            const response = await run({
-                streamSetup: 'custom-rtmp',
-                outputs: [output({
-                    current: lightweightCurrent(),
-                    probes: [{
-                        id: 'twitch-primary',
-                        kind: 'twitch-standard',
-                        server: `rtmp://127.0.0.1:${mockPort}/live`,
-                        streamKey: secret,
-                    }],
-                })],
-            });
-
-            expect(mock.getConnections()).to.equal(0);
-            expect(mock.getBytes()).to.equal(0);
-            expect(response.result.status).to.equal('complete');
-            expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
-            expect(response.result.outputs[0].measurement.reason).to.equal('custom_rtmp');
-            expect(response.result.outputs[0].encoding!.bitrateKbps).to.equal(2500);
-            expect(JSON.stringify(response.result)).not.to.contain(secret);
-            expect(JSON.stringify(response.events)).not.to.contain(secret);
-            expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
-            expect(response.events.every((event, index) => index === 0 || event.progress >= response.events[index - 1].progress)).to.equal(true);
-            const hardwareAttempt = response.events.find(event => event.code === 'hardware_testing_encoder' ||
-                event.code === 'hardware_testing_encoder_surfaces' ||
-                event.code === 'hardware_testing_x264');
-            expect(hardwareAttempt).not.to.equal(undefined);
-            if (!hardwareAttempt)
-                throw new Error('Expected a hardware attempt event');
-            expect(hardwareAttempt.encoderId).to.be.a('string').and.not.equal('');
-            expect(hardwareAttempt.encoderFamily).to.be.a('string').and.not.equal('');
-            expect(hardwareAttempt.encoderTitle).to.be.a('string').and.not.equal('');
-            expect(hardwareAttempt.width).to.be.greaterThan(0);
-            expect(hardwareAttempt.height).to.be.greaterThan(0);
-            expect(hardwareAttempt.fpsNum).to.be.greaterThan(0);
-            expect(hardwareAttempt.fpsDen).to.be.greaterThan(0);
-            const qualityInput = response.events.find(event => event.code === 'recommendation_selecting_quality');
-            if (!qualityInput)
-                throw new Error('Expected a quality-selection input event');
-            expect(qualityInput.availableBitrateKbps).to.equal(2500);
-            expect(qualityInput.width).to.equal(lightweightVideoWidth);
-            const qualityResult = response.events.find(event => event.code === 'recommendation_quality_selected');
-            if (!qualityResult)
-                throw new Error('Expected a quality-selection result event');
-            expect(qualityResult.selectedBitrateKbps).to.equal(2500);
-            expect(response.result.outputs[0].videos[0].width).to.be.at.most(lightweightVideoWidth);
-            expect(response.result.outputs[0].videos[0].height).to.be.at.most(lightweightVideoHeight);
-            expect(response.result.outputs[0].videos[0].fpsNum).to.equal(lightweightVideoFps);
-            expect(response.result.outputs[0].videos[0].fpsDen).to.equal(1);
-            expect(response.result.outputs[0].encoding!.encoderFamily).to.be.a('string').and.not.equal('');
-            expect(response.result.outputs[0].encoding!.encoderTitle).to.be.a('string').and.not.equal('');
-            const testedPresets: Record<string, string> = {
-                obs_nvenc_h264_tex: 'p5',
-                obs_qsv11_v2: 'TU4',
-                h264_texture_amf: 'quality',
-                'com.apple.videotoolbox.videoencoder.h264.gva': 'high',
-                'com.apple.videotoolbox.videoencoder.ave.avc': 'high',
-                obs_x264: 'veryfast',
-            };
-            const recommendation = response.result.outputs[0].encoding!;
-            const locallyExpectedEncoder = process.env.AUTOCONFIG_EXPECT_ENCODER;
-            if (locallyExpectedEncoder)
-                expect(recommendation.encoderId).to.equal(locallyExpectedEncoder);
-            expect(recommendation.preset).to.equal(testedPresets[recommendation.encoderId]);
-            const expectedTitles: Record<string, string> = {
-                obs_nvenc_h264_tex: 'NVIDIA NVENC H.264 (new)',
-                obs_qsv11_v2: 'QuickSync H.264',
-                h264_texture_amf: 'AMD HW H.264',
-                'com.apple.videotoolbox.videoencoder.h264.gva': 'Apple VT H264 Hardware Encoder',
-                'com.apple.videotoolbox.videoencoder.ave.avc': 'Apple VT H264 Hardware Encoder',
-                obs_x264: 'Software (x264)',
-            };
-            expect(recommendation.encoderTitle).to.equal(expectedTitles[recommendation.encoderId]);
-        } finally {
-            await mock.close();
-        }
-    });
-
-    it('default-denies non-official YouTube probe endpoints without dialing them', async function() {
-        const mock = await startConnectionSink(mockPort);
-        const secret = 'youtube-secret-must-not-appear';
-        try {
-            const response = await run({
-                streamSetup: 'direct-single',
-                outputs: [output({
-                    destinations: ['youtube'],
-                    current: lightweightCurrent(),
-                    probes: [{
-                        id: 'youtube-primary',
-                        kind: 'youtube-unbound',
-                        server: `rtmps://127.0.0.1:${mockPort}/live2`,
-                        streamKey: secret,
-                    }],
-                })],
-            });
-
-            expect(mock.getConnections()).to.equal(0);
-            expect(mock.getBytes()).to.equal(0);
-            expect(response.result.status).to.equal('complete');
-            expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
-            expect(JSON.stringify(response.result)).not.to.contain(secret);
-            expect(JSON.stringify(response.events)).not.to.contain(secret);
-            expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
-        } finally {
-            await mock.close();
-        }
-    });
-
-    it('keeps a shared cloud output estimate-only when no supplied probe is eligible', async function() {
-        const response = await run({
-            streamSetup: 'cloud-multistream',
-            outputs: [output({
-                destinations: ['twitch', 'youtube'],
-                current: lightweightCurrent(),
-                estimateReason: 'cloud_multistream',
-                probes: [{
-                    id: 'cloud-twitch-only',
-                    kind: 'twitch-standard',
-                    // Individual endpoint validation must reject this credential
-                    // without affecting the partial-provider coverage policy.
-                    server: `rtmp://127.0.0.1:${mockPort}/live`,
-                    streamKey: 'incomplete-cloud-secret',
-                }],
-            })],
-        });
-        expect(response.result.status).to.equal('complete');
-        expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
-        expect(response.result.outputs[0].measurement.reason).to.equal('cloud_multistream');
-        expect(response.events.some(event => event.code === 'twitch_probe_started')).to.equal(false);
-        expect(JSON.stringify(response.result)).not.to.contain('incomplete-cloud-secret');
-        expect(JSON.stringify(response.events)).not.to.contain('incomplete-cloud-secret');
-    });
-
-    it('default-denies dual-output active probes whose two outputs reuse one canvas identity', async function() {
-        const twitchSecret = 'dual-twitch-secret';
-        const youtubeSecret = 'dual-youtube-secret';
-        const response = await run({
-            streamSetup: 'dual-output',
-            outputs: [
-                output({
-                    outputId: 'horizontal',
-                    display: 'horizontal',
-                    destinations: ['twitch'],
-                    current: lightweightCurrent({ bitrateKbps: 6000 }),
-                    estimateReason: 'dual_output',
-                    probes: [{
-                        id: 'dual-twitch',
-                        kind: 'twitch-standard',
-                        server: 'rtmp://live.twitch.tv/app',
-                        streamKey: twitchSecret,
-                    }],
-                }),
-                output({
-                    outputId: 'vertical',
-                    display: 'vertical',
-                    destinations: ['youtube'],
-                    current: lightweightCurrent({ bitrateKbps: 6000 }),
-                    estimateReason: 'dual_output',
-                    probes: [{
-                        id: 'dual-youtube',
-                        kind: 'youtube-unbound',
-                        server: 'rtmps://a.rtmps.youtube.com/live2',
-                        streamKey: youtubeSecret,
-                    }],
-                }),
-            ],
-        });
-
-        expect(response.result.status).to.equal('complete');
-        expect(response.result.outputs).to.have.length(2);
-        expect(response.result.outputs.every(resultOutput => resultOutput.measurement.mode === 'estimated')).to.equal(true);
-        expect(response.result.outputs.every(resultOutput => resultOutput.measurement.reason === 'dual_output')).to.equal(true);
-        expect(response.events.some(event => event.code === 'dual_output_testing_workload')).to.equal(false);
-        expect(response.events.some(event => event.code === 'dual_output_allocating_upload')).to.equal(false);
-        expect(response.events.filter(event => event.code === 'dual_output_multiple_active_legs')).to.have.length(2);
-        expect(response.events.some(event => event.code === 'twitch_probe_started' || event.code === 'youtube_probe_started')).to.equal(false);
-        expect(new Set(response.result.outputs.map(resultOutput => resultOutput.encoding!.encoderId)).size).to.equal(1);
-        expect(JSON.stringify(response.result)).not.to.contain(twitchSecret);
-        expect(JSON.stringify(response.result)).not.to.contain(youtubeSecret);
-        expect(JSON.stringify(response.events)).not.to.contain(twitchSecret);
-        expect(JSON.stringify(response.events)).not.to.contain(youtubeSecret);
-    });
-
-    it('clamps estimate-only results to bundled platform caps without raising current bitrate', async function() {
-        const twitch = await run({
-            streamSetup: 'direct-single',
-            outputs: [output({
-                destinations: ['twitch'],
-                current: lightweightCurrent({ bitrateKbps: 8000 }),
-                estimateReason: 'probe_disabled',
-            })],
-        });
-        expect(twitch.result.status).to.equal('complete');
-        expect(twitch.result.outputs[0].measurement.mode).to.equal('estimated');
-        expect(twitch.result.outputs[0].encoding!.bitrateKbps).to.equal(6000);
-
-        const alreadyConservative = await run({
-            streamSetup: 'direct-single',
-            outputs: [output({
-                destinations: ['twitch'],
-                current: lightweightCurrent({ bitrateKbps: 2500 }),
-                estimateReason: 'probe_disabled',
-            })],
-        });
-        expect(alreadyConservative.result.status).to.equal('complete');
-        expect(alreadyConservative.result.outputs[0].encoding!.bitrateKbps).to.equal(2500);
-
-        const globallyCapped = await run({
-            streamSetup: 'direct-single',
-            outputs: [output({
-                destinations: ['other'],
-                current: lightweightCurrent({ bitrateKbps: 12000 }),
-                estimateReason: 'probe_disabled',
-            })],
-        });
-        expect(globallyCapped.result.status).to.equal('complete');
-        expect(globallyCapped.result.outputs[0].measurement.mode).to.equal('estimated');
-        expect(globallyCapped.result.outputs[0].encoding!.bitrateKbps).to.equal(8000);
-    });
-
-    it('uses the strictest destination/request cap and replaces an unavailable encoder', async function() {
-        const response = await run({
-            streamSetup: 'cloud-multistream',
-            outputs: [output({
-                destinations: ['youtube', 'twitch'],
-                current: lightweightCurrent({
-                    bitrateKbps: 9000,
-                    encoderId: 'definitely-not-a-real-encoder',
-                }),
-                limits: { maxBitrateKbps: 1800 },
-                estimateReason: 'cloud_multistream',
-            })],
-        });
-
-        expect(response.result.status).to.equal('complete');
-        expect(response.result.outputs[0].encoding!.bitrateKbps).to.equal(1800);
-        expect(response.result.outputs[0].encoding!.encoderId).not.to.equal('definitely-not-a-real-encoder');
-        expect(response.result.outputs[0].encoding!.codec).to.equal('h264');
-        expect(['obs_nvenc_h264_tex', 'qsv', 'amd', 'apple', 'x264']).to.include(response.result.outputs[0].encoding!.encoderFamily);
-        expect(response.result.outputs[0].measurement.confidence).to.equal('medium');
     });
 
     it('does not return Twitch-managed encoding settings for a paired Enhanced Broadcasting output', async function() {
@@ -956,7 +662,7 @@ describe(testName, function() {
         const result = await nativeRun.result;
         expect(result.status).to.equal('cancelled');
         expect(result.error.code).to.equal('cancelled');
-        obs.createDefaultVideoContext(lightweightVideoInfo);
+        obs.createDefaultVideoContext();
     });
 
     it('disconnects cleanly while a session worker is running', async function() {

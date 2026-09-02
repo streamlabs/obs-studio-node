@@ -33,7 +33,6 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cctype>
 #include <cmath>
 #include <condition_variable>
 #include <cstring>
@@ -45,7 +44,6 @@
 #include <queue>
 #include <set>
 #include <string>
-#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -85,7 +83,6 @@ constexpr float kProbeCongestionHigh = 0.20f;
 constexpr float kProbeCongestionSevere = 0.50f;
 constexpr int kTwitchProbeAudioBitrateKbps = 32;
 constexpr int kYoutubeProbeAudioBitrateKbps = 128;
-constexpr int kDefaultEstimatedBitrateKbps = 2500;
 constexpr int kHardwareWarmupMs = 500;
 constexpr int kHardwareSampleMs = 1500;
 constexpr int kHardwareStopTimeoutMs = 1000;
@@ -360,81 +357,15 @@ static std::string asciiLowerCopy(std::string value)
 	return value;
 }
 
-static bool isOfficialTwitchServer(const std::string &server)
-{
-	const std::string value = asciiLowerCopy(server);
-	if (value == "auto")
-		return true;
-
-	size_t hostStart = 0;
-	if (value.starts_with("rtmp://"))
-		hostStart = 7;
-	else if (value.starts_with("rtmps://"))
-		hostStart = 8;
-	else
-		return false;
-
-	const size_t hostEnd = value.find_first_of("/:?#", hostStart);
-	const std::string host = value.substr(hostStart, hostEnd == std::string::npos ? std::string::npos : hostEnd - hostStart);
-	if (host.empty() || host.find('@') != std::string::npos)
-		return false;
-
-	return host == "live.twitch.tv" || host.ends_with(".twitch.tv") || host == "live-video.net" || host.ends_with(".live-video.net");
-}
-
-static bool containsWhitespaceOrControl(const std::string &value)
-{
-	return std::any_of(value.begin(), value.end(), [](unsigned char ch) { return std::isspace(ch) || std::iscntrl(ch); });
-}
-
-static bool isBoundedTwitchKey(const std::string &key)
-{
-	return !key.empty() && key.size() <= 4096 && !containsWhitespaceOrControl(key);
-}
-
-static bool isBoundedYoutubeKey(const std::string &key)
-{
-	if (key.empty() || key.size() > 1024 || containsWhitespaceOrControl(key))
-		return false;
-	return key.find_first_of("/\\?#@:") == std::string::npos;
-}
-
-static bool isOfficialYoutubeRtmpsServer(const std::string &server)
-{
-	if (server.empty() || server.size() > 2048 || containsWhitespaceOrControl(server))
-		return false;
-
-	const std::string value = asciiLowerCopy(server);
-	constexpr std::string_view scheme = "rtmps://";
-	if (!value.starts_with(scheme) || value.find_first_of("?#") != std::string::npos)
-		return false;
-
-	const size_t authorityStart = scheme.size();
-	const size_t pathStart = value.find('/', authorityStart);
-	if (pathStart == std::string::npos || value.substr(pathStart) != "/live2")
-		return false;
-
-	const std::string authority = value.substr(authorityStart, pathStart - authorityStart);
-	if (authority.empty() || authority.find('@') != std::string::npos)
-		return false;
-
-	std::string host = authority;
-	const size_t portSeparator = authority.find(':');
-	if (portSeparator != std::string::npos) {
-		if (authority.find(':', portSeparator + 1) != std::string::npos || authority.substr(portSeparator + 1) != "443")
-			return false;
-		host = authority.substr(0, portSeparator);
-	}
-	return host == "a.rtmps.youtube.com";
-}
-
 static bool probeProviderContractIsValid(const ProbeRequest &probe)
 {
-	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && isOfficialTwitchServer(probe.server) && isBoundedTwitchKey(probe.streamKey)) ||
-	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.server == "auto" && isBoundedTwitchKey(probe.streamKey) &&
+	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && probePolicy::isOfficialTwitchServer(probe.server) &&
+		probePolicy::isBoundedTwitchKey(probe.streamKey)) ||
+	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.server == "auto" &&
+		probePolicy::isBoundedTwitchKey(probe.streamKey) &&
 		osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
-	       (probe.kind == "youtube-unbound" && probe.provider == "youtube" && isOfficialYoutubeRtmpsServer(probe.server) &&
-		isBoundedYoutubeKey(probe.streamKey));
+	       (probe.kind == "youtube-unbound" && probe.provider == "youtube" && probePolicy::isOfficialYoutubeRtmpsServer(probe.server) &&
+		probePolicy::isBoundedYoutubeKey(probe.streamKey));
 }
 
 static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
@@ -446,22 +377,22 @@ static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
 		return false;
 	};
 
-	std::set<std::string> displays;
-	std::set<uint64_t> canvasIds;
+	const LegRequest &firstLeg = session.legs[0];
+	const LegRequest &secondLeg = session.legs[1];
+	const bool canvasPairValid = probePolicy::standardDualOutputCanvasPairIsValid(
+		firstLeg.display, firstLeg.current.canvasId,
+		firstLeg.current.canvasId != osn::common::INVALID_ID && osn::Video::Manager::GetInstance().find(firstLeg.current.canvasId) != nullptr,
+		secondLeg.display, secondLeg.current.canvasId,
+		secondLeg.current.canvasId != osn::common::INVALID_ID && osn::Video::Manager::GetInstance().find(secondLeg.current.canvasId) != nullptr);
+	if (!canvasPairValid)
+		return reject("legs must use distinct horizontal and vertical canvases");
+
 	std::map<std::string, std::set<std::string>> destinationProvidersByLeg;
 	for (const auto &leg : session.legs) {
-		if (leg.display != "horizontal" && leg.display != "vertical")
-			return reject("each leg must select one horizontal or vertical display");
-		if (leg.current.canvasId == osn::common::INVALID_ID || !osn::Video::Manager::GetInstance().find(leg.current.canvasId))
-			return reject("each leg must reference a live canvas");
-		displays.insert(leg.display);
-		canvasIds.insert(leg.current.canvasId);
 		auto &providers = destinationProvidersByLeg[leg.legId];
 		for (const auto &destination : leg.destinations)
 			providers.insert(destination.platform);
 	}
-	if (displays != std::set<std::string>{"horizontal", "vertical"} || canvasIds.size() != 2)
-		return reject("legs must use distinct horizontal and vertical canvases");
 
 	std::set<std::string> probeProviders;
 	std::set<std::string> probedLegs;
@@ -878,11 +809,12 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 		const bool topologyEligible = singleOutputEnhancedBroadcastingEligible || compositeEnhancedBroadcastingEligible ||
 					      (probe.kind != "twitch-enhanced-broadcasting" && (directEligible || dualEligible || cloudEligible));
-		probe.eligible = !probe.provider.empty() && destinationFound && topologyEligible && providerValid &&
-				 probePairCounts[probe.legId + "\n" + probe.provider] == 1;
+		const auto eligibility = probePolicy::decideActiveProbeEligibility(!probe.provider.empty(), destinationFound, topologyEligible, providerValid,
+										   probePairCounts[probe.legId + "\n" + probe.provider] == 1,
+										   multipleDualOutputLegs, session.dualOutputActiveProbePair);
+		probe.eligible = eligibility.eligible;
 		if (!probe.eligible) {
-			probe.denialReason = multipleDualOutputLegs && !session.dualOutputActiveProbePair ? "dual_output_multiple_active_legs"
-													  : "active_probe_not_eligible";
+			probe.denialReason = eligibility.denialReason;
 			probe.streamKey.clear();
 			probe.server.clear();
 		}
@@ -1184,12 +1116,14 @@ static void applyEncoderSelection(CurrentSettings &value, const EncoderSelection
 static CurrentSettings baseRecommendation(const LegRequest &leg)
 {
 	CurrentSettings value = leg.current;
-	if (value.bitrateKbps <= 0)
-		value.bitrateKbps = kDefaultEstimatedBitrateKbps;
-	if (leg.limits.maxBitrateKbps > 0)
-		value.bitrateKbps = std::min(value.bitrateKbps, leg.limits.maxBitrateKbps);
-	if (leg.outputKind == "standard")
-		value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps((uint64_t)value.bitrateKbps);
+	if (leg.outputKind == "standard") {
+		value.bitrateKbps = qualityPolicy::composeEstimatedBitrateKbps(value.bitrateKbps, leg.limits.maxBitrateKbps);
+	} else {
+		if (value.bitrateKbps <= 0)
+			value.bitrateKbps = qualityPolicy::kDefaultEstimatedBitrateKbps;
+		if (leg.limits.maxBitrateKbps > 0)
+			value.bitrateKbps = std::min(value.bitrateKbps, leg.limits.maxBitrateKbps);
+	}
 	const auto bounded =
 		qualityPolicy::boundCurrentToSupportedTier({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
 	value.width = bounded.width;

@@ -4,6 +4,133 @@
 
 namespace policy = autoConfig::probePolicy;
 
+TEST_CASE("Standard Twitch probes accept only official endpoints and bounded keys")
+{
+	const std::string acceptedServers[] = {
+		"auto",
+		"AUTO",
+		"rtmp://live.twitch.tv/app",
+		"RTMPS://LIVE.TWITCH.TV/app",
+		"rtmps://video-weaver.example.live-video.net:443/app",
+		"rtmp://ingest.example.twitch.tv/app",
+	};
+	for (const std::string &server : acceptedServers) {
+		CAPTURE(server);
+		CHECK(policy::isOfficialTwitchServer(server));
+	}
+
+	const std::string rejectedServers[] = {
+		"",
+		"live.twitch.tv",
+		"http://live.twitch.tv/app",
+		"rtmp:///app",
+		"rtmp://user@live.twitch.tv/app",
+		"rtmp://live.twitch.tv@evil.example/app",
+		"rtmp://live.twitch.tv.evil.example/app",
+		"rtmp://evil-live-video.net/app",
+		"rtmp://twitch.tv.evil.example/app",
+	};
+	for (const std::string &server : rejectedServers) {
+		CAPTURE(server);
+		CHECK_FALSE(policy::isOfficialTwitchServer(server));
+	}
+
+	CHECK(policy::isBoundedTwitchKey("live_123_example"));
+	CHECK(policy::isBoundedTwitchKey(std::string(4096, 'k')));
+	CHECK_FALSE(policy::isBoundedTwitchKey(""));
+	CHECK_FALSE(policy::isBoundedTwitchKey(std::string(4097, 'k')));
+	CHECK_FALSE(policy::isBoundedTwitchKey("live key"));
+	CHECK_FALSE(policy::isBoundedTwitchKey("live\tkey"));
+	CHECK_FALSE(policy::isBoundedTwitchKey(std::string("live\0key", 8)));
+}
+
+TEST_CASE("Unbound YouTube probes accept only the official RTMPS endpoint and bounded keys")
+{
+	const std::string acceptedServers[] = {
+		"rtmps://a.rtmps.youtube.com/live2",
+		"RTMPS://A.RTMPS.YOUTUBE.COM/live2",
+		"rtmps://a.rtmps.youtube.com:443/live2",
+	};
+	for (const std::string &server : acceptedServers) {
+		CAPTURE(server);
+		CHECK(policy::isOfficialYoutubeRtmpsServer(server));
+	}
+
+	const std::string rejectedServers[] = {
+		"",
+		"rtmp://a.rtmps.youtube.com/live2",
+		"rtmps://a.rtmps.youtube.com",
+		"rtmps://a.rtmps.youtube.com/",
+		"rtmps://a.rtmps.youtube.com/live2/",
+		"rtmps://b.rtmps.youtube.com/live2",
+		"rtmps://sub.a.rtmps.youtube.com/live2",
+		"rtmps://a.rtmps.youtube.com.evil.example/live2",
+		"rtmps://user@a.rtmps.youtube.com/live2",
+		"rtmps://a.rtmps.youtube.com:80/live2",
+		"rtmps://a.rtmps.youtube.com:443:443/live2",
+		"rtmps://a.rtmps.youtube.com/live2?query",
+		"rtmps://a.rtmps.youtube.com/live2#fragment",
+		"rtmps://a.rtmps.youtube.com/live 2",
+	};
+	for (const std::string &server : rejectedServers) {
+		CAPTURE(server);
+		CHECK_FALSE(policy::isOfficialYoutubeRtmpsServer(server));
+	}
+
+	CHECK(policy::isBoundedYoutubeKey("abcd-1234_efgh.example"));
+	CHECK(policy::isBoundedYoutubeKey(std::string(1024, 'k')));
+	CHECK_FALSE(policy::isBoundedYoutubeKey(""));
+	CHECK_FALSE(policy::isBoundedYoutubeKey(std::string(1025, 'k')));
+	CHECK_FALSE(policy::isBoundedYoutubeKey("live key"));
+	CHECK_FALSE(policy::isBoundedYoutubeKey("live\nkey"));
+	CHECK_FALSE(policy::isBoundedYoutubeKey(std::string("live\0key", 8)));
+	for (const char reserved : std::string("/\\?#@:")) {
+		CAPTURE(reserved);
+		CHECK_FALSE(policy::isBoundedYoutubeKey(std::string("live") + reserved + "key"));
+	}
+}
+
+TEST_CASE("Active probe eligibility preserves specific Dual Output denials")
+{
+	const auto eligible = policy::decideActiveProbeEligibility(true, true, true, true, true, false, false);
+	CHECK(eligible.eligible);
+	CHECK(eligible.denialReason.empty());
+
+	const auto customProvider = policy::decideActiveProbeEligibility(false, true, true, true, true, false, false);
+	CHECK_FALSE(customProvider.eligible);
+	CHECK(customProvider.denialReason == "active_probe_not_eligible");
+
+	const auto nonOfficialEndpoint = policy::decideActiveProbeEligibility(true, true, true, false, true, false, false);
+	CHECK_FALSE(nonOfficialEndpoint.eligible);
+	CHECK(nonOfficialEndpoint.denialReason == "active_probe_not_eligible");
+
+	CHECK_FALSE(policy::decideActiveProbeEligibility(true, false, true, true, true, false, false).eligible);
+	CHECK_FALSE(policy::decideActiveProbeEligibility(true, true, false, true, true, false, false).eligible);
+	CHECK_FALSE(policy::decideActiveProbeEligibility(true, true, true, true, false, false, false).eligible);
+
+	const auto unsupportedJointPair = policy::decideActiveProbeEligibility(true, true, true, true, true, true, false);
+	CHECK_FALSE(unsupportedJointPair.eligible);
+	CHECK(unsupportedJointPair.denialReason == "dual_output_multiple_active_legs");
+
+	const auto supportedJointPair = policy::decideActiveProbeEligibility(true, true, true, true, true, true, true);
+	CHECK(supportedJointPair.eligible);
+	CHECK(supportedJointPair.denialReason.empty());
+
+	const auto duplicateJointProbe = policy::decideActiveProbeEligibility(true, true, true, true, false, true, true);
+	CHECK_FALSE(duplicateJointProbe.eligible);
+	CHECK(duplicateJointProbe.denialReason == "active_probe_not_eligible");
+}
+
+TEST_CASE("Standard Dual Output probing requires distinct registered horizontal and vertical canvases")
+{
+	CHECK(policy::standardDualOutputCanvasPairIsValid("horizontal", 1, true, "vertical", 2, true));
+	CHECK(policy::standardDualOutputCanvasPairIsValid("vertical", 2, true, "horizontal", 1, true));
+	CHECK_FALSE(policy::standardDualOutputCanvasPairIsValid("horizontal", 1, true, "vertical", 1, true));
+	CHECK_FALSE(policy::standardDualOutputCanvasPairIsValid("horizontal", 1, false, "vertical", 2, true));
+	CHECK_FALSE(policy::standardDualOutputCanvasPairIsValid("horizontal", 1, true, "vertical", 2, false));
+	CHECK_FALSE(policy::standardDualOutputCanvasPairIsValid("horizontal", 1, true, "horizontal", 2, true));
+}
+
 TEST_CASE("Provider probe coverage distinguishes absent, partial, and complete evidence")
 {
 	CHECK(policy::classifyProviderProbeCoverage(2, 0) == policy::ProviderProbeCoverage::None);

@@ -22,12 +22,27 @@ namespace autoConfig::qualityPolicy {
 
 inline constexpr size_t kMaximumUploadLegs = 2;
 inline constexpr size_t kMaximumEnhancedBroadcastingDualOutputLegs = 3;
+inline constexpr int kDefaultEstimatedBitrateKbps = 2500;
 inline constexpr int kMaximumRecommendedBitrateKbps = 8000;
 
 /** Keep measured capacity separate from the bitrate Desktop may apply. */
 inline int clampRecommendedBitrateKbps(uint64_t bitrateKbps)
 {
 	return (int)std::clamp<uint64_t>(bitrateKbps, 1, kMaximumRecommendedBitrateKbps);
+}
+
+// Compose an estimate from the current setting, an optional request limit, and
+// the strictest limit reported by the configured destinations. Non-positive
+// limits mean that no limit was supplied. The product-wide recommendation cap
+// applies even when neither caller-owned limit is present.
+inline int composeEstimatedBitrateKbps(int currentBitrateKbps, int requestMaximumBitrateKbps = 0, int destinationMaximumBitrateKbps = 0)
+{
+	int bitrateKbps = currentBitrateKbps > 0 ? currentBitrateKbps : kDefaultEstimatedBitrateKbps;
+	if (requestMaximumBitrateKbps > 0)
+		bitrateKbps = std::min(bitrateKbps, requestMaximumBitrateKbps);
+	if (destinationMaximumBitrateKbps > 0)
+		bitrateKbps = std::min(bitrateKbps, destinationMaximumBitrateKbps);
+	return clampRecommendedBitrateKbps((uint64_t)std::max(1, bitrateKbps));
 }
 
 enum class HardwareFailureScope {

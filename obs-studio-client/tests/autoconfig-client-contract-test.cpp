@@ -314,6 +314,48 @@ TEST_CASE("AutoConfig client projects ordered progress without private envelope 
 	CHECK_FALSE(contract::projectEvent(raw.dump(), "run", 8, prepared.context).valid);
 }
 
+TEST_CASE("AutoConfig client omits probe credentials from public progress and results")
+{
+	const auto prepared =
+		prepare({{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}});
+	const json rawEvent = {{"schemaVersion", 1},
+			       {"sessionId", "run"},
+			       {"sequence", 1},
+			       {"type", "progress"},
+			       {"phase", "bandwidth"},
+			       {"progress", 50},
+			       {"legId", "horizontal"},
+			       {"probeId", "twitch-probe"},
+			       {"provider", "twitch"},
+			       {"server", "rtmp://private.example/app"},
+			       {"streamKey", "event-secret"}};
+	const auto event = contract::projectEvent(rawEvent.dump(), "run", -1, prepared.context);
+	REQUIRE(event.valid);
+	const json projectedEvent = json::parse(event.json);
+	CHECK_FALSE(projectedEvent.contains("server"));
+	CHECK_FALSE(projectedEvent.contains("streamKey"));
+	CHECK(event.json.find("private.example") == std::string::npos);
+	CHECK(event.json.find("event-secret") == std::string::npos);
+
+	json rawResult = {{"schemaVersion", 1},
+			  {"sessionId", "run"},
+			  {"status", "complete"},
+			  {"server", "rtmp://private.example/app"},
+			  {"streamKey", "result-secret"},
+			  {"legs", json::array({returnedStandardOutput("horizontal", "horizontal", "twitch", "twitch", "twitch-bandwidth-test", 5000, 4500)})}};
+	rawResult["legs"][0]["measurement"]["probes"][0]["server"] = "rtmp://nested-private.example/app";
+	rawResult["legs"][0]["measurement"]["probes"][0]["streamKey"] = "nested-result-secret";
+	const auto result = contract::projectResult(rawResult.dump(), "run", prepared.context);
+	REQUIRE(result.valid);
+	const json projectedResult = json::parse(result.json);
+	CHECK_FALSE(projectedResult.contains("server"));
+	CHECK_FALSE(projectedResult.contains("streamKey"));
+	CHECK_FALSE(projectedResult["outputs"][0]["measurement"]["evidence"][0].contains("server"));
+	CHECK_FALSE(projectedResult["outputs"][0]["measurement"]["evidence"][0].contains("streamKey"));
+	CHECK(result.json.find("private.example") == std::string::npos);
+	CHECK(result.json.find("result-secret") == std::string::npos);
+}
+
 TEST_CASE("AutoConfig client treats an empty poll as no event without consuming sequence")
 {
 	const auto prepared =

@@ -1,8 +1,11 @@
 #pragma once
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <string_view>
 
 namespace autoConfig {
 namespace probePolicy {
@@ -18,6 +21,119 @@ constexpr uint32_t kYoutubeHardCongestionSevereMaximumBasisPoints = 1000;
 constexpr uint32_t kTwitchDirectPassMinimumBasisPoints = 9500;
 constexpr uint32_t kTwitchCongestionHighMaximumBasisPoints = 1000;
 constexpr uint32_t kTwitchCongestionSevereMaximumBasisPoints = 200;
+
+namespace detail {
+
+inline std::string asciiLowerCopy(std::string value)
+{
+	for (char &character : value)
+		character = character >= 'A' && character <= 'Z' ? static_cast<char>(character + ('a' - 'A')) : character;
+	return value;
+}
+
+inline bool containsWhitespaceOrControl(const std::string &value)
+{
+	return std::any_of(value.begin(), value.end(), [](unsigned char character) { return std::isspace(character) || std::iscntrl(character); });
+}
+
+} // namespace detail
+
+/** Return whether a standard Twitch probe may connect to this server. */
+inline bool isOfficialTwitchServer(const std::string &server)
+{
+	const std::string value = detail::asciiLowerCopy(server);
+	if (value == "auto")
+		return true;
+
+	size_t hostStart = 0;
+	if (value.starts_with("rtmp://"))
+		hostStart = 7;
+	else if (value.starts_with("rtmps://"))
+		hostStart = 8;
+	else
+		return false;
+
+	const size_t hostEnd = value.find_first_of("/:?#", hostStart);
+	const std::string host = value.substr(hostStart, hostEnd == std::string::npos ? std::string::npos : hostEnd - hostStart);
+	if (host.empty() || host.find('@') != std::string::npos)
+		return false;
+
+	return host == "live.twitch.tv" || host.ends_with(".twitch.tv") || host == "live-video.net" || host.ends_with(".live-video.net");
+}
+
+/** Bound Twitch credentials before a standard or Enhanced Broadcasting probe. */
+inline bool isBoundedTwitchKey(const std::string &key)
+{
+	return !key.empty() && key.size() <= 4096 && !detail::containsWhitespaceOrControl(key);
+}
+
+/** Bound an unbound YouTube stream key and reject characters with URL meaning. */
+inline bool isBoundedYoutubeKey(const std::string &key)
+{
+	if (key.empty() || key.size() > 1024 || detail::containsWhitespaceOrControl(key))
+		return false;
+	return key.find_first_of("/\\?#@:") == std::string::npos;
+}
+
+/** Return whether an unbound YouTube probe may connect to this RTMPS endpoint. */
+inline bool isOfficialYoutubeRtmpsServer(const std::string &server)
+{
+	if (server.empty() || server.size() > 2048 || detail::containsWhitespaceOrControl(server))
+		return false;
+
+	const std::string value = detail::asciiLowerCopy(server);
+	constexpr std::string_view scheme = "rtmps://";
+	if (!value.starts_with(scheme) || value.find_first_of("?#") != std::string::npos)
+		return false;
+
+	const size_t authorityStart = scheme.size();
+	const size_t pathStart = value.find('/', authorityStart);
+	if (pathStart == std::string::npos || value.substr(pathStart) != "/live2")
+		return false;
+
+	const std::string authority = value.substr(authorityStart, pathStart - authorityStart);
+	if (authority.empty() || authority.find('@') != std::string::npos)
+		return false;
+
+	std::string host = authority;
+	const size_t portSeparator = authority.find(':');
+	if (portSeparator != std::string::npos) {
+		if (authority.find(':', portSeparator + 1) != std::string::npos || authority.substr(portSeparator + 1) != "443")
+			return false;
+		host = authority.substr(0, portSeparator);
+	}
+	return host == "a.rtmps.youtube.com";
+}
+
+struct ActiveProbeEligibility {
+	bool eligible = false;
+	std::string_view denialReason = "active_probe_not_eligible";
+};
+
+/** Require two registered, distinct canvases assigned to opposite displays. */
+inline bool standardDualOutputCanvasPairIsValid(std::string_view firstDisplay, uint64_t firstCanvasId, bool firstCanvasRegistered,
+						std::string_view secondDisplay, uint64_t secondCanvasId, bool secondCanvasRegistered)
+{
+	const bool displaysValid = (firstDisplay == "horizontal" && secondDisplay == "vertical") ||
+				   (firstDisplay == "vertical" && secondDisplay == "horizontal");
+	return displaysValid && firstCanvasRegistered && secondCanvasRegistered && firstCanvasId != secondCanvasId;
+}
+
+/**
+ * Make the final active-probe decision after the caller validates topology and
+ * any live canvas references. A multi-leg Dual Output request receives its
+ * more specific denial reason only when it is not the supported joint pair.
+ */
+inline ActiveProbeEligibility decideActiveProbeEligibility(bool providerKnown, bool destinationPresent, bool topologyEligible, bool providerContractValid,
+							   bool uniqueLegProviderProbe, bool multipleDualOutputLegs, bool supportedJointProbePair)
+{
+	const bool jointProbeShapeAllowed = !multipleDualOutputLegs || supportedJointProbePair;
+	const bool eligible = providerKnown && destinationPresent && topologyEligible && providerContractValid && uniqueLegProviderProbe &&
+			      jointProbeShapeAllowed;
+	if (eligible)
+		return {true, {}};
+	return {false, multipleDualOutputLegs && !supportedJointProbePair ? "dual_output_multiple_active_legs" : "active_probe_not_eligible"};
+}
 
 struct YoutubeProbeSampleMetrics {
 	// The observed-output/target ratio is useful for identifying source or

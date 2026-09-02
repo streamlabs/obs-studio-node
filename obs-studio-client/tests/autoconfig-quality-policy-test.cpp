@@ -326,6 +326,35 @@ TEST_CASE("Auto Config preserves probe headroom while capping the recommended bi
 	CHECK(policy::select({1920, 1080, 60, 1}, 7900, "obs_nvenc_h264_tex").bitrateKbps == 7900);
 }
 
+TEST_CASE("Auto Config composes estimated bitrate limits deterministically")
+{
+	SECTION("the strictest destination limit wins")
+	{
+		CHECK(policy::composeEstimatedBitrateKbps(8000, 0, 6000) == 6000);
+	}
+
+	SECTION("a lower current bitrate is preserved")
+	{
+		CHECK(policy::composeEstimatedBitrateKbps(2500, 0, 6000) == 2500);
+	}
+
+	SECTION("the product limit applies without a destination limit")
+	{
+		CHECK(policy::composeEstimatedBitrateKbps(12000) == policy::kMaximumRecommendedBitrateKbps);
+	}
+
+	SECTION("a request limit can be stricter than destination limits")
+	{
+		CHECK(policy::composeEstimatedBitrateKbps(8000, 1800, 6000) == 1800);
+	}
+
+	SECTION("missing current bitrate uses the product default")
+	{
+		CHECK(policy::composeEstimatedBitrateKbps(0) == policy::kDefaultEstimatedBitrateKbps);
+		CHECK(policy::composeEstimatedBitrateKbps(-1) == policy::kDefaultEstimatedBitrateKbps);
+	}
+}
+
 TEST_CASE("Auto Config benchmark ceiling explicitly permits isolated promotion above the current canvas")
 {
 	const policy::VideoTuple current{1280, 720, 30, 1};
