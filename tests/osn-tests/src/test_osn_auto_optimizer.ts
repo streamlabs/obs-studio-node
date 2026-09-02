@@ -12,6 +12,17 @@ import { deleteConfigFiles } from '../util/general';
 
 const testName = 'osn-auto-optimizer';
 const mockPort = 11937;
+const lightweightVideoWidth = 640;
+const lightweightVideoHeight = 360;
+const lightweightVideoFps = 15;
+const lightweightVideoInfo: Partial<osn.IVideoInfo> = {
+    fpsNum: lightweightVideoFps,
+    fpsDen: 1,
+    baseWidth: lightweightVideoWidth,
+    baseHeight: lightweightVideoHeight,
+    outputWidth: lightweightVideoWidth,
+    outputHeight: lightweightVideoHeight,
+};
 
 describe(testName, function() {
     this.timeout(340000);
@@ -38,7 +49,10 @@ describe(testName, function() {
 
     before(function() {
         deleteConfigFiles();
-        obs = new OBSHandler(testName);
+        obs = new OBSHandler(testName, false);
+        // Match the live canvas to the 640x360@15 policy requests so the
+        // independent OBS render loop does not add an unrelated 720p60 workload.
+        obs.createDefaultVideoContext(lightweightVideoInfo);
     });
 
     after(function() {
@@ -86,9 +100,9 @@ describe(testName, function() {
     function lightweightCurrent(overrides: Partial<AutoConfigCurrentSettings> = {}): AutoConfigCurrentSettings {
         return {
             ...output().current,
-            width: 640,
-            height: 360,
-            fpsNum: 15,
+            width: lightweightVideoWidth,
+            height: lightweightVideoHeight,
+            fpsNum: lightweightVideoFps,
             fpsDen: 1,
             ...overrides,
         };
@@ -942,7 +956,7 @@ describe(testName, function() {
         const result = await nativeRun.result;
         expect(result.status).to.equal('cancelled');
         expect(result.error.code).to.equal('cancelled');
-        obs.createDefaultVideoContext();
+        obs.createDefaultVideoContext(lightweightVideoInfo);
     });
 
     it('disconnects cleanly while a session worker is running', async function() {

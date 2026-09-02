@@ -30,10 +30,6 @@
 #include <util/platform.h>
 #include <util/threading.h>
 
-#if defined(__APPLE__)
-#include <pthread.h>
-#endif
-
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -1643,14 +1639,9 @@ public:
 			return;
 		feeder = std::thread([this]() {
 			os_set_thread_name("auto optimizer feeder");
-#if defined(__APPLE__)
-			// Match the graphics thread's QoS so macOS does not starve the exact-
-			// cadence source while the benchmark encoder is under load.
-			(void)pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
-#endif
-			const uint64_t frameDurationNs = (1000000000ULL * videoFpsDen) / videoFpsNum;
-			uint64_t nextFrameTimestamp = os_gettime_ns();
-			uint64_t timestamp = nextFrameTimestamp;
+			const auto frameDuration = std::chrono::nanoseconds((1000000000ULL * videoFpsDen) / videoFpsNum);
+			auto nextFrame = std::chrono::steady_clock::now();
+			uint64_t timestamp = os_gettime_ns();
 			bool alternate = false;
 			while (!stopFeeder.load()) {
 				scheduledFrames.fetch_add(1, std::memory_order_relaxed);
@@ -1669,17 +1660,17 @@ public:
 				} else {
 					lockFailedFrames.fetch_add(1, std::memory_order_relaxed);
 				}
-				timestamp += frameDurationNs;
-				nextFrameTimestamp += frameDurationNs;
-				const uint64_t now = os_gettime_ns();
-				if (nextFrameTimestamp < now) {
+				timestamp += (uint64_t)frameDuration.count();
+				nextFrame += frameDuration;
+				const auto now = std::chrono::steady_clock::now();
+				if (nextFrame < now) {
 					// Skip missed schedule slots instead of submitting a burst of
 					// catch-up frames that would distort encoder throughput.
 					lateFrames.fetch_add(1, std::memory_order_relaxed);
-					nextFrameTimestamp = now + frameDurationNs;
-					timestamp = nextFrameTimestamp;
+					nextFrame = now + frameDuration;
+					timestamp = os_gettime_ns() + (uint64_t)frameDuration.count();
 				}
-				os_sleepto_ns(nextFrameTimestamp);
+				std::this_thread::sleep_until(nextFrame);
 			}
 		});
 	}

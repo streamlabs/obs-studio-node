@@ -475,7 +475,7 @@ export class OBSHandler {
         throw new Error(timeoutMessage);
     }
 
-    createDefaultVideoContext() {
+    createDefaultVideoContext(overrides: Partial<osn.IVideoInfo> = {}) {
         logInfo(this.osnTestName, 'createDefaultVideoContext called');
         this.defaultVideoContext = osn.VideoFactory.create();
         const defaultVideoInfo: osn.IVideoInfo = {
@@ -491,7 +491,7 @@ export class OBSHandler {
             scaleType: osn.EScaleType.Bilinear,
             fpsType: osn.EFPSType.Fractional
         };
-        this.defaultVideoContext.video = defaultVideoInfo;
+        this.defaultVideoContext.video = { ...defaultVideoInfo, ...overrides };
     }
 
     destroyDefaultVideoContext() {
