@@ -279,6 +279,36 @@ TEST_CASE("AutoConfig client rejects duplicate public output and probe identitie
 	CHECK_FALSE(contract::prepareRequest(duplicateDestinations.dump()).valid);
 }
 
+TEST_CASE("AutoConfig client validates effective frame rates")
+{
+	auto request = [] {
+		return json{{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}};
+	};
+	const struct {
+		int numerator;
+		int denominator;
+		bool valid;
+	} cases[] = {{1, 10000, false}, {10000, 10000, true}, {240000, 1000, true}, {240000, 999, false}};
+
+	for (const auto &test : cases) {
+		CAPTURE(test.numerator, test.denominator);
+		json currentValue = request();
+		currentValue["outputs"][0]["current"]["fpsNum"] = test.numerator;
+		currentValue["outputs"][0]["current"]["fpsDen"] = test.denominator;
+		CHECK(contract::prepareRequest(currentValue.dump()).valid == test.valid);
+
+		json limitValue = request();
+		limitValue["outputs"][0]["limits"]["maxFpsNum"] = test.numerator;
+		limitValue["outputs"][0]["limits"]["maxFpsDen"] = test.denominator;
+		CHECK(contract::prepareRequest(limitValue.dump()).valid == test.valid);
+	}
+
+	json implicitDenominator = request();
+	implicitDenominator["outputs"][0]["limits"]["maxFpsNum"] = 241;
+	implicitDenominator["outputs"][0]["limits"].erase("maxFpsDen");
+	CHECK_FALSE(contract::prepareRequest(implicitDenominator.dump()).valid);
+}
+
 TEST_CASE("AutoConfig client projects ordered progress without private envelope fields")
 {
 	const auto prepared =

@@ -25,6 +25,16 @@ inline constexpr size_t kMaximumEnhancedBroadcastingDualOutputLegs = 3;
 inline constexpr int kDefaultEstimatedBitrateKbps = 2500;
 inline constexpr int kMaximumRecommendedBitrateKbps = 8000;
 
+/** Accept only effective frame rates from 1 through 240 FPS. */
+inline bool isValidFrameRate(int64_t numerator, int64_t denominator)
+{
+	if (numerator < denominator || denominator <= 0)
+		return false;
+
+	const int64_t wholeFrames = numerator / denominator;
+	return wholeFrames < 240 || (wholeFrames == 240 && numerator % denominator == 0);
+}
+
 /** Keep measured capacity separate from the bitrate Desktop may apply. */
 inline int clampRecommendedBitrateKbps(uint64_t bitrateKbps)
 {

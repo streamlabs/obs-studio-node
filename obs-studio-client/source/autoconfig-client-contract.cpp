@@ -117,6 +117,8 @@ bool parseVideo(const json &value, VideoContext &result, json &wire)
 	    !requiredInteger(value, "fpsNum", 1, 240000, result.fpsNum) || !requiredInteger(value, "fpsDen", 1, 10000, result.fpsDen) ||
 	    !requiredInteger(value, "bitrateKbps", 0, 100000, result.bitrateKbps) || !value.contains("encoderId") || !boundedString(value["encoderId"], 256))
 		return false;
+	if (!qualityPolicy::isValidFrameRate(result.fpsNum, result.fpsDen))
+		return false;
 
 	result.encoderId = value["encoderId"].get<std::string>();
 	try {
@@ -149,6 +151,8 @@ bool parseLimits(const json *value, LimitsContext &result, json &wire)
 		return false;
 	if (result.maxFpsNum && !result.maxFpsDen)
 		result.maxFpsDen = 1;
+	if (result.maxFpsNum && !qualityPolicy::isValidFrameRate(*result.maxFpsNum, *result.maxFpsDen))
+		return false;
 	if (result.maxBitrateKbps)
 		wire["maxBitrateKbps"] = *result.maxBitrateKbps;
 	if (result.maxWidth) {

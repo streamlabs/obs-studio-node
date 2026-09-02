@@ -8,6 +8,17 @@
 
 namespace policy = autoConfig::qualityPolicy;
 
+TEST_CASE("Auto Config accepts only effective frame rates from 1 through 240 FPS")
+{
+	CHECK_FALSE(policy::isValidFrameRate(0, 1));
+	CHECK_FALSE(policy::isValidFrameRate(1, 0));
+	CHECK_FALSE(policy::isValidFrameRate(1, 10000));
+	CHECK(policy::isValidFrameRate(1, 1));
+	CHECK(policy::isValidFrameRate(30000, 1001));
+	CHECK(policy::isValidFrameRate(240000, 1000));
+	CHECK_FALSE(policy::isValidFrameRate(240001, 1000));
+}
+
 TEST_CASE("Auto Config Dual Output uses one shared minimum frame rate")
 {
 	SECTION("integer 60 and 30 FPS")

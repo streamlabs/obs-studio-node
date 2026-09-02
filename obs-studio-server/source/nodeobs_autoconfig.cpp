@@ -559,8 +559,9 @@ static bool parseCurrentSettings(obs_data_t *object, CurrentSettings &current)
 	current.bitrateKbps = (int)obs_data_get_int(object, "bitrateKbps");
 	current.encoderId = obs_data_get_string(object, "encoderId");
 	current.preset = obs_data_get_string(object, "preset");
-	return current.width >= 64 && current.width <= 8192 && current.height >= 64 && current.height <= 8192 && current.fpsNum > 0 &&
-	       current.fpsNum <= 240000 && current.fpsDen > 0 && current.fpsDen <= 10000 && current.bitrateKbps >= 0 && current.bitrateKbps <= 100000;
+	return current.width >= 64 && current.width <= 8192 && current.height >= 64 && current.height <= 8192 && current.fpsNum <= 240000 &&
+	       current.fpsDen <= 10000 && qualityPolicy::isValidFrameRate(current.fpsNum, current.fpsDen) && current.bitrateKbps >= 0 &&
+	       current.bitrateKbps <= 100000;
 }
 
 static bool parseLimits(obs_data_t *object, Limits &limits)
@@ -574,15 +575,16 @@ static bool parseLimits(obs_data_t *object, Limits &limits)
 	const int64_t maxFpsDen = obs_data_get_int(object, "maxFpsDen");
 	const bool hasPartialResolutionLimit = (maxWidth > 0) != (maxHeight > 0);
 	const bool hasOrphanFpsDenominator = maxFpsNum == 0 && maxFpsDen > 0;
+	const int64_t effectiveMaxFpsDen = maxFpsNum > 0 && maxFpsDen == 0 ? 1 : maxFpsDen;
 	if (maxBitrateKbps < 0 || maxBitrateKbps > 100000 || maxWidth < 0 || maxWidth > 8192 || maxHeight < 0 || maxHeight > 8192 ||
 	    (maxWidth > 0 && maxWidth < 64) || (maxHeight > 0 && maxHeight < 64) || hasPartialResolutionLimit || maxFpsNum < 0 || maxFpsNum > 240000 ||
-	    maxFpsDen < 0 || maxFpsDen > 10000 || hasOrphanFpsDenominator)
+	    maxFpsDen < 0 || maxFpsDen > 10000 || hasOrphanFpsDenominator || (maxFpsNum > 0 && !qualityPolicy::isValidFrameRate(maxFpsNum, effectiveMaxFpsDen)))
 		return false;
 	limits.maxBitrateKbps = (int)maxBitrateKbps;
 	limits.maxWidth = (int)maxWidth;
 	limits.maxHeight = (int)maxHeight;
 	limits.maxFpsNum = (int)maxFpsNum;
-	limits.maxFpsDen = maxFpsNum > 0 && maxFpsDen == 0 ? 1 : (int)maxFpsDen;
+	limits.maxFpsDen = (int)effectiveMaxFpsDen;
 	return true;
 }
 
@@ -1443,6 +1445,8 @@ public:
 	std::vector<OBSEncoderAutoRelease> multitrackAudioEncoders;
 	std::shared_ptr<obs_encoder_group_t> multitrackVideoEncoderGroup;
 	std::atomic<bool> stopFeeder{false};
+	std::mutex feederMutex;
+	std::condition_variable feederCondition;
 	std::atomic<uint32_t> scheduledFrames{0};
 	std::atomic<uint32_t> submittedFrames{0};
 	std::atomic<uint32_t> lockFailedFrames{0};
@@ -1614,7 +1618,9 @@ public:
 					nextFrame = now + frameDuration;
 					timestamp = os_gettime_ns() + (uint64_t)frameDuration.count();
 				}
-				std::this_thread::sleep_until(nextFrame);
+				std::unique_lock<std::mutex> lock(feederMutex);
+				if (feederCondition.wait_until(lock, nextFrame, [this]() { return stopFeeder.load(); }))
+					break;
 			}
 		});
 	}
@@ -1653,7 +1659,11 @@ public:
 				output = nullptr;
 			}
 		}
-		stopFeeder.store(true);
+		{
+			std::lock_guard<std::mutex> lock(feederMutex);
+			stopFeeder.store(true);
+		}
+		feederCondition.notify_all();
 		if (feeder.joinable())
 			feeder.join();
 		multitrackAudioEncoders.clear();

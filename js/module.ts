@@ -2082,6 +2082,7 @@ interface IAutoConfigCurrentSettings {
     canvasId?: number;
     width: number;
     height: number;
+    /** Together these fields must describe a frame rate from 1 through 240 FPS. */
     fpsNum: number;
     fpsDen: number;
     bitrateKbps: number;
@@ -2122,7 +2123,9 @@ interface IAutoConfigLimits {
      * Maximum frame rate OSN may test. Supply `maxFpsNum` to permit promotion
      * above the current frame rate; `maxFpsDen` defaults to `1`. OSN tests at
      * most 60 FPS, or 60000/1001 when `maxFpsDen` is `1001`. It returns a
-     * higher frame rate only after a successful active provider probe.
+     * higher frame rate only after a successful active provider probe. When
+     * supplied, the numerator and denominator must describe a frame rate from
+     * 1 through 240 FPS.
      */
     maxFpsNum?: number;
     maxFpsDen?: number;
