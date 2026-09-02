@@ -9,6 +9,7 @@
 
 #include "nodeobs_autoconfig.h"
 
+#include "autoconfig-video-mix.hpp"
 #include "autoconfig-probe-policy.hpp"
 #include "autoconfig-enhanced-broadcasting-policy.hpp"
 #include "autoconfig-quality-policy.hpp"
@@ -1557,9 +1558,18 @@ public:
 		return audio_output_open(&syntheticAudio, &info) == AUDIO_OUTPUT_SUCCESS;
 	}
 
-	bool useKnownStreamingVideoMix()
+	bool useKnownActiveVideoMix(uint64_t canvasId)
 	{
-		scratchMix = obs_video_mix_get(nullptr, OBS_STREAMING_VIDEO_RENDERING);
+		obs_video_info *canvas = nullptr;
+		if (canvasId != osn::common::INVALID_ID) {
+			canvas = osn::Video::Manager::GetInstance().find(canvasId);
+			if (!canvas)
+				return false;
+		}
+
+		// Streaming mixes remain registered when multiple rendering is disabled,
+		// but libobs renders only the main mix in that mode.
+		scratchMix = obs_video_mix_get(canvas, videoMix::activeRenderingMode(obs_get_multiple_rendering()));
 		if (!scratchMix)
 			return false;
 		borrowedVideo = true;
@@ -1866,7 +1876,7 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 			  : useSyntheticRawExact ? "synthetic-raw-exact"
 			  : useCoreVideoMix      ? "private-mix"
 						 : "synthetic-raw";
-	const bool videoCreated = useMainVideoControl ? useCoreVideoMix && resources.useKnownStreamingVideoMix()
+	const bool videoCreated = useMainVideoControl ? useCoreVideoMix && resources.useKnownActiveVideoMix(candidate.canvasId)
 						      : resources.createSyntheticVideo((uint32_t)candidate.width, (uint32_t)candidate.height,
 										       (uint32_t)candidate.fpsNum, (uint32_t)candidate.fpsDen, useCoreVideoMix);
 	if (!videoCreated) {
@@ -3171,7 +3181,7 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	std::vector<obs_core_video_mix_t *> identitySourceMixes(candidates.size(), nullptr);
 	if (usePrivateTextureMix) {
 		const bool multipleRendering = obs_get_multiple_rendering();
-		obs_video_rendering_mode identityMode = multipleRendering ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING;
+		const obs_video_rendering_mode identityMode = videoMix::activeRenderingMode(multipleRendering);
 		for (size_t index = 0; index < canvasIds.size(); index++) {
 			obs_video_info *canvasIdentity = osn::Video::Manager::GetInstance().find(canvasIds[index]);
 			if (canvasIdentity)
