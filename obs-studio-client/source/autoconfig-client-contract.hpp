@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 
 namespace autoConfig::clientContract {
@@ -61,6 +62,14 @@ inline EventEnvelope validateEvent(const std::string &value, const std::string &
 		envelope.error = "Native Auto Optimizer returned malformed event JSON";
 		return envelope;
 	}
+}
+
+inline std::optional<EventEnvelope> decodePolledEvent(const std::optional<std::string> &value, const std::string &sessionId, int64_t lastSequence)
+{
+	if (!value)
+		return std::nullopt;
+
+	return validateEvent(*value, sessionId, lastSequence);
 }
 
 inline std::string validateResult(const std::string &value, const std::string &sessionId)

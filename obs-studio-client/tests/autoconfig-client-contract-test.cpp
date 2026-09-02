@@ -2,6 +2,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
+
 namespace contract = autoConfig::clientContract;
 
 TEST_CASE("AutoConfig client accepts only ordered events for its own session")
@@ -15,6 +17,17 @@ TEST_CASE("AutoConfig client accepts only ordered events for its own session")
 	CHECK_FALSE(contract::validateEvent(R"({"schemaVersion":1,"sessionId":"run","sequence":4,"type":"progress","progress":0.5})", "run", 4).valid);
 	CHECK_FALSE(contract::validateEvent(R"({"schemaVersion":1,"sessionId":"run","sequence":5,"type":"unknown","progress":0.5})", "run", 4).valid);
 	CHECK_FALSE(contract::validateEvent("{", "run", 4).valid);
+}
+
+TEST_CASE("AutoConfig client treats an empty poll as no event")
+{
+	const auto empty = contract::decodePolledEvent(std::nullopt, "run", 7);
+	CHECK_FALSE(empty);
+
+	const auto event = contract::decodePolledEvent(R"({"schemaVersion":1,"sessionId":"run","sequence":8,"type":"progress","progress":0.5})", "run", 7);
+	REQUIRE(event);
+	CHECK(event->valid);
+	CHECK(event->sequence == 8);
 }
 
 TEST_CASE("AutoConfig client recognizes terminal events and validates results")

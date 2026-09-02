@@ -27,6 +27,7 @@
 #include <chrono>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -140,11 +141,17 @@ void Worker()
 			const std::string sessionId = GetActiveSessionId();
 			if (!sessionId.empty()) {
 				auto response = CallServer("QueryAutoConfigSession", {ipc::value(sessionId)}, 2);
-				const auto envelope = autoConfig::clientContract::validateEvent(response[1].value_str, sessionId, lastEventSequence);
-				auto *event = new EventData{response[1].value_str, envelope.error, envelope.terminal};
-				if (envelope.valid)
-					lastEventSequence = static_cast<int64_t>(envelope.sequence);
-				DispatchEvent(event);
+				std::optional<std::string> eventJson;
+				if (response[1].type != ipc::type::Null)
+					eventJson = response[1].value_str;
+				const auto polledEvent = autoConfig::clientContract::decodePolledEvent(eventJson, sessionId, lastEventSequence);
+				if (polledEvent) {
+					const auto &envelope = *polledEvent;
+					auto *event = new EventData{response[1].value_str, envelope.error, envelope.terminal};
+					if (envelope.valid)
+						lastEventSequence = static_cast<int64_t>(envelope.sequence);
+					DispatchEvent(event);
+				}
 			}
 		} catch (...) {
 			// A lost peer is bounded by the caller's deadline. Shutdown or an

@@ -5211,8 +5211,10 @@ void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, st
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	std::lock_guard<std::mutex> lock(session->mutex);
-	if (session->events.empty())
+	if (session->events.empty()) {
+		rval.push_back(ipc::value());
 		return;
+	}
 
 	rval.push_back(ipc::value(serializeEvent(*session, session->events.front())));
 	session->events.pop();
