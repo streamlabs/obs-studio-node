@@ -49,15 +49,22 @@ describe(testName, function() {
         deleteConfigFiles();
     });
 
-    type AutoConfigLegRequest = IAutoConfigRequest['legs'][number];
-    type AutoConfigRun = ReturnType<typeof osn.NodeObs.AutoConfig.run>;
+    type AutoConfigOutputRequest = IAutoConfigRequest['outputs'][number];
+    interface AutoConfigRun {
+        readonly result: Promise<IAutoConfigResult>;
+        confirmProbeIngest(probeId: string, received: boolean): void;
+        cancel(): Promise<void>;
+    }
+    const autoConfig = osn.NodeObs.AutoConfig as unknown as {
+        run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): AutoConfigRun;
+    };
 
-    function leg(overrides: Partial<AutoConfigLegRequest> = {}): AutoConfigLegRequest {
+    function output(overrides: Partial<AutoConfigOutputRequest> = {}): AutoConfigOutputRequest {
         return {
-            legId: 'primary',
+            outputId: 'primary',
             display: 'horizontal',
             outputKind: 'standard',
-            destinations: [{ platform: 'custom' }],
+            destinations: ['custom'],
             current: {
                 canvasId: obs.defaultVideoContext.canvasId,
                 width: 1280,
@@ -74,55 +81,52 @@ describe(testName, function() {
 
     function pairedEnhancedBroadcastingRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoConfigRequest {
         return {
-            schemaVersion: 1,
-            topology: 'enhanced-broadcasting',
-            legs: [leg({
+            streamSetup: 'enhanced-broadcasting',
+            outputs: [output({
                 display: 'both',
                 outputKind: 'twitch-enhanced-broadcasting',
-                destinations: [{ platform: 'twitch' }],
-                current: { ...leg().current, canvasId: primaryCanvasId },
+                destinations: ['twitch'],
+                current: { ...output().current, canvasId: primaryCanvasId },
                 additionalVideo: {
                     display: 'vertical',
                     current: {
-                        ...leg().current,
+                        ...output().current,
                         canvasId: additionalCanvasId,
                         width: 720,
                         height: 1280,
                         fpsNum: 60,
                     },
                 },
+                probes: [{
+                    id: 'enhanced-broadcasting-primary',
+                    kind: 'twitch-enhanced-broadcasting',
+                    streamKey: 'integration-test-key',
+                }],
             })],
-            activeProbes: [{
-                probeId: 'enhanced-broadcasting-primary',
-                kind: 'twitch-enhanced-broadcasting',
-                legId: 'primary',
-                streamKey: 'integration-test-key',
-            }],
         };
     }
 
     function enhancedBroadcastingDualOutputRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoConfigRequest {
         const paired = pairedEnhancedBroadcastingRequest(primaryCanvasId, additionalCanvasId);
-        const enhanced = paired.legs[0];
-        enhanced.legId = 'enhanced';
-        paired.activeProbes![0].legId = enhanced.legId;
+        const enhanced = paired.outputs[0];
+        enhanced.outputId = 'enhanced';
         return {
             ...paired,
-            topology: 'enhanced-broadcasting-dual-output',
-            legs: [
+            streamSetup: 'enhanced-broadcasting-dual-output',
+            outputs: [
                 enhanced,
-                leg({
-                    legId: 'horizontal-companion',
+                output({
+                    outputId: 'horizontal-companion',
                     display: 'horizontal',
                     outputKind: 'standard',
-                    destinations: [{ platform: 'kick' }],
+                    destinations: ['kick'],
                     current: { ...enhanced.current },
                 }),
-                leg({
-                    legId: 'vertical-companion',
+                output({
+                    outputId: 'vertical-companion',
                     display: 'vertical',
                     outputKind: 'standard',
-                    destinations: [{ platform: 'facebook' }],
+                    destinations: ['facebook'],
                     current: { ...enhanced.additionalVideo!.current },
                 }),
             ],
@@ -145,11 +149,10 @@ describe(testName, function() {
                 }
             };
 
-            nativeRun = osn.NodeObs.AutoConfig.run(
+            nativeRun = autoConfig.run(
                 {
-                    schemaVersion: 1,
-                    topology: 'custom-rtmp',
-                    legs: [leg()],
+                    streamSetup: 'custom-rtmp',
+                    outputs: [output()],
                 } as IAutoConfigRequest,
                 onEvent,
             );
@@ -166,12 +169,11 @@ describe(testName, function() {
     }
 
     async function run(request: IAutoConfigRequest): Promise<{
-        sessionId: string;
         events: IAutoConfigEvent[];
         result: IAutoConfigResult;
     }> {
         const events: IAutoConfigEvent[] = [];
-        const nativeRun = osn.NodeObs.AutoConfig.run(request, event => events.push(event));
+        const nativeRun = autoConfig.run(request, event => events.push(event));
         let timeout: ReturnType<typeof setTimeout>;
         const timedResult = new Promise<IAutoConfigResult>((_, reject) => {
             timeout = setTimeout(() => {
@@ -183,15 +185,32 @@ describe(testName, function() {
         });
         try {
             const result = await Promise.race([nativeRun.result, timedResult]);
-            return { sessionId: result.sessionId, events, result };
+            for (const event of events) {
+                for (const field of ['schemaVersion', 'sessionId', 'sequence', 'provider', 'probeId', 'legId'])
+                    expect(event).not.to.have.property(field);
+                if (event.probe)
+                    expect(Object.keys(event.probe).sort()).to.deep.equal(['id', 'kind']);
+            }
+            for (const field of ['schemaVersion', 'sessionId', 'legs', 'aggregateUpload', 'combinedWorkload'])
+                expect(result).not.to.have.property(field);
+            for (const projectedOutput of result.outputs) {
+                for (const field of ['legId', 'display', 'outputKind', 'destinations', 'limits', 'recommendation'])
+                    expect(projectedOutput).not.to.have.property(field);
+                for (const video of projectedOutput.videos)
+                    expect(Object.keys(video).sort()).to.deep.equal(['display', 'fpsDen', 'fpsNum', 'height', 'width']);
+                expect(projectedOutput.measurement).not.to.have.property('probes');
+                for (const evidence of projectedOutput.measurement.evidence || [])
+                    expect(Object.keys(evidence).sort()).to.deep.equal(['method', 'platform', 'success']);
+            }
+            return { events, result };
         } finally {
             clearTimeout(timeout!);
         }
     }
 
     it('exposes only the resource-safe Auto Optimizer facade', function() {
-        expect(osn.NodeObs.AutoConfig.run).to.be.a('function');
-        expect(Object.keys(osn.NodeObs.AutoConfig)).to.deep.equal(['run']);
+        expect(autoConfig.run).to.be.a('function');
+        expect(Object.keys(autoConfig)).to.deep.equal(['run']);
         for (const rawMethod of [
             '__AutoConfigNative',
             'GetAutoConfigCapabilities',
@@ -213,7 +232,7 @@ describe(testName, function() {
         try {
             expect(obs.defaultVideoContext.canvasId).to.equal(0);
             expect(verticalCanvas.canvasId).to.equal(1);
-            nativeRun = osn.NodeObs.AutoConfig.run(
+            nativeRun = autoConfig.run(
                 pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId),
                 () => undefined,
             );
@@ -226,30 +245,28 @@ describe(testName, function() {
         }
     });
 
-    it('rejects provider-owned output kinds outside Enhanced Broadcasting topologies', function() {
+    it('rejects provider-owned output kinds outside Enhanced Broadcasting stream setups', function() {
         const direct = {
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({ outputKind: 'twitch-enhanced-broadcasting' })],
+            streamSetup: 'direct-single',
+            outputs: [output({ outputKind: 'twitch-enhanced-broadcasting' })],
         } as IAutoConfigRequest;
-        expect(() => osn.NodeObs.AutoConfig.run(direct, () => undefined)).to.throw('invalid_autoconfig_output_kind');
+        expect(() => autoConfig.run(direct, () => undefined)).to.throw('invalid_autoconfig_output_kind');
 
         const enhanced = {
-            schemaVersion: 1,
-            topology: 'enhanced-broadcasting',
-            legs: [leg({
+            streamSetup: 'enhanced-broadcasting',
+            outputs: [output({
                 outputKind: 'standard',
-                destinations: [{ platform: 'twitch' }],
+                destinations: ['twitch'],
             })],
         } as IAutoConfigRequest;
-        expect(() => osn.NodeObs.AutoConfig.run(enhanced, () => undefined)).to.throw('invalid_autoconfig_output_kind');
+        expect(() => autoConfig.run(enhanced, () => undefined)).to.throw('invalid_autoconfig_output_kind');
     });
 
-    it('accepts the exact Enhanced Broadcasting plus two companion output topology', async function() {
+    it('accepts the exact Enhanced Broadcasting plus two companion output stream setup', async function() {
         const verticalCanvas = osn.VideoFactory.create();
         let nativeRun: AutoConfigRun | null = null;
         try {
-            nativeRun = osn.NodeObs.AutoConfig.run(
+            nativeRun = autoConfig.run(
                 enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId),
                 () => undefined,
             );
@@ -266,21 +283,21 @@ describe(testName, function() {
         const verticalCanvas = osn.VideoFactory.create();
         try {
             const wrongCanvas = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
-            wrongCanvas.legs[1].current.canvasId = verticalCanvas.canvasId;
-            expect(() => osn.NodeObs.AutoConfig.run(wrongCanvas, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+            wrongCanvas.outputs[1].current.canvasId = verticalCanvas.canvasId;
+            expect(() => autoConfig.run(wrongCanvas, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
 
             const custom = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
-            custom.legs[1].destinations = [{ platform: 'custom' }];
-            expect(() => osn.NodeObs.AutoConfig.run(custom, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+            custom.outputs[1].destinations = ['custom'];
+            expect(() => autoConfig.run(custom, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
 
             const providerOwnedCompanion = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
-            providerOwnedCompanion.legs[1].outputKind = 'twitch-enhanced-broadcasting';
-            expect(() => osn.NodeObs.AutoConfig.run(providerOwnedCompanion, () => undefined))
+            providerOwnedCompanion.outputs[1].outputKind = 'twitch-enhanced-broadcasting';
+            expect(() => autoConfig.run(providerOwnedCompanion, () => undefined))
                 .to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
 
             const implicitOwnership = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
-            delete implicitOwnership.legs[1].outputKind;
-            expect(() => osn.NodeObs.AutoConfig.run(implicitOwnership, () => undefined)).to.throw('invalid_autoconfig_output_kind');
+            delete implicitOwnership.outputs[1].outputKind;
+            expect(() => autoConfig.run(implicitOwnership, () => undefined)).to.throw('Invalid Auto Optimizer output');
         } finally {
             verticalCanvas.destroy();
         }
@@ -288,12 +305,11 @@ describe(testName, function() {
 
     it('allows estimate-only requests to omit a canvas identity', async function() {
         const request = {
-            schemaVersion: 1,
-            topology: 'custom-rtmp',
-            legs: [leg()],
+            streamSetup: 'custom-rtmp',
+            outputs: [output()],
         } as any;
-        delete request.legs[0].current.canvasId;
-        const nativeRun = osn.NodeObs.AutoConfig.run(request, () => undefined);
+        delete request.outputs[0].current.canvasId;
+        const nativeRun = autoConfig.run(request, () => undefined);
         await nativeRun.cancel();
         expect((await nativeRun.result).status).to.equal('cancelled');
     });
@@ -302,41 +318,41 @@ describe(testName, function() {
         const verticalCanvas = osn.VideoFactory.create();
         try {
             const missingPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
-            delete missingPrimary.legs[0].current.canvasId;
-            expect(() => osn.NodeObs.AutoConfig.run(missingPrimary, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            delete missingPrimary.outputs[0].current.canvasId;
+            expect(() => autoConfig.run(missingPrimary, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
 
             const negativePrimary = pairedEnhancedBroadcastingRequest(-1, verticalCanvas.canvasId);
-            expect(() => osn.NodeObs.AutoConfig.run(negativePrimary, () => undefined)).to.throw('invalid_autoconfig_current_settings');
+            expect(() => autoConfig.run(negativePrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const missingAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
-            delete missingAdditional.legs[0].additionalVideo.current.canvasId;
-            expect(() => osn.NodeObs.AutoConfig.run(missingAdditional, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            delete missingAdditional.outputs[0].additionalVideo.current.canvasId;
+            expect(() => autoConfig.run(missingAdditional, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
 
             const negativeAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, -1);
-            expect(() => osn.NodeObs.AutoConfig.run(negativeAdditional, () => undefined)).to.throw('invalid_autoconfig_additional_video');
+            expect(() => autoConfig.run(negativeAdditional, () => undefined)).to.throw('Invalid Auto Optimizer additional video');
 
             const fractionalPrimary = pairedEnhancedBroadcastingRequest(0.5, verticalCanvas.canvasId);
-            expect(() => osn.NodeObs.AutoConfig.run(fractionalPrimary, () => undefined)).to.throw('invalid_autoconfig_current_settings');
+            expect(() => autoConfig.run(fractionalPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const stringPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
-            stringPrimary.legs[0].current.canvasId = '0';
-            expect(() => osn.NodeObs.AutoConfig.run(stringPrimary, () => undefined)).to.throw('invalid_autoconfig_current_settings');
+            stringPrimary.outputs[0].current.canvasId = '0';
+            expect(() => autoConfig.run(stringPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const nullPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
-            nullPrimary.legs[0].current.canvasId = null;
-            expect(() => osn.NodeObs.AutoConfig.run(nullPrimary, () => undefined)).to.throw('invalid_autoconfig_current_settings');
+            nullPrimary.outputs[0].current.canvasId = null;
+            expect(() => autoConfig.run(nullPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const unsafeIntegerPrimary = pairedEnhancedBroadcastingRequest(Number.MAX_SAFE_INTEGER + 1, verticalCanvas.canvasId);
-            expect(() => osn.NodeObs.AutoConfig.run(unsafeIntegerPrimary, () => undefined)).to.throw('invalid_autoconfig_current_settings');
+            expect(() => autoConfig.run(unsafeIntegerPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const equalCanvasIds = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, obs.defaultVideoContext.canvasId);
-            expect(() => osn.NodeObs.AutoConfig.run(equalCanvasIds, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoConfig.run(equalCanvasIds, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
 
             const unknownPrimary = pairedEnhancedBroadcastingRequest(999999, verticalCanvas.canvasId);
-            expect(() => osn.NodeObs.AutoConfig.run(unknownPrimary, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoConfig.run(unknownPrimary, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
 
             const unknownAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, 999999);
-            expect(() => osn.NodeObs.AutoConfig.run(unknownAdditional, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoConfig.run(unknownAdditional, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
         } finally {
             verticalCanvas.destroy();
         }
@@ -347,24 +363,24 @@ describe(testName, function() {
         const secret = 'must-not-appear-in-result';
         try {
             const response = await run({
-                schemaVersion: 1,
-                topology: 'custom-rtmp',
-                legs: [leg({ limits: { maxWidth: 1920, maxHeight: 1080, maxFpsNum: 60, maxFpsDen: 1 } })],
-                activeProbes: [{
-                    probeId: 'twitch-primary',
-                    kind: 'twitch-standard',
-                    legId: 'primary',
-                    server: `rtmp://127.0.0.1:${mockPort}/live`,
-                    streamKey: secret,
-                }],
+                streamSetup: 'custom-rtmp',
+                outputs: [output({
+                    limits: { maxWidth: 1920, maxHeight: 1080, maxFpsNum: 60, maxFpsDen: 1 },
+                    probes: [{
+                        id: 'twitch-primary',
+                        kind: 'twitch-standard',
+                        server: `rtmp://127.0.0.1:${mockPort}/live`,
+                        streamKey: secret,
+                    }],
+                })],
             });
 
             expect(mock.getConnections()).to.equal(0);
             expect(mock.getBytes()).to.equal(0);
             expect(response.result.status).to.equal('complete');
-            expect(response.result.legs[0].measurement.mode).to.equal('estimated');
-            expect(response.result.legs[0].measurement.reason).to.equal('custom_rtmp');
-            expect(response.result.legs[0].recommendation.bitrateKbps).to.equal(2500);
+            expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
+            expect(response.result.outputs[0].measurement.reason).to.equal('custom_rtmp');
+            expect(response.result.outputs[0].encoding!.bitrateKbps).to.equal(2500);
             expect(JSON.stringify(response.result)).not.to.contain(secret);
             expect(JSON.stringify(response.events)).not.to.contain(secret);
             expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
@@ -397,12 +413,12 @@ describe(testName, function() {
             if (!qualityResult)
                 throw new Error('Expected a quality-selection result event');
             expect(qualityResult.selectedBitrateKbps).to.equal(2500);
-            expect(response.result.legs[0].recommendation.width).to.be.at.most(1280);
-            expect(response.result.legs[0].recommendation.height).to.be.at.most(720);
-            expect(response.result.legs[0].recommendation.fpsNum).to.equal(30);
-            expect(response.result.legs[0].recommendation.fpsDen).to.equal(1);
-            expect(response.result.legs[0].recommendation.encoderFamily).to.be.a('string').and.not.equal('');
-            expect(response.result.legs[0].recommendation.encoderTitle).to.be.a('string').and.not.equal('');
+            expect(response.result.outputs[0].videos[0].width).to.be.at.most(1280);
+            expect(response.result.outputs[0].videos[0].height).to.be.at.most(720);
+            expect(response.result.outputs[0].videos[0].fpsNum).to.equal(30);
+            expect(response.result.outputs[0].videos[0].fpsDen).to.equal(1);
+            expect(response.result.outputs[0].encoding!.encoderFamily).to.be.a('string').and.not.equal('');
+            expect(response.result.outputs[0].encoding!.encoderTitle).to.be.a('string').and.not.equal('');
             const testedPresets: Record<string, string> = {
                 obs_nvenc_h264_tex: 'p5',
                 obs_qsv11_v2: 'TU4',
@@ -411,7 +427,7 @@ describe(testName, function() {
                 'com.apple.videotoolbox.videoencoder.ave.avc': 'high',
                 obs_x264: 'veryfast',
             };
-            const recommendation = response.result.legs[0].recommendation;
+            const recommendation = response.result.outputs[0].encoding!;
             const locallyExpectedEncoder = process.env.AUTOCONFIG_EXPECT_ENCODER;
             if (locallyExpectedEncoder)
                 expect(recommendation.encoderId).to.equal(locallyExpectedEncoder);
@@ -435,21 +451,21 @@ describe(testName, function() {
         const secret = 'youtube-secret-must-not-appear';
         try {
             const response = await run({
-                schemaVersion: 1,
-                topology: 'direct-single',
-                legs: [leg({ destinations: [{ platform: 'youtube' }] })],
-                activeProbes: [{
-                    probeId: 'youtube-primary',
-                    kind: 'youtube-unbound',
-                    legId: 'primary',
-                    server: `rtmps://127.0.0.1:${mockPort}/live2`,
-                    streamKey: secret,
-                }],
+                streamSetup: 'direct-single',
+                outputs: [output({
+                    destinations: ['youtube'],
+                    probes: [{
+                        id: 'youtube-primary',
+                        kind: 'youtube-unbound',
+                        server: `rtmps://127.0.0.1:${mockPort}/live2`,
+                        streamKey: secret,
+                    }],
+                })],
             });
 
             expect(mock.getConnections()).to.equal(0);
             expect(mock.getBytes()).to.equal(0);
-            expect(response.result.legs[0].measurement.mode).to.equal('estimated');
+            expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
             expect(JSON.stringify(response.result)).not.to.contain(secret);
             expect(JSON.stringify(response.events)).not.to.contain(secret);
             expect(response.events.some(event => event.code === 'active_probe_not_eligible')).to.equal(true);
@@ -458,80 +474,72 @@ describe(testName, function() {
         }
     });
 
-    it('keeps a shared cloud leg estimate-only when no supplied probe is eligible', async function() {
+    it('keeps a shared cloud output estimate-only when no supplied probe is eligible', async function() {
         const response = await run({
-            schemaVersion: 1,
-            topology: 'cloud-multistream',
-            legs: [leg({
-                destinations: [{ platform: 'twitch' }, { platform: 'youtube' }],
+            streamSetup: 'cloud-multistream',
+            outputs: [output({
+                destinations: ['twitch', 'youtube'],
                 estimateReason: 'cloud_multistream',
+                probes: [{
+                    id: 'cloud-twitch-only',
+                    kind: 'twitch-standard',
+                    // Individual endpoint validation must reject this credential
+                    // without affecting the partial-provider coverage policy.
+                    server: `rtmp://127.0.0.1:${mockPort}/live`,
+                    streamKey: 'incomplete-cloud-secret',
+                }],
             })],
-            activeProbes: [{
-                probeId: 'cloud-twitch-only',
-                kind: 'twitch-standard',
-                legId: 'primary',
-                // Individual endpoint validation must reject this credential
-                // without affecting the partial-provider coverage policy.
-                server: `rtmp://127.0.0.1:${mockPort}/live`,
-                streamKey: 'incomplete-cloud-secret',
-            }],
         });
-        expect(response.result.legs[0].measurement.mode).to.equal('estimated');
-        expect(response.result.legs[0].measurement.reason).to.equal('cloud_multistream');
+        expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
+        expect(response.result.outputs[0].measurement.reason).to.equal('cloud_multistream');
         expect(response.events.some(event => event.code === 'twitch_probe_started')).to.equal(false);
         expect(JSON.stringify(response.result)).not.to.contain('incomplete-cloud-secret');
         expect(JSON.stringify(response.events)).not.to.contain('incomplete-cloud-secret');
     });
 
-    it('default-denies dual-output active probes whose two legs reuse one canvas identity', async function() {
+    it('default-denies dual-output active probes whose two outputs reuse one canvas identity', async function() {
         const twitchSecret = 'dual-twitch-secret';
         const youtubeSecret = 'dual-youtube-secret';
         const response = await run({
-            schemaVersion: 1,
-            topology: 'dual-output',
-            legs: [
-                leg({
-                    legId: 'horizontal',
+            streamSetup: 'dual-output',
+            outputs: [
+                output({
+                    outputId: 'horizontal',
                     display: 'horizontal',
-                    destinations: [{ platform: 'twitch' }],
-                    current: { ...leg().current, bitrateKbps: 6000 },
+                    destinations: ['twitch'],
+                    current: { ...output().current, bitrateKbps: 6000 },
                     estimateReason: 'dual_output',
+                    probes: [{
+                        id: 'dual-twitch',
+                        kind: 'twitch-standard',
+                        server: 'rtmp://live.twitch.tv/app',
+                        streamKey: twitchSecret,
+                    }],
                 }),
-                leg({
-                    legId: 'vertical',
+                output({
+                    outputId: 'vertical',
                     display: 'vertical',
-                    destinations: [{ platform: 'youtube' }],
-                    current: { ...leg().current, bitrateKbps: 6000 },
+                    destinations: ['youtube'],
+                    current: { ...output().current, bitrateKbps: 6000 },
                     estimateReason: 'dual_output',
+                    probes: [{
+                        id: 'dual-youtube',
+                        kind: 'youtube-unbound',
+                        server: 'rtmps://a.rtmps.youtube.com/live2',
+                        streamKey: youtubeSecret,
+                    }],
                 }),
-            ],
-            activeProbes: [
-                {
-                    probeId: 'dual-twitch',
-                    kind: 'twitch-standard',
-                    legId: 'horizontal',
-                    server: 'rtmp://live.twitch.tv/app',
-                    streamKey: twitchSecret,
-                },
-                {
-                    probeId: 'dual-youtube',
-                    kind: 'youtube-unbound',
-                    legId: 'vertical',
-                    server: 'rtmps://a.rtmps.youtube.com/live2',
-                    streamKey: youtubeSecret,
-                },
             ],
         });
 
-        expect(response.result.legs).to.have.length(2);
-        expect(response.result.legs.every(resultLeg => resultLeg.measurement.mode === 'estimated')).to.equal(true);
-        expect(response.result.legs.every(resultLeg => resultLeg.measurement.reason === 'dual_output')).to.equal(true);
-        expect(response.result.aggregateUpload).to.equal(undefined);
+        expect(response.result.outputs).to.have.length(2);
+        expect(response.result.outputs.every(resultOutput => resultOutput.measurement.mode === 'estimated')).to.equal(true);
+        expect(response.result.outputs.every(resultOutput => resultOutput.measurement.reason === 'dual_output')).to.equal(true);
         expect(response.events.some(event => event.code === 'dual_output_testing_workload')).to.equal(false);
         expect(response.events.some(event => event.code === 'dual_output_allocating_upload')).to.equal(false);
         expect(response.events.filter(event => event.code === 'dual_output_multiple_active_legs')).to.have.length(2);
         expect(response.events.some(event => event.code === 'twitch_probe_started' || event.code === 'youtube_probe_started')).to.equal(false);
-        expect(new Set(response.result.legs.map(resultLeg => resultLeg.recommendation.encoderId)).size).to.equal(1);
+        expect(new Set(response.result.outputs.map(resultOutput => resultOutput.encoding!.encoderId)).size).to.equal(1);
         expect(JSON.stringify(response.result)).not.to.contain(twitchSecret);
         expect(JSON.stringify(response.result)).not.to.contain(youtubeSecret);
         expect(JSON.stringify(response.events)).not.to.contain(twitchSecret);
@@ -540,50 +548,45 @@ describe(testName, function() {
 
     it('clamps estimate-only results to bundled platform caps without raising current bitrate', async function() {
         const twitch = await run({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({
-                destinations: [{ platform: 'twitch' }],
-                current: { ...leg().current, bitrateKbps: 8000 },
+            streamSetup: 'direct-single',
+            outputs: [output({
+                destinations: ['twitch'],
+                current: { ...output().current, bitrateKbps: 8000 },
                 estimateReason: 'probe_disabled',
             })],
         });
-        expect(twitch.result.legs[0].measurement.mode).to.equal('estimated');
-        expect(twitch.result.legs[0].recommendation.bitrateKbps).to.equal(6000);
-        expect(twitch.result.legs[0].limits.maxBitrateKbps).to.equal(6000);
+        expect(twitch.result.outputs[0].measurement.mode).to.equal('estimated');
+        expect(twitch.result.outputs[0].encoding!.bitrateKbps).to.equal(6000);
 
         const alreadyConservative = await run({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({
-                destinations: [{ platform: 'twitch' }],
-                current: { ...leg().current, bitrateKbps: 2500 },
+            streamSetup: 'direct-single',
+            outputs: [output({
+                destinations: ['twitch'],
+                current: { ...output().current, bitrateKbps: 2500 },
                 estimateReason: 'probe_disabled',
             })],
         });
-        expect(alreadyConservative.result.legs[0].recommendation.bitrateKbps).to.equal(2500);
+        expect(alreadyConservative.result.outputs[0].encoding!.bitrateKbps).to.equal(2500);
 
         const globallyCapped = await run({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({
-                destinations: [{ platform: 'other' }],
-                current: { ...leg().current, bitrateKbps: 12000 },
+            streamSetup: 'direct-single',
+            outputs: [output({
+                destinations: ['other'],
+                current: { ...output().current, bitrateKbps: 12000 },
                 estimateReason: 'probe_disabled',
             })],
         });
-        expect(globallyCapped.result.legs[0].measurement.mode).to.equal('estimated');
-        expect(globallyCapped.result.legs[0].recommendation.bitrateKbps).to.equal(8000);
+        expect(globallyCapped.result.outputs[0].measurement.mode).to.equal('estimated');
+        expect(globallyCapped.result.outputs[0].encoding!.bitrateKbps).to.equal(8000);
     });
 
     it('uses the strictest destination/request cap and replaces an unavailable encoder', async function() {
         const response = await run({
-            schemaVersion: 1,
-            topology: 'cloud-multistream',
-            legs: [leg({
-                destinations: [{ platform: 'youtube' }, { platform: 'twitch' }],
+            streamSetup: 'cloud-multistream',
+            outputs: [output({
+                destinations: ['youtube', 'twitch'],
                 current: {
-                    ...leg().current,
+                    ...output().current,
                     bitrateKbps: 9000,
                     encoderId: 'definitely-not-a-real-encoder',
                 },
@@ -592,29 +595,28 @@ describe(testName, function() {
             })],
         });
 
-        expect(response.result.legs[0].recommendation.bitrateKbps).to.equal(1800);
-        expect(response.result.legs[0].recommendation.encoderId).not.to.equal('definitely-not-a-real-encoder');
-        expect(response.result.legs[0].recommendation.codec).to.equal('h264');
-        expect(['obs_nvenc_h264_tex', 'qsv', 'amd', 'apple', 'x264']).to.include(response.result.legs[0].recommendation.encoderFamily);
-        expect(response.result.legs[0].measurement.confidence).to.equal('medium');
+        expect(response.result.outputs[0].encoding!.bitrateKbps).to.equal(1800);
+        expect(response.result.outputs[0].encoding!.encoderId).not.to.equal('definitely-not-a-real-encoder');
+        expect(response.result.outputs[0].encoding!.codec).to.equal('h264');
+        expect(['obs_nvenc_h264_tex', 'qsv', 'amd', 'apple', 'x264']).to.include(response.result.outputs[0].encoding!.encoderFamily);
+        expect(response.result.outputs[0].measurement.confidence).to.equal('medium');
     });
 
-    it('does not test or replace provider-owned Twitch both-display encoding', async function() {
+    it('does not test or expose provider-owned Twitch both-display encoding', async function() {
         const response = await run({
-            schemaVersion: 1,
-            topology: 'enhanced-broadcasting',
-            legs: [leg({
+            streamSetup: 'enhanced-broadcasting',
+            outputs: [output({
                 display: 'both',
                 outputKind: 'twitch-enhanced-broadcasting',
-                destinations: [{ platform: 'twitch' }],
+                destinations: ['twitch'],
                 current: {
-                    ...leg().current,
+                    ...output().current,
                     encoderId: 'obs_nvenc_av1_tex',
                 },
                 additionalVideo: {
                     display: 'vertical',
                     current: {
-                        ...leg().current,
+                        ...output().current,
                         width: 720,
                         height: 1280,
                         encoderId: 'obs_nvenc_av1_tex',
@@ -629,25 +631,22 @@ describe(testName, function() {
             event.code === 'hardware_validating_target_cadence' || event.code === 'hardware_testing_x264'))
             .to.equal(false);
         expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
-        expect(response.result.legs[0].recommendation.encoderId).to.equal('obs_nvenc_av1_tex');
-        // The provider owns this ladder. Preserve the selected ID, but do not
-        // invent codec metadata when that encoder is not registered locally.
-        expect(response.result.legs[0].recommendation.codec).to.equal('');
+        expect(response.result.outputs[0].encoding).to.equal(undefined);
+        expect(response.result.outputs[0].videos.map(video => video.display)).to.deep.equal(['horizontal', 'vertical']);
     });
 
     it('preserves a paired vertical recommendation when Enhanced Broadcasting is estimate-only', async function() {
         const response = await run({
-            schemaVersion: 1,
-            topology: 'enhanced-broadcasting',
-            legs: [leg({
+            streamSetup: 'enhanced-broadcasting',
+            outputs: [output({
                 display: 'both',
                 outputKind: 'twitch-enhanced-broadcasting',
-                destinations: [{ platform: 'twitch' }],
+                destinations: ['twitch'],
                 estimateReason: 'enhanced_broadcasting',
                 additionalVideo: {
                     display: 'vertical',
                     current: {
-                        ...leg().current,
+                        ...output().current,
                         width: 720,
                         height: 1280,
                         fpsNum: 60,
@@ -662,8 +661,8 @@ describe(testName, function() {
             })],
         });
 
-        expect(response.result.legs[0].measurement.mode).to.equal('estimated');
-        expect(response.result.legs[0].recommendation.additionalVideo).to.deep.equal({
+        expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
+        expect(response.result.outputs[0].videos.find(video => video.display === 'vertical')).to.deep.equal({
             display: 'vertical',
             width: 720,
             height: 1280,
@@ -674,10 +673,9 @@ describe(testName, function() {
     });
 
     it('cancels a newly started run and makes cleanup observable before returning', async function() {
-        const nativeRun = osn.NodeObs.AutoConfig.run({
-            schemaVersion: 1,
-            topology: 'custom-rtmp',
-            legs: [leg()],
+        const nativeRun = autoConfig.run({
+            streamSetup: 'custom-rtmp',
+            outputs: [output()],
         } as IAutoConfigRequest,
             () => undefined);
 
@@ -688,10 +686,9 @@ describe(testName, function() {
     });
 
     it('cancels a running session only after its scratch worker has cleaned up', async function() {
-        const nativeRun = osn.NodeObs.AutoConfig.run({
-            schemaVersion: 1,
-            topology: 'custom-rtmp',
-            legs: [leg()],
+        const nativeRun = autoConfig.run({
+            streamSetup: 'custom-rtmp',
+            outputs: [output()],
         } as IAutoConfigRequest,
             () => undefined);
         // Let the worker enter the hardware phase so this covers cancellation
@@ -713,43 +710,38 @@ describe(testName, function() {
                 const timeout = setTimeout(
                     () => reject(new Error(`Timed out waiting for the concurrent Dual Output workload; events=${eventCodes.join(',')}`)),
                     15000);
-                nativeRun = osn.NodeObs.AutoConfig.run(
+                nativeRun = autoConfig.run(
                     {
-                        schemaVersion: 1,
-                        topology: 'dual-output',
-                        legs: [
-                            leg({
-                                legId: 'horizontal',
+                        streamSetup: 'dual-output',
+                        outputs: [
+                            output({
+                                outputId: 'horizontal',
                                 display: 'horizontal',
-                                destinations: [{ platform: 'twitch' }, { platform: 'kick' }],
+                                destinations: ['twitch', 'kick'],
+                                probes: [{
+                                    id: 'dual-cancel-twitch',
+                                    kind: 'twitch-standard',
+                                    server: 'rtmp://live.twitch.tv/app',
+                                    streamKey: 'integration-test-twitch-key',
+                                }],
                             }),
-                            leg({
-                                legId: 'vertical',
+                            output({
+                                outputId: 'vertical',
                                 display: 'vertical',
-                                destinations: [{ platform: 'youtube' }],
+                                destinations: ['youtube'],
                                 current: {
-                                    ...leg().current,
+                                    ...output().current,
                                     canvasId: verticalCanvas.canvasId,
                                     width: 720,
                                     height: 1280,
                                 },
+                                probes: [{
+                                    id: 'dual-cancel-youtube',
+                                    kind: 'youtube-unbound',
+                                    server: 'rtmps://a.rtmps.youtube.com/live2',
+                                    streamKey: 'integration-test-youtube-key',
+                                }],
                             }),
-                        ],
-                        activeProbes: [
-                            {
-                                probeId: 'dual-cancel-twitch',
-                                kind: 'twitch-standard',
-                                legId: 'horizontal',
-                                server: 'rtmp://live.twitch.tv/app',
-                                streamKey: 'integration-test-twitch-key',
-                            },
-                            {
-                                probeId: 'dual-cancel-youtube',
-                                kind: 'youtube-unbound',
-                                legId: 'vertical',
-                                server: 'rtmps://a.rtmps.youtube.com/live2',
-                                streamKey: 'integration-test-youtube-key',
-                            },
                         ],
                     } as IAutoConfigRequest,
                     event => {
@@ -807,95 +799,121 @@ describe(testName, function() {
         }
     });
 
-    it('rejects malformed versioned requests before creating a session', function() {
+    it('rejects malformed public requests before creating a session', function() {
         const expectInvalid =
             (request: unknown,
-                error: string) => { expect(() => osn.NodeObs.AutoConfig.run(request as IAutoConfigRequest, () => undefined)).to.throw(error); };
+                error: string) => { expect(() => autoConfig.run(request as IAutoConfigRequest, () => undefined)).to.throw(error); };
 
         expectInvalid({
-            schemaVersion: 999,
-            topology: 'direct-single',
-            legs: [leg()],
+            streamSetup: 'not-a-stream-setup',
+            outputs: [output()],
         },
-            'unsupported_autoconfig_schema');
+            'Invalid Auto Optimizer request');
 
         expectInvalid({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({ limits: { maxWidth: 1920 } })],
+            streamSetup: 'direct-single',
+            outputs: [output({ limits: { maxWidth: 1920 } })],
         },
-            'invalid_autoconfig_limits');
+            'Invalid Auto Optimizer limits');
 
         expectInvalid({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({ limits: { maxWidth: 4294969216, maxHeight: 4294968376 } })],
+            streamSetup: 'direct-single',
+            outputs: [output({ limits: { maxWidth: 4294969216, maxHeight: 4294968376 } })],
         },
-            'invalid_autoconfig_limits');
+            'Invalid Auto Optimizer limits');
 
         expectInvalid({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({ limits: { maxFpsNum: 60, maxFpsDen: -1 } })],
+            streamSetup: 'direct-single',
+            outputs: [output({ limits: { maxFpsNum: 60, maxFpsDen: -1 } })],
         },
-            'invalid_autoconfig_limits');
+            'Invalid Auto Optimizer limits');
 
         expectInvalid({
-            schemaVersion: 1,
-            topology: 'direct-single',
-            legs: [leg({ limits: { maxFpsDen: 1 } })],
+            streamSetup: 'direct-single',
+            outputs: [output({ limits: { maxFpsDen: 1 } })],
         },
-            'invalid_autoconfig_limits');
+            'Invalid Auto Optimizer limits');
 
         expectInvalid({
-            schemaVersion: 1,
-            topology: 'enhanced-broadcasting',
-            legs: [leg({
+            streamSetup: 'enhanced-broadcasting',
+            outputs: [output({
                 display: 'horizontal',
                 outputKind: 'twitch-enhanced-broadcasting',
                 additionalVideo: {
                     display: 'vertical',
-                    current: { ...leg().current, width: 720, height: 1280 },
+                    current: { ...output().current, width: 720, height: 1280 },
                 },
             })],
         },
-            'invalid_autoconfig_additional_video');
+            'Invalid Auto Optimizer additional video');
 
         expectInvalid({
-            schemaVersion: 1,
-            topology: 'enhanced-broadcasting',
-            legs: [leg({
+            streamSetup: 'enhanced-broadcasting',
+            outputs: [output({
                 display: 'both',
                 outputKind: 'twitch-enhanced-broadcasting',
                 additionalVideo: {
                     display: 'vertical',
-                    current: { ...leg().current, width: 720, height: 1280 },
+                    current: { ...output().current, width: 720, height: 1280 },
                     limits: { maxWidth: 1080 },
                 },
             })],
         },
-            'invalid_autoconfig_additional_video');
+            'Invalid Auto Optimizer additional video');
+
+        expectInvalid({
+            streamSetup: 'dual-output',
+            outputs: [
+                output({ outputId: 'duplicate' }),
+                output({ outputId: 'duplicate', display: 'vertical' }),
+            ],
+        },
+            'Duplicate Auto Optimizer outputId');
+
+        expectInvalid({
+            streamSetup: 'dual-output',
+            outputs: [
+                output({
+                    outputId: 'horizontal',
+                    probes: [{
+                        id: 'duplicate-probe',
+                        kind: 'twitch-standard',
+                        server: 'rtmp://live.twitch.tv/app',
+                        streamKey: 'integration-test-key',
+                    }],
+                }),
+                output({
+                    outputId: 'vertical',
+                    display: 'vertical',
+                    probes: [{
+                        id: 'duplicate-probe',
+                        kind: 'youtube-unbound',
+                        server: 'rtmps://a.rtmps.youtube.com/live2',
+                        streamKey: 'integration-test-key',
+                    }],
+                }),
+            ],
+        },
+            'Invalid Auto Optimizer probe identity');
     });
 
-    it('rejects more upload legs than Desktop can create', function() {
-        expect(() => osn.NodeObs.AutoConfig.run({
-            schemaVersion: 1,
-            topology: 'dual-output',
-            legs: [
-                leg({ legId: 'horizontal', display: 'horizontal' }),
-                leg({ legId: 'vertical', display: 'vertical' }),
-                leg({ legId: 'unexpected-third', display: 'horizontal' }),
+    it('rejects more outputs than Desktop can create', function() {
+        expect(() => autoConfig.run({
+            streamSetup: 'dual-output',
+            outputs: [
+                output({ outputId: 'horizontal', display: 'horizontal' }),
+                output({ outputId: 'vertical', display: 'vertical' }),
+                output({ outputId: 'unexpected-third', display: 'horizontal' }),
             ],
         } as IAutoConfigRequest,
             () => undefined))
-            .to.throw('invalid_autoconfig_legs');
+            .to.throw('Invalid Auto Optimizer outputs');
     });
 
     it('cancels an active session before removing its video context', async function() {
-        const nativeRun = osn.NodeObs.AutoConfig.run({
-            schemaVersion: 1,
-            topology: 'custom-rtmp',
-            legs: [leg()],
+        const nativeRun = autoConfig.run({
+            streamSetup: 'custom-rtmp',
+            outputs: [output()],
         } as IAutoConfigRequest,
             () => undefined);
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -911,10 +929,9 @@ describe(testName, function() {
     });
 
     it('disconnects cleanly while a session worker is running', async function() {
-        osn.NodeObs.AutoConfig.run({
-            schemaVersion: 1,
-            topology: 'custom-rtmp',
-            legs: [leg()],
+        autoConfig.run({
+            streamSetup: 'custom-rtmp',
+            outputs: [output()],
         } as IAutoConfigRequest,
             () => undefined);
         await new Promise(resolve => setTimeout(resolve, 100));

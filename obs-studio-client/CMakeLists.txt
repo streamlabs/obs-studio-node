@@ -45,6 +45,7 @@ SET(OSN_CLIENT_CORE_SOURCES
     "source/polling-pacer.hpp"
     "source/best-effort-gate.cpp"
     "source/best-effort-gate.hpp"
+    "source/autoconfig-client-contract.cpp"
     "source/autoconfig-client-contract.hpp"
 )
 

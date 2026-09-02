@@ -1004,14 +1004,11 @@ export interface IAudioTrackFactory {
     importLegacySettings(): void;
     saveLegacySettings(): void;
 }
-type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
+type AutoConfigStreamSetup = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
 type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
 type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
 type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
 type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'enhanced_broadcasting_dual_output' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
-interface IAutoConfigDestination {
-    platform: AutoConfigPlatform;
-}
 interface IAutoConfigCurrentSettings {
     canvasId?: number;
     width: number;
@@ -1034,42 +1031,38 @@ interface IAutoConfigLimits {
     maxFpsNum?: number;
     maxFpsDen?: number;
 }
-interface IAutoConfigLegRequest {
-    legId: string;
+interface IAutoConfigOutputRequest {
+    outputId: string;
     display: AutoConfigDisplay;
     outputKind: AutoConfigOutputKind;
-    destinations: IAutoConfigDestination[];
+    destinations: AutoConfigPlatform[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
     additionalVideo?: IAutoConfigAdditionalVideoRequest;
     estimateReason?: AutoConfigEstimateReason;
+    probes?: IAutoConfigProbeRequest[];
 }
-interface IAutoConfigTwitchActiveProbe {
-    probeId: string;
+interface IAutoConfigTwitchProbeRequest {
+    id: string;
     kind: 'twitch-standard';
-    legId: string;
     server: string;
     streamKey: string;
 }
-interface IAutoConfigTwitchEnhancedBroadcastingProbe {
-    probeId: string;
+interface IAutoConfigTwitchEnhancedBroadcastingProbeRequest {
+    id: string;
     kind: 'twitch-enhanced-broadcasting';
-    legId: string;
     streamKey: string;
 }
-interface IAutoConfigYoutubeActiveProbe {
-    probeId: string;
+interface IAutoConfigYoutubeProbeRequest {
+    id: string;
     kind: 'youtube-unbound';
-    legId: string;
     server: string;
     streamKey: string;
 }
-type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigTwitchEnhancedBroadcastingProbe | IAutoConfigYoutubeActiveProbe;
+type IAutoConfigProbeRequest = IAutoConfigTwitchProbeRequest | IAutoConfigTwitchEnhancedBroadcastingProbeRequest | IAutoConfigYoutubeProbeRequest;
 export interface IAutoConfigRequest {
-    schemaVersion: 1;
-    topology: AutoConfigTopology;
-    legs: IAutoConfigLegRequest[];
-    activeProbes?: IAutoConfigActiveProbe[];
+    streamSetup: AutoConfigStreamSetup;
+    outputs: IAutoConfigOutputRequest[];
 }
 type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
 type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
@@ -1082,17 +1075,13 @@ interface IAutoConfigAdditionalVideoTuple {
     fpsDen: number;
 }
 export interface IAutoConfigEvent {
-    schemaVersion: 1;
-    sessionId: string;
-    sequence: number;
     type: AutoConfigEventType;
     phase: AutoConfigPhase;
     progress: number;
     code?: string;
-    legId?: string;
+    outputId?: string;
     measurementMode?: AutoConfigMeasurementMode;
-    probeId?: string;
-    provider?: 'twitch' | 'youtube';
+    probe?: IAutoConfigEventProbe;
     targetBitrateKbps?: number;
     encoderId?: string;
     encoderFamily?: string;
@@ -1105,93 +1094,56 @@ export interface IAutoConfigEvent {
     selectedBitrateKbps?: number;
     availableBitrateKbps?: number;
 }
-interface IAutoConfigProbeMeasurement {
-    provider: 'twitch' | 'youtube';
+interface IAutoConfigMeasurementEvidence {
+    platform: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     success: boolean;
-    measuredKbps?: number;
-    safeKbps?: number;
-    headroomPercent?: number;
-    ceilingReached: boolean;
-    testedWidth?: number;
-    testedHeight?: number;
-    testedFpsNum?: number;
-    testedFpsDen?: number;
-    testedAdditionalVideo?: IAutoConfigAdditionalVideoTuple;
-    videoTrackCount?: number;
-    configuredAggregateBitrateKbps?: number;
 }
 interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
-    probes?: IAutoConfigProbeMeasurement[];
+    evidence?: IAutoConfigMeasurementEvidence[];
 }
-interface IAutoConfigRecommendation {
+interface IAutoConfigVideoRecommendation {
+    display: 'horizontal' | 'vertical';
     width: number;
     height: number;
     fpsNum: number;
     fpsDen: number;
+}
+interface IAutoConfigEncodingRecommendation {
     bitrateKbps: number;
     encoderId: string;
     encoderFamily: string;
     encoderTitle: string;
     codec: string;
     preset?: string;
-    additionalVideo?: IAutoConfigAdditionalVideoTuple;
 }
-interface IAutoConfigResultDestination {
-    platform: string;
-}
-interface IAutoConfigLegResult {
-    legId: string;
-    display: AutoConfigDisplay;
-    outputKind: AutoConfigOutputKind;
-    destinations: IAutoConfigResultDestination[];
+interface IAutoConfigOutputResult {
+    outputId: string;
+    videos: IAutoConfigVideoRecommendation[];
+    encoding?: IAutoConfigEncodingRecommendation;
     measurement: IAutoConfigMeasurement;
-    recommendation: IAutoConfigRecommendation;
-    limits?: IAutoConfigLimits;
-}
-interface IAutoConfigAggregateUpload {
-    method: 'dual-output-isolated-lower-bound';
-    safeVideoKbps: number;
-    allocatedVideoKbps: number;
-    concurrentHardwareValidated: true;
-}
-interface IAutoConfigCombinedWorkloadCompanionLeg {
-    legId: string;
-    display: 'horizontal' | 'vertical';
-    width: number;
-    height: number;
-    fpsNum: number;
-    fpsDen: number;
-    bitrateKbps: number;
-    encoderId: string;
-    preset?: string;
-}
-interface IAutoConfigCombinedWorkload {
-    method: 'enhanced-broadcasting-dual-output-concurrent';
-    enhancedBroadcastingLegId: string;
-    validated: true;
-    companionLegs: IAutoConfigCombinedWorkloadCompanionLeg[];
 }
 type AutoConfigFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'autoconfig_worker_failed' | 'autoconfig_worker_launch_failed';
 interface IAutoConfigError {
     code: AutoConfigFatalErrorCode;
 }
 export interface IAutoConfigResult {
-    schemaVersion: 1;
-    sessionId: string;
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
     error?: IAutoConfigError;
-    aggregateUpload?: IAutoConfigAggregateUpload;
-    combinedWorkload?: IAutoConfigCombinedWorkload;
-    legs: IAutoConfigLegResult[];
+    outputs: IAutoConfigOutputResult[];
 }
 interface IAutoConfigRun {
     readonly result: Promise<IAutoConfigResult>;
     confirmProbeIngest(probeId: string, received: boolean): void;
     cancel(): Promise<void>;
+}
+type AutoConfigProbeKind = 'twitch-standard' | 'twitch-enhanced-broadcasting' | 'youtube-unbound';
+interface IAutoConfigEventProbe {
+    id: string;
+    kind: AutoConfigProbeKind;
 }
 interface IAutoConfig {
     run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): IAutoConfigRun;

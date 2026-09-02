@@ -55,6 +55,7 @@ std::thread *workerThread = nullptr;
 std::mutex sessionMutex;
 std::mutex lifecycleMutex;
 std::string activeSessionId;
+std::shared_ptr<const autoConfig::clientContract::RequestContext> activeRequestContext;
 int64_t lastEventSequence = -1;
 
 enum class CallbackShutdownMode { Release, Abort };
@@ -69,6 +70,21 @@ void SetActiveSessionId(const std::string &sessionId)
 {
 	std::lock_guard<std::mutex> lock(sessionMutex);
 	activeSessionId = sessionId;
+	if (sessionId.empty())
+		activeRequestContext.reset();
+}
+
+std::shared_ptr<const autoConfig::clientContract::RequestContext> GetActiveRequestContext()
+{
+	std::lock_guard<std::mutex> lock(sessionMutex);
+	return activeRequestContext;
+}
+
+void SetActiveSession(const std::string &sessionId, std::shared_ptr<const autoConfig::clientContract::RequestContext> context)
+{
+	std::lock_guard<std::mutex> lock(sessionMutex);
+	activeSessionId = sessionId;
+	activeRequestContext = std::move(context);
 }
 
 std::string ResponseError(const std::vector<ipc::value> &response)
@@ -139,15 +155,16 @@ void Worker()
 		const auto cycleStart = std::chrono::high_resolution_clock::now();
 		try {
 			const std::string sessionId = GetActiveSessionId();
-			if (!sessionId.empty()) {
+			const auto context = GetActiveRequestContext();
+			if (!sessionId.empty() && context) {
 				auto response = CallServer("QueryAutoConfigSession", {ipc::value(sessionId)}, 2);
 				std::optional<std::string> eventJson;
 				if (response[1].type != ipc::type::Null)
 					eventJson = response[1].value_str;
-				const auto polledEvent = autoConfig::clientContract::decodePolledEvent(eventJson, sessionId, lastEventSequence);
+				const auto polledEvent = autoConfig::clientContract::decodePolledEvent(eventJson, sessionId, lastEventSequence, *context);
 				if (polledEvent) {
 					const auto &envelope = *polledEvent;
-					auto *event = new EventData{response[1].value_str, envelope.error, envelope.terminal};
+					auto *event = new EventData{envelope.json, envelope.error, envelope.terminal};
 					if (envelope.valid)
 						lastEventSequence = static_cast<int64_t>(envelope.sequence);
 					DispatchEvent(event);
@@ -244,7 +261,8 @@ class AutoConfigRun;
 
 class FinishWorker final : public Napi::AsyncWorker {
 public:
-	FinishWorker(AutoConfigRun *run, std::string sessionId, bool cancel, bool readResult, std::string preferredError);
+	FinishWorker(AutoConfigRun *run, std::string sessionId, std::shared_ptr<const autoConfig::clientContract::RequestContext> context, bool cancel,
+		     bool readResult, std::string preferredError);
 	void Execute() override;
 	void OnOK() override;
 	void OnError(const Napi::Error &error) override;
@@ -252,6 +270,7 @@ public:
 private:
 	AutoConfigRun *run;
 	std::string sessionId;
+	std::shared_ptr<const autoConfig::clientContract::RequestContext> context;
 	bool cancel;
 	bool readResult;
 	std::string preferredError;
@@ -261,6 +280,7 @@ private:
 struct RunInitialization {
 	std::string sessionId;
 	Napi::Function progressCallback;
+	std::shared_ptr<const autoConfig::clientContract::RequestContext> context;
 };
 
 class AutoConfigRun final : public Napi::ObjectWrap<AutoConfigRun> {
@@ -290,6 +310,7 @@ public:
 		}
 		auto *initialization = info[0].As<Napi::External<RunInitialization>>().Data();
 		sessionId = initialization->sessionId;
+		context = initialization->context;
 		progressCallback = Napi::Persistent(initialization->progressCallback);
 		resultPromise = Napi::Persistent(resultDeferred.Promise());
 	}
@@ -303,7 +324,7 @@ public:
 
 	void Activate(Napi::Env env)
 	{
-		SetActiveSessionId(sessionId);
+		SetActiveSession(sessionId, context);
 		Ref();
 		callbackReference = true;
 		try {
@@ -347,7 +368,7 @@ public:
 		const bool readResult = !resultSettled && preferredError.empty();
 		Ref();
 		try {
-			auto worker = std::make_unique<FinishWorker>(this, sessionId, cancel, readResult, preferredError);
+			auto worker = std::make_unique<FinishWorker>(this, sessionId, context, cancel, readResult, preferredError);
 			worker->Queue();
 			worker.release();
 		} catch (const std::exception &error) {
@@ -500,6 +521,7 @@ private:
 	Napi::Value Cancel(const Napi::CallbackInfo &info) { return BeginFinish(info.Env(), true); }
 
 	std::string sessionId;
+	std::shared_ptr<const autoConfig::clientContract::RequestContext> context;
 	Napi::FunctionReference progressCallback;
 	Napi::Promise::Deferred resultDeferred;
 	Napi::Reference<Napi::Promise> resultPromise;
@@ -512,10 +534,12 @@ private:
 
 Napi::FunctionReference AutoConfigRun::constructor;
 
-FinishWorker::FinishWorker(AutoConfigRun *run, std::string sessionId, bool cancel, bool readResult, std::string preferredError)
+FinishWorker::FinishWorker(AutoConfigRun *run, std::string sessionId, std::shared_ptr<const autoConfig::clientContract::RequestContext> context, bool cancel,
+			   bool readResult, std::string preferredError)
 	: Napi::AsyncWorker(run->Env()),
 	  run(run),
 	  sessionId(std::move(sessionId)),
+	  context(std::move(context)),
 	  cancel(cancel),
 	  readResult(readResult),
 	  preferredError(std::move(preferredError))
@@ -539,10 +563,10 @@ void FinishWorker::Execute()
 		if (readResult) {
 			try {
 				auto response = CallServer("GetAutoConfigResult", {ipc::value(sessionId)}, 2);
-				outcome.resultJson = response[1].value_str;
-				const std::string validationError = autoConfig::clientContract::validateResult(outcome.resultJson, sessionId);
-				if (!validationError.empty() && outcome.failure.empty())
-					outcome.failure = validationError;
+				const auto projected = autoConfig::clientContract::projectResult(response[1].value_str, sessionId, *context);
+				outcome.resultJson = projected.json;
+				if (!projected.valid && outcome.failure.empty())
+					outcome.failure = projected.error;
 			} catch (const std::exception &error) {
 				if (outcome.failure.empty())
 					outcome.failure = error.what();
@@ -583,17 +607,25 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 	}
 
-	std::string requestJson;
+	std::string publicRequestJson;
 	try {
-		requestJson = StringifyJson(info.Env(), info[0]);
+		publicRequestJson = StringifyJson(info.Env(), info[0]);
 	} catch (...) {
 	}
 	if (info.Env().IsExceptionPending())
 		return info.Env().Undefined();
-	if (requestJson.empty()) {
+	if (publicRequestJson.empty()) {
 		Napi::TypeError::New(info.Env(), "AutoConfig.run expects a JSON-serializable request object").ThrowAsJavaScriptException();
 		return info.Env().Undefined();
 	}
+	auto prepared = autoConfig::clientContract::prepareRequest(publicRequestJson);
+	publicRequestJson.clear();
+	if (!prepared.valid) {
+		Napi::TypeError::New(info.Env(), prepared.error).ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+	std::string requestJson = std::move(prepared.wireJson);
+	auto context = std::make_shared<const autoConfig::clientContract::RequestContext>(std::move(prepared.context));
 
 	std::string startFailure;
 	std::string createdSessionId;
@@ -607,6 +639,7 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 
 		try {
 			auto response = CallServer("CreateAutoConfigSession", {ipc::value(requestJson)}, 2);
+			requestJson.clear();
 			createdSessionId = response[1].value_str;
 			if (createdSessionId.empty())
 				throw std::runtime_error("CreateAutoConfigSession returned an empty sessionId");
@@ -615,7 +648,7 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 			return info.Env().Undefined();
 		}
 
-		RunInitialization initialization{createdSessionId, info[1].As<Napi::Function>()};
+		RunInitialization initialization{createdSessionId, info[1].As<Napi::Function>(), context};
 		try {
 			instance = AutoConfigRun::New(info.Env(), initialization);
 			auto *run = AutoConfigRun::Unwrap(instance);

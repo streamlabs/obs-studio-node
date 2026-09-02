@@ -2040,7 +2040,7 @@ export interface IAudioTrackFactory {
 
 // ---- Auto Optimizer API ----
 
-type AutoConfigTopology =
+type AutoConfigStreamSetup =
     'direct-single' |
     'cloud-multistream' |
     'custom-rtmp' |
@@ -2074,14 +2074,10 @@ type AutoConfigEstimateReason =
     'probe_disabled' |
     'partial_provider_probes';
 
-interface IAutoConfigDestination {
-    platform: AutoConfigPlatform;
-}
-
 interface IAutoConfigCurrentSettings {
     /**
      * Zero-based server-side canvas identity from IVideo.canvasId; `0` is
-     * valid. Active Enhanced Broadcasting and active two-leg Dual Output
+     * valid. Active Enhanced Broadcasting and active two-output Dual Output
      * require registered, distinct, nonnegative JavaScript-safe identities
      * that remain live for the native probe. Other request modes may omit the
      * identity.
@@ -2134,17 +2130,17 @@ interface IAutoConfigLimits {
     maxFpsDen?: number;
 }
 
-interface IAutoConfigLegRequest {
-    legId: string;
+interface IAutoConfigOutputRequest {
+    outputId: string;
     display: AutoConfigDisplay;
     /**
      * Physical output ownership. Composite Enhanced Broadcasting requests must
-     * set this explicitly on every leg. Their single provider-owned leg is
-     * Twitch-only and uses `display: 'both'`; each standard leg represents one
+     * set this explicitly on every output. Their single provider-owned output is
+     * Twitch-only and uses `display: 'both'`; each standard output represents one
      * non-Twitch horizontal or vertical output.
      */
     outputKind: AutoConfigOutputKind;
-    destinations: IAutoConfigDestination[];
+    destinations: AutoConfigPlatform[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
     /**
@@ -2155,22 +2151,22 @@ interface IAutoConfigLegRequest {
      */
     additionalVideo?: IAutoConfigAdditionalVideoRequest;
     estimateReason?: AutoConfigEstimateReason;
+    /** Attempt-scoped probes executed in this output's array order. */
+    probes?: IAutoConfigProbeRequest[];
 }
 
-interface IAutoConfigTwitchActiveProbe {
-    probeId: string;
+interface IAutoConfigTwitchProbeRequest {
+    id: string;
     kind: 'twitch-standard';
-    legId: string;
     /** Official Twitch ingest URL; the service identity is derived from kind. */
     server: string;
     streamKey: string;
 }
 
 /** A safe full-ladder Twitch Enhanced Broadcasting capacity probe. */
-interface IAutoConfigTwitchEnhancedBroadcastingProbe {
-    probeId: string;
+interface IAutoConfigTwitchEnhancedBroadcastingProbeRequest {
+    id: string;
     kind: 'twitch-enhanced-broadcasting';
-    legId: string;
     /** Native derives Twitch service identity and automatic ingest from kind. */
     /**
      * Twitch credential supplied only by Desktop's trusted worker. OSN
@@ -2181,7 +2177,7 @@ interface IAutoConfigTwitchEnhancedBroadcastingProbe {
     streamKey: string;
 }
 
-interface IAutoConfigYoutubeActiveProbe {
+interface IAutoConfigYoutubeProbeRequest {
     /**
      * Security contract: Desktop's trusted worker must create an exact-marked,
      * reusable-but-unbound liveStream and status-confirm that same resource.
@@ -2189,57 +2185,54 @@ interface IAutoConfigYoutubeActiveProbe {
      * resource ownership or binding. Desktop must close the native session
      * before deleting the liveStream through the YouTube API.
      */
-    probeId: string;
+    id: string;
     kind: 'youtube-unbound';
-    legId: string;
     /** Official YouTube RTMPS URL; the service identity is derived from kind. */
     server: string;
     streamKey: string;
 }
 
-type IAutoConfigActiveProbe =
-    | IAutoConfigTwitchActiveProbe
-    | IAutoConfigTwitchEnhancedBroadcastingProbe
-    | IAutoConfigYoutubeActiveProbe;
+type IAutoConfigProbeRequest =
+    | IAutoConfigTwitchProbeRequest
+    | IAutoConfigTwitchEnhancedBroadcastingProbeRequest
+    | IAutoConfigYoutubeProbeRequest;
 
 /**
  * Complete immutable input for one Auto Optimizer session. OSN validates the
- * topology, canvas identities, provider probes, and limits when the session is
+ * stream setup, canvas identities, provider probes, and limits when the session is
  * created. The caller owns all persistent settings and applies a returned
  * recommendation only after validating the corresponding result.
  */
 export interface IAutoConfigRequest {
-    schemaVersion: 1;
-    topology: AutoConfigTopology;
-    legs: IAutoConfigLegRequest[];
+    streamSetup: AutoConfigStreamSetup;
+    outputs: IAutoConfigOutputRequest[];
     /**
      * Attempt-scoped provider credentials. Native validates each probe
-     * independently. A shared cloud leg may contain a subset of its probeable
+     * independently. A shared cloud output may contain a subset of its probeable
      * destinations. A subset that succeeds during setup or execution produces
      * active evidence with low confidence rather than disabling every provider
      * measurement. Active Dual Output requires exactly one horizontal and one
-     * vertical upload leg with distinct live canvas identities, one Twitch-
-     * standard probe bound to a leg containing Twitch, and one YouTube-unbound
-     * probe bound to the other leg containing YouTube. Either leg may contain
+     * vertical output with distinct live canvas identities, one Twitch-standard
+     * probe on an output containing Twitch, and one YouTube-unbound probe on the
+     * other output containing YouTube. Either output may contain
      * additional unprobed destinations. The probes execute sequentially, and
-     * both must produce usable evidence before either leg is promoted.
+     * both must produce usable evidence before either output is promoted.
      *
-     * `enhanced-broadcasting-dual-output` is a separate exact topology. It
+     * `enhanced-broadcasting-dual-output` is a separate exact stream setup. It
      * requires one Twitch Enhanced Broadcasting probe plus one or two standard
-     * companion legs whose canvas identity and current video tuple exactly
+     * companion outputs whose canvas identity and current video tuple exactly
      * match the corresponding primary or additional Twitch canvas. A companion
      * may optionally carry one YouTube probe; unsupported destinations remain
      * estimate-only, and custom RTMP is rejected. Standard probes finish before
      * the combined workload is tested.
      */
-    activeProbes?: IAutoConfigActiveProbe[];
 }
 
 type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
 type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
 type AutoConfigMeasurementMode = 'active' | 'estimated';
 
-/** A paired vertical canvas tuple tested and applied with the primary canvas. */
+/** A paired vertical canvas tuple tested with the primary canvas. */
 interface IAutoConfigAdditionalVideoTuple {
     display: 'vertical';
     width: number;
@@ -2254,9 +2247,6 @@ interface IAutoConfigAdditionalVideoTuple {
  * and closes all native resources before settling its `result` promise.
  */
 export interface IAutoConfigEvent {
-    schemaVersion: 1;
-    sessionId: string;
-    sequence: number;
     type: AutoConfigEventType;
     phase: AutoConfigPhase;
     progress: number;
@@ -2269,7 +2259,7 @@ export interface IAutoConfigEvent {
      * raw-input counterpart. hardware_target_cadence_rejected means only that
      * quality candidate was rejected; OSN continues testing lower cadences and
      * keeps the public hardware encoder eligible. dual_output_testing_workload
-     * marks the start of one concurrent two-leg encoder sample, while
+     * marks the start of one concurrent two-output encoder sample, while
      * dual_output_allocating_upload means both isolated provider probes and the
      * concurrent hardware sample passed and OSN is splitting their demonstrated
      * shared-uplink lower bound equally. During bandwidth testing,
@@ -2282,10 +2272,9 @@ export interface IAutoConfigEvent {
      * establish encoder/render capacity; they are not network bandwidth probes.
      */
     code?: string;
-    legId?: string;
+    outputId?: string;
     measurementMode?: AutoConfigMeasurementMode;
-    probeId?: string;
-    provider?: 'twitch' | 'youtube';
+    probe?: IAutoConfigEventProbe;
     /** Applied video bitrate for the active probe substep; audio is additional. */
     targetBitrateKbps?: number;
     /** Concrete encoder currently being tested or selected. */
@@ -2306,142 +2295,44 @@ export interface IAutoConfigEvent {
     availableBitrateKbps?: number;
 }
 
-interface IAutoConfigProbeMeasurement {
-    provider: 'twitch' | 'youtube';
+interface IAutoConfigMeasurementEvidence {
+    platform: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
-    /**
-     * True when the probe produced sufficient evidence for its recommendation.
-     * Standard Twitch and YouTube probes validate a usable safeKbps value. An
-     * Enhanced Broadcasting probe instead validates that the complete returned
-     * video ladder sustained the exact tested canvas tuple; it does not imply a
-     * measured or safe upload-bandwidth value.
-     */
     success: boolean;
-    /**
-     * Aggregate output payload rate observed during the probe. This is
-     * sender-side evidence, not receiver-confirmed network capacity: the
-     * source or encoder can underfill its target without network loss or
-     * congestion.
-     */
-    measuredKbps?: number;
-    /**
-     * Validated video capacity derived from usable probe evidence and
-     * applicable platform caps. It can exceed the final recommendation when a
-     * higher stability rung was tested; only explicit degradation or transport
-     * evidence can lower it. This is not necessarily the raw observed aggregate
-     * payload rate.
-     */
-    safeKbps?: number;
-    /**
-     * Fixed percentage removed from usable probe evidence. Current probe
-     * policies validate targets directly and report zero; the field remains in
-     * the measurement contract so callers can explain future policies.
-     */
-    headroomPercent?: number;
-    /**
-     * True when the active ladder reached its effective probe ceiling. The
-     * ceiling can come from probe, platform, or request limits and does not
-     * imply that the physical upload path was saturated.
-     */
-    ceilingReached: boolean;
-    /** Exact canvas width validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
-    testedWidth?: number;
-    /** Exact canvas height validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
-    testedHeight?: number;
-    /** Exact frame-rate numerator validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
-    testedFpsNum?: number;
-    /** Exact frame-rate denominator validated by a successful Enhanced Broadcasting probe; omitted for other or failed probes. */
-    testedFpsDen?: number;
-    /** Exact vertical tuple exercised concurrently with the primary Enhanced Broadcasting tuple. */
-    testedAdditionalVideo?: IAutoConfigAdditionalVideoTuple;
-    /** Returned video tracks exercised concurrently by a successful Enhanced Broadcasting probe; omitted otherwise. */
-    videoTrackCount?: number;
-    /**
-     * Sum of the configured video and live-audio bitrates in the validated
-     * Enhanced Broadcasting ladder. This is requested workload, not observed
-     * throughput or path capacity, and is omitted for other or failed probes.
-     */
-    configuredAggregateBitrateKbps?: number;
 }
 
 interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
-    /**
-     * Evidence only for providers whose probes were attempted. For a
-     * partial_provider_probes result, compare these providers only with the
-     * leg's probe-capable Twitch and YouTube destinations to identify which
-     * supported providers were estimated. Other co-destinations are outside
-     * the V1 bandwidth-probing contract and must not be labelled as estimated.
-     */
-    probes?: IAutoConfigProbeMeasurement[];
+    /** Minimal public provenance; detailed bandwidth and workload proof remains private to OSN. */
+    evidence?: IAutoConfigMeasurementEvidence[];
 }
 
-interface IAutoConfigRecommendation {
+interface IAutoConfigVideoRecommendation {
+    display: 'horizontal' | 'vertical';
     width: number;
     height: number;
     fpsNum: number;
     fpsDen: number;
+}
+
+interface IAutoConfigEncodingRecommendation {
     bitrateKbps: number;
     encoderId: string;
     encoderFamily: string;
     encoderTitle: string;
     codec: string;
     preset?: string;
-    /** Paired vertical canvas recommendation validated in the same Enhanced Broadcasting output. */
-    additionalVideo?: IAutoConfigAdditionalVideoTuple;
 }
 
-interface IAutoConfigResultDestination {
-    platform: string;
-}
-
-interface IAutoConfigLegResult {
-    legId: string;
-    display: AutoConfigDisplay;
-    /** Echoes request ownership so callers can reject mismatched or reclassified legs. */
-    outputKind: AutoConfigOutputKind;
-    destinations: IAutoConfigResultDestination[];
+interface IAutoConfigOutputResult {
+    outputId: string;
+    /** One concrete canvas tuple, or paired horizontal and vertical tuples. */
+    videos: IAutoConfigVideoRecommendation[];
+    /** Omitted when Twitch owns the Enhanced Broadcasting encoding ladder. */
+    encoding?: IAutoConfigEncodingRecommendation;
     measurement: IAutoConfigMeasurement;
-    recommendation: IAutoConfigRecommendation;
-    limits?: IAutoConfigLimits;
-}
-
-interface IAutoConfigAggregateUpload {
-    /** Two isolated provider probes establish a lower bound for one shared uplink. */
-    method: 'dual-output-isolated-lower-bound';
-    /** Larger isolated safe result: the aggregate video budget demonstrated across the two sequential probes. */
-    safeVideoKbps: number;
-    /** Sum of the equal, 100-Kbps-rounded video allocations returned for both legs. */
-    allocatedVideoKbps: number;
-    /** True only when both leg encoder workloads passed concurrently in the same benchmark window. */
-    concurrentHardwareValidated: true;
-}
-
-interface IAutoConfigCombinedWorkloadCompanionLeg {
-    legId: string;
-    display: 'horizontal' | 'vertical';
-    width: number;
-    height: number;
-    fpsNum: number;
-    fpsDen: number;
-    /** Desktop-owned outputs never exceed 8000 Kbps; provider-owned ladders ignore this field. */
-    bitrateKbps: number;
-    encoderId: string;
-    preset?: string;
-}
-
-/**
- * Exact video-encoder workloads sustained concurrently with Twitch's returned
- * ladder. This proves local render/encoder capacity only; provider bandwidth
- * provenance remains in each leg's `measurement.probes`.
- */
-interface IAutoConfigCombinedWorkload {
-    method: 'enhanced-broadcasting-dual-output-concurrent';
-    enhancedBroadcastingLegId: string;
-    validated: true;
-    companionLegs: IAutoConfigCombinedWorkloadCompanionLeg[];
 }
 
 type AutoConfigFatalErrorCode =
@@ -2464,19 +2355,9 @@ interface IAutoConfigError {
  * resources can be deleted safely after awaiting it.
  */
 export interface IAutoConfigResult {
-    schemaVersion: 1;
-    sessionId: string;
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
     error?: IAutoConfigError;
-    /** Present only for a fully successful active Twitch + YouTube Dual Output recommendation. */
-    aggregateUpload?: IAutoConfigAggregateUpload;
-    /**
-     * Present only after the full Enhanced Broadcasting plus every companion
-     * workload passes one common sample window. Standard leg recommendations
-     * reuse these exact tuples, encoder IDs, presets, and bitrates.
-     */
-    combinedWorkload?: IAutoConfigCombinedWorkload;
-    legs: IAutoConfigLegResult[];
+    outputs: IAutoConfigOutputResult[];
 }
 
 /** One running Auto Optimizer operation. */
@@ -2505,6 +2386,16 @@ interface IAutoConfigRun {
      * @throws {Error} If the native close barrier cannot be completed
      */
     cancel(): Promise<void>;
+}
+
+type AutoConfigProbeKind =
+    | 'twitch-standard'
+    | 'twitch-enhanced-broadcasting'
+    | 'youtube-unbound';
+
+interface IAutoConfigEventProbe {
+    id: string;
+    kind: AutoConfigProbeKind;
 }
 
 /** High-level, resource-safe Auto Optimizer API. */
