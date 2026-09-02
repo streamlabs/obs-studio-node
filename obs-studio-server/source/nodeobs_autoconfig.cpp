@@ -429,10 +429,9 @@ static bool isOfficialYoutubeRtmpsServer(const std::string &server)
 
 static bool probeProviderContractIsValid(const ProbeRequest &probe)
 {
-	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && isOfficialTwitchServer(probe.server) &&
-		isBoundedTwitchKey(probe.streamKey)) ||
-	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.server == "auto" &&
-		isBoundedTwitchKey(probe.streamKey) && osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
+	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && isOfficialTwitchServer(probe.server) && isBoundedTwitchKey(probe.streamKey)) ||
+	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.server == "auto" && isBoundedTwitchKey(probe.streamKey) &&
+		osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
 	       (probe.kind == "youtube-unbound" && probe.provider == "youtube" && isOfficialYoutubeRtmpsServer(probe.server) &&
 		isBoundedYoutubeKey(probe.streamKey));
 }
