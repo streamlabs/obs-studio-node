@@ -217,12 +217,19 @@ TEST_CASE("Auto Config failure scope preserves lower tiers and the x264 fallback
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_no_input_frames") == policy::HardwareFailureScope::Workload);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_no_encoded_packets") == policy::HardwareFailureScope::Workload);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_no_output_packets") == policy::HardwareFailureScope::Phase);
-	CHECK(policy::hardwareFailureScope("hardware_benchmark_feeder_stalled") == policy::HardwareFailureScope::Phase);
+	CHECK(policy::hardwareFailureScope("hardware_benchmark_feeder_stalled") == policy::HardwareFailureScope::Workload);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_encoder_unavailable") == policy::HardwareFailureScope::Encoder);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_video_mix_create_failed") == policy::HardwareFailureScope::Encoder);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_video_create_failed") == policy::HardwareFailureScope::Phase);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_audio_create_failed") == policy::HardwareFailureScope::Phase);
 	CHECK(policy::hardwareFailureScope("", true) == policy::HardwareFailureScope::Phase);
+}
+
+TEST_CASE("Auto Config preserves workload pressure from feeder stalls")
+{
+	CHECK(policy::hardwareFailureIndicatesOverload("hardware_benchmark_overloaded"));
+	CHECK(policy::hardwareFailureIndicatesOverload("hardware_benchmark_feeder_stalled"));
+	CHECK_FALSE(policy::hardwareFailureIndicatesOverload("hardware_benchmark_start_failed"));
 }
 
 TEST_CASE("Auto Config adopts only conclusive streaming-mix controls")

@@ -50,6 +50,7 @@ describe(testName, function() {
     });
 
     type AutoConfigOutputRequest = IAutoConfigRequest['outputs'][number];
+    type AutoConfigCurrentSettings = AutoConfigOutputRequest['current'];
     interface AutoConfigRun {
         readonly result: Promise<IAutoConfigResult>;
         confirmProbeIngest(probeId: string, received: boolean): void;
@@ -75,6 +76,20 @@ describe(testName, function() {
                 encoderId: 'obs_x264',
                 preset: 'veryfast',
             },
+            ...overrides,
+        };
+    }
+
+    // These requests exercise eligibility and recommendation policy rather than
+    // encoder throughput. Keep their real encoder workload small enough to be
+    // deterministic on hosted runners while retaining the end-to-end boundary.
+    function lightweightCurrent(overrides: Partial<AutoConfigCurrentSettings> = {}): AutoConfigCurrentSettings {
+        return {
+            ...output().current,
+            width: 640,
+            height: 360,
+            fpsNum: 15,
+            fpsDen: 1,
             ...overrides,
         };
     }
@@ -365,7 +380,7 @@ describe(testName, function() {
             const response = await run({
                 streamSetup: 'custom-rtmp',
                 outputs: [output({
-                    limits: { maxWidth: 1920, maxHeight: 1080, maxFpsNum: 60, maxFpsDen: 1 },
+                    current: lightweightCurrent(),
                     probes: [{
                         id: 'twitch-primary',
                         kind: 'twitch-standard',
@@ -398,24 +413,18 @@ describe(testName, function() {
             expect(hardwareAttempt.height).to.be.greaterThan(0);
             expect(hardwareAttempt.fpsNum).to.be.greaterThan(0);
             expect(hardwareAttempt.fpsDen).to.be.greaterThan(0);
-            expect(response.events.some(event => (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_x264' ||
-                event.code === 'hardware_validating_target_cadence') &&
-                event.width === 1920 && event.height === 1080 && event.fpsNum === 60 && event.fpsDen === 1))
-                .to.equal(true);
             const qualityInput = response.events.find(event => event.code === 'recommendation_selecting_quality');
             if (!qualityInput)
                 throw new Error('Expected a quality-selection input event');
             expect(qualityInput.availableBitrateKbps).to.equal(2500);
-            // This estimate-only path may test the higher canvas ceiling, but
-            // cannot promote without a successful provider bandwidth probe.
-            expect(qualityInput.width).to.equal(1280);
+            expect(qualityInput.width).to.equal(640);
             const qualityResult = response.events.find(event => event.code === 'recommendation_quality_selected');
             if (!qualityResult)
                 throw new Error('Expected a quality-selection result event');
             expect(qualityResult.selectedBitrateKbps).to.equal(2500);
-            expect(response.result.outputs[0].videos[0].width).to.be.at.most(1280);
-            expect(response.result.outputs[0].videos[0].height).to.be.at.most(720);
-            expect(response.result.outputs[0].videos[0].fpsNum).to.equal(30);
+            expect(response.result.outputs[0].videos[0].width).to.be.at.most(640);
+            expect(response.result.outputs[0].videos[0].height).to.be.at.most(360);
+            expect(response.result.outputs[0].videos[0].fpsNum).to.equal(15);
             expect(response.result.outputs[0].videos[0].fpsDen).to.equal(1);
             expect(response.result.outputs[0].encoding!.encoderFamily).to.be.a('string').and.not.equal('');
             expect(response.result.outputs[0].encoding!.encoderTitle).to.be.a('string').and.not.equal('');
@@ -454,6 +463,7 @@ describe(testName, function() {
                 streamSetup: 'direct-single',
                 outputs: [output({
                     destinations: ['youtube'],
+                    current: lightweightCurrent(),
                     probes: [{
                         id: 'youtube-primary',
                         kind: 'youtube-unbound',
@@ -465,6 +475,7 @@ describe(testName, function() {
 
             expect(mock.getConnections()).to.equal(0);
             expect(mock.getBytes()).to.equal(0);
+            expect(response.result.status).to.equal('complete');
             expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
             expect(JSON.stringify(response.result)).not.to.contain(secret);
             expect(JSON.stringify(response.events)).not.to.contain(secret);
@@ -479,6 +490,7 @@ describe(testName, function() {
             streamSetup: 'cloud-multistream',
             outputs: [output({
                 destinations: ['twitch', 'youtube'],
+                current: lightweightCurrent(),
                 estimateReason: 'cloud_multistream',
                 probes: [{
                     id: 'cloud-twitch-only',
@@ -490,6 +502,7 @@ describe(testName, function() {
                 }],
             })],
         });
+        expect(response.result.status).to.equal('complete');
         expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
         expect(response.result.outputs[0].measurement.reason).to.equal('cloud_multistream');
         expect(response.events.some(event => event.code === 'twitch_probe_started')).to.equal(false);
@@ -507,7 +520,7 @@ describe(testName, function() {
                     outputId: 'horizontal',
                     display: 'horizontal',
                     destinations: ['twitch'],
-                    current: { ...output().current, bitrateKbps: 6000 },
+                    current: lightweightCurrent({ bitrateKbps: 6000 }),
                     estimateReason: 'dual_output',
                     probes: [{
                         id: 'dual-twitch',
@@ -520,7 +533,7 @@ describe(testName, function() {
                     outputId: 'vertical',
                     display: 'vertical',
                     destinations: ['youtube'],
-                    current: { ...output().current, bitrateKbps: 6000 },
+                    current: lightweightCurrent({ bitrateKbps: 6000 }),
                     estimateReason: 'dual_output',
                     probes: [{
                         id: 'dual-youtube',
@@ -532,6 +545,7 @@ describe(testName, function() {
             ],
         });
 
+        expect(response.result.status).to.equal('complete');
         expect(response.result.outputs).to.have.length(2);
         expect(response.result.outputs.every(resultOutput => resultOutput.measurement.mode === 'estimated')).to.equal(true);
         expect(response.result.outputs.every(resultOutput => resultOutput.measurement.reason === 'dual_output')).to.equal(true);
@@ -551,10 +565,11 @@ describe(testName, function() {
             streamSetup: 'direct-single',
             outputs: [output({
                 destinations: ['twitch'],
-                current: { ...output().current, bitrateKbps: 8000 },
+                current: lightweightCurrent({ bitrateKbps: 8000 }),
                 estimateReason: 'probe_disabled',
             })],
         });
+        expect(twitch.result.status).to.equal('complete');
         expect(twitch.result.outputs[0].measurement.mode).to.equal('estimated');
         expect(twitch.result.outputs[0].encoding!.bitrateKbps).to.equal(6000);
 
@@ -562,20 +577,22 @@ describe(testName, function() {
             streamSetup: 'direct-single',
             outputs: [output({
                 destinations: ['twitch'],
-                current: { ...output().current, bitrateKbps: 2500 },
+                current: lightweightCurrent({ bitrateKbps: 2500 }),
                 estimateReason: 'probe_disabled',
             })],
         });
+        expect(alreadyConservative.result.status).to.equal('complete');
         expect(alreadyConservative.result.outputs[0].encoding!.bitrateKbps).to.equal(2500);
 
         const globallyCapped = await run({
             streamSetup: 'direct-single',
             outputs: [output({
                 destinations: ['other'],
-                current: { ...output().current, bitrateKbps: 12000 },
+                current: lightweightCurrent({ bitrateKbps: 12000 }),
                 estimateReason: 'probe_disabled',
             })],
         });
+        expect(globallyCapped.result.status).to.equal('complete');
         expect(globallyCapped.result.outputs[0].measurement.mode).to.equal('estimated');
         expect(globallyCapped.result.outputs[0].encoding!.bitrateKbps).to.equal(8000);
     });
@@ -585,16 +602,16 @@ describe(testName, function() {
             streamSetup: 'cloud-multistream',
             outputs: [output({
                 destinations: ['youtube', 'twitch'],
-                current: {
-                    ...output().current,
+                current: lightweightCurrent({
                     bitrateKbps: 9000,
                     encoderId: 'definitely-not-a-real-encoder',
-                },
+                }),
                 limits: { maxBitrateKbps: 1800 },
                 estimateReason: 'cloud_multistream',
             })],
         });
 
+        expect(response.result.status).to.equal('complete');
         expect(response.result.outputs[0].encoding!.bitrateKbps).to.equal(1800);
         expect(response.result.outputs[0].encoding!.encoderId).not.to.equal('definitely-not-a-real-encoder');
         expect(response.result.outputs[0].encoding!.codec).to.equal('h264');

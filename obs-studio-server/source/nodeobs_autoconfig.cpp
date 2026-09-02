@@ -28,6 +28,11 @@
 #include <media-io/video-frame.h>
 #include <media-io/video-io.h>
 #include <util/platform.h>
+#include <util/threading.h>
+
+#if defined(__APPLE__)
+#include <pthread.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -1637,9 +1642,15 @@ public:
 		if (coreVideoMix || borrowedVideo)
 			return;
 		feeder = std::thread([this]() {
-			const auto frameDuration = std::chrono::nanoseconds((1000000000ULL * videoFpsDen) / videoFpsNum);
-			auto nextFrame = std::chrono::steady_clock::now();
-			uint64_t timestamp = os_gettime_ns();
+			os_set_thread_name("auto optimizer feeder");
+#if defined(__APPLE__)
+			// Match the graphics thread's QoS so macOS does not starve the exact-
+			// cadence source while the benchmark encoder is under load.
+			(void)pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
+			const uint64_t frameDurationNs = (1000000000ULL * videoFpsDen) / videoFpsNum;
+			uint64_t nextFrameTimestamp = os_gettime_ns();
+			uint64_t timestamp = nextFrameTimestamp;
 			bool alternate = false;
 			while (!stopFeeder.load()) {
 				scheduledFrames.fetch_add(1, std::memory_order_relaxed);
@@ -1658,17 +1669,17 @@ public:
 				} else {
 					lockFailedFrames.fetch_add(1, std::memory_order_relaxed);
 				}
-				timestamp += (uint64_t)frameDuration.count();
-				nextFrame += frameDuration;
-				const auto now = std::chrono::steady_clock::now();
-				if (nextFrame < now) {
+				timestamp += frameDurationNs;
+				nextFrameTimestamp += frameDurationNs;
+				const uint64_t now = os_gettime_ns();
+				if (nextFrameTimestamp < now) {
 					// Skip missed schedule slots instead of submitting a burst of
 					// catch-up frames that would distort encoder throughput.
 					lateFrames.fetch_add(1, std::memory_order_relaxed);
-					nextFrame = now + frameDuration;
-					timestamp = os_gettime_ns() + (uint64_t)frameDuration.count();
+					nextFrameTimestamp = now + frameDurationNs;
+					timestamp = nextFrameTimestamp;
 				}
-				std::this_thread::sleep_until(nextFrame);
+				os_sleepto_ns(nextFrameTimestamp);
 			}
 		});
 	}
@@ -2327,7 +2338,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			for (size_t legIndex = 0; legIndex < attempts.size(); legIndex++) {
 				const HardwareAttempt &attempt = attempts[legIndex];
 				logHardwareAttempt(encoder, selected[legIndex], attempt);
-				if (attempt.errorCode == "hardware_benchmark_overloaded")
+				if (qualityPolicy::hardwareFailureIndicatesOverload(attempt.errorCode))
 					overloadObserved = true;
 				if (attempt.cancelled) {
 					for (auto &assessment : assessments)
@@ -2361,7 +2372,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 				for (size_t legIndex = 0; legIndex < cadenceAttempts.size(); legIndex++) {
 					const HardwareAttempt &attempt = cadenceAttempts[legIndex];
 					logHardwareAttempt(encoder, selected[legIndex], attempt);
-					if (attempt.errorCode == "hardware_benchmark_overloaded")
+					if (qualityPolicy::hardwareFailureIndicatesOverload(attempt.errorCode))
 						overloadObserved = true;
 					if (attempt.cancelled) {
 						for (auto &assessment : assessments)
@@ -2443,7 +2454,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 				HardwareAttempt cadenceValidation =
 					runEncoderWorkload(session, candidate, phaseDeadline, HardwareWorkloadFeed::SyntheticRawExact);
 				logHardwareAttempt(encoder, candidate, cadenceValidation);
-				if (cadenceValidation.errorCode == "hardware_benchmark_overloaded")
+				if (qualityPolicy::hardwareFailureIndicatesOverload(cadenceValidation.errorCode))
 					overloadObserved = true;
 				if (cadenceValidation.cancelled) {
 					for (auto &assessment : assessments)
@@ -2467,7 +2478,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 					return false;
 				}
 			}
-			if (attempt.errorCode == "hardware_benchmark_overloaded")
+			if (qualityPolicy::hardwareFailureIndicatesOverload(attempt.errorCode))
 				overloadObserved = true;
 			if (attempt.cancelled) {
 				for (auto &assessment : assessments)

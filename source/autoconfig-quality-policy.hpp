@@ -78,17 +78,25 @@ inline HardwareSampleClassification classifyHardwareSample(bool feederHealthy, u
 
 // Hardware texture encoders require a private OBS video mix. If that mix cannot
 // be created, reject only that hardware encoder and continue testing the
-// independent raw-video path used by x264. Creation and start failures may
-// depend on resolution and frame rate, so continue with lower tiers.
+// independent raw-video path used by x264. Creation, start, and feeder failures
+// may depend on resolution and frame rate, so continue with lower tiers.
 inline HardwareFailureScope hardwareFailureScope(std::string_view code, bool timedOut = false)
 {
 	if (timedOut || code == "hardware_benchmark_video_create_failed" || code == "hardware_benchmark_audio_create_failed" ||
 	    code == "hardware_benchmark_audio_encoder_create_failed" || code == "hardware_benchmark_output_create_failed" ||
-	    code == "hardware_benchmark_no_output_packets" || code == "hardware_benchmark_feeder_stalled" || code == "hardware_benchmark_cleanup_timeout")
+	    code == "hardware_benchmark_no_output_packets" || code == "hardware_benchmark_cleanup_timeout")
 		return HardwareFailureScope::Phase;
 	if (code == "hardware_benchmark_encoder_unavailable" || code == "hardware_benchmark_video_mix_create_failed")
 		return HardwareFailureScope::Encoder;
 	return HardwareFailureScope::Workload;
+}
+
+// A feeder that cannot supply the requested cadence proves that the complete
+// workload is not sustainable even when the encoder has not reported skipped
+// frames. Preserve that evidence when all lower workload candidates also fail.
+inline bool hardwareFailureIndicatesOverload(std::string_view code)
+{
+	return code == "hardware_benchmark_overloaded" || code == "hardware_benchmark_feeder_stalled";
 }
 
 // The control run uses the application's streaming mix to distinguish an
