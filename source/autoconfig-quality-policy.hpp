@@ -57,9 +57,9 @@ inline FrameRateDivisor frameRateDivisor(uint32_t sourceNum, uint32_t sourceDen,
 	return {true, (uint32_t)(numerator / denominator)};
 }
 
-// Keep the throughput decision independent from OBS resource management so
-// contradictory states (for example success=true with zero output packets)
-// cannot escape into encoder selection.
+// Keep throughput classification independent of OBS resource lifetime so
+// impossible results, such as success with zero output packets, cannot
+// influence encoder selection.
 inline HardwareSampleClassification classifyHardwareSample(bool feederHealthy, uint32_t totalFrames, uint32_t skippedFrames, uint32_t encodedFrames,
 							   uint32_t outputFrames, uint32_t minimumEncodedFrames, uint32_t allowedSkippedFrames)
 {
@@ -76,10 +76,10 @@ inline HardwareSampleClassification classifyHardwareSample(bool feederHealthy, u
 	return {true, nullptr};
 }
 
-// A private OBS video mix is required only by the hardware path. Failure to
-// create it rejects hardware, but must not suppress the independent raw-video
-// path used by the guaranteed x264 fallback. Encoder creation/start failures
-// can depend on the requested tuple, so lower tiers must still be attempted.
+// Hardware texture encoders require a private OBS video mix. If that mix cannot
+// be created, reject only that hardware encoder and continue testing the
+// independent raw-video path used by x264. Creation and start failures may
+// depend on resolution and frame rate, so continue with lower tiers.
 inline HardwareFailureScope hardwareFailureScope(std::string_view code, bool timedOut = false)
 {
 	if (timedOut || code == "hardware_benchmark_video_create_failed" || code == "hardware_benchmark_audio_create_failed" ||
@@ -91,19 +91,19 @@ inline HardwareFailureScope hardwareFailureScope(std::string_view code, bool tim
 	return HardwareFailureScope::Workload;
 }
 
-// The streaming-mix control is diagnostic. A successful control proves the
-// concrete encoder can produce packets; cancellation and shared infrastructure
-// failures must also escape immediately. An unavailable or inconclusive
-// control must not turn a private-mix symptom into an encoder-global rejection.
+// The control run uses the application's streaming mix to distinguish an
+// encoder failure from a private-mix failure. Adopt success, cancellation, or a
+// phase-wide infrastructure failure. Otherwise keep the original result so an
+// inconclusive control does not reject the encoder globally.
 inline bool shouldAdoptHardwareControl(bool success, bool cancelled, std::string_view errorCode, bool timedOut = false)
 {
 	return success || cancelled || hardwareFailureScope(errorCode, timedOut) == HardwareFailureScope::Phase;
 }
 
-// Once the public texture path has passed, the paired raw path is evidence only
-// for the requested higher cadence. Its ordinary setup, packet, feeder, or
-// overload failures constrain that workload rather than disabling the public
-// encoder. Only a phase deadline or unsafe teardown prevents further testing.
+// After the texture-encoder test succeeds, the raw-input test only determines
+// whether the same encoder can sustain a higher frame rate. Ordinary failures
+// reject that resolution and frame-rate candidate, not the encoder. Stop the
+// phase only for a deadline or unsafe cleanup.
 inline HardwareFailureScope exactCadenceValidationFailureScope(std::string_view code, bool timedOut = false)
 {
 	return timedOut || code == "hardware_benchmark_cleanup_timeout" ? HardwareFailureScope::Phase : HardwareFailureScope::Workload;
@@ -153,12 +153,11 @@ inline SharedTwoLegAllocation allocateSharedTwoLegBandwidth(uint64_t firstSafeVi
 	return {true, aggregateSafeVideoKbps, perLegVideoKbps, perLegVideoKbps * 2};
 }
 
-// A mixed-provider Dual Output result is active only when the complete joint
-// proof is present: the exact topology was admitted, both encoder workloads
-// sustained one shared cadence, and both provider probes produced usable
-// lower bounds. An invalid allocation is the caller's all-or-nothing signal to
-// keep both recommendations estimated; one successful leg must never escape as
-// an independently active result.
+// Return an active mixed-provider Dual Output allocation only when the request
+// matches the supported stream setup, both encoders sustain the common frame rate,
+// and both provider probes produce usable lower bounds. Otherwise return an
+// invalid allocation so the caller keeps both outputs estimated; never activate
+// only one output.
 inline SharedTwoLegAllocation assembleSharedTwoLegAllocation(bool exactTopologyEligible, bool concurrentHardwareValidated, bool allHardwareWorkloadsPassed,
 							     bool firstProviderProbeUsable, uint64_t firstSafeVideoKbps, bool secondProviderProbeUsable,
 							     uint64_t secondSafeVideoKbps)
@@ -180,10 +179,9 @@ struct HardwareTier {
 	bool lowerFps = false;
 };
 
-// Dual Output applies one cadence to both independently rendered legs. Keep
-// each leg's geometry, but benchmark and recommend the lower exact rational
-// cadence so a 60/30 or 60000/1001 vs 30000/1001 pair cannot accidentally be
-// validated as two incompatible output rates.
+// Dual Output uses one frame rate for both independently rendered outputs. Keep
+// each resolution, but test and recommend the lower exact frame rate so 60/30
+// or 60000/1001 versus 30000/1001 cannot be treated as compatible.
 inline void applySharedMinimumCadence(VideoTuple &first, VideoTuple &second)
 {
 	const bool firstIsLowerOrEqual = (int64_t)first.fpsNum * std::max(1, second.fpsDen) <= (int64_t)second.fpsNum * std::max(1, first.fpsDen);
@@ -243,10 +241,10 @@ inline bool fpsGreaterThan(const VideoTuple &value, int numerator, int denominat
 	return (int64_t)value.fpsNum * denominator > (int64_t)numerator * std::max(1, value.fpsDen);
 }
 
-// Libobs can render a private texture mix only at the main canvas cadence. A
-// hardware candidate above that observed cadence therefore needs a second,
-// exact-cadence raw-input validation before its public texture encoder can be
-// recommended. Software encoders already use that exact raw path directly.
+// Libobs renders a private texture mix only at the main canvas frame rate. If a
+// candidate uses a higher frame rate, separately test the same hardware encoder
+// with raw input at the exact candidate resolution and frame rate. Software
+// encoders already use that exact raw-input path.
 inline bool requiresExactHardwareCadenceValidation(bool hardware, uint32_t sourceNum, uint32_t sourceDen, uint32_t targetNum, uint32_t targetDen)
 {
 	if (!hardware || sourceNum == 0 || sourceDen == 0 || targetNum == 0 || targetDen == 0)
@@ -254,7 +252,7 @@ inline bool requiresExactHardwareCadenceValidation(bool hardware, uint32_t sourc
 	return (uint64_t)targetNum * sourceDen > (uint64_t)sourceNum * targetDen;
 }
 
-inline bool hasV1AspectRatio(const VideoTuple &value)
+inline bool hasSupportedTierAspectRatio(const VideoTuple &value)
 {
 	if (value.width <= 0 || value.height <= 0)
 		return false;
@@ -266,11 +264,11 @@ inline bool hasV1AspectRatio(const VideoTuple &value)
 inline VideoTuple fitTier(const VideoTuple &ceiling, int longEdge, int shortEdge, bool lowerFps)
 {
 	VideoTuple result = ceiling;
-	// V1 exposes only the three exact 16:9 tiers (and their portrait
-	// equivalents). Preserve custom-aspect output geometry and cadence instead
-	// of inventing proportional tuples that Desktop cannot present or safely
-	// apply as one of those tiers.
-	if (!hasV1AspectRatio(ceiling))
+	// The optimizer supports only the 1920x1080, 1280x720, and 960x540 tiers,
+	// and their portrait equivalents. Preserve custom-aspect geometry and frame
+	// rate instead of constructing a resolution Desktop cannot apply as a
+	// supported tier.
+	if (!hasSupportedTierAspectRatio(ceiling))
 		return result;
 
 	const bool landscape = ceiling.width >= ceiling.height;
@@ -299,17 +297,16 @@ inline VideoTuple fitTier(const VideoTuple &ceiling, int longEdge, int shortEdge
 	return result;
 }
 
-// Bound the current tuple downward when the caller supplies a smaller complete
-// geometry limit. Promotion above the current canvas is handled separately by
-// benchmarkCeiling through an isolated native workload. An absent/partial
-// maximum, an orientation mismatch, or a custom aspect ratio deliberately
-// keeps the current output as the ceiling, so native cannot infer permission to
-// change geometry.
-inline VideoTuple boundCurrentToV1Tier(const VideoTuple &current, int maxWidth, int maxHeight)
+// When the caller supplies a complete smaller resolution limit, lower the
+// current resolution to a supported tier. benchmarkCeiling handles promotion
+// separately without changing application settings. Missing dimensions, a
+// changed orientation, or a custom aspect ratio leave the current resolution
+// unchanged, so OSN never assumes permission to resize.
+inline VideoTuple boundCurrentToSupportedTier(const VideoTuple &current, int maxWidth, int maxHeight)
 {
 	if (maxWidth <= 0 || maxHeight <= 0)
 		return current;
-	if (!hasV1AspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
+	if (!hasSupportedTierAspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
 		return current;
 	if (current.width <= maxWidth && current.height <= maxHeight)
 		return current;
@@ -326,16 +323,17 @@ inline VideoTuple boundCurrentToV1Tier(const VideoTuple &current, int maxWidth, 
 	return current;
 }
 
-// Promote only inside a complete, orientation-compatible V1 geometry bound.
-// The optional frame-rate bound is permission to benchmark a higher cadence,
-// not permission to return it without successful active bandwidth evidence.
+// Promote only inside a complete, orientation-compatible bound for a supported
+// 16:9 or 9:16 tier. The optional frame-rate bound permits testing a higher
+// frame rate, but returning it still requires successful active bandwidth
+// evidence.
 inline VideoTuple benchmarkCeiling(const VideoTuple &current, int maxWidth, int maxHeight, int maxFpsNum = 0, int maxFpsDen = 1)
 {
-	const VideoTuple bounded = boundCurrentToV1Tier(current, maxWidth, maxHeight);
+	const VideoTuple bounded = boundCurrentToSupportedTier(current, maxWidth, maxHeight);
 	if (maxWidth <= 0 || maxHeight <= 0)
 		return current;
 
-	if (!hasV1AspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
+	if (!hasSupportedTierAspectRatio(current) || (current.width >= current.height) != (maxWidth >= maxHeight))
 		return current;
 
 	VideoTuple result = bounded;
@@ -374,9 +372,9 @@ inline VideoTuple benchmarkCeiling(const VideoTuple &current, int maxWidth, int 
 	return result;
 }
 
-// A completed active provider probe is the only source of permission to use a
-// tested tuple above the current output. Estimate-only and failed-probe paths
-// retain lower hardware fallbacks but cannot promote geometry or cadence.
+// A recommendation may exceed the current resolution or frame rate only after
+// a successful active provider probe. Estimated and failed-probe results may
+// choose a lower tested setting but cannot promote.
 inline VideoTuple recommendationCeiling(const VideoTuple &tested, const VideoTuple &current, bool allowPromotion)
 {
 	if (allowPromotion)
@@ -423,10 +421,10 @@ inline long double bitrateComplexity(const VideoTuple &video)
 
 inline int twitchMinimumBitrateKbps(const VideoTuple &video)
 {
-	// Product ladder for any locally encoded leg containing Twitch. The
-	// 1080p60 floor deliberately tolerates a small shortfall from Twitch's
-	// published 6000 Kbps recommendation; lower rungs use explicit product
-	// transitions instead of the generic OBS complexity estimate.
+	// Use these bitrate thresholds for every locally encoded Twitch output.
+	// 1080p60 tolerates a small shortfall from Twitch's published 6000 Kbps
+	// recommendation; lower qualities use explicit product thresholds instead
+	// of the generic OBS complexity estimate.
 	const int longEdge = std::max(video.width, video.height);
 	const int shortEdge = std::min(video.width, video.height);
 	const bool highFps = fpsGreaterThan(video, 30);
@@ -487,7 +485,7 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 		// Mirror OBS's high-FPS preference: when bandwidth rejects a higher
 		// resolution at high FPS but admits it at low FPS, prefer the next lower
 		// high-FPS tier as long as that tier is at least 960x540.
-		// The Twitch profile already defines the preferred resolution/cadence at
+		// The Twitch profile already defines the preferred resolution and frame rate at
 		// each boundary. Do not let the generic high-FPS override reorder it.
 		if (profile == QualityProfile::Generic && eligible.size() > 1) {
 			const VideoTuple &first = options[eligible[0]];
@@ -503,8 +501,8 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 	result.minimumBitrateKbps = profileMinimumBitrateKbps(result.video, encoderFamily, profile);
 	result.insufficientBandwidth = eligible.empty();
 	result.bandwidthConstrained = !sameVideo(result.video, ceiling);
-	// Preserve larger measured capacity in probe provenance while applying the
-	// product-wide ceiling only to the Desktop-owned recommendation.
+	// Keep the full measured capacity in the evidence, but cap the bitrate
+	// recommendation that Desktop may apply.
 	result.bitrateKbps = recommendedBitrateKbps;
 	return result;
 }

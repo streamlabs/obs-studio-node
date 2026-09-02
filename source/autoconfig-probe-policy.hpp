@@ -65,10 +65,9 @@ enum class YoutubeExtendedValidationDecision { TargetAccepted, SourceUnderfill, 
 enum class ProviderProbeCoverage { None, Partial, Complete };
 
 /**
- * Classify how much of an upload leg's probeable destination set can be
- * measured. Each provider is counted at most once by the caller. A partial
- * set is still useful evidence, but it must not be presented with the same
- * confidence as a complete provider set.
+ * Report whether none, some, or all measurable providers on an output were
+ * probed. The caller counts each provider once. Partial coverage remains useful
+ * but must have lower confidence than complete coverage.
  */
 inline ProviderProbeCoverage classifyProviderProbeCoverage(size_t expectedProviderCount, size_t eligibleProviderCount)
 {
@@ -89,9 +88,10 @@ inline bool probeSafeValueContributesToActiveRecommendation(bool success, bool o
 	return safeKbps > 0 && (success || (observedThroughputReliable && measuredKbps > 0));
 }
 
-// Isolated two-leg probes are combined into one shared-uplink allocation. A
-// merely conservative or failed observation can remain useful for a single-leg
-// estimate, but cannot prove that two simultaneous outputs are safe.
+// Combine the two sequential provider probes into one shared-upload allocation
+// only when both produced reliable measurements. A conservative or failed
+// observation may still support one estimated output, but cannot prove that
+// both outputs are safe simultaneously.
 inline bool dualOutputProviderProbeIsUsable(bool success, bool observedThroughputReliable, uint64_t measuredKbps, uint64_t safeKbps)
 {
 	return success && observedThroughputReliable && measuredKbps > 0 && safeKbps > 0;
@@ -100,8 +100,9 @@ inline bool dualOutputProviderProbeIsUsable(bool success, bool observedThroughpu
 inline uint64_t roundDownRecommendationBitrateKbps(uint64_t bitrateKbps)
 {
 	constexpr uint64_t quantumKbps = 100;
-	// A positive value below one quantum cannot be rounded upward safely or
-	// rounded down to a valid positive bitrate, so preserve it unchanged.
+	// A positive value below the rounding increment cannot be rounded safely: up
+	// would exceed the measurement and down would become zero. Preserve it
+	// unchanged.
 	if (bitrateKbps < quantumKbps)
 		return bitrateKbps;
 	return bitrateKbps - bitrateKbps % quantumKbps;

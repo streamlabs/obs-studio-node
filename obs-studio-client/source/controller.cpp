@@ -381,9 +381,8 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 
 void Controller::disconnect()
 {
-	// AutoConfig owns a polling thread and a Node ThreadSafeFunction. Tear them
-	// down before dropping IPC so an abandoned session cannot keep the renderer
-	// environment or addon alive.
+	// Stop Auto Optimizer polling and release its callback before disconnecting
+	// IPC so an active run cannot retain the renderer environment or add-on.
 	autoConfig::Shutdown();
 
 	if (m_isServer) {

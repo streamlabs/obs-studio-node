@@ -137,7 +137,7 @@ describe(testName, function() {
         let nativeRun: AutoConfigRun | null = null;
         let timeout: ReturnType<typeof setTimeout>;
         const hardwareAttemptStarted = new Promise<void>((resolve, reject) => {
-            timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer scratch workload')), 15000);
+            timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer benchmark workload')), 15000);
             const onEvent = (event: IAutoConfigEvent) => {
                 if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
                     event.code === 'hardware_testing_x264') {
@@ -145,7 +145,7 @@ describe(testName, function() {
                     resolve();
                 } else if (event.type === 'complete' || event.type === 'cancelled') {
                     clearTimeout(timeout);
-                    reject(new Error(`Auto Optimizer stopped before starting a scratch workload: ${event.code}`));
+                    reject(new Error(`Auto Optimizer stopped before starting a benchmark workload: ${event.code}`));
                 }
             };
 
@@ -208,7 +208,7 @@ describe(testName, function() {
         }
     }
 
-    it('exposes only the resource-safe Auto Optimizer facade', function() {
+    it('exposes only the run-based Auto Optimizer API', function() {
         expect(autoConfig.run).to.be.a('function');
         expect(Object.keys(autoConfig)).to.deep.equal(['run']);
         for (const rawMethod of [
@@ -245,7 +245,7 @@ describe(testName, function() {
         }
     });
 
-    it('rejects provider-owned output kinds outside Enhanced Broadcasting stream setups', function() {
+    it('rejects Twitch-managed outputs outside Enhanced Broadcasting stream setups', function() {
         const direct = {
             streamSetup: 'direct-single',
             outputs: [output({ outputKind: 'twitch-enhanced-broadcasting' })],
@@ -602,7 +602,7 @@ describe(testName, function() {
         expect(response.result.outputs[0].measurement.confidence).to.equal('medium');
     });
 
-    it('does not test or expose provider-owned Twitch both-display encoding', async function() {
+    it('does not return Twitch-managed encoding settings for a paired Enhanced Broadcasting output', async function() {
         const response = await run({
             streamSetup: 'enhanced-broadcasting',
             outputs: [output({
@@ -685,14 +685,14 @@ describe(testName, function() {
         expect(result.error.code).to.equal('cancelled');
     });
 
-    it('cancels a running session only after its scratch worker has cleaned up', async function() {
+    it('cancels a running session only after its benchmark worker has cleaned up', async function() {
         const nativeRun = autoConfig.run({
             streamSetup: 'custom-rtmp',
             outputs: [output()],
         } as IAutoConfigRequest,
             () => undefined);
-        // Let the worker enter the hardware phase so this covers cancellation
-        // of an executing scratch workload rather than a prepared session.
+        // Wait for hardware testing to start so this cancels active benchmark
+        // work rather than a session that has not begun.
         await new Promise(resolve => setTimeout(resolve, 100));
 
         await nativeRun.cancel();
@@ -770,7 +770,7 @@ describe(testName, function() {
         }
     });
 
-    it('cancels an active session before the legacy service resets its video context', async function() {
+    it('cancels an active session before OBS_service resets its video context', async function() {
         const nativeRun = await startSessionAtHardwareAttempt();
 
         try {

@@ -499,9 +499,8 @@ static const size_t numVals = sizeof(vals) / sizeof(double);
 
 int OBS_service::resetVideoContext(bool reload, bool retryWithDefaultConf)
 {
-	// Auto Optimizer owns disposable encoder, output, and video-mix resources
-	// while a session is running. Wait for their teardown before changing the
-	// process-wide video context.
+	// An Auto Optimizer run uses temporary encoders, outputs, and video mixes.
+	// Wait for their cleanup before changing the process-wide video context.
 	if (!autoConfig::CancelActiveSession()) {
 		blog(LOG_ERROR, "Timed out while stopping Auto Optimizer before resetting the video context.");
 		return OBS_VIDEO_CURRENTLY_ACTIVE;

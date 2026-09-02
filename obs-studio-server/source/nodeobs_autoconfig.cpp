@@ -147,10 +147,10 @@ static void registerHardwareBenchmarkOutput()
 
 	obs_output_info info{};
 	info.id = kHardwareBenchmarkOutputId;
-	// OBS's bundled null_output is AV-only. Attaching the isolated scratch
-	// canvas to it pairs video with an audio encoder that multi-canvas audio
-	// routing cannot service, so texture encoders wait for audio and emit no
-	// packets. A video-only sink exercises the encoder without that AV gate.
+	// OBS's null_output waits for both audio and video. A private benchmark canvas
+	// cannot provide audio through multi-canvas routing, so null_output would
+	// never emit its video packets. Use a video-only output to test encoder packet
+	// production independently.
 	info.flags = OBS_OUTPUT_VIDEO | OBS_OUTPUT_ENCODED;
 	info.get_name = hardwareBenchmarkOutputName;
 	info.create = hardwareBenchmarkOutputCreate;
@@ -775,10 +775,10 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	if (legs)
 		obs_data_array_release(legs);
 	if (valid && session.topology != "enhanced-broadcasting-dual-output") {
-		const bool legacyEnhanced = session.topology == "enhanced-broadcasting";
-		const bool outputKindsValid = (!legacyEnhanced || session.legs.size() == 1) &&
+		const bool singleOutputEnhanced = session.topology == "enhanced-broadcasting";
+		const bool outputKindsValid = (!singleOutputEnhanced || session.legs.size() == 1) &&
 					      std::all_of(session.legs.begin(), session.legs.end(), [&](const LegRequest &leg) {
-						      return leg.outputKind == (legacyEnhanced ? "twitch-enhanced-broadcasting" : "standard");
+						      return leg.outputKind == (singleOutputEnhanced ? "twitch-enhanced-broadcasting" : "standard");
 					      });
 		if (!outputKindsValid) {
 			error = "invalid_autoconfig_output_kind";
@@ -832,8 +832,9 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		}
 	}
 
-	// Active probing is deliberately default-deny. Credentials survive parsing
-	// only when the probe, upload leg, topology, and destination all agree.
+	// Keep probe credentials only when the probe kind, output, stream setup, and
+	// destination match an allowed active-probe configuration. Otherwise clear
+	// them before any network work.
 	const bool multipleDualOutputLegs = session.topology == "dual-output" && session.legs.size() > 1;
 	session.dualOutputActiveProbePair = isSupportedStandardDualOutputActiveProbePair(session);
 	std::map<std::string, size_t> probePairCounts;
@@ -864,16 +865,17 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 			legFound && canvasReferencesValid &&
 			((legIt->display == "horizontal" && !legIt->additionalVideo.has_value()) ||
 			 (legIt->display == "both" && legIt->additionalVideo.has_value() && legIt->additionalVideo->display == "vertical"));
-		const bool legacyEnhancedBroadcastingEligible = probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" &&
-								session.legs.size() == 1 && probeCount == 1 && enhancedBroadcastingCanvasEligible &&
-								legIt->destinations.size() == 1 && legIt->destinations.front().platform == "twitch";
+		const bool singleOutputEnhancedBroadcastingEligible = probe.kind == "twitch-enhanced-broadcasting" &&
+								      session.topology == "enhanced-broadcasting" && session.legs.size() == 1 &&
+								      probeCount == 1 && enhancedBroadcastingCanvasEligible &&
+								      legIt->destinations.size() == 1 && legIt->destinations.front().platform == "twitch";
 		const bool compositeEnhancedBroadcastingEligible =
 			session.enhancedBroadcastingDualOutputWorkload && legFound &&
 			((probe.kind == "twitch-enhanced-broadcasting" && legIt->outputKind == "twitch-enhanced-broadcasting") ||
 			 (probe.kind == "youtube-unbound" && legIt->outputKind == "standard"));
 		const bool providerValid = probeProviderContractIsValid(probe);
 
-		const bool topologyEligible = legacyEnhancedBroadcastingEligible || compositeEnhancedBroadcastingEligible ||
+		const bool topologyEligible = singleOutputEnhancedBroadcastingEligible || compositeEnhancedBroadcastingEligible ||
 					      (probe.kind != "twitch-enhanced-broadcasting" && (directEligible || dualEligible || cloudEligible));
 		probe.eligible = !probe.provider.empty() && destinationFound && topologyEligible && providerValid &&
 				 probePairCounts[probe.legId + "\n" + probe.provider] == 1;
@@ -1027,10 +1029,9 @@ static bool isModernHardwareH264(const std::string &id)
 
 static EncoderPreset defaultEncoderPreset(const std::string &id)
 {
-	// These are the concrete native encoder properties and the defaults exposed
-	// by the matching modern OBS H.264 implementations. The value returned in
-	// the recommendation is therefore the exact value exercised by the scratch
-	// benchmark, not an OBS profile/config field name.
+	// These are the actual encoder properties and defaults exposed by the
+	// supported OBS H.264 encoders. Return the exact property value used by the
+	// temporary benchmark, not a similarly named OBS configuration field.
 	if (id == ENCODER_NVENC_H264_TEX)
 		return {"preset", "p5"};
 	if (id == ADVANCED_ENCODER_QSV_V2)
@@ -1066,8 +1067,9 @@ static std::vector<EncoderDescriptor> availableHardwareEncoders(const CurrentSet
 			result.push_back(describeEncoder(resolved, true));
 	};
 
-	// Keep a modern, currently selected hardware encoder first. A current x264,
-	// legacy QSV, HEVC, or AV1 selection deliberately does not block discovery.
+	// Prefer the currently selected supported hardware encoder. An x264,
+	// deprecated QSV H.264, HEVC, or AV1 selection does not prevent discovery of
+	// supported H.264 hardware encoders.
 	add(current.encoderId);
 	add(ENCODER_NVENC_H264_TEX);
 	add(ADVANCED_ENCODER_QSV_V2);
@@ -1188,14 +1190,14 @@ static CurrentSettings baseRecommendation(const LegRequest &leg)
 	if (leg.outputKind == "standard")
 		value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps((uint64_t)value.bitrateKbps);
 	const auto bounded =
-		qualityPolicy::boundCurrentToV1Tier({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
+		qualityPolicy::boundCurrentToSupportedTier({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight);
 	value.width = bounded.width;
 	value.height = bounded.height;
 	if (leg.limits.maxFpsNum > 0)
 		capFps(value, leg.limits.maxFpsNum, leg.limits.maxFpsDen);
-	// Encoder discovery and workload validation happen in the hardware phase.
-	// Preserve the current value here for provider-managed paths and as the
-	// fail-open recommendation when shared scratch infrastructure is unavailable.
+	// Encoder discovery and workload testing happen later in the hardware phase.
+	// Until then, preserve the selected encoder for Twitch-managed ladders and as
+	// the fallback if OSN cannot create temporary benchmark resources.
 	applyEncoderMetadata(value);
 	return value;
 }
@@ -1559,12 +1561,11 @@ public:
 				obs_view_set_source(scratchView, 0, currentScene);
 			}
 			if (identitySourceMix) {
-				// The Enhanced Broadcasting probe renders the current scene at
-				// candidate settings without registering another application
-				// canvas. Its mix must nevertheless use the registered horizontal
-				// canvas identity: scene-item filtering and the paired AAC routing
-				// both match on that identity. The auxiliary API keeps the render
-				// settings private while deriving the safe identity alias in libobs.
+				// The probe renders the current scene at candidate settings without
+				// registering another application canvas. It retains the horizontal
+				// canvas ID because scene-item filtering and synthetic-audio routing
+				// use that ID. The auxiliary-mix API changes render settings while
+				// preserving the registered canvas identity.
 				scratchMix = scratchView ? obs_view_add_auxiliary_mix(scratchView, scratchViewInfo.get(), identitySourceMix) : nullptr;
 				auxiliaryVideoMix = scratchMix != nullptr;
 				syntheticVideo = scratchMix ? obs_video_mix_get_video(scratchMix) : nullptr;
@@ -1968,11 +1969,11 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 				result.errorCode = "hardware_benchmark_frame_rate_unsupported";
 				return result;
 			}
-			// Libobs renders every private texture mix at the main canvas
-			// cadence. Validate the public texture encoder at the candidate's
-			// exact resolution and this available cadence; the caller must pair
-			// this with an exact-resolution/FPS raw-input run before accepting a
-			// frame-rate promotion.
+			// Libobs renders private texture mixes at the main canvas frame rate.
+			// Test the selected texture encoder at the candidate resolution and
+			// available frame rate. If the candidate frame rate is higher, also
+			// require a raw-input test at the exact candidate settings before
+			// recommending it.
 			result.sourceCadenceBelowTarget = true;
 			result.validatedFpsNum = result.sourceFpsNum;
 			result.validatedFpsDen = result.sourceFpsDen;
@@ -2079,11 +2080,10 @@ static HardwareAttempt runEncoderWorkload(const std::shared_ptr<Session> &sessio
 	const uint32_t allowedLate = std::max(1U, result.scheduledFrames * 5U / 100U);
 	result.feederHealthy = useMainVideoControl || useCoreVideoMix ||
 			       (result.submittedFrames >= minimumSubmitted && result.lockFailedFrames <= allowedLockFailed && result.lateFrames <= allowedLate);
-	// The streaming-mix control exists only to prove that this concrete encoder can
-	// produce packets from the known-working application video pipeline. Global
-	// main-video skipped-frame counters describe the running app, not this
-	// temporary encoder, so retain them for diagnostics but do not reject the
-	// control because of them.
+	// The control test uses the application's working video pipeline to verify
+	// that this encoder can produce packets. Main-video skipped-frame counters
+	// describe the running application, not this test encoder, so keep them only
+	// for diagnostics and do not fail the control test because of them.
 	const uint32_t classificationTotalFrames = useMainVideoControl ? std::max({result.totalFrames, result.encodedFrames, result.outputFrames})
 								       : result.totalFrames;
 	const uint32_t classificationSkippedFrames = useMainVideoControl ? 0 : result.skippedFrames;
@@ -2256,9 +2256,9 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			}
 		}
 		if (encoder.hardware) {
-			// At most one known-streaming-mix control is useful per encoder and
-			// horizontal leg. Repeating an unavailable control at every quality
-			// tier would consume the budget needed to reach x264.
+			// Run at most one application-mix control test for each encoder on the
+			// horizontal output. Repeating an unavailable control at every quality
+			// candidate could exhaust the phase deadline before testing x264.
 			plannedControlAttempts += std::count_if(legs.begin(), legs.end(), [](const LegRequest &leg) { return leg.display == "horizontal"; });
 		}
 	}
@@ -2411,9 +2411,9 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 							  attempt.errorCode == "hardware_benchmark_no_encoded_packets";
 			const bool mainControlAttempted = encoder.hardware && legs[legIndex].display == "horizontal" && attempt.feedMode == "private-mix" &&
 							  privatePacketFailure && attemptedMainControls.insert(mainControlKey).second;
-			// A streaming-mix retry is diagnostic only. If it succeeds, the hardware
-			// encoder is healthy and the private benchmark infrastructure failed;
-			// never mislabel that outcome as overload or silently select x264.
+			// This control retry is diagnostic. If it succeeds, the encoder is
+			// healthy and only the isolated benchmark path failed; do not report
+			// overload or switch silently to x264.
 			double resolvedProgress = progress;
 			if (mainControlAttempted) {
 				resolvedProgress = attemptProgress();
@@ -2428,10 +2428,10 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 					blog(LOG_WARNING,
 					     "[Auto Optimizer][Hardware] private mix produced no packets, but the known-streaming-mix control passed for encoder=%s workload=%dx%d@%d/%d; accepting the validated hardware result",
 					     encoder.id.c_str(), candidate.width, candidate.height, candidate.fpsNum, candidate.fpsDen);
-				// Adopt only a conclusive success, cancellation, or shared
-				// infrastructure failure. If the optional control mix is unavailable
-				// or itself produces no packets, preserve the private result so lower
-				// tiers and the x264 fallback remain reachable.
+				// Replace the isolated benchmark result only with a conclusive
+				// success, cancellation, or phase-wide infrastructure failure. If
+				// the optional control is unavailable or produces no packets, keep
+				// the original result so lower qualities and x264 can still be tested.
 				if (qualityPolicy::shouldAdoptHardwareControl(mainControl.success, mainControl.cancelled, mainControl.errorCode,
 									      mainControl.timedOut))
 					attempt = std::move(mainControl);
@@ -2450,10 +2450,10 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 						assessment.cancelled = true;
 					return false;
 				}
-				// The texture path already proved the public encoder is usable.
-				// Failure of its raw-input counterpart constrains only this exact
-				// resolution/cadence candidate. Continue through lower tiers rather
-				// than blacklisting the hardware family or selecting x264.
+				// The texture-input test already proved the selected encoder works. A
+				// raw-input failure rejects only this resolution and frame rate;
+				// continue with lower candidates instead of rejecting the encoder
+				// family or switching immediately to x264.
 				const bool cadencePhaseFailure =
 					qualityPolicy::exactCadenceValidationFailureScope(cadenceValidation.errorCode, cadenceValidation.timedOut) ==
 					qualityPolicy::HardwareFailureScope::Phase;
@@ -3224,8 +3224,9 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		attempt.errorCode = "enhanced_broadcasting_invalid_canvas_topology";
 		return false;
 	}
-	// Declare the additional canvas owner first so the primary resource (which
-	// owns the shared output) is destroyed first on every early-return path.
+	// Declare the secondary canvas resources first so C++ destroys the primary
+	// resources, and therefore the shared output, before them on every return
+	// path.
 	std::unique_ptr<ScratchResources> additionalResources;
 	ScratchResources resources(*session);
 	std::vector<std::unique_ptr<ScratchResources>> companionResources;
@@ -3402,9 +3403,9 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 
 		auto companion = std::make_unique<ScratchResources>(*session, kHardwareStopTimeoutMs);
 		OBSDataAutoRelease encoderSettings = obs_data_create();
-		// The combined-workload proof is an exact contract consumed by Desktop.
-		// Exercise the bitrate that will be serialized and applied rather than a
-		// hidden probe-only clamp which could understate the live encoder load.
+		// Desktop validates the result against the exact concurrent workload. Test
+		// the bitrate Desktop will apply; a lower internal test cap would
+		// understate the live encoder load.
 		obs_data_set_int(encoderSettings, "bitrate", workload.value.bitrateKbps);
 		obs_data_set_string(encoderSettings, "rate_control", "CBR");
 		obs_data_set_int(encoderSettings, "keyint_sec", 2);
@@ -3458,9 +3459,9 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 			attempt.errorCode = "enhanced_broadcasting_audio_encoder_missing";
 			return false;
 		}
-		// Never route the user's microphone or desktop audio into a bandwidth
-		// test. Non-silent probe-owned audio also lets the output interleaver
-		// establish the primary A/V stream before it releases video packets.
+		// Never send the user's microphone or desktop audio during a bandwidth
+		// test. Generate non-silent audio used only by the probe so the output
+		// interleaver can establish A/V timing before releasing video packets.
 		obs_encoder_set_audio(encoder, resources.syntheticAudio);
 	}
 
@@ -3865,10 +3866,10 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		if (additionalIdentity &&
 		    (uint64_t)additionalIdentity->fps_num * primaryIdentity->fps_den < (uint64_t)primaryIdentity->fps_num * additionalIdentity->fps_den)
 			smokeIdentity = additionalIdentity;
-		// Auxiliary mixes share the graphics thread's render cadence. Lower
+		// Auxiliary mixes share the graphics thread's render frame rate. Lower
 		// Twitch renditions and companion outputs are exercised with exact
 		// encoder frame-rate divisors; a higher candidate still receives the
-		// separate exact-cadence raw-input attempt below.
+		// separate exact-frame-rate raw-input attempt below.
 		const uint32_t smokeFpsNum = smokeIdentity->fps_num;
 		const uint32_t smokeFpsDen = std::max(1U, smokeIdentity->fps_den);
 		std::vector<uint64_t> canvasIds{leg.current.canvasId};
@@ -3963,8 +3964,9 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 	resources.service = obs_service_create_private("rtmp_common", "auto_optimizer_probe_service", serviceSettings);
 	obs_data_release(serviceSettings);
 
-	// Drop the only application-owned copies as soon as the disposable service
-	// has consumed them. Neither value is emitted, serialized, or logged.
+	// After the private OBS service copies the endpoint and stream key, clear
+	// every temporary copy held by Auto Optimizer. These values are never
+	// returned, serialized, or logged.
 	probe.streamKey.clear();
 	probe.server.clear();
 	serviceKey.clear();
@@ -4125,8 +4127,9 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000};
 		uint64_t totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
 		probePolicy::YoutubeRampEvidence rampEvidence;
-		// maxBitrateKbps is the returned/application ceiling. YouTube tests one
-		// higher stability rung and retains that capacity only as provenance.
+		// maxBitrateKbps caps the recommendation returned to Desktop. YouTube may
+		// test one higher bitrate to verify stability, but records the extra
+		// capacity only as measurement evidence.
 		const int effectiveCeilingKbps = probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, 0);
 		std::vector<std::pair<int, int>> plannedTargets;
 		int lastPlannedTarget = 0;
@@ -4140,9 +4143,9 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		std::string terminationReason = "ladder_exhausted";
 		int activeTarget = initialBitrate;
 		size_t confirmationEpisodes = 0;
-		// This means the probe produced enough evidence for a conservative
-		// recommendation; it does not necessarily mean the physical path limit
-		// was measured.
+		// recommendationEvidenceUsable records whether the probe produced enough
+		// evidence for a conservative recommendation; it does not imply that the
+		// physical path limit was measured.
 		bool recommendationEvidenceUsable = false;
 		probePolicy::YoutubeSourceUnderfillState sourceUnderfillState;
 		const auto rampStarted = std::chrono::steady_clock::now();
@@ -4669,8 +4672,8 @@ static void runSession(const std::shared_ptr<Session> &session)
 		else
 			pushEvent(session, "progress", "bandwidth", 30, probe.denialReason, probe.legId, "estimated", probe.probeId, probe.provider);
 	}
-	// Keep provider execution deterministic and leave the provider-managed
-	// Enhanced Broadcasting workload until its companion evidence is ready.
+	// Run the Twitch Enhanced Broadcasting workload after the standard companion
+	// probes so the combined workload can use their bandwidth evidence.
 	std::stable_sort(orderedProbes.begin(), orderedProbes.end(), [&](const ProbeRequest *left, const ProbeRequest *right) {
 		const auto priority = [&](const ProbeRequest *value) {
 			if (session->enhancedBroadcastingDualOutputWorkload && value->kind == "twitch-enhanced-broadcasting")
@@ -4958,9 +4961,9 @@ static void runSession(const std::shared_ptr<Session> &session)
 			}
 		}
 
-		// Keep exact probe throughput in provenance and logs, but present and
-		// apply a stable, conservative bitrate recommendation. Round before
-		// quality selection so the chosen video tuple fits the applied budget.
+		// Keep exact throughput in measurement evidence and logs, but return a
+		// stable, conservative bitrate. Round it before choosing resolution and
+		// frame rate so the recommendation fits the applied bitrate.
 		if (!providerOwnsEncoding(session->topology, leg)) {
 			recommendation.value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps(
 				probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(0, recommendation.value.bitrateKbps)));
@@ -4971,7 +4974,8 @@ static void runSession(const std::shared_ptr<Session> &session)
 		if (!providerOwnsEncoding(session->topology, leg) && hardware.passed) {
 			// Complete successful provider coverage is required before raising the
 			// current resolution or frame rate. Estimate-only, failed, and partial
-			// paths may still select a lower tested tuple, but never promote from
+			// paths may still select lower tested resolution and frame-rate settings,
+			// but never promote from
 			// incomplete bandwidth evidence.
 			const CurrentSettings currentCeiling = baseRecommendation(leg);
 			const auto eligibleCeiling = qualityPolicy::recommendationCeiling(
@@ -5057,9 +5061,9 @@ static bool requestCancellation(const std::shared_ptr<Session> &session)
 		}
 	}
 
-	// Terminal state is published immediately before the async worker returns.
-	// Close may therefore race the final event; always join that bounded tail
-	// before allowing the session to be removed.
+	// The worker publishes terminal state immediately before returning, so close
+	// may receive the final event before the worker finishes. Join that short
+	// remaining execution before removing the session.
 	if (session->worker.valid() && session->worker.wait_for(std::chrono::milliseconds(kCancelTimeoutMs)) != std::future_status::ready) {
 		if (state == SessionState::Running)
 			pushEvent(session, "error", "cleanup", 100, "cleanup_timeout");
@@ -5326,10 +5330,9 @@ void Shutdown()
 			}
 		}
 
-		// Shutdown is the final safety barrier before libobs teardown. Unlike the
-		// public cancellation API, it must not continue while scratch resources
-		// are still owned by the worker, even if cleanup takes longer than the
-		// normal cancellation deadline.
+		// Shutdown is the last barrier before libobs teardown. Unlike ordinary
+		// cancellation, it must wait until the worker releases every temporary OBS
+		// resource, even if cleanup exceeds the normal cancellation deadline.
 		if (session->worker.valid())
 			session->worker.wait();
 		clearProbeSecrets(*session);

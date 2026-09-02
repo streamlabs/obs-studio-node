@@ -752,9 +752,9 @@ bool parseOutputResult(const json &value, const OutputContext &expected, ParsedO
 	LimitsContext returnedLimits;
 	json ignoredLimits = json::object();
 	const json *limits = value.contains("limits") ? &value["limits"] : nullptr;
-	// The server may tighten caller limits with provider-owned caps before it
-	// serializes the result. Validate the private echo's shape, but use the
-	// credential-free request context below as the public acceptance boundary.
+	// The server may lower request limits to provider caps before returning a
+	// result. Validate that echoed request data is well formed, but compare the
+	// public result against the original credential-free request context.
 	if (!parseLimits(limits, returnedLimits, ignoredLimits))
 		return false;
 

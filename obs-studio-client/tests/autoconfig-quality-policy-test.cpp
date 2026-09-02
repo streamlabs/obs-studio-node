@@ -8,7 +8,7 @@
 
 namespace policy = autoConfig::qualityPolicy;
 
-TEST_CASE("Auto Config Dual Output uses one shared minimum cadence")
+TEST_CASE("Auto Config Dual Output uses one shared minimum frame rate")
 {
 	SECTION("integer 60 and 30 FPS")
 	{
@@ -295,7 +295,7 @@ TEST_CASE("Auto Config derives only exact frame-rate divisors")
 	CHECK_FALSE(result.supported);
 }
 
-TEST_CASE("Auto Config native contract supports the two Desktop upload legs")
+TEST_CASE("Auto Config supports two Desktop-managed upload outputs")
 {
 	CHECK(policy::kMaximumUploadLegs == 2);
 }
@@ -362,12 +362,12 @@ TEST_CASE("Auto Config benchmark ceiling explicitly permits isolated promotion a
 	const auto lowerProductBound = policy::benchmarkCeiling({1920, 1080, 30, 1}, 1280, 720);
 	CHECK(lowerProductBound.width == 1280);
 	CHECK(lowerProductBound.height == 720);
-	const auto boundingBox = policy::boundCurrentToV1Tier({1920, 1080, 30, 1}, 1366, 768);
+	const auto boundingBox = policy::boundCurrentToSupportedTier({1920, 1080, 30, 1}, 1366, 768);
 	CHECK(boundingBox.width == 1280);
 	CHECK(boundingBox.height == 720);
 }
 
-TEST_CASE("Auto Config pairs texture and raw hardware checks only above the rendered cadence")
+TEST_CASE("Auto Config adds a raw-input hardware check only above the rendered frame rate")
 {
 	CHECK(policy::requiresExactHardwareCadenceValidation(true, 30, 1, 60, 1));
 	CHECK(policy::requiresExactHardwareCadenceValidation(true, 30000, 1001, 60000, 1001));
@@ -377,7 +377,7 @@ TEST_CASE("Auto Config pairs texture and raw hardware checks only above the rend
 	CHECK_FALSE(policy::requiresExactHardwareCadenceValidation(true, 0, 1, 60, 1));
 }
 
-TEST_CASE("Auto Config exact-cadence raw failures constrain the workload instead of blacklisting hardware")
+TEST_CASE("Auto Config raw-input failures at the exact frame rate reject only that workload")
 {
 	CHECK(policy::exactCadenceValidationFailureScope("hardware_benchmark_encoder_unavailable") == policy::HardwareFailureScope::Workload);
 	CHECK(policy::exactCadenceValidationFailureScope("hardware_benchmark_video_create_failed") == policy::HardwareFailureScope::Workload);
@@ -396,7 +396,7 @@ TEST_CASE("Auto Config benchmark ceiling preserves portrait orientation")
 	CHECK(policy::select(promoted, 6000, "obs_nvenc_h264_tex").video.height == 1920);
 }
 
-TEST_CASE("Auto Config promotes only the exact V1 aspect family")
+TEST_CASE("Auto Config promotes only supported 16:9 and 9:16 aspect ratios")
 {
 	const std::vector<policy::VideoTuple> custom = {
 		{1600, 1000, 30, 1}, // 16:10
@@ -405,7 +405,7 @@ TEST_CASE("Auto Config promotes only the exact V1 aspect family")
 	};
 	for (const auto &current : custom) {
 		CAPTURE(current.width, current.height);
-		CHECK(policy::sameVideo(policy::boundCurrentToV1Tier(current, 640, 360), current));
+		CHECK(policy::sameVideo(policy::boundCurrentToSupportedTier(current, 640, 360), current));
 		const auto ceiling = policy::benchmarkCeiling(current, 1920, 1080, 60, 1);
 		CHECK(policy::sameVideo(ceiling, current));
 		const auto options = policy::candidates(ceiling);

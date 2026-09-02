@@ -1786,7 +1786,7 @@ export interface IVideoEncoderFactory {
 }
 
 export interface IStreaming {
-    // Video encoder value is ignored only in the Enhanced Broadcasting mode, otherwise it should be set
+    /** Required for standard streaming. Twitch supplies the Enhanced Broadcasting encoding ladder. */
     videoEncoder?: IVideoEncoder,
     service: IService,
     enforceServiceBitrate: boolean,
@@ -1869,8 +1869,7 @@ export interface IAdvancedStreamingFactory {
 }
 
 export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
+    /** Optional vertical canvas for Enhanced Broadcasting Dual Output. Assign it before calling `start()`. */
     additionalVideo?: IVideo,
     displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
@@ -1882,8 +1881,7 @@ export interface IEnhancedBroadcastingAdvancedStreamingFactory {
 }
 
 export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
+    /** Optional vertical canvas for Enhanced Broadcasting Dual Output. Assign it before calling `start()`. */
     additionalVideo?: IVideo,
     displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
@@ -2076,11 +2074,10 @@ type AutoConfigEstimateReason =
 
 interface IAutoConfigCurrentSettings {
     /**
-     * Zero-based server-side canvas identity from IVideo.canvasId; `0` is
-     * valid. Active Enhanced Broadcasting and active two-output Dual Output
-     * require registered, distinct, nonnegative JavaScript-safe identities
-     * that remain live for the native probe. Other request modes may omit the
-     * identity.
+     * Canvas ID from `IVideo.canvasId`; `0` is valid. Active Enhanced
+     * Broadcasting and two-output Dual Output require distinct IDs for
+     * registered canvases that remain alive for the entire run. Other stream
+     * setups may omit this field.
      */
     canvasId?: number;
     width: number;
@@ -2093,7 +2090,10 @@ interface IAutoConfigCurrentSettings {
 }
 
 interface IAutoConfigAdditionalVideoRequest {
-    /** V1 paired Enhanced Broadcasting supports only the vertical canvas. */
+    /**
+     * The parent `current` describes the horizontal canvas; this secondary
+     * video request describes the vertical canvas.
+     */
     display: 'vertical';
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
@@ -2101,30 +2101,28 @@ interface IAutoConfigAdditionalVideoRequest {
 
 interface IAutoConfigLimits {
     /**
-     * Highest bitrate native may return for this Desktop-owned output. A
-     * provider probe may intentionally test above this ceiling and preserve
-     * the higher measured/safe capacity as stability or shared-uplink
-     * evidence; that evidence never raises the returned bitrate above this
-     * limit.
+     * Maximum video bitrate OSN may recommend for an output whose encoding
+     * settings are managed by Desktop. A provider probe may test above this
+     * value to verify stability or shared upload capacity, but the
+     * recommendation never exceeds it.
      */
     maxBitrateKbps?: number;
     /**
-     * Complete attempt-scoped output ceiling eligible for isolated hardware
-     * testing. It may exceed the current canvas because native does not mutate
-     * persistent video settings while benchmarking. Supply maxWidth and
-     * maxHeight together. Native caps this tuple to the V1 1080p tier and
-     * promotes only exact 16:9 or 9:16 outputs. The caller remains responsible
-     * for safely applying a recommended Base Canvas resize. Custom aspect
-     * ratios retain their current resolution and frame rate.
+     * Maximum resolution OSN may test for this run without changing persistent
+     * video settings. Supply `maxWidth` and `maxHeight` together. OSN tests only
+     * the supported 1920x1080, 1280x720, and 960x540 tiers, or their portrait
+     * equivalents, up to this limit. It promotes only 16:9 or 9:16 output; a
+     * custom aspect ratio keeps its current resolution and frame rate. The
+     * caller remains responsible for applying a recommended Base Canvas resize
+     * safely.
      */
     maxWidth?: number;
     maxHeight?: number;
     /**
-     * Complete frame-rate ceiling eligible for hardware testing. Supply
-     * maxFpsNum to permit promotion above the current cadence; maxFpsDen
-     * defaults to 1. Native caps the V1 benchmark at 60 or 59.94 FPS, and a
-     * successful active provider probe is still required before returning a
-     * higher frame rate as the recommendation.
+     * Maximum frame rate OSN may test. Supply `maxFpsNum` to permit promotion
+     * above the current frame rate; `maxFpsDen` defaults to `1`. OSN tests at
+     * most 60 FPS, or 60000/1001 when `maxFpsDen` is `1001`. It returns a
+     * higher frame rate only after a successful active provider probe.
      */
     maxFpsNum?: number;
     maxFpsDen?: number;
@@ -2134,60 +2132,62 @@ interface IAutoConfigOutputRequest {
     outputId: string;
     display: AutoConfigDisplay;
     /**
-     * Physical output ownership. Composite Enhanced Broadcasting requests must
-     * set this explicitly on every output. Their single provider-owned output is
-     * Twitch-only and uses `display: 'both'`; each standard output represents one
-     * non-Twitch horizontal or vertical output.
+     * Identifies who supplies the encoding settings. Use `standard` when
+     * Desktop selects the encoder and bitrate. Use
+     * `twitch-enhanced-broadcasting` when Twitch supplies the ladder. That
+     * Twitch-only output uses `display: 'horizontal'` for one canvas or
+     * `display: 'both'` for paired horizontal and vertical canvases. Each
+     * non-Twitch output remains `standard`.
      */
     outputKind: AutoConfigOutputKind;
     destinations: AutoConfigPlatform[];
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
     /**
-     * Second canvas on the same Twitch Enhanced Broadcasting upload. Valid
-     * only when display is `both`. Active probing is default-denied unless the
-     * request has one Twitch destination, one Enhanced Broadcasting probe, and
-     * two valid, distinct registered canvas identities.
+     * Optional vertical canvas carried on the same Twitch Enhanced
+     * Broadcasting upload as `current`. Valid only with `display: 'both'`. OSN
+     * permits active probing only for one Twitch destination, one Enhanced
+     * Broadcasting probe, and two distinct registered canvas IDs.
      */
     additionalVideo?: IAutoConfigAdditionalVideoRequest;
     estimateReason?: AutoConfigEstimateReason;
-    /** Attempt-scoped probes executed in this output's array order. */
+    /** Probes for this run, executed in array order. */
     probes?: IAutoConfigProbeRequest[];
 }
 
 interface IAutoConfigTwitchProbeRequest {
     id: string;
     kind: 'twitch-standard';
-    /** Official Twitch ingest URL; the service identity is derived from kind. */
+    /** Official Twitch ingest URL. OSN selects the Twitch service from `kind`. */
     server: string;
     streamKey: string;
 }
 
-/** A safe full-ladder Twitch Enhanced Broadcasting capacity probe. */
+/** Twitch Enhanced Broadcasting probe that tests the complete returned encoding ladder. */
 interface IAutoConfigTwitchEnhancedBroadcastingProbeRequest {
     id: string;
     kind: 'twitch-enhanced-broadcasting';
-    /** Native derives Twitch service identity and automatic ingest from kind. */
     /**
-     * Twitch credential supplied only by Desktop's trusted worker. OSN
-     * normalizes the bandwidth-test parameter, validates the final
-     * Twitch-returned authentication before output starts, and clears its
-     * request copy after probe setup.
+     * Twitch stream key supplied by Desktop's trusted worker. OSN selects the
+     * Twitch service from `kind`, normalizes the bandwidth-test parameter,
+     * verifies the authentication returned by Twitch before starting output,
+     * and clears its temporary copy after configuring the probe.
      */
     streamKey: string;
 }
 
+/**
+ * Desktop's trusted worker must create a reusable YouTube `liveStream` with
+ * the required Auto Optimizer marker and leave it unbound to a
+ * `liveBroadcast`. Desktop must confirm ingest for that same resource. OSN
+ * validates the official RTMPS endpoint but cannot verify YouTube resource
+ * ownership or binding. Await the run's cleanup before deleting the
+ * `liveStream`.
+ */
 interface IAutoConfigYoutubeProbeRequest {
-    /**
-     * Security contract: Desktop's trusted worker must create an exact-marked,
-     * reusable-but-unbound liveStream and status-confirm that same resource.
-     * Native validates the official RTMPS endpoint but cannot query YouTube
-     * resource ownership or binding. Desktop must close the native session
-     * before deleting the liveStream through the YouTube API.
-     */
     id: string;
     kind: 'youtube-unbound';
-    /** Official YouTube RTMPS URL; the service identity is derived from kind. */
+    /** Official YouTube RTMPS URL. OSN selects the YouTube service from `kind`. */
     server: string;
     streamKey: string;
 }
@@ -2198,41 +2198,40 @@ type IAutoConfigProbeRequest =
     | IAutoConfigYoutubeProbeRequest;
 
 /**
- * Complete immutable input for one Auto Optimizer session. OSN validates the
- * stream setup, canvas identities, provider probes, and limits when the session is
- * created. The caller owns all persistent settings and applies a returned
- * recommendation only after validating the corresponding result.
+ * Input for one Auto Optimizer run. OSN validates the stream setup, canvas IDs,
+ * provider probes, and limits before starting. It never changes persistent
+ * settings; the caller validates and applies any recommendation.
  */
 export interface IAutoConfigRequest {
     streamSetup: AutoConfigStreamSetup;
-    outputs: IAutoConfigOutputRequest[];
     /**
-     * Attempt-scoped provider credentials. Native validates each probe
-     * independently. A shared cloud output may contain a subset of its probeable
-     * destinations. A subset that succeeds during setup or execution produces
-     * active evidence with low confidence rather than disabling every provider
-     * measurement. Active Dual Output requires exactly one horizontal and one
-     * vertical output with distinct live canvas identities, one Twitch-standard
-     * probe on an output containing Twitch, and one YouTube-unbound probe on the
-     * other output containing YouTube. Either output may contain
-     * additional unprobed destinations. The probes execute sequentially, and
-     * both must produce usable evidence before either output is promoted.
+     * Outputs and provider probes for this run. OSN validates each probe
+     * independently. A shared cloud output may probe only some of its measurable
+     * destinations; successful partial coverage produces active evidence with
+     * low confidence instead of disabling all provider measurement.
      *
-     * `enhanced-broadcasting-dual-output` is a separate exact stream setup. It
-     * requires one Twitch Enhanced Broadcasting probe plus one or two standard
-     * companion outputs whose canvas identity and current video tuple exactly
-     * match the corresponding primary or additional Twitch canvas. A companion
-     * may optionally carry one YouTube probe; unsupported destinations remain
-     * estimate-only, and custom RTMP is rejected. Standard probes finish before
-     * the combined workload is tested.
+     * Active Dual Output requires one horizontal and one vertical output with
+     * distinct live canvas IDs. One output containing Twitch must have a
+     * `twitch-standard` probe, and the other output containing YouTube must have
+     * a `youtube-unbound` probe. Either output may include additional unprobed
+     * destinations. The probes run sequentially, and both must produce usable
+     * evidence before OSN promotes either output.
+     *
+     * `enhanced-broadcasting-dual-output` requires one Twitch Enhanced
+     * Broadcasting probe and one or two standard outputs. Each standard output
+     * must match the canvas ID, resolution, and frame rate of the corresponding
+     * Twitch canvas. A standard output may include one YouTube probe;
+     * unsupported destinations remain estimate-only, and custom RTMP is
+     * rejected. Standard probes finish before OSN tests the combined workload.
      */
+    outputs: IAutoConfigOutputRequest[];
 }
 
 type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
 type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
 type AutoConfigMeasurementMode = 'active' | 'estimated';
 
-/** A paired vertical canvas tuple tested with the primary canvas. */
+/** Vertical canvas settings tested together with the primary canvas. */
 interface IAutoConfigAdditionalVideoTuple {
     display: 'vertical';
     width: number;
@@ -2244,32 +2243,36 @@ interface IAutoConfigAdditionalVideoTuple {
 /**
  * Ordered progress notification delivered to `NodeObs.AutoConfig.run()`.
  * `complete` and `cancelled` are terminal; the run handle then reads the result
- * and closes all native resources before settling its `result` promise.
+ * and releases the run's temporary OSN resources before settling its `result`
+ * promise.
  */
 export interface IAutoConfigEvent {
     type: AutoConfigEventType;
     phase: AutoConfigPhase;
     progress: number;
     /**
-     * Machine-readable status or failure code. During hardware promotion,
-     * hardware_testing_encoder_surfaces means OSN is validating the requested
-     * resolution and public texture path at the available render cadence;
-     * hardware_validating_target_cadence then validates the exact requested
-     * resolution and frame rate through the hardware encoder's synthetic
-     * raw-input counterpart. hardware_target_cadence_rejected means only that
-     * quality candidate was rejected; OSN continues testing lower cadences and
-     * keeps the public hardware encoder eligible. dual_output_testing_workload
-     * marks the start of one concurrent two-output encoder sample, while
-     * dual_output_allocating_upload means both isolated provider probes and the
-     * concurrent hardware sample passed and OSN is splitting their demonstrated
-     * shared-uplink lower bound equally. During bandwidth testing,
-     * twitch_probe_confirming_capacity means the initial Twitch window was
-     * underfilled without transport pressure and OSN is running one extended
-     * same-target window on the existing connection.
-     * enhanced_broadcasting_testing_concurrent_outputs means Twitch's complete
-     * returned ladder and every standard companion encoder are running in one
-     * common five-second workload window. Companion sinks are video-only and
-     * establish encoder/render capacity; they are not network bandwidth probes.
+     * Machine-readable status or failure code. Important progress codes include:
+     *
+     * - `hardware_testing_encoder_surfaces`: OSN tests the requested resolution
+     *   through the selected texture encoder at the available render frame rate.
+     * - `hardware_validating_target_cadence`: OSN tests the exact requested
+     *   resolution and frame rate through the encoder's synthetic raw-input
+     *   counterpart.
+     * - `hardware_target_cadence_rejected`: only this resolution and frame-rate
+     *   candidate was rejected; OSN continues with lower candidates and keeps
+     *   the selected hardware encoder eligible.
+     * - `dual_output_testing_workload`: OSN starts one concurrent two-output
+     *   encoder sample.
+     * - `dual_output_allocating_upload`: both provider probes and the concurrent
+     *   encoder sample passed, so OSN divides the demonstrated shared upload
+     *   capacity equally.
+     * - `twitch_probe_confirming_capacity`: an initial Twitch sample was
+     *   underfilled without transport pressure, so OSN repeats it for longer on
+     *   the existing connection.
+     * - `enhanced_broadcasting_testing_concurrent_outputs`: OSN runs Twitch's
+     *   complete returned ladder and every standard companion encoder in one
+     *   five-second window. The video-only companion outputs test local encoding
+     *   and rendering capacity, not network bandwidth.
      */
     code?: string;
     outputId?: string;
@@ -2281,17 +2284,17 @@ export interface IAutoConfigEvent {
     encoderId?: string;
     /** Public family key matching getAvailableEncoders(). */
     encoderFamily?: string;
-    /** User-facing encoder title from the native encoder catalog. */
+    /** User-facing encoder title from OSN's encoder catalog. */
     encoderTitle?: string;
     width?: number;
     height?: number;
     fpsNum?: number;
     fpsDen?: number;
-    /** Vertical canvas tuple tested concurrently with the primary tuple. */
+    /** Vertical canvas settings tested together with the primary canvas settings. */
     additionalVideo?: IAutoConfigAdditionalVideoTuple;
-    /** Final video bitrate selected with the quality tuple. */
+    /** Video bitrate selected for the recommended resolution and frame rate. */
     selectedBitrateKbps?: number;
-    /** Effective safe video bandwidth used to select the quality tuple. */
+    /** Conservative video-bandwidth estimate used to choose the recommended resolution and frame rate. */
     availableBitrateKbps?: number;
 }
 
@@ -2305,7 +2308,7 @@ interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
-    /** Minimal public provenance; detailed bandwidth and workload proof remains private to OSN. */
+    /** Provider measurements that contributed to the result. Detailed throughput and workload data remains internal to OSN. */
     evidence?: IAutoConfigMeasurementEvidence[];
 }
 
@@ -2328,9 +2331,9 @@ interface IAutoConfigEncodingRecommendation {
 
 interface IAutoConfigOutputResult {
     outputId: string;
-    /** One concrete canvas tuple, or paired horizontal and vertical tuples. */
+    /** One recommended canvas setting, or separate horizontal and vertical settings for a paired output. */
     videos: IAutoConfigVideoRecommendation[];
-    /** Omitted when Twitch owns the Enhanced Broadcasting encoding ladder. */
+    /** Omitted for Twitch Enhanced Broadcasting because Twitch supplies its encoding ladder. */
     encoding?: IAutoConfigEncodingRecommendation;
     measurement: IAutoConfigMeasurement;
 }
@@ -2349,10 +2352,10 @@ interface IAutoConfigError {
 }
 
 /**
- * Final, caller-owned Auto Optimizer result. The `result` promise does not
- * settle until native outputs have stopped and the session is closed. No
- * further progress callback invocations occur after it settles, so provider
- * resources can be deleted safely after awaiting it.
+ * Final Auto Optimizer result. The `result` promise settles only after OSN
+ * stops every temporary output and closes the session. No progress callback
+ * runs after settlement, so the caller may then delete temporary provider
+ * resources.
  */
 export interface IAutoConfigResult {
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
@@ -2363,27 +2366,25 @@ export interface IAutoConfigResult {
 /** One running Auto Optimizer operation. */
 interface IAutoConfigRun {
     /**
-     * Settles with the native result only after native outputs have stopped and
-     * the session is closed. No further progress callback invocations occur
-     * after settlement. It rejects on malformed native data, a reported IPC
-     * failure, or cleanup failure. A caller that must bound a lost native
-     * process should enforce its own deadline and call `cancel()`.
+     * Settles after OSN stops its temporary outputs and closes the session. No
+     * progress callback runs after settlement. It rejects on malformed server
+     * data, an IPC failure, or cleanup failure. To bound a server process that
+     * stops responding, enforce a caller-side deadline and call `cancel()`.
      */
     readonly result: Promise<IAutoConfigResult>;
 
     /**
-     * Supplies the caller's authoritative ingest observation for the active
-     * YouTube probe.
-     * @throws {Error} If this run is already closed or the native probe cannot
+     * Reports whether YouTube received data for the active probe.
+     * @throws {Error} If this run is already closed or the probe cannot
      * accept the confirmation
      */
     confirmProbeIngest(probeId: string, received: boolean): void;
 
     /**
-     * Cancels native work and resolves after the same close barrier as
-     * `result`. Calling it again is idempotent after a successful close and
-     * retries the close barrier if the preceding cleanup attempt failed.
-     * @throws {Error} If the native close barrier cannot be completed
+     * Requests cancellation and resolves after OSN closes the session. Repeated
+     * calls are safe after successful cleanup and retry cleanup if the preceding
+     * attempt failed.
+     * @throws {Error} If OSN cannot complete session cleanup
      */
     cancel(): Promise<void>;
 }
@@ -2398,36 +2399,34 @@ interface IAutoConfigEventProbe {
     kind: AutoConfigProbeKind;
 }
 
-/** High-level, resource-safe Auto Optimizer API. */
+/** Auto Optimizer API that manages each run through cleanup. */
 interface IAutoConfig {
     /**
      * Creates and immediately starts one optimizer run. The progress callback
-     * is registered before native work starts. Provider credentials are copied
-     * into native request JSON and are not retained by the returned handle.
+     * is registered before work starts. Credentials are used only to configure
+     * probes and are not stored on the returned handle.
      *
-     * @param request - Immutable attempt-scoped request
+     * @param request - Input used only for this run
      * @param onProgress - Receives validated, ordered progress events
-     * @returns A cancellable run whose result owns the native close barrier
+     * @returns A cancellable run whose result settles after session cleanup
      * @throws {TypeError} If the request or callback has the wrong type
      * @throws {Error} If request validation or session creation fails
      *
-     * A native start failure is reported through `result`, rather than thrown,
-     * because the returned handle retains the close barrier needed to release
-     * any provider-owned resources safely. `cancel()` remains retryable if that
-     * initial close attempt fails.
+     * A server start failure is reported through `result`, rather than thrown,
+     * so the returned handle can still complete cleanup before the caller
+     * releases temporary provider resources. `cancel()` remains retryable if
+     * that initial cleanup attempt fails.
      */
     run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): IAutoConfigRun;
 }
 
 /**
- * Most of the addon's non-optimizer surface remains dynamically typed. This
- * interface gives the Auto Optimizer methods useful declarations without
- * changing unrelated callers.
+ * Typed Auto Optimizer surface on the add-on's otherwise dynamic export.
  */
 interface INodeObs {
     [key: string]: any;
 
-    /** Resource-safe Auto Optimizer entry point. */
+    /** Starts and manages Auto Optimizer runs. */
     readonly AutoConfig: IAutoConfig;
 
     /**

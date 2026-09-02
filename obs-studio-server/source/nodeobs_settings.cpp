@@ -3674,7 +3674,7 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 		if (canResetVideo) {
 			// Advanced color settings reset the process-wide video context. Do
 			// not persist settings that cannot be applied because Auto Optimizer
-			// still owns scratch OBS resources.
+			// still has temporary OBS outputs and encoders active.
 			if (!autoConfig::CancelActiveSession()) {
 				blog(LOG_ERROR, "Timed out while stopping Auto Optimizer before applying advanced video settings.");
 				return false;

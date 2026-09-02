@@ -66,9 +66,9 @@ inline bool everyCanvasHasSampledInput(const std::vector<size_t> &sampledCanvasI
 
 /**
  * Validates the registered canvas identities used by an Enhanced Broadcasting
- * workload. Zero is a valid OSN object identity; INVALID_ID is the only
- * missing-identity sentinel. A paired workload must use two distinct live
- * canvas identities.
+ * workload. Canvas ID 0 is valid; only INVALID_ID means that no canvas was
+ * supplied. A paired workload requires two distinct registered canvas IDs that
+ * remain live.
  */
 template<typename CanvasExists>
 inline bool canvasReferencesAreValid(uint64_t primaryCanvasId, std::optional<uint64_t> additionalCanvasId, CanvasExists &&canvasExists)
@@ -134,11 +134,11 @@ inline uint32_t allowedSkippedFrames(uint32_t totalFrames)
 	return totalFrames * 5U / 100U;
 }
 
-// These failures occur only after the composite candidate has begun allocating
-// or running its additional Desktop-owned encoder workload. They may be caused
-// by the candidate exhausting local encoder/GPU resources, so the composite
-// probe may retry a lower rung. Legacy Enhanced Broadcasting and transport or
-// configuration failures keep their existing fail-closed behavior.
+// These failures occur only after an Enhanced Broadcasting Dual Output
+// candidate starts its additional locally encoded workload. Because they can
+// indicate exhausted GPU or encoder capacity, retry the next lower quality
+// tier. For single-output Enhanced Broadcasting and for transport or
+// configuration failures, stop without retrying.
 inline bool isCompositeCandidateLoadFailure(std::string_view errorCode)
 {
 	return errorCode == "enhanced_broadcasting_companion_encoder_create_failed" || errorCode == "enhanced_broadcasting_companion_output_start_failed" ||

@@ -29,9 +29,9 @@
 #include "nodeobs_api.h"
 
 namespace {
-// Auto Optimizer session API replacement for the legacy OBS_service::stopConnectingOutputs() guard.
-// obs_set_video_info / obs_remove_video_info must not run while a streaming output
-// is still connecting, or libobs races on the video pointer.
+// Stop connecting streaming outputs before changing or removing a canvas.
+// Calling obs_set_video_info() or obs_remove_video_info() while an output is
+// connecting can race with libobs video-pointer access.
 void stopConnectingStreamingOutputs()
 {
 	osn::IStreaming::Manager::GetInstance().for_each([](osn::Streaming *streaming) {
@@ -357,8 +357,8 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 	video.gpu_conversion = true;
 	video.fps_type = args[10].value_union.ui32;
 
-	// Updating a canvas has the same libobs restriction as removing it: no
-	// Auto Optimizer scratch output may still reference the video subsystem.
+	// Updating a canvas has the same libobs restriction as removing it. Cancel
+	// active Auto Optimizer work and release its temporary outputs first.
 	if (!autoConfig::CancelActiveSession()) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before updating the video context.");
 	}
@@ -423,10 +423,9 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
 	}
 
-	// Auto Optimizer owns disposable outputs and encoder/video resources while
-	// its hardware or bandwidth tests are running. OBS refuses to remove a
-	// video context while those resources are active, so make their cancellation
-	// observable and await their cleanup before attempting the reset.
+	// OBS cannot remove a video context while Auto Optimizer's temporary outputs,
+	// encoders, or video resources are active. Cancel the run and wait for cleanup
+	// before removing the canvas.
 	if (!autoConfig::CancelActiveSession()) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before removing the video context.");
 	}
