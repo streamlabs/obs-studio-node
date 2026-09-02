@@ -24,7 +24,6 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-file-output.hpp"
 #include "osn-encoders.hpp"
-#include "osn-streaming-helpers.hpp"
 #include <util/platform.h>
 
 void osn::ISimpleRecording::Register(ipc::server &srv)

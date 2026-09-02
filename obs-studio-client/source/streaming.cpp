@@ -24,10 +24,6 @@
 #include "reconnect.hpp"
 #include "network.hpp"
 #include "video.hpp"
-#include "simple-streaming.hpp"
-#include "advanced-streaming.hpp"
-#include "enhanced-broadcasting-simple-streaming.hpp"
-#include "enhanced-broadcasting-advanced-streaming.hpp"
 
 void osn::Streaming::ReleaseObjects()
 {
@@ -438,7 +434,6 @@ Napi::Value osn::Streaming::GetKBitsPerSec(const Napi::CallbackInfo &info)
 
 	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
-
 Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);
@@ -451,41 +446,4 @@ Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
 		return info.Env().Undefined();
 
 	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
-}
-
-bool osn::TryUnwrapStreamingUid(const Napi::Value &value, uint64_t &out_uid)
-{
-	if (!value.IsObject())
-		return false;
-	Napi::Object obj = value.As<Napi::Object>();
-
-	if (obj.InstanceOf(osn::SimpleStreaming::constructor.Value())) {
-		auto *s = Napi::ObjectWrap<osn::SimpleStreaming>::Unwrap(obj);
-		if (s) {
-			out_uid = s->uid;
-			return true;
-		}
-	}
-	if (obj.InstanceOf(osn::AdvancedStreaming::constructor.Value())) {
-		auto *s = Napi::ObjectWrap<osn::AdvancedStreaming>::Unwrap(obj);
-		if (s) {
-			out_uid = s->uid;
-			return true;
-		}
-	}
-	if (obj.InstanceOf(osn::EnhancedBroadcastingSimpleStreaming::constructor.Value())) {
-		auto *s = Napi::ObjectWrap<osn::EnhancedBroadcastingSimpleStreaming>::Unwrap(obj);
-		if (s) {
-			out_uid = s->uid;
-			return true;
-		}
-	}
-	if (obj.InstanceOf(osn::EnhancedBroadcastingAdvancedStreaming::constructor.Value())) {
-		auto *s = Napi::ObjectWrap<osn::EnhancedBroadcastingAdvancedStreaming>::Unwrap(obj);
-		if (s) {
-			out_uid = s->uid;
-			return true;
-		}
-	}
-	return false;
 }
