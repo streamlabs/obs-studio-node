@@ -12,9 +12,9 @@ import { deleteConfigFiles } from '../util/general';
 
 const testName = 'osn-auto-optimizer';
 const mockPort = 11937;
-const lightweightVideoWidth = 640;
-const lightweightVideoHeight = 360;
-const lightweightVideoFps = 15;
+const lightweightVideoWidth = 320;
+const lightweightVideoHeight = 180;
+const lightweightVideoFps = 30;
 const lightweightVideoInfo: Partial<osn.IVideoInfo> = {
     fpsNum: lightweightVideoFps,
     fpsDen: 1,
@@ -50,7 +50,7 @@ describe(testName, function() {
     before(function() {
         deleteConfigFiles();
         obs = new OBSHandler(testName, false);
-        // Match the live canvas to the 640x360@15 policy requests so the
+        // Match the live canvas to the 320x180@30 policy requests so the
         // independent OBS render loop does not add an unrelated 720p60 workload.
         obs.createDefaultVideoContext(lightweightVideoInfo);
     });
@@ -431,14 +431,14 @@ describe(testName, function() {
             if (!qualityInput)
                 throw new Error('Expected a quality-selection input event');
             expect(qualityInput.availableBitrateKbps).to.equal(2500);
-            expect(qualityInput.width).to.equal(640);
+            expect(qualityInput.width).to.equal(lightweightVideoWidth);
             const qualityResult = response.events.find(event => event.code === 'recommendation_quality_selected');
             if (!qualityResult)
                 throw new Error('Expected a quality-selection result event');
             expect(qualityResult.selectedBitrateKbps).to.equal(2500);
-            expect(response.result.outputs[0].videos[0].width).to.be.at.most(640);
-            expect(response.result.outputs[0].videos[0].height).to.be.at.most(360);
-            expect(response.result.outputs[0].videos[0].fpsNum).to.equal(15);
+            expect(response.result.outputs[0].videos[0].width).to.be.at.most(lightweightVideoWidth);
+            expect(response.result.outputs[0].videos[0].height).to.be.at.most(lightweightVideoHeight);
+            expect(response.result.outputs[0].videos[0].fpsNum).to.equal(lightweightVideoFps);
             expect(response.result.outputs[0].videos[0].fpsDen).to.equal(1);
             expect(response.result.outputs[0].encoding!.encoderFamily).to.be.a('string').and.not.equal('');
             expect(response.result.outputs[0].encoding!.encoderTitle).to.be.a('string').and.not.equal('');
