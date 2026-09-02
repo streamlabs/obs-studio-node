@@ -2040,31 +2040,7 @@ export interface IAudioTrackFactory {
 
 // ---- Auto Optimizer API ----
 
-export interface IAutoConfigCapabilities {
-    apiVersion: 1;
-    resultSchemaVersion: 1;
-    previewApplySplit: true;
-    awaitableCancel: true;
-    perUploadLegResults: true;
-    desktopOwnedApply: true;
-    multipleActiveProbes: true;
-    /**
-     * Supports the isolated two-leg Dual Output contract when one leg contains
-     * Twitch and the other contains YouTube. A leg may also contain additional
-     * destinations; only the selected Twitch or YouTube provider is actively
-     * probed for that upload leg.
-     */
-    dualOutputActiveProbes: true;
-    /**
-     * Supports the exact `enhanced-broadcasting-dual-output` topology: one
-     * Twitch-owned paired horizontal/vertical ladder plus one or two standard
-     * video encoders sustained in the same sample window.
-     */
-    enhancedBroadcastingDualOutputWorkload: true;
-    bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
-}
-
-export type AutoConfigTopology =
+type AutoConfigTopology =
     'direct-single' |
     'cloud-multistream' |
     'custom-rtmp' |
@@ -2074,10 +2050,10 @@ export type AutoConfigTopology =
     'stream-shift' |
     'mixed';
 
-export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
-export type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
+type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
+type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
 
-export type AutoConfigPlatform =
+type AutoConfigPlatform =
     'twitch' |
     'youtube' |
     'facebook' |
@@ -2086,7 +2062,7 @@ export type AutoConfigPlatform =
     'custom' |
     'other';
 
-export type AutoConfigEstimateReason =
+type AutoConfigEstimateReason =
     'non_twitch' |
     'custom_rtmp' |
     'cloud_multistream' |
@@ -2098,11 +2074,11 @@ export type AutoConfigEstimateReason =
     'probe_disabled' |
     'partial_provider_probes';
 
-export interface IAutoConfigDestination {
+interface IAutoConfigDestination {
     platform: AutoConfigPlatform;
 }
 
-export interface IAutoConfigCurrentSettings {
+interface IAutoConfigCurrentSettings {
     /**
      * Zero-based server-side canvas identity from IVideo.canvasId; `0` is
      * valid. Active Enhanced Broadcasting and active two-leg Dual Output
@@ -2117,18 +2093,17 @@ export interface IAutoConfigCurrentSettings {
     fpsDen: number;
     bitrateKbps: number;
     encoderId: string;
-    codec: string;
     preset?: string;
 }
 
-export interface IAutoConfigAdditionalVideoRequest {
+interface IAutoConfigAdditionalVideoRequest {
     /** V1 paired Enhanced Broadcasting supports only the vertical canvas. */
     display: 'vertical';
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
 }
 
-export interface IAutoConfigLimits {
+interface IAutoConfigLimits {
     /**
      * Highest bitrate native may return for this Desktop-owned output. A
      * provider probe may intentionally test above this ceiling and preserve
@@ -2159,7 +2134,7 @@ export interface IAutoConfigLimits {
     maxFpsDen?: number;
 }
 
-export interface IAutoConfigLegRequest {
+interface IAutoConfigLegRequest {
     legId: string;
     display: AutoConfigDisplay;
     /**
@@ -2182,22 +2157,21 @@ export interface IAutoConfigLegRequest {
     estimateReason?: AutoConfigEstimateReason;
 }
 
-export interface IAutoConfigTwitchActiveProbe {
+interface IAutoConfigTwitchActiveProbe {
     probeId: string;
     kind: 'twitch-standard';
     legId: string;
-    serviceName: 'Twitch';
+    /** Official Twitch ingest URL; the service identity is derived from kind. */
     server: string;
     streamKey: string;
 }
 
 /** A safe full-ladder Twitch Enhanced Broadcasting capacity probe. */
-export interface IAutoConfigTwitchEnhancedBroadcastingProbe {
+interface IAutoConfigTwitchEnhancedBroadcastingProbe {
     probeId: string;
     kind: 'twitch-enhanced-broadcasting';
     legId: string;
-    serviceName: 'Twitch';
-    server: 'auto';
+    /** Native derives Twitch service identity and automatic ingest from kind. */
     /**
      * Twitch credential supplied only by Desktop's trusted worker. OSN
      * normalizes the bandwidth-test parameter, validates the final
@@ -2207,7 +2181,7 @@ export interface IAutoConfigTwitchEnhancedBroadcastingProbe {
     streamKey: string;
 }
 
-export interface IAutoConfigYoutubeActiveProbe {
+interface IAutoConfigYoutubeActiveProbe {
     /**
      * Security contract: Desktop's trusted worker must create an exact-marked,
      * reusable-but-unbound liveStream and status-confirm that same resource.
@@ -2218,16 +2192,22 @@ export interface IAutoConfigYoutubeActiveProbe {
     probeId: string;
     kind: 'youtube-unbound';
     legId: string;
-    serviceName: 'YouTube - RTMPS';
+    /** Official YouTube RTMPS URL; the service identity is derived from kind. */
     server: string;
     streamKey: string;
 }
 
-export type IAutoConfigActiveProbe =
+type IAutoConfigActiveProbe =
     | IAutoConfigTwitchActiveProbe
     | IAutoConfigTwitchEnhancedBroadcastingProbe
     | IAutoConfigYoutubeActiveProbe;
 
+/**
+ * Complete immutable input for one Auto Optimizer session. OSN validates the
+ * topology, canvas identities, provider probes, and limits when the session is
+ * created. The caller owns all persistent settings and applies a returned
+ * recommendation only after validating the corresponding result.
+ */
 export interface IAutoConfigRequest {
     schemaVersion: 1;
     topology: AutoConfigTopology;
@@ -2255,12 +2235,12 @@ export interface IAutoConfigRequest {
     activeProbes?: IAutoConfigActiveProbe[];
 }
 
-export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
-export type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
-export type AutoConfigMeasurementMode = 'active' | 'estimated';
+type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
+type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
+type AutoConfigMeasurementMode = 'active' | 'estimated';
 
 /** A paired vertical canvas tuple tested and applied with the primary canvas. */
-export interface IAutoConfigAdditionalVideoTuple {
+interface IAutoConfigAdditionalVideoTuple {
     display: 'vertical';
     width: number;
     height: number;
@@ -2268,6 +2248,11 @@ export interface IAutoConfigAdditionalVideoTuple {
     fpsDen: number;
 }
 
+/**
+ * Ordered progress notification delivered to `NodeObs.AutoConfig.run()`.
+ * `complete` and `cancelled` are terminal; the run handle then reads the result
+ * and closes all native resources before settling its `result` promise.
+ */
 export interface IAutoConfigEvent {
     schemaVersion: 1;
     sessionId: string;
@@ -2321,7 +2306,7 @@ export interface IAutoConfigEvent {
     availableBitrateKbps?: number;
 }
 
-export interface IAutoConfigProbeMeasurement {
+interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     /**
@@ -2379,7 +2364,7 @@ export interface IAutoConfigProbeMeasurement {
     configuredAggregateBitrateKbps?: number;
 }
 
-export interface IAutoConfigMeasurement {
+interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
@@ -2393,7 +2378,7 @@ export interface IAutoConfigMeasurement {
     probes?: IAutoConfigProbeMeasurement[];
 }
 
-export interface IAutoConfigRecommendation {
+interface IAutoConfigRecommendation {
     width: number;
     height: number;
     fpsNum: number;
@@ -2408,11 +2393,11 @@ export interface IAutoConfigRecommendation {
     additionalVideo?: IAutoConfigAdditionalVideoTuple;
 }
 
-export interface IAutoConfigResultDestination {
+interface IAutoConfigResultDestination {
     platform: string;
 }
 
-export interface IAutoConfigLegResult {
+interface IAutoConfigLegResult {
     legId: string;
     display: AutoConfigDisplay;
     /** Echoes request ownership so callers can reject mismatched or reclassified legs. */
@@ -2423,7 +2408,7 @@ export interface IAutoConfigLegResult {
     limits?: IAutoConfigLimits;
 }
 
-export interface IAutoConfigAggregateUpload {
+interface IAutoConfigAggregateUpload {
     /** Two isolated provider probes establish a lower bound for one shared uplink. */
     method: 'dual-output-isolated-lower-bound';
     /** Larger isolated safe result: the aggregate video budget demonstrated across the two sequential probes. */
@@ -2434,7 +2419,7 @@ export interface IAutoConfigAggregateUpload {
     concurrentHardwareValidated: true;
 }
 
-export interface IAutoConfigCombinedWorkloadCompanionLeg {
+interface IAutoConfigCombinedWorkloadCompanionLeg {
     legId: string;
     display: 'horizontal' | 'vertical';
     width: number;
@@ -2452,14 +2437,14 @@ export interface IAutoConfigCombinedWorkloadCompanionLeg {
  * ladder. This proves local render/encoder capacity only; provider bandwidth
  * provenance remains in each leg's `measurement.probes`.
  */
-export interface IAutoConfigCombinedWorkload {
+interface IAutoConfigCombinedWorkload {
     method: 'enhanced-broadcasting-dual-output-concurrent';
     enhancedBroadcastingLegId: string;
     validated: true;
     companionLegs: IAutoConfigCombinedWorkloadCompanionLeg[];
 }
 
-export type AutoConfigFatalErrorCode =
+type AutoConfigFatalErrorCode =
     | 'cancelled'
     | 'hardware_no_usable_encoder'
     | 'hardware_benchmark_overloaded'
@@ -2468,10 +2453,16 @@ export type AutoConfigFatalErrorCode =
     | 'autoconfig_worker_failed'
     | 'autoconfig_worker_launch_failed';
 
-export interface IAutoConfigError {
+interface IAutoConfigError {
     code: AutoConfigFatalErrorCode;
 }
 
+/**
+ * Final, caller-owned Auto Optimizer result. The `result` promise does not
+ * settle until native outputs have stopped and the session is closed. No
+ * further progress callback invocations occur after it settles, so provider
+ * resources can be deleted safely after awaiting it.
+ */
 export interface IAutoConfigResult {
     schemaVersion: 1;
     sessionId: string;
@@ -2488,24 +2479,65 @@ export interface IAutoConfigResult {
     legs: IAutoConfigLegResult[];
 }
 
-/** Raw native methods. Requests and results cross IPC as JSON strings. */
-export interface IAutoConfigNativeApi {
-    GetAutoConfigCapabilities(): string;
-    CreateAutoConfigSession(requestJson: string, callback: (event: IAutoConfigEvent) => void): string;
-    StartAutoConfigSession(sessionId: string): void;
-    ConfirmAutoConfigProbeIngest(sessionId: string, probeId: string, received: boolean): void;
-    GetAutoConfigResult(sessionId: string): string;
-    CancelAutoConfigSession(sessionId: string): void;
-    CloseAutoConfigSession(sessionId: string): void;
+/** One running Auto Optimizer operation. */
+interface IAutoConfigRun {
+    /**
+     * Settles with the native result only after native outputs have stopped and
+     * the session is closed. No further progress callback invocations occur
+     * after settlement. It rejects on malformed native data, a reported IPC
+     * failure, or cleanup failure. A caller that must bound a lost native
+     * process should enforce its own deadline and call `cancel()`.
+     */
+    readonly result: Promise<IAutoConfigResult>;
+
+    /**
+     * Supplies the caller's authoritative ingest observation for the active
+     * YouTube probe.
+     * @throws {Error} If this run is already closed or the native probe cannot
+     * accept the confirmation
+     */
+    confirmProbeIngest(probeId: string, received: boolean): void;
+
+    /**
+     * Cancels native work and resolves after the same close barrier as
+     * `result`. Calling it again is idempotent after a successful close and
+     * retries the close barrier if the preceding cleanup attempt failed.
+     * @throws {Error} If the native close barrier cannot be completed
+     */
+    cancel(): Promise<void>;
+}
+
+/** High-level, resource-safe Auto Optimizer API. */
+interface IAutoConfig {
+    /**
+     * Creates and immediately starts one optimizer run. The progress callback
+     * is registered before native work starts. Provider credentials are copied
+     * into native request JSON and are not retained by the returned handle.
+     *
+     * @param request - Immutable attempt-scoped request
+     * @param onProgress - Receives validated, ordered progress events
+     * @returns A cancellable run whose result owns the native close barrier
+     * @throws {TypeError} If the request or callback has the wrong type
+     * @throws {Error} If request validation or session creation fails
+     *
+     * A native start failure is reported through `result`, rather than thrown,
+     * because the returned handle retains the close barrier needed to release
+     * any provider-owned resources safely. `cancel()` remains retryable if that
+     * initial close attempt fails.
+     */
+    run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): IAutoConfigRun;
 }
 
 /**
  * Most of the addon's non-optimizer surface remains dynamically typed. This
- * intersection gives the Auto Optimizer methods useful declarations without
+ * interface gives the Auto Optimizer methods useful declarations without
  * changing unrelated callers.
  */
-export interface INodeObsApi extends IAutoConfigNativeApi {
+interface INodeObs {
     [key: string]: any;
+
+    /** Resource-safe Auto Optimizer entry point. */
+    readonly AutoConfig: IAutoConfig;
 
     /**
      * Initializes the global OBS runtime.
@@ -2538,4 +2570,4 @@ else if (fs.existsSync(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 
 else {
     obs.IPC.setServerPath(path.resolve(__dirname, `obs32.exe`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirname).replace('app.asar', 'app.asar.unpacked'));
 }
-export const NodeObs: INodeObsApi = obs;
+export const NodeObs: INodeObs = obs;

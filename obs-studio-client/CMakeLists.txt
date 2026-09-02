@@ -45,6 +45,7 @@ SET(OSN_CLIENT_CORE_SOURCES
     "source/polling-pacer.hpp"
     "source/best-effort-gate.cpp"
     "source/best-effort-gate.hpp"
+    "source/autoconfig-client-contract.hpp"
 )
 
 SET(osn-client_SOURCES
@@ -183,6 +184,7 @@ if(BUILD_TESTING)
         "tests/autoconfig-probe-policy-test.cpp"
         "tests/autoconfig-quality-policy-test.cpp"
         "tests/autoconfig-enhanced-broadcasting-policy-test.cpp"
+        "tests/autoconfig-client-contract-test.cpp"
         ${OSN_CLIENT_CORE_SOURCES}
     )
 
@@ -191,6 +193,7 @@ if(BUILD_TESTING)
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/source"
             "${CMAKE_SOURCE_DIR}/source"
+            "${nlohmannjson_SOURCE_DIR}/single_include"
     )
 
     target_link_libraries(

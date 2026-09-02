@@ -1004,27 +1004,15 @@ export interface IAudioTrackFactory {
     importLegacySettings(): void;
     saveLegacySettings(): void;
 }
-export interface IAutoConfigCapabilities {
-    apiVersion: 1;
-    resultSchemaVersion: 1;
-    previewApplySplit: true;
-    awaitableCancel: true;
-    perUploadLegResults: true;
-    desktopOwnedApply: true;
-    multipleActiveProbes: true;
-    dualOutputActiveProbes: true;
-    enhancedBroadcastingDualOutputWorkload: true;
-    bandwidthModes: ['twitch-standard-active', 'twitch-enhanced-broadcasting-active', 'youtube-unbound-active', 'estimate'];
-}
-export type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
-export type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
-export type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
-export type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
-export type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'enhanced_broadcasting_dual_output' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
-export interface IAutoConfigDestination {
+type AutoConfigTopology = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
+type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
+type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
+type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
+type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'enhanced_broadcasting_dual_output' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
+interface IAutoConfigDestination {
     platform: AutoConfigPlatform;
 }
-export interface IAutoConfigCurrentSettings {
+interface IAutoConfigCurrentSettings {
     canvasId?: number;
     width: number;
     height: number;
@@ -1032,22 +1020,21 @@ export interface IAutoConfigCurrentSettings {
     fpsDen: number;
     bitrateKbps: number;
     encoderId: string;
-    codec: string;
     preset?: string;
 }
-export interface IAutoConfigAdditionalVideoRequest {
+interface IAutoConfigAdditionalVideoRequest {
     display: 'vertical';
     current: IAutoConfigCurrentSettings;
     limits?: IAutoConfigLimits;
 }
-export interface IAutoConfigLimits {
+interface IAutoConfigLimits {
     maxBitrateKbps?: number;
     maxWidth?: number;
     maxHeight?: number;
     maxFpsNum?: number;
     maxFpsDen?: number;
 }
-export interface IAutoConfigLegRequest {
+interface IAutoConfigLegRequest {
     legId: string;
     display: AutoConfigDisplay;
     outputKind: AutoConfigOutputKind;
@@ -1057,41 +1044,37 @@ export interface IAutoConfigLegRequest {
     additionalVideo?: IAutoConfigAdditionalVideoRequest;
     estimateReason?: AutoConfigEstimateReason;
 }
-export interface IAutoConfigTwitchActiveProbe {
+interface IAutoConfigTwitchActiveProbe {
     probeId: string;
     kind: 'twitch-standard';
     legId: string;
-    serviceName: 'Twitch';
     server: string;
     streamKey: string;
 }
-export interface IAutoConfigTwitchEnhancedBroadcastingProbe {
+interface IAutoConfigTwitchEnhancedBroadcastingProbe {
     probeId: string;
     kind: 'twitch-enhanced-broadcasting';
     legId: string;
-    serviceName: 'Twitch';
-    server: 'auto';
     streamKey: string;
 }
-export interface IAutoConfigYoutubeActiveProbe {
+interface IAutoConfigYoutubeActiveProbe {
     probeId: string;
     kind: 'youtube-unbound';
     legId: string;
-    serviceName: 'YouTube - RTMPS';
     server: string;
     streamKey: string;
 }
-export type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigTwitchEnhancedBroadcastingProbe | IAutoConfigYoutubeActiveProbe;
+type IAutoConfigActiveProbe = IAutoConfigTwitchActiveProbe | IAutoConfigTwitchEnhancedBroadcastingProbe | IAutoConfigYoutubeActiveProbe;
 export interface IAutoConfigRequest {
     schemaVersion: 1;
     topology: AutoConfigTopology;
     legs: IAutoConfigLegRequest[];
     activeProbes?: IAutoConfigActiveProbe[];
 }
-export type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
-export type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
-export type AutoConfigMeasurementMode = 'active' | 'estimated';
-export interface IAutoConfigAdditionalVideoTuple {
+type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
+type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
+type AutoConfigMeasurementMode = 'active' | 'estimated';
+interface IAutoConfigAdditionalVideoTuple {
     display: 'vertical';
     width: number;
     height: number;
@@ -1122,7 +1105,7 @@ export interface IAutoConfigEvent {
     selectedBitrateKbps?: number;
     availableBitrateKbps?: number;
 }
-export interface IAutoConfigProbeMeasurement {
+interface IAutoConfigProbeMeasurement {
     provider: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     success: boolean;
@@ -1138,13 +1121,13 @@ export interface IAutoConfigProbeMeasurement {
     videoTrackCount?: number;
     configuredAggregateBitrateKbps?: number;
 }
-export interface IAutoConfigMeasurement {
+interface IAutoConfigMeasurement {
     mode: AutoConfigMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
     probes?: IAutoConfigProbeMeasurement[];
 }
-export interface IAutoConfigRecommendation {
+interface IAutoConfigRecommendation {
     width: number;
     height: number;
     fpsNum: number;
@@ -1157,10 +1140,10 @@ export interface IAutoConfigRecommendation {
     preset?: string;
     additionalVideo?: IAutoConfigAdditionalVideoTuple;
 }
-export interface IAutoConfigResultDestination {
+interface IAutoConfigResultDestination {
     platform: string;
 }
-export interface IAutoConfigLegResult {
+interface IAutoConfigLegResult {
     legId: string;
     display: AutoConfigDisplay;
     outputKind: AutoConfigOutputKind;
@@ -1169,13 +1152,13 @@ export interface IAutoConfigLegResult {
     recommendation: IAutoConfigRecommendation;
     limits?: IAutoConfigLimits;
 }
-export interface IAutoConfigAggregateUpload {
+interface IAutoConfigAggregateUpload {
     method: 'dual-output-isolated-lower-bound';
     safeVideoKbps: number;
     allocatedVideoKbps: number;
     concurrentHardwareValidated: true;
 }
-export interface IAutoConfigCombinedWorkloadCompanionLeg {
+interface IAutoConfigCombinedWorkloadCompanionLeg {
     legId: string;
     display: 'horizontal' | 'vertical';
     width: number;
@@ -1186,14 +1169,14 @@ export interface IAutoConfigCombinedWorkloadCompanionLeg {
     encoderId: string;
     preset?: string;
 }
-export interface IAutoConfigCombinedWorkload {
+interface IAutoConfigCombinedWorkload {
     method: 'enhanced-broadcasting-dual-output-concurrent';
     enhancedBroadcastingLegId: string;
     validated: true;
     companionLegs: IAutoConfigCombinedWorkloadCompanionLeg[];
 }
-export type AutoConfigFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'autoconfig_worker_failed' | 'autoconfig_worker_launch_failed';
-export interface IAutoConfigError {
+type AutoConfigFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'autoconfig_worker_failed' | 'autoconfig_worker_launch_failed';
+interface IAutoConfigError {
     code: AutoConfigFatalErrorCode;
 }
 export interface IAutoConfigResult {
@@ -1205,17 +1188,17 @@ export interface IAutoConfigResult {
     combinedWorkload?: IAutoConfigCombinedWorkload;
     legs: IAutoConfigLegResult[];
 }
-export interface IAutoConfigNativeApi {
-    GetAutoConfigCapabilities(): string;
-    CreateAutoConfigSession(requestJson: string, callback: (event: IAutoConfigEvent) => void): string;
-    StartAutoConfigSession(sessionId: string): void;
-    ConfirmAutoConfigProbeIngest(sessionId: string, probeId: string, received: boolean): void;
-    GetAutoConfigResult(sessionId: string): string;
-    CancelAutoConfigSession(sessionId: string): void;
-    CloseAutoConfigSession(sessionId: string): void;
+interface IAutoConfigRun {
+    readonly result: Promise<IAutoConfigResult>;
+    confirmProbeIngest(probeId: string, received: boolean): void;
+    cancel(): Promise<void>;
 }
-export interface INodeObsApi extends IAutoConfigNativeApi {
+interface IAutoConfig {
+    run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): IAutoConfigRun;
+}
+interface INodeObs {
     [key: string]: any;
+    readonly AutoConfig: IAutoConfig;
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
 }
 export declare const enum VCamOutputType {
@@ -1225,4 +1208,5 @@ export declare const enum VCamOutputType {
     ProgramView = 3,
     PreviewOutput = 4
 }
-export declare const NodeObs: INodeObsApi;
+export declare const NodeObs: INodeObs;
+export {};

@@ -17,53 +17,44 @@
 ******************************************************************************/
 
 #include "nodeobs_autoconfig.hpp"
+
+#include "autoconfig-client-contract.hpp"
+#include "controller.hpp"
+#include "osn-error.hpp"
 #include "polling-pacer.hpp"
-#include "shared.hpp"
-#include "utility-v8.hpp"
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 namespace {
-struct AutoConfigEvent {
-	uint32_t schemaVersion = 0;
-	std::string sessionId;
-	uint64_t sequence = 0;
-	std::string type;
-	std::string phase;
-	double progress = 0;
-	std::string code;
-	std::string legId;
-	std::string measurementMode;
-	std::string probeId;
-	std::string provider;
-	uint32_t targetBitrateKbps = 0;
-	std::string encoderId;
-	std::string encoderFamily;
-	std::string encoderTitle;
-	uint32_t width = 0;
-	uint32_t height = 0;
-	uint32_t fpsNum = 0;
-	uint32_t fpsDen = 0;
-	uint32_t selectedBitrateKbps = 0;
-	uint32_t availableBitrateKbps = 0;
-	uint32_t additionalVideoWidth = 0;
-	uint32_t additionalVideoHeight = 0;
-	uint32_t additionalVideoFpsNum = 0;
-	uint32_t additionalVideoFpsDen = 0;
-};
+using autoConfig::clientContract::RunState;
+
+constexpr std::chrono::milliseconds sleepInterval(33);
 
 std::atomic<bool> workerStop{true};
-constexpr std::chrono::milliseconds sleepInterval(33);
-Napi::ThreadSafeFunction jsThread;
+struct EventData {
+	std::string json;
+	std::string error;
+	bool terminal = false;
+};
+
+void CallQueuedEvent(Napi::Env env, Napi::Function jsCallback, void *, EventData *event);
+using EventThreadSafeFunction = Napi::TypedThreadSafeFunction<void, EventData, CallQueuedEvent>;
+
+EventThreadSafeFunction jsThread;
 bool jsThreadActive = false;
 std::thread *workerThread = nullptr;
 std::mutex sessionMutex;
 std::mutex lifecycleMutex;
 std::string activeSessionId;
+int64_t lastEventSequence = -1;
 
 enum class CallbackShutdownMode { Release, Abort };
 
@@ -79,176 +70,85 @@ void SetActiveSessionId(const std::string &sessionId)
 	activeSessionId = sessionId;
 }
 
-uint64_t ReadUnsigned(const ipc::value &value)
+std::string ResponseError(const std::vector<ipc::value> &response)
 {
-	switch (value.type) {
-	case ipc::type::UInt32:
-		return value.value_union.ui32;
-	case ipc::type::UInt64:
-		return value.value_union.ui64;
-	case ipc::type::Int32:
-		return value.value_union.i32 < 0 ? 0 : static_cast<uint64_t>(value.value_union.i32);
-	case ipc::type::Int64:
-		return value.value_union.i64 < 0 ? 0 : static_cast<uint64_t>(value.value_union.i64);
-	default:
-		return 0;
+	if (response.empty())
+		return "Failed to make IPC call, verify IPC status.";
+	if (response.size() == 1 && response[0].type == ipc::type::Null)
+		return response[0].value_str.empty() ? "Failed to make IPC call, verify IPC status." : response[0].value_str;
+
+	const auto error = static_cast<ErrorCode>(response[0].value_union.ui64);
+	if (error == ErrorCode::Ok)
+		return {};
+	if (response.size() >= 2 && !response[1].value_str.empty())
+		return response[1].value_str;
+	return "IPC received error code " + std::to_string(static_cast<uint64_t>(error)) + ", no additional description provided.";
+}
+
+std::vector<ipc::value> CallServer(const char *method, std::vector<ipc::value> arguments = {}, size_t minimumResponseSize = 1)
+{
+	auto connection = Controller::GetInstance().GetConnection();
+	if (!connection)
+		throw std::runtime_error("Failed to obtain IPC connection.");
+
+	auto response = connection->call_synchronous_helper("AutoConfig", method, std::move(arguments));
+	const std::string error = ResponseError(response);
+	if (!error.empty())
+		throw std::runtime_error(error);
+	if (response.size() < minimumResponseSize)
+		throw std::runtime_error(std::string(method) + " returned an incomplete response");
+	return response;
+}
+
+void BestEffortServerCall(const std::shared_ptr<ipc::client> &connection, const char *method, const std::string &sessionId)
+{
+	if (!connection || sessionId.empty())
+		return;
+	try {
+		connection->call_synchronous_helper("AutoConfig", method, {ipc::value(sessionId)});
+	} catch (...) {
+		// Disconnect and environment teardown must always continue locally.
 	}
 }
 
-double ReadDouble(const ipc::value &value)
+void CallQueuedEvent(Napi::Env env, Napi::Function jsCallback, void *, EventData *event)
 {
-	switch (value.type) {
-	case ipc::type::Float:
-		return value.value_union.fp32;
-	case ipc::type::Double:
-		return value.value_union.fp64;
-	case ipc::type::Int32:
-		return value.value_union.i32;
-	case ipc::type::Int64:
-		return static_cast<double>(value.value_union.i64);
-	case ipc::type::UInt32:
-		return value.value_union.ui32;
-	case ipc::type::UInt64:
-		return static_cast<double>(value.value_union.ui64);
-	default:
-		return 0;
+	std::unique_ptr<EventData> ownedEvent(event);
+	if (static_cast<napi_env>(env) == nullptr)
+		return;
+
+	try {
+		jsCallback.Call({Napi::String::New(env, event->json), Napi::String::New(env, event->error), Napi::Boolean::New(env, event->terminal)});
+	} catch (...) {
 	}
+	if (env.IsExceptionPending())
+		env.GetAndClearPendingException();
 }
 
-bool GetSessionArgument(const Napi::CallbackInfo &info, const char *method, std::string &sessionId)
+void DispatchEvent(EventData *data)
 {
-	if (info.Length() < 1 || !info[0].IsString()) {
-		Napi::TypeError::New(info.Env(), std::string(method) + " expects (sessionId: string)").ThrowAsJavaScriptException();
-		return false;
-	}
-
-	sessionId = info[0].As<Napi::String>().Utf8Value();
-	if (sessionId.empty()) {
-		Napi::TypeError::New(info.Env(), std::string(method) + " expects a non-empty sessionId").ThrowAsJavaScriptException();
-		return false;
-	}
-
-	return true;
-}
-
-void DispatchEvent(AutoConfigEvent *event)
-{
-	auto callback = [](Napi::Env env, Napi::Function jsCallback, AutoConfigEvent *eventData) {
-		try {
-			Napi::Object result = Napi::Object::New(env);
-			result.Set("schemaVersion", Napi::Number::New(env, eventData->schemaVersion));
-			result.Set("sessionId", Napi::String::New(env, eventData->sessionId));
-			result.Set("sequence", Napi::Number::New(env, static_cast<double>(eventData->sequence)));
-			result.Set("type", Napi::String::New(env, eventData->type));
-			result.Set("phase", Napi::String::New(env, eventData->phase));
-			result.Set("progress", Napi::Number::New(env, eventData->progress));
-
-			if (!eventData->code.empty())
-				result.Set("code", Napi::String::New(env, eventData->code));
-			if (!eventData->legId.empty())
-				result.Set("legId", Napi::String::New(env, eventData->legId));
-			if (!eventData->measurementMode.empty())
-				result.Set("measurementMode", Napi::String::New(env, eventData->measurementMode));
-			if (!eventData->probeId.empty())
-				result.Set("probeId", Napi::String::New(env, eventData->probeId));
-			if (!eventData->provider.empty())
-				result.Set("provider", Napi::String::New(env, eventData->provider));
-			if (eventData->targetBitrateKbps > 0)
-				result.Set("targetBitrateKbps", Napi::Number::New(env, eventData->targetBitrateKbps));
-			if (!eventData->encoderId.empty())
-				result.Set("encoderId", Napi::String::New(env, eventData->encoderId));
-			if (!eventData->encoderFamily.empty())
-				result.Set("encoderFamily", Napi::String::New(env, eventData->encoderFamily));
-			if (!eventData->encoderTitle.empty())
-				result.Set("encoderTitle", Napi::String::New(env, eventData->encoderTitle));
-			if (eventData->width > 0)
-				result.Set("width", Napi::Number::New(env, eventData->width));
-			if (eventData->height > 0)
-				result.Set("height", Napi::Number::New(env, eventData->height));
-			if (eventData->fpsNum > 0)
-				result.Set("fpsNum", Napi::Number::New(env, eventData->fpsNum));
-			if (eventData->fpsDen > 0)
-				result.Set("fpsDen", Napi::Number::New(env, eventData->fpsDen));
-			if (eventData->selectedBitrateKbps > 0)
-				result.Set("selectedBitrateKbps", Napi::Number::New(env, eventData->selectedBitrateKbps));
-			if (eventData->availableBitrateKbps > 0)
-				result.Set("availableBitrateKbps", Napi::Number::New(env, eventData->availableBitrateKbps));
-			if (eventData->additionalVideoWidth > 0) {
-				Napi::Object additionalVideo = Napi::Object::New(env);
-				additionalVideo.Set("display", Napi::String::New(env, "vertical"));
-				additionalVideo.Set("width", Napi::Number::New(env, eventData->additionalVideoWidth));
-				additionalVideo.Set("height", Napi::Number::New(env, eventData->additionalVideoHeight));
-				additionalVideo.Set("fpsNum", Napi::Number::New(env, eventData->additionalVideoFpsNum));
-				additionalVideo.Set("fpsDen", Napi::Number::New(env, eventData->additionalVideoFpsDen));
-				result.Set("additionalVideo", additionalVideo);
-			}
-
-			jsCallback.Call({result});
-		} catch (...) {
-		}
-		delete eventData;
-	};
-
-	if (jsThread.NonBlockingCall(event, callback) != napi_ok)
-		delete event;
+	if (!jsThreadActive || jsThread.NonBlockingCall(data) != napi_ok)
+		delete data;
 }
 
 void Worker()
 {
 	osn::PollingPacer pacer(sleepInterval);
-
 	while (!workerStop.load()) {
 		const auto cycleStart = std::chrono::high_resolution_clock::now();
 		try {
-			auto conn = Controller::GetInstance().GetConnection();
 			const std::string sessionId = GetActiveSessionId();
-
-			if (conn && !sessionId.empty()) {
-				std::vector<ipc::value> response =
-					conn->call_synchronous_helper("AutoConfig", "QueryAutoConfigSession", {ipc::value(sessionId)});
-				if (response.size() >= 12 && static_cast<ErrorCode>(response[0].value_union.ui64) == ErrorCode::Ok) {
-					auto *event = new AutoConfigEvent;
-					event->schemaVersion = static_cast<uint32_t>(ReadUnsigned(response[1]));
-					event->sessionId = response[2].value_str;
-					event->sequence = ReadUnsigned(response[3]);
-					event->type = response[4].value_str;
-					event->phase = response[5].value_str;
-					event->progress = ReadDouble(response[6]);
-					event->code = response[7].value_str;
-					event->legId = response[8].value_str;
-					event->measurementMode = response[9].value_str;
-					event->probeId = response[10].value_str;
-					event->provider = response[11].value_str;
-					if (response.size() >= 13)
-						event->targetBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[12]));
-					if (response.size() >= 22) {
-						event->encoderId = response[13].value_str;
-						event->encoderFamily = response[14].value_str;
-						event->encoderTitle = response[15].value_str;
-						event->width = static_cast<uint32_t>(ReadUnsigned(response[16]));
-						event->height = static_cast<uint32_t>(ReadUnsigned(response[17]));
-						event->fpsNum = static_cast<uint32_t>(ReadUnsigned(response[18]));
-						event->fpsDen = static_cast<uint32_t>(ReadUnsigned(response[19]));
-						event->selectedBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[20]));
-						event->availableBitrateKbps = static_cast<uint32_t>(ReadUnsigned(response[21]));
-					}
-					if (response.size() >= 26) {
-						event->additionalVideoWidth = static_cast<uint32_t>(ReadUnsigned(response[22]));
-						event->additionalVideoHeight = static_cast<uint32_t>(ReadUnsigned(response[23]));
-						event->additionalVideoFpsNum = static_cast<uint32_t>(ReadUnsigned(response[24]));
-						event->additionalVideoFpsDen = static_cast<uint32_t>(ReadUnsigned(response[25]));
-					}
-
-					if (event->sessionId == sessionId)
-						DispatchEvent(event);
-					else
-						delete event;
-				}
+			if (!sessionId.empty()) {
+				auto response = CallServer("QueryAutoConfigSession", {ipc::value(sessionId)}, 2);
+				const auto envelope = autoConfig::clientContract::validateEvent(response[1].value_str, sessionId, lastEventSequence);
+				auto *event = new EventData{response[1].value_str, envelope.error, envelope.terminal};
+				if (envelope.valid)
+					lastEventSequence = static_cast<int64_t>(envelope.sequence);
+				DispatchEvent(event);
 			}
 		} catch (...) {
-			// A peer disappearing must never escape the native polling thread.
-			// Explicit IPC disconnect and environment teardown set workerStop and
-			// perform the corresponding join/ThreadSafeFunction abort.
+			// A lost peer is bounded by the caller's deadline. Shutdown or an
+			// explicit cancellation will stop and join this poller.
 		}
 
 		const auto cycleEnd = std::chrono::high_resolution_clock::now();
@@ -267,7 +167,12 @@ void StartWorker()
 {
 	if (IsWorkerRunning())
 		return;
-
+	if (workerThread) {
+		if (workerThread->joinable())
+			workerThread->join();
+		delete workerThread;
+		workerThread = nullptr;
+	}
 	workerStop.store(false);
 	workerThread = new std::thread(Worker);
 }
@@ -285,194 +190,459 @@ void StopWorker(CallbackShutdownMode mode)
 		else
 			jsThread.Release();
 		jsThreadActive = false;
-		jsThread = Napi::ThreadSafeFunction();
+		jsThread = EventThreadSafeFunction();
 	}
 }
 
-void StopLocalSession(const std::string &sessionId, CallbackShutdownMode mode)
+void StopLocalSession(const std::string &sessionId, CallbackShutdownMode mode, bool clearSession)
 {
-	std::lock_guard<std::mutex> lock(lifecycleMutex);
 	if (GetActiveSessionId() != sessionId)
 		return;
 	StopWorker(mode);
-	SetActiveSessionId("");
+	if (clearSession)
+		SetActiveSessionId("");
 }
 
-void BestEffortServerCall(const std::shared_ptr<ipc::client> &conn, const char *method, const std::string &sessionId)
+Napi::Value ParseJson(Napi::Env env, const std::string &json)
 {
-	if (!conn || sessionId.empty())
-		return;
-	try {
-		conn->call_synchronous_helper("AutoConfig", method, {ipc::value(sessionId)});
-	} catch (...) {
-		// Disconnect and environment teardown must always continue locally.
-	}
+	Napi::Object jsonObject = env.Global().Get("JSON").As<Napi::Object>();
+	Napi::Function parse = jsonObject.Get("parse").As<Napi::Function>();
+	return parse.Call(jsonObject, {Napi::String::New(env, json)});
 }
 
-Napi::Value GetAutoConfigCapabilities(const Napi::CallbackInfo &info)
+std::string StringifyJson(Napi::Env env, const Napi::Value &value)
 {
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "GetAutoConfigCapabilities", {});
-	if (!ValidateResponse(info, response) || response.size() < 2)
-		return info.Env().Undefined();
-
-	return Napi::String::New(info.Env(), response[1].value_str);
+	Napi::Object jsonObject = env.Global().Get("JSON").As<Napi::Object>();
+	Napi::Function stringify = jsonObject.Get("stringify").As<Napi::Function>();
+	Napi::Value result = stringify.Call(jsonObject, {value});
+	if (env.IsExceptionPending() || !result.IsString())
+		return {};
+	return result.As<Napi::String>().Utf8Value();
 }
 
-Napi::Value CreateAutoConfigSession(const Napi::CallbackInfo &info)
+Napi::Promise ResolvedPromise(Napi::Env env)
 {
-	if (info.Length() < 2 || !info[0].IsString() || !info[1].IsFunction()) {
-		Napi::TypeError::New(info.Env(), "CreateAutoConfigSession expects (requestJson: string, callback)").ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	}
-
-	if (IsWorkerRunning()) {
-		Napi::Error::New(info.Env(), "An AutoConfig session is already active").ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	}
-
-	const std::string requestJson = info[0].As<Napi::String>().Utf8Value();
-	if (requestJson.empty()) {
-		Napi::TypeError::New(info.Env(), "CreateAutoConfigSession expects non-empty request JSON").ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	}
-
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "CreateAutoConfigSession", {ipc::value(requestJson)});
-	if (!ValidateResponse(info, response) || response.size() < 2)
-		return info.Env().Undefined();
-
-	const std::string sessionId = response[1].value_str;
-	if (sessionId.empty()) {
-		Napi::Error::New(info.Env(), "CreateAutoConfigSession returned an empty sessionId").ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	}
-
-	jsThread = Napi::ThreadSafeFunction::New(info.Env(), info[1].As<Napi::Function>(), "AutoConfigSession", 0, 1, [](Napi::Env) {});
-	// The poller must not keep a renderer's Node environment alive. Its cleanup
-	// hook below owns the final abort/join if JavaScript never closes the session.
-	jsThread.Unref(info.Env());
-	jsThreadActive = true;
-	SetActiveSessionId(sessionId);
-	StartWorker();
-
-	return Napi::String::New(info.Env(), sessionId);
+	auto deferred = Napi::Promise::Deferred::New(env);
+	deferred.Resolve(env.Undefined());
+	return deferred.Promise();
 }
 
-Napi::Value StartAutoConfigSession(const Napi::CallbackInfo &info)
-{
+struct FinishOutcome {
+	std::string resultJson;
+	std::string failure;
+	std::string closeFailure;
+};
+
+class AutoConfigRun;
+
+class FinishWorker final : public Napi::AsyncWorker {
+public:
+	FinishWorker(AutoConfigRun *run, std::string sessionId, bool cancel, bool readResult, std::string preferredError);
+	void Execute() override;
+	void OnOK() override;
+	void OnError(const Napi::Error &error) override;
+
+private:
+	AutoConfigRun *run;
 	std::string sessionId;
-	if (!GetSessionArgument(info, "StartAutoConfigSession", sessionId))
-		return info.Env().Undefined();
+	bool cancel;
+	bool readResult;
+	std::string preferredError;
+	FinishOutcome outcome;
+};
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "StartAutoConfigSession", {ipc::value(sessionId)});
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	return info.Env().Undefined();
-}
-
-Napi::Value ConfirmAutoConfigProbeIngest(const Napi::CallbackInfo &info)
-{
-	if (info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsBoolean()) {
-		Napi::TypeError::New(info.Env(), "ConfirmAutoConfigProbeIngest expects (sessionId: string, probeId: string, received: boolean)")
-			.ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	}
-	const std::string sessionId = info[0].As<Napi::String>().Utf8Value();
-	const std::string probeId = info[1].As<Napi::String>().Utf8Value();
-	if (sessionId.empty() || probeId.empty()) {
-		Napi::TypeError::New(info.Env(), "ConfirmAutoConfigProbeIngest expects non-empty sessionId and probeId").ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	}
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "ConfirmAutoConfigProbeIngest",
-									 {ipc::value(sessionId), ipc::value(probeId),
-									  ipc::value((uint32_t)(info[2].As<Napi::Boolean>().Value() ? 1 : 0))});
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-	return info.Env().Undefined();
-}
-
-Napi::Value GetAutoConfigResult(const Napi::CallbackInfo &info)
-{
+struct RunInitialization {
 	std::string sessionId;
-	if (!GetSessionArgument(info, "GetAutoConfigResult", sessionId))
-		return info.Env().Undefined();
+	Napi::Function progressCallback;
+};
 
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
+class AutoConfigRun final : public Napi::ObjectWrap<AutoConfigRun> {
+public:
+	static Napi::FunctionReference constructor;
 
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "GetAutoConfigResult", {ipc::value(sessionId)});
-	if (!ValidateResponse(info, response) || response.size() < 2)
-		return info.Env().Undefined();
-
-	return Napi::String::New(info.Env(), response[1].value_str);
-}
-
-Napi::Value CancelAutoConfigSession(const Napi::CallbackInfo &info)
-{
-	std::string sessionId;
-	if (!GetSessionArgument(info, "CancelAutoConfigSession", sessionId))
-		return info.Env().Undefined();
-
-	auto conn = GetConnection(info);
-	if (!conn)
-		return info.Env().Undefined();
-
-	std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "CancelAutoConfigSession", {ipc::value(sessionId)});
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
-
-	// Cancellation is awaitable: polling continues until cleanup emits its
-	// terminal event, after which the caller closes the session.
-	return info.Env().Undefined();
-}
-
-Napi::Value CloseAutoConfigSession(const Napi::CallbackInfo &info)
-{
-	std::string sessionId;
-	if (!GetSessionArgument(info, "CloseAutoConfigSession", sessionId))
-		return info.Env().Undefined();
-
-	auto conn = GetConnection(info);
-	if (!conn) {
-		StopLocalSession(sessionId, CallbackShutdownMode::Release);
-		return info.Env().Undefined();
+	static void Init(Napi::Env env)
+	{
+		Napi::Function function = DefineClass(env, "AutoConfigRun",
+						      {InstanceAccessor("result", &AutoConfigRun::GetResult, nullptr),
+						       InstanceMethod("confirmProbeIngest", &AutoConfigRun::ConfirmProbeIngest),
+						       InstanceMethod("cancel", &AutoConfigRun::Cancel)});
+		constructor = Napi::Persistent(function);
+		constructor.SuppressDestruct();
 	}
 
-	try {
-		std::vector<ipc::value> response = conn->call_synchronous_helper("AutoConfig", "CloseAutoConfigSession", {ipc::value(sessionId)});
-		const bool responseIsValid = ValidateResponse(info, response);
-		StopLocalSession(sessionId, CallbackShutdownMode::Release);
-		if (!responseIsValid)
+	static Napi::Object New(Napi::Env env, RunInitialization &initialization)
+	{
+		return constructor.New({Napi::External<RunInitialization>::New(env, &initialization)});
+	}
+
+	explicit AutoConfigRun(const Napi::CallbackInfo &info) : Napi::ObjectWrap<AutoConfigRun>(info), resultDeferred(Napi::Promise::Deferred::New(info.Env()))
+	{
+		if (info.Length() != 1 || !info[0].IsExternal()) {
+			Napi::TypeError::New(info.Env(), "AutoConfigRun cannot be constructed directly").ThrowAsJavaScriptException();
+			return;
+		}
+		auto *initialization = info[0].As<Napi::External<RunInitialization>>().Data();
+		sessionId = initialization->sessionId;
+		progressCallback = Napi::Persistent(initialization->progressCallback);
+		resultPromise = Napi::Persistent(resultDeferred.Promise());
+	}
+
+	~AutoConfigRun() override
+	{
+		progressCallback.Reset();
+		resultPromise.Reset();
+		finishPromise.Reset();
+	}
+
+	void Activate(Napi::Env env)
+	{
+		SetActiveSessionId(sessionId);
+		Ref();
+		callbackReference = true;
+		try {
+			Napi::Function dispatch = Napi::Function::New(env, DispatchToRun, "AutoConfigEvent", this);
+			jsThread = EventThreadSafeFunction::New(
+				env, dispatch, Value(), "AutoConfigSession", 0, 1, nullptr,
+				[](Napi::Env, AutoConfigRun *run, void *) { run->ReleaseCallbackReference(); }, this);
+			jsThreadActive = true;
+			jsThread.Unref(env);
+			lastEventSequence = -1;
+		} catch (...) {
+			if (jsThreadActive) {
+				jsThread.Abort();
+				jsThreadActive = false;
+				jsThread = EventThreadSafeFunction();
+			} else {
+				ReleaseCallbackReference();
+			}
+			throw;
+		}
+	}
+
+	Napi::Promise BeginFinish(Napi::Env env, bool cancel, const std::string &preferredError = {})
+	{
+		if (state.isClosed())
+			return ResolvedPromise(env);
+		if (state.isFinishing())
+			return finishPromise.Value();
+
+		finishDeferred = std::make_unique<Napi::Promise::Deferred>(Napi::Promise::Deferred::New(env));
+		finishPromise = Napi::Persistent(finishDeferred->Promise());
+		Napi::Promise attemptPromise = finishPromise.Value();
+		// Automatic terminal cleanup does not expose this attempt promise. Mark
+		// its rejection handled while returning the original promise unchanged
+		// to explicit cancel() callers.
+		Napi::Object promise = attemptPromise;
+		Napi::Function catchFunction = promise.Get("catch").As<Napi::Function>();
+		catchFunction.Call(promise, {Napi::Function::New(env, [](const Napi::CallbackInfo &info) { return info.Env().Undefined(); })});
+
+		state.beginFinish();
+		const bool readResult = !resultSettled && preferredError.empty();
+		Ref();
+		try {
+			auto worker = std::make_unique<FinishWorker>(this, sessionId, cancel, readResult, preferredError);
+			worker->Queue();
+			worker.release();
+		} catch (const std::exception &error) {
+			HandleFinishSchedulingFailure(env, preferredError.empty() ? error.what() : preferredError);
+		} catch (...) {
+			HandleFinishSchedulingFailure(env, preferredError.empty() ? "Failed to schedule Auto Optimizer cleanup" : preferredError);
+		}
+		return attemptPromise;
+	}
+
+	void CompleteFinish(Napi::Env env, FinishOutcome outcome)
+	{
+		const bool closeSucceeded = outcome.closeFailure.empty();
+		state.finishAttempt(closeSucceeded);
+
+		if (!resultSettled) {
+			resultSettled = true;
+			std::string failure = std::move(outcome.failure);
+			if (failure.empty() && !closeSucceeded)
+				failure = outcome.closeFailure;
+
+			Napi::Value result = env.Undefined();
+			if (failure.empty()) {
+				try {
+					result = ParseJson(env, outcome.resultJson);
+				} catch (const std::exception &error) {
+					failure = error.what();
+				} catch (...) {
+					failure = "Native Auto Optimizer returned malformed result JSON";
+				}
+				if (env.IsExceptionPending()) {
+					env.GetAndClearPendingException();
+					failure = "Native Auto Optimizer returned malformed result JSON";
+				}
+			}
+
+			if (failure.empty())
+				resultDeferred.Resolve(result);
+			else
+				resultDeferred.Reject(Napi::Error::New(env, failure).Value());
+		}
+
+		if (closeSucceeded)
+			finishDeferred->Resolve(env.Undefined());
+		else
+			finishDeferred->Reject(Napi::Error::New(env, outcome.closeFailure).Value());
+
+		finishDeferred.reset();
+		finishPromise.Reset();
+		// BeginFinish owns one reference until this asynchronous attempt has
+		// settled. The callback reference is released separately by the TSFN
+		// finalizer after every queued dispatch has drained.
+		Unref();
+	}
+
+private:
+	void HandleFinishSchedulingFailure(Napi::Env env, const std::string &error)
+	{
+		if (env.IsExceptionPending())
+			env.GetAndClearPendingException();
+		state.finishAttempt(false);
+		if (!resultSettled) {
+			resultSettled = true;
+			resultDeferred.Reject(Napi::Error::New(env, error).Value());
+		}
+		finishDeferred->Reject(Napi::Error::New(env, error).Value());
+		finishDeferred.reset();
+		finishPromise.Reset();
+		Unref();
+	}
+
+	static void DispatchToRun(const Napi::CallbackInfo &info)
+	{
+		auto *run = static_cast<AutoConfigRun *>(info.Data());
+		if (!run || info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsBoolean())
+			return;
+		run->HandleEvent(info.Env(), info[0].As<Napi::String>().Utf8Value(), info[1].As<Napi::String>().Utf8Value(),
+				 info[2].As<Napi::Boolean>().Value());
+	}
+
+	void ReleaseCallbackReference()
+	{
+		if (!callbackReference)
+			return;
+		callbackReference = false;
+		Unref();
+	}
+
+	void HandleEvent(Napi::Env env, const std::string &json, const std::string &validationError, bool terminal)
+	{
+		if (resultSettled || state.isClosed() || state.isFinishing())
+			return;
+		if (!validationError.empty()) {
+			BeginFinish(env, true, validationError);
+			return;
+		}
+
+		Napi::Value event = env.Undefined();
+		try {
+			event = ParseJson(env, json);
+		} catch (...) {
+			if (env.IsExceptionPending())
+				env.GetAndClearPendingException();
+			BeginFinish(env, true, "Native Auto Optimizer returned malformed event JSON");
+			return;
+		}
+		if (env.IsExceptionPending()) {
+			env.GetAndClearPendingException();
+			BeginFinish(env, true, "Native Auto Optimizer returned malformed event JSON");
+			return;
+		}
+
+		try {
+			progressCallback.Call({event});
+		} catch (...) {
+		}
+		if (env.IsExceptionPending())
+			env.GetAndClearPendingException();
+		if (terminal)
+			BeginFinish(env, false);
+	}
+
+	Napi::Value GetResult(const Napi::CallbackInfo &) { return resultPromise.Value(); }
+
+	Napi::Value ConfirmProbeIngest(const Napi::CallbackInfo &info)
+	{
+		if (state.isClosed() || sessionId.empty()) {
+			Napi::Error::New(info.Env(), "Auto Optimizer run is already closed").ThrowAsJavaScriptException();
 			return info.Env().Undefined();
-	} catch (const std::exception &error) {
-		StopLocalSession(sessionId, CallbackShutdownMode::Release);
-		Napi::Error::New(info.Env(), error.what()).ThrowAsJavaScriptException();
-		return info.Env().Undefined();
-	} catch (...) {
-		StopLocalSession(sessionId, CallbackShutdownMode::Release);
-		Napi::Error::New(info.Env(), "CloseAutoConfigSession IPC call failed").ThrowAsJavaScriptException();
+		}
+		if (info.Length() != 2 || !info[0].IsString() || !info[1].IsBoolean()) {
+			Napi::TypeError::New(info.Env(), "confirmProbeIngest expects (probeId: string, received: boolean)").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+		const std::string probeId = info[0].As<Napi::String>().Utf8Value();
+		if (probeId.empty()) {
+			Napi::TypeError::New(info.Env(), "confirmProbeIngest expects a non-empty probeId").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
+		try {
+			CallServer("ConfirmAutoConfigProbeIngest", {ipc::value(sessionId), ipc::value(probeId),
+								    ipc::value(static_cast<uint32_t>(info[1].As<Napi::Boolean>().Value() ? 1 : 0))});
+		} catch (const std::exception &error) {
+			Napi::Error::New(info.Env(), error.what()).ThrowAsJavaScriptException();
+		}
 		return info.Env().Undefined();
 	}
 
-	return info.Env().Undefined();
+	Napi::Value Cancel(const Napi::CallbackInfo &info) { return BeginFinish(info.Env(), true); }
+
+	std::string sessionId;
+	Napi::FunctionReference progressCallback;
+	Napi::Promise::Deferred resultDeferred;
+	Napi::Reference<Napi::Promise> resultPromise;
+	std::unique_ptr<Napi::Promise::Deferred> finishDeferred;
+	Napi::Reference<Napi::Promise> finishPromise;
+	RunState state;
+	bool resultSettled = false;
+	bool callbackReference = false;
+};
+
+Napi::FunctionReference AutoConfigRun::constructor;
+
+FinishWorker::FinishWorker(AutoConfigRun *run, std::string sessionId, bool cancel, bool readResult, std::string preferredError)
+	: Napi::AsyncWorker(run->Env()),
+	  run(run),
+	  sessionId(std::move(sessionId)),
+	  cancel(cancel),
+	  readResult(readResult),
+	  preferredError(std::move(preferredError))
+{
 }
+
+void FinishWorker::Execute()
+{
+	try {
+		std::lock_guard<std::mutex> lock(lifecycleMutex);
+		outcome.failure = preferredError;
+		if (cancel) {
+			try {
+				CallServer("CancelAutoConfigSession", {ipc::value(sessionId)});
+			} catch (const std::exception &error) {
+				if (outcome.failure.empty())
+					outcome.failure = error.what();
+			}
+		}
+
+		if (readResult) {
+			try {
+				auto response = CallServer("GetAutoConfigResult", {ipc::value(sessionId)}, 2);
+				outcome.resultJson = response[1].value_str;
+				const std::string validationError = autoConfig::clientContract::validateResult(outcome.resultJson, sessionId);
+				if (!validationError.empty() && outcome.failure.empty())
+					outcome.failure = validationError;
+			} catch (const std::exception &error) {
+				if (outcome.failure.empty())
+					outcome.failure = error.what();
+			}
+		}
+
+		try {
+			CallServer("CloseAutoConfigSession", {ipc::value(sessionId)});
+		} catch (const std::exception &error) {
+			outcome.closeFailure = error.what();
+		}
+		StopLocalSession(sessionId, CallbackShutdownMode::Release, outcome.closeFailure.empty());
+	} catch (const std::exception &error) {
+		if (outcome.closeFailure.empty())
+			outcome.closeFailure = error.what();
+	} catch (...) {
+		if (outcome.closeFailure.empty())
+			outcome.closeFailure = "Unexpected Auto Optimizer cleanup failure";
+	}
 }
+
+void FinishWorker::OnOK()
+{
+	run->CompleteFinish(Env(), std::move(outcome));
+}
+
+void FinishWorker::OnError(const Napi::Error &error)
+{
+	if (outcome.closeFailure.empty())
+		outcome.closeFailure = error.Message();
+	run->CompleteFinish(Env(), std::move(outcome));
+}
+
+Napi::Value Run(const Napi::CallbackInfo &info)
+{
+	if (info.Length() != 2 || !info[0].IsObject() || !info[1].IsFunction()) {
+		Napi::TypeError::New(info.Env(), "AutoConfig.run expects (request: object, onProgress: function)").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	std::string requestJson;
+	try {
+		requestJson = StringifyJson(info.Env(), info[0]);
+	} catch (...) {
+	}
+	if (info.Env().IsExceptionPending())
+		return info.Env().Undefined();
+	if (requestJson.empty()) {
+		Napi::TypeError::New(info.Env(), "AutoConfig.run expects a JSON-serializable request object").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	std::string startFailure;
+	std::string createdSessionId;
+	Napi::Object instance;
+	{
+		std::lock_guard<std::mutex> lock(lifecycleMutex);
+		if (!GetActiveSessionId().empty() || IsWorkerRunning()) {
+			Napi::Error::New(info.Env(), "An AutoConfig session is already active").ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
+		try {
+			auto response = CallServer("CreateAutoConfigSession", {ipc::value(requestJson)}, 2);
+			createdSessionId = response[1].value_str;
+			if (createdSessionId.empty())
+				throw std::runtime_error("CreateAutoConfigSession returned an empty sessionId");
+		} catch (const std::exception &error) {
+			Napi::Error::New(info.Env(), error.what()).ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+
+		RunInitialization initialization{createdSessionId, info[1].As<Napi::Function>()};
+		try {
+			instance = AutoConfigRun::New(info.Env(), initialization);
+			auto *run = AutoConfigRun::Unwrap(instance);
+			run->Activate(info.Env());
+			CallServer("StartAutoConfigSession", {ipc::value(createdSessionId)});
+			StartWorker();
+		} catch (const std::exception &error) {
+			startFailure = error.what();
+		} catch (...) {
+			startFailure = "Failed to start Auto Optimizer session";
+		}
+	}
+
+	if (info.Env().IsExceptionPending()) {
+		const auto error = info.Env().GetAndClearPendingException();
+		if (startFailure.empty())
+			startFailure = error.Message();
+	}
+	if (!startFailure.empty()) {
+		if (instance.IsEmpty()) {
+			std::lock_guard<std::mutex> lock(lifecycleMutex);
+			auto connection = Controller::GetInstance().GetConnection();
+			BestEffortServerCall(connection, "CancelAutoConfigSession", createdSessionId);
+			BestEffortServerCall(connection, "CloseAutoConfigSession", createdSessionId);
+			StopLocalSession(createdSessionId, CallbackShutdownMode::Release, true);
+			Napi::Error::New(info.Env(), startFailure).ThrowAsJavaScriptException();
+			return info.Env().Undefined();
+		}
+		AutoConfigRun::Unwrap(instance)->BeginFinish(info.Env(), true, startFailure);
+	}
+
+	return instance;
+}
+} // namespace
 
 void autoConfig::Shutdown()
 {
@@ -483,13 +653,10 @@ void autoConfig::Shutdown()
 		return;
 	}
 
-	// Prevent new poll cycles while the server performs awaitable cancellation.
-	// An already-running query may finish, so local joining remains mandatory.
 	workerStop.store(true);
-	auto conn = Controller::GetInstance().GetConnection();
-	BestEffortServerCall(conn, "CancelAutoConfigSession", sessionId);
-	BestEffortServerCall(conn, "CloseAutoConfigSession", sessionId);
-
+	auto connection = Controller::GetInstance().GetConnection();
+	BestEffortServerCall(connection, "CancelAutoConfigSession", sessionId);
+	BestEffortServerCall(connection, "CloseAutoConfigSession", sessionId);
 	StopWorker(CallbackShutdownMode::Abort);
 	SetActiveSessionId("");
 }
@@ -497,11 +664,8 @@ void autoConfig::Shutdown()
 void autoConfig::Init(Napi::Env env, Napi::Object exports)
 {
 	env.AddCleanupHook([]() { autoConfig::Shutdown(); });
-	exports.Set("GetAutoConfigCapabilities", Napi::Function::New(env, GetAutoConfigCapabilities));
-	exports.Set("CreateAutoConfigSession", Napi::Function::New(env, CreateAutoConfigSession));
-	exports.Set("StartAutoConfigSession", Napi::Function::New(env, StartAutoConfigSession));
-	exports.Set("ConfirmAutoConfigProbeIngest", Napi::Function::New(env, ConfirmAutoConfigProbeIngest));
-	exports.Set("GetAutoConfigResult", Napi::Function::New(env, GetAutoConfigResult));
-	exports.Set("CancelAutoConfigSession", Napi::Function::New(env, CancelAutoConfigSession));
-	exports.Set("CloseAutoConfigSession", Napi::Function::New(env, CloseAutoConfigSession));
+	AutoConfigRun::Init(env);
+	Napi::Object api = Napi::Object::New(env);
+	api.Set("run", Napi::Function::New(env, Run, "run"));
+	exports.Set("AutoConfig", api);
 }

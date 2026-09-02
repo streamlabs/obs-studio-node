@@ -228,7 +228,6 @@ struct ProbeRequest {
 	std::string probeId;
 	std::string kind;
 	std::string legId;
-	std::string serviceName;
 	std::string server;
 	std::string streamKey;
 	std::string provider;
@@ -430,12 +429,12 @@ static bool isOfficialYoutubeRtmpsServer(const std::string &server)
 
 static bool probeProviderContractIsValid(const ProbeRequest &probe)
 {
-	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && probe.serviceName == "Twitch" && isOfficialTwitchServer(probe.server) &&
+	return (probe.kind == "twitch-standard" && probe.provider == "twitch" && isOfficialTwitchServer(probe.server) &&
 		isBoundedTwitchKey(probe.streamKey)) ||
-	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.serviceName == "Twitch" && probe.server == "auto" &&
+	       (probe.kind == "twitch-enhanced-broadcasting" && probe.provider == "twitch" && probe.server == "auto" &&
 		isBoundedTwitchKey(probe.streamKey) && osn::HasExactlyOneTwitchBandwidthTestParameter(osn::NormalizeTwitchBandwidthTestKey(probe.streamKey))) ||
-	       (probe.kind == "youtube-unbound" && probe.provider == "youtube" && probe.serviceName == "YouTube - RTMPS" &&
-		isOfficialYoutubeRtmpsServer(probe.server) && isBoundedYoutubeKey(probe.streamKey));
+	       (probe.kind == "youtube-unbound" && probe.provider == "youtube" && isOfficialYoutubeRtmpsServer(probe.server) &&
+		isBoundedYoutubeKey(probe.streamKey));
 }
 
 static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
@@ -627,7 +626,6 @@ static bool parseCurrentSettings(obs_data_t *object, CurrentSettings &current)
 	current.fpsDen = (int)obs_data_get_int(object, "fpsDen");
 	current.bitrateKbps = (int)obs_data_get_int(object, "bitrateKbps");
 	current.encoderId = obs_data_get_string(object, "encoderId");
-	current.codec = obs_data_get_string(object, "codec");
 	current.preset = obs_data_get_string(object, "preset");
 	return current.width >= 64 && current.width <= 8192 && current.height >= 64 && current.height <= 8192 && current.fpsNum > 0 &&
 	       current.fpsNum <= 240000 && current.fpsDen > 0 && current.fpsDen <= 10000 && current.bitrateKbps >= 0 && current.bitrateKbps <= 100000;
@@ -802,8 +800,9 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		probe.probeId = obs_data_get_string(item, "probeId");
 		probe.kind = obs_data_get_string(item, "kind");
 		probe.legId = obs_data_get_string(item, "legId");
-		probe.serviceName = obs_data_get_string(item, "serviceName");
 		probe.server = obs_data_get_string(item, "server");
+		if (probe.kind == "twitch-enhanced-broadcasting")
+			probe.server = "auto";
 		probe.streamKey = obs_data_get_string(item, "streamKey");
 		obs_data_release(item);
 
@@ -931,6 +930,55 @@ static std::shared_ptr<Session> findSession(const std::string &id)
 	if (activeSession && activeSession->id == id)
 		return activeSession;
 	return nullptr;
+}
+
+static void putAdditionalVideoTuple(obs_data_t *parent, const char *key, const CurrentSettings &video);
+
+static std::string serializeEvent(const Session &session, const SessionEvent &event)
+{
+	obs_data_t *root = obs_data_create();
+	obs_data_set_int(root, "schemaVersion", kSchemaVersion);
+	obs_data_set_string(root, "sessionId", session.id.c_str());
+	obs_data_set_int(root, "sequence", (long long)event.sequence);
+	obs_data_set_string(root, "type", event.type.c_str());
+	obs_data_set_string(root, "phase", event.phase.c_str());
+	obs_data_set_double(root, "progress", event.progress);
+	if (!event.code.empty())
+		obs_data_set_string(root, "code", event.code.c_str());
+	if (!event.legId.empty())
+		obs_data_set_string(root, "legId", event.legId.c_str());
+	if (!event.measurementMode.empty())
+		obs_data_set_string(root, "measurementMode", event.measurementMode.c_str());
+	if (!event.probeId.empty())
+		obs_data_set_string(root, "probeId", event.probeId.c_str());
+	if (!event.provider.empty())
+		obs_data_set_string(root, "provider", event.provider.c_str());
+	if (event.targetBitrateKbps > 0)
+		obs_data_set_int(root, "targetBitrateKbps", event.targetBitrateKbps);
+	if (!event.encoderId.empty())
+		obs_data_set_string(root, "encoderId", event.encoderId.c_str());
+	if (!event.encoderFamily.empty())
+		obs_data_set_string(root, "encoderFamily", event.encoderFamily.c_str());
+	if (!event.encoderTitle.empty())
+		obs_data_set_string(root, "encoderTitle", event.encoderTitle.c_str());
+	if (event.width > 0)
+		obs_data_set_int(root, "width", event.width);
+	if (event.height > 0)
+		obs_data_set_int(root, "height", event.height);
+	if (event.fpsNum > 0)
+		obs_data_set_int(root, "fpsNum", event.fpsNum);
+	if (event.fpsDen > 0)
+		obs_data_set_int(root, "fpsDen", event.fpsDen);
+	if (event.selectedBitrateKbps > 0)
+		obs_data_set_int(root, "selectedBitrateKbps", event.selectedBitrateKbps);
+	if (event.availableBitrateKbps > 0)
+		obs_data_set_int(root, "availableBitrateKbps", event.availableBitrateKbps);
+	if (event.additionalVideo && event.additionalVideo->width > 0)
+		putAdditionalVideoTuple(root, "additionalVideo", *event.additionalVideo);
+
+	std::string json = obs_data_get_json(root);
+	obs_data_release(root);
+	return json;
 }
 
 static std::string resolveEncoderId(const std::string &id)
@@ -1104,6 +1152,18 @@ static bool capFps(CurrentSettings &value, int maxNum, int maxDen)
 	return true;
 }
 
+static void applyEncoderMetadata(CurrentSettings &value)
+{
+	const std::string internal = resolveEncoderId(value.encoderId);
+	if (internal.empty())
+		return;
+	value.encoderId = internal;
+	const char *codec = obs_get_encoder_codec(internal.c_str());
+	value.codec = codec ? codec : value.codec;
+	value.encoderFamily = osn::EncoderUtils::getPublicEncoderFamily(internal.c_str());
+	value.encoderTitle = osn::EncoderUtils::getPublicEncoderTitle(internal.c_str());
+}
+
 static void applyEncoderSelection(CurrentSettings &value, const EncoderSelection &selection)
 {
 	if (selection.id != value.encoderId) {
@@ -1112,18 +1172,11 @@ static void applyEncoderSelection(CurrentSettings &value, const EncoderSelection
 		// unavailable/failed encoder into its replacement; encoder defaults are
 		// safer than a syntactically valid preset for the wrong family.
 		value.preset.clear();
-		const std::string internal = resolveEncoderId(value.encoderId);
-		const char *codec = internal.empty() ? nullptr : obs_get_encoder_codec(internal.c_str());
-		value.codec = codec ? codec : "h264";
+		value.codec.clear();
 	}
-	if (value.codec.empty()) {
-		const std::string internal = resolveEncoderId(value.encoderId);
-		const char *codec = internal.empty() ? nullptr : obs_get_encoder_codec(internal.c_str());
-		value.codec = codec ? codec : "h264";
-	}
-	const std::string internal = resolveEncoderId(value.encoderId);
-	value.encoderFamily = osn::EncoderUtils::getPublicEncoderFamily(internal.c_str());
-	value.encoderTitle = osn::EncoderUtils::getPublicEncoderTitle(internal.c_str());
+	applyEncoderMetadata(value);
+	if (value.codec.empty())
+		value.codec = "h264";
 }
 
 static CurrentSettings baseRecommendation(const LegRequest &leg)
@@ -1144,12 +1197,7 @@ static CurrentSettings baseRecommendation(const LegRequest &leg)
 	// Encoder discovery and workload validation happen in the hardware phase.
 	// Preserve the current value here for provider-managed paths and as the
 	// fail-open recommendation when shared scratch infrastructure is unavailable.
-	const std::string currentEncoder = resolveEncoderId(value.encoderId);
-	if (!currentEncoder.empty()) {
-		value.encoderId = currentEncoder;
-		value.encoderFamily = osn::EncoderUtils::getPublicEncoderFamily(currentEncoder.c_str());
-		value.encoderTitle = osn::EncoderUtils::getPublicEncoderTitle(currentEncoder.c_str());
-	}
+	applyEncoderMetadata(value);
 	return value;
 }
 
@@ -4998,21 +5046,24 @@ static bool requestCancellation(const std::shared_ptr<Session> &session)
 		completeCancelled(session);
 		return true;
 	}
-	if (state != SessionState::Running)
-		return true;
-
-	session->cancelRequested.store(true);
-	session->probeConfirmationCondition.notify_all();
-	{
-		std::lock_guard<std::mutex> lock(session->probeMutex);
-		for (obs_output_t *output : session->activeProbeOutputs) {
-			if (output)
-				obs_output_force_stop(output);
+	if (state == SessionState::Running) {
+		session->cancelRequested.store(true);
+		session->probeConfirmationCondition.notify_all();
+		{
+			std::lock_guard<std::mutex> lock(session->probeMutex);
+			for (obs_output_t *output : session->activeProbeOutputs) {
+				if (output)
+					obs_output_force_stop(output);
+			}
 		}
 	}
 
+	// Terminal state is published immediately before the async worker returns.
+	// Close may therefore race the final event; always join that bounded tail
+	// before allowing the session to be removed.
 	if (session->worker.valid() && session->worker.wait_for(std::chrono::milliseconds(kCancelTimeoutMs)) != std::future_status::ready) {
-		pushEvent(session, "error", "cleanup", 100, "cleanup_timeout");
+		if (state == SessionState::Running)
+			pushEvent(session, "error", "cleanup", 100, "cleanup_timeout");
 		return false;
 	}
 	return true;
@@ -5029,7 +5080,6 @@ void Register(ipc::server &srv)
 {
 	auto collection = std::make_shared<ipc::collection>("AutoConfig");
 
-	collection->register_function(std::make_shared<ipc::function>("GetAutoConfigCapabilities", std::vector<ipc::type>{}, GetCapabilities));
 	collection->register_function(std::make_shared<ipc::function>("CreateAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CreateSession));
 	collection->register_function(std::make_shared<ipc::function>("StartAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, StartSession));
 	collection->register_function(std::make_shared<ipc::function>(
@@ -5040,14 +5090,6 @@ void Register(ipc::server &srv)
 	collection->register_function(std::make_shared<ipc::function>("CloseAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CloseSession));
 
 	srv.register_collection(collection);
-}
-
-void GetCapabilities(void *, const int64_t, const std::vector<ipc::value> &, std::vector<ipc::value> &rval)
-{
-	static const char *capabilities =
-		R"({"apiVersion":1,"resultSchemaVersion":1,"previewApplySplit":true,"awaitableCancel":true,"perUploadLegResults":true,"desktopOwnedApply":true,"multipleActiveProbes":true,"dualOutputActiveProbes":true,"enhancedBroadcastingDualOutputWorkload":true,"bandwidthModes":["twitch-standard-active","twitch-enhanced-broadcasting-active","youtube-unbound-active","estimate"]})";
-	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value(capabilities));
 }
 
 void CreateSession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
@@ -5172,32 +5214,7 @@ void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, st
 	if (session->events.empty())
 		return;
 
-	const SessionEvent &event = session->events.front();
-	rval.push_back(ipc::value((uint32_t)kSchemaVersion));
-	rval.push_back(ipc::value(session->id));
-	rval.push_back(ipc::value(event.sequence));
-	rval.push_back(ipc::value(event.type));
-	rval.push_back(ipc::value(event.phase));
-	rval.push_back(ipc::value(event.progress));
-	rval.push_back(ipc::value(event.code));
-	rval.push_back(ipc::value(event.legId));
-	rval.push_back(ipc::value(event.measurementMode));
-	rval.push_back(ipc::value(event.probeId));
-	rval.push_back(ipc::value(event.provider));
-	rval.push_back(ipc::value(event.targetBitrateKbps));
-	rval.push_back(ipc::value(event.encoderId));
-	rval.push_back(ipc::value(event.encoderFamily));
-	rval.push_back(ipc::value(event.encoderTitle));
-	rval.push_back(ipc::value(event.width));
-	rval.push_back(ipc::value(event.height));
-	rval.push_back(ipc::value(event.fpsNum));
-	rval.push_back(ipc::value(event.fpsDen));
-	rval.push_back(ipc::value(event.selectedBitrateKbps));
-	rval.push_back(ipc::value(event.availableBitrateKbps));
-	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->width) : 0U));
-	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->height) : 0U));
-	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->fpsNum) : 0U));
-	rval.push_back(ipc::value(event.additionalVideo ? (uint32_t)std::max(0, event.additionalVideo->fpsDen) : 0U));
+	rval.push_back(ipc::value(serializeEvent(*session, session->events.front())));
 	session->events.pop();
 }
 
