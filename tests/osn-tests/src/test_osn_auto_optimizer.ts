@@ -537,6 +537,7 @@ describe(testName, function() {
     });
 
     it('rejects malformed public requests before creating a session', function() {
+        const UINT32_MODULUS = 2 ** 32;
         const expectInvalid =
             (request: unknown,
                 error: string) => { expect(() => autoConfig.run(request as IAutoConfigRequest, () => undefined)).to.throw(error); };
@@ -555,7 +556,12 @@ describe(testName, function() {
 
         expectInvalid({
             streamSetup: 'direct-single',
-            outputs: [output({ limits: { maxWidth: 4294969216, maxHeight: 4294968376 } })],
+            outputs: [output({
+                limits: {
+                    maxWidth: UINT32_MODULUS + 1920,
+                    maxHeight: UINT32_MODULUS + 1080,
+                },
+            })],
         },
             'Invalid Auto Optimizer limits');
 
