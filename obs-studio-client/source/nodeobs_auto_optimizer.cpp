@@ -302,7 +302,8 @@ public:
 		return constructor.New({Napi::External<RunInitialization>::New(env, &initialization)});
 	}
 
-	explicit AutoOptimizerRun(const Napi::CallbackInfo &info) : Napi::ObjectWrap<AutoOptimizerRun>(info), resultDeferred(Napi::Promise::Deferred::New(info.Env()))
+	explicit AutoOptimizerRun(const Napi::CallbackInfo &info)
+		: Napi::ObjectWrap<AutoOptimizerRun>(info), resultDeferred(Napi::Promise::Deferred::New(info.Env()))
 	{
 		if (info.Length() != 1 || !info[0].IsExternal()) {
 			Napi::TypeError::New(info.Env(), "AutoOptimizerRun cannot be constructed directly").ThrowAsJavaScriptException();
@@ -511,7 +512,7 @@ private:
 
 		try {
 			CallServer("ConfirmAutoOptimizerProbeIngest", {ipc::value(sessionId), ipc::value(probeId),
-								    ipc::value(static_cast<uint32_t>(info[1].As<Napi::Boolean>().Value() ? 1 : 0))});
+								       ipc::value(static_cast<uint32_t>(info[1].As<Napi::Boolean>().Value() ? 1 : 0))});
 		} catch (const std::exception &error) {
 			Napi::Error::New(info.Env(), error.what()).ThrowAsJavaScriptException();
 		}
@@ -534,8 +535,8 @@ private:
 
 Napi::FunctionReference AutoOptimizerRun::constructor;
 
-FinishWorker::FinishWorker(AutoOptimizerRun *run, std::string sessionId, std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context, bool cancel,
-			   bool readResult, std::string preferredError)
+FinishWorker::FinishWorker(AutoOptimizerRun *run, std::string sessionId, std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context,
+			   bool cancel, bool readResult, std::string preferredError)
 	: Napi::AsyncWorker(run->Env()),
 	  run(run),
 	  sessionId(std::move(sessionId)),
