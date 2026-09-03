@@ -1530,6 +1530,11 @@ export interface IVideo {
       * Number of total encoded frames
       */
      readonly encodedFrames: number;
+
+     /**
+      * Server-side canvas id. Pass to APIs that reference video contexts by id.
+      */
+     readonly canvasId: number;
 }
 
 export interface IVideoFactory {
@@ -1781,7 +1786,7 @@ export interface IVideoEncoderFactory {
 }
 
 export interface IStreaming {
-    // Video encoder value is ignored only in the Enhanced Broadcasting mode, otherwise it should be set
+    /** Required for standard streaming. Twitch supplies the Enhanced Broadcasting encoding ladder. */
     videoEncoder?: IVideoEncoder,
     service: IService,
     enforceServiceBitrate: boolean,
@@ -1864,8 +1869,7 @@ export interface IAdvancedStreamingFactory {
 }
 
 export interface IEnhancedBroadcastingAdvancedStreaming extends IAdvancedStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
+    /** Optional vertical canvas for Enhanced Broadcasting Dual Output. Assign it before calling `start()`. */
     additionalVideo?: IVideo,
     displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
@@ -1877,8 +1881,7 @@ export interface IEnhancedBroadcastingAdvancedStreamingFactory {
 }
 
 export interface IEnhancedBroadcastingSimpleStreaming extends ISimpleStreaming {
-    // If set, the Enhanced Broadcasting stream will be in the Dual Output mode.
-    // This value should be initialized before the stream start.
+    /** Optional vertical canvas for Enhanced Broadcasting Dual Output. Assign it before calling `start()`. */
     additionalVideo?: IVideo,
     displayStats: IEnhancedBroadcastingPerDisplayStats,
 }
@@ -2033,6 +2036,412 @@ export interface IAudioTrackFactory {
     saveLegacySettings(): void;
 }
 
+// ---- Auto Optimizer API ----
+
+type AutoOptimizerStreamSetup =
+    'direct-single' |
+    'cloud-multistream' |
+    'custom-rtmp' |
+    'dual-output' |
+    'enhanced-broadcasting' |
+    'enhanced-broadcasting-dual-output' |
+    'stream-shift' |
+    'mixed';
+
+type AutoOptimizerDisplay = 'horizontal' | 'vertical' | 'both';
+type AutoOptimizerOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
+
+type AutoOptimizerPlatform =
+    'twitch' |
+    'youtube' |
+    'facebook' |
+    'kick' |
+    'tiktok' |
+    'custom' |
+    'other';
+
+type AutoOptimizerEstimateReason =
+    'non_twitch' |
+    'custom_rtmp' |
+    'cloud_multistream' |
+    'dual_output' |
+    'enhanced_broadcasting' |
+    'enhanced_broadcasting_dual_output' |
+    'stream_shift' |
+    'mixed_topology' |
+    'probe_disabled' |
+    'partial_provider_probes';
+
+interface IAutoOptimizerCurrentSettings {
+    /**
+     * Canvas ID from `IVideo.canvasId`; `0` is valid. Active Enhanced
+     * Broadcasting and two-output Dual Output require distinct IDs for
+     * registered canvases that remain alive for the entire run. Other stream
+     * setups may omit this field.
+     */
+    canvasId?: number;
+    width: number;
+    height: number;
+    /** Together these fields must describe a frame rate from 1 through 240 FPS. */
+    fpsNum: number;
+    fpsDen: number;
+    bitrateKbps: number;
+    encoderId: string;
+    preset?: string;
+}
+
+interface IAutoOptimizerAdditionalVideoRequest {
+    /**
+     * The parent `current` describes the horizontal canvas; this secondary
+     * video request describes the vertical canvas.
+     */
+    display: 'vertical';
+    current: IAutoOptimizerCurrentSettings;
+    limits?: IAutoOptimizerLimits;
+}
+
+interface IAutoOptimizerLimits {
+    /**
+     * Maximum video bitrate OSN may recommend for an output whose encoding
+     * settings are managed by Desktop. A provider probe may test above this
+     * value to verify stability or shared upload capacity, but the
+     * recommendation never exceeds it.
+     */
+    maxBitrateKbps?: number;
+    /**
+     * Maximum resolution OSN may test for this run without changing persistent
+     * video settings. Supply `maxWidth` and `maxHeight` together. OSN tests only
+     * the supported 1920x1080, 1280x720, and 960x540 tiers, or their portrait
+     * equivalents, up to this limit. It promotes only 16:9 or 9:16 output; a
+     * custom aspect ratio keeps its current resolution and frame rate. The
+     * caller remains responsible for applying a recommended Base Canvas resize
+     * safely.
+     */
+    maxWidth?: number;
+    maxHeight?: number;
+    /**
+     * Maximum frame rate OSN may test. Supply `maxFpsNum` to permit promotion
+     * above the current frame rate; `maxFpsDen` defaults to `1`. OSN tests at
+     * most 60 FPS, or 60000/1001 when `maxFpsDen` is `1001`. It returns a
+     * higher frame rate only after a successful active provider probe. When
+     * supplied, the numerator and denominator must describe a frame rate from
+     * 1 through 240 FPS.
+     */
+    maxFpsNum?: number;
+    maxFpsDen?: number;
+}
+
+interface IAutoOptimizerOutputRequest {
+    outputId: string;
+    display: AutoOptimizerDisplay;
+    /**
+     * Identifies who supplies the encoding settings. Use `standard` when
+     * Desktop selects the encoder and bitrate. Use
+     * `twitch-enhanced-broadcasting` when Twitch supplies the ladder. That
+     * Twitch-only output uses `display: 'horizontal'` for one canvas or
+     * `display: 'both'` for paired horizontal and vertical canvases. Each
+     * non-Twitch output remains `standard`.
+     */
+    outputKind: AutoOptimizerOutputKind;
+    destinations: AutoOptimizerPlatform[];
+    current: IAutoOptimizerCurrentSettings;
+    limits?: IAutoOptimizerLimits;
+    /**
+     * Optional vertical canvas carried on the same Twitch Enhanced
+     * Broadcasting upload as `current`. Valid only with `display: 'both'`. OSN
+     * permits active probing only for one Twitch destination, one Enhanced
+     * Broadcasting probe, and two distinct registered canvas IDs.
+     */
+    additionalVideo?: IAutoOptimizerAdditionalVideoRequest;
+    estimateReason?: AutoOptimizerEstimateReason;
+    /** Probes for this run, executed in array order. */
+    probes?: IAutoOptimizerProbeRequest[];
+}
+
+interface IAutoOptimizerTwitchProbeRequest {
+    id: string;
+    kind: 'twitch-standard';
+    /** Official Twitch ingest URL. OSN selects the Twitch service from `kind`. */
+    server: string;
+    streamKey: string;
+}
+
+/** Twitch Enhanced Broadcasting probe that tests the complete returned encoding ladder. */
+interface IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest {
+    id: string;
+    kind: 'twitch-enhanced-broadcasting';
+    /**
+     * Twitch stream key supplied by Desktop's trusted worker. OSN selects the
+     * Twitch service from `kind`, normalizes the bandwidth-test parameter,
+     * verifies the authentication returned by Twitch before starting output,
+     * and clears its temporary copy after configuring the probe.
+     */
+    streamKey: string;
+}
+
+/**
+ * Desktop's trusted worker must create a reusable YouTube `liveStream` with
+ * the required Auto Optimizer marker and leave it unbound to a
+ * `liveBroadcast`. Desktop must confirm ingest for that same resource. OSN
+ * validates the official RTMPS endpoint but cannot verify YouTube resource
+ * ownership or binding. Await the run's cleanup before deleting the
+ * `liveStream`.
+ */
+interface IAutoOptimizerYoutubeProbeRequest {
+    id: string;
+    kind: 'youtube-unbound';
+    /** Official YouTube RTMPS URL. OSN selects the YouTube service from `kind`. */
+    server: string;
+    streamKey: string;
+}
+
+type IAutoOptimizerProbeRequest =
+    | IAutoOptimizerTwitchProbeRequest
+    | IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest
+    | IAutoOptimizerYoutubeProbeRequest;
+
+/**
+ * Input for one Auto Optimizer run. OSN validates the stream setup, canvas IDs,
+ * provider probes, and limits before starting. It never changes persistent
+ * settings; the caller validates and applies any recommendation.
+ */
+export interface IAutoOptimizerRequest {
+    streamSetup: AutoOptimizerStreamSetup;
+    /**
+     * Outputs and provider probes for this run. OSN validates each probe
+     * independently. A shared cloud output may probe only some of its measurable
+     * destinations; successful partial coverage produces active evidence with
+     * low confidence instead of disabling all provider measurement.
+     *
+     * Active Dual Output requires one horizontal and one vertical output with
+     * distinct live canvas IDs. One output containing Twitch must have a
+     * `twitch-standard` probe, and the other output containing YouTube must have
+     * a `youtube-unbound` probe. Either output may include additional unprobed
+     * destinations. The probes run sequentially, and both must produce usable
+     * evidence before OSN promotes either output.
+     *
+     * `enhanced-broadcasting-dual-output` requires one Twitch Enhanced
+     * Broadcasting probe and one or two standard outputs. Each standard output
+     * must match the canvas ID, resolution, and frame rate of the corresponding
+     * Twitch canvas. A standard output may include one YouTube probe;
+     * unsupported destinations remain estimate-only, and custom RTMP is
+     * rejected. Standard probes finish before OSN tests the combined workload.
+     */
+    outputs: IAutoOptimizerOutputRequest[];
+}
+
+type AutoOptimizerEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
+type AutoOptimizerPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
+type AutoOptimizerMeasurementMode = 'active' | 'estimated';
+
+/** Vertical canvas settings tested together with the primary canvas. */
+interface IAutoOptimizerAdditionalVideoTuple {
+    display: 'vertical';
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+}
+
+/**
+ * Ordered progress notification delivered to `NodeObs.AutoOptimizer.run()`.
+ * `complete` and `cancelled` are terminal; the run handle then reads the result
+ * and releases the run's temporary OSN resources before settling its `result`
+ * promise.
+ */
+export interface IAutoOptimizerEvent {
+    type: AutoOptimizerEventType;
+    phase: AutoOptimizerPhase;
+    progress: number;
+    /**
+     * Machine-readable status or failure code. Important progress codes include:
+     *
+     * - `hardware_testing_encoder_surfaces`: OSN tests the requested resolution
+     *   through the selected texture encoder at the available render frame rate.
+     * - `hardware_validating_target_cadence`: OSN tests the exact requested
+     *   resolution and frame rate through the encoder's synthetic raw-input
+     *   counterpart.
+     * - `hardware_target_cadence_rejected`: only this resolution and frame-rate
+     *   candidate was rejected; OSN continues with lower candidates and keeps
+     *   the selected hardware encoder eligible.
+     * - `dual_output_testing_workload`: OSN starts one concurrent two-output
+     *   encoder sample.
+     * - `dual_output_allocating_upload`: both provider probes and the concurrent
+     *   encoder sample passed, so OSN divides the demonstrated shared upload
+     *   capacity equally.
+     * - `twitch_probe_confirming_capacity`: an initial Twitch sample was
+     *   underfilled without transport pressure, so OSN repeats it for longer on
+     *   the existing connection.
+     * - `enhanced_broadcasting_testing_concurrent_outputs`: OSN runs Twitch's
+     *   complete returned ladder and every standard companion encoder in one
+     *   five-second window. The video-only companion outputs test local encoding
+     *   and rendering capacity, not network bandwidth.
+     */
+    code?: string;
+    outputId?: string;
+    measurementMode?: AutoOptimizerMeasurementMode;
+    probe?: IAutoOptimizerEventProbe;
+    /** Applied video bitrate for the active probe substep; audio is additional. */
+    targetBitrateKbps?: number;
+    /** Concrete encoder currently being tested or selected. */
+    encoderId?: string;
+    /** Public family key matching getAvailableEncoders(). */
+    encoderFamily?: string;
+    /** User-facing encoder title from OSN's encoder catalog. */
+    encoderTitle?: string;
+    width?: number;
+    height?: number;
+    fpsNum?: number;
+    fpsDen?: number;
+    /** Vertical canvas settings tested together with the primary canvas settings. */
+    additionalVideo?: IAutoOptimizerAdditionalVideoTuple;
+    /** Video bitrate selected for the recommended resolution and frame rate. */
+    selectedBitrateKbps?: number;
+    /** Conservative video-bandwidth estimate used to choose the recommended resolution and frame rate. */
+    availableBitrateKbps?: number;
+}
+
+interface IAutoOptimizerMeasurementEvidence {
+    platform: 'twitch' | 'youtube';
+    method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
+    success: boolean;
+}
+
+interface IAutoOptimizerMeasurement {
+    mode: AutoOptimizerMeasurementMode;
+    confidence: 'high' | 'medium' | 'low';
+    reason?: string;
+    /** Provider measurements that contributed to the result. Detailed throughput and workload data remains internal to OSN. */
+    evidence?: IAutoOptimizerMeasurementEvidence[];
+}
+
+interface IAutoOptimizerVideoRecommendation {
+    display: 'horizontal' | 'vertical';
+    width: number;
+    height: number;
+    fpsNum: number;
+    fpsDen: number;
+}
+
+interface IAutoOptimizerEncodingRecommendation {
+    bitrateKbps: number;
+    encoderId: string;
+    encoderFamily: string;
+    encoderTitle: string;
+    codec: string;
+    preset?: string;
+}
+
+interface IAutoOptimizerOutputResult {
+    outputId: string;
+    /** One recommended canvas setting, or separate horizontal and vertical settings for a paired output. */
+    videos: IAutoOptimizerVideoRecommendation[];
+    /** Omitted for Twitch Enhanced Broadcasting because Twitch supplies its encoding ladder. */
+    encoding?: IAutoOptimizerEncodingRecommendation;
+    measurement: IAutoOptimizerMeasurement;
+}
+
+type AutoOptimizerFatalErrorCode =
+    | 'cancelled'
+    | 'hardware_no_usable_encoder'
+    | 'hardware_benchmark_overloaded'
+    | 'hardware_benchmark_timeout'
+    | 'hardware_benchmark_unavailable'
+    | 'auto_optimizer_worker_failed'
+    | 'auto_optimizer_worker_launch_failed';
+
+interface IAutoOptimizerError {
+    code: AutoOptimizerFatalErrorCode;
+}
+
+/**
+ * Final Auto Optimizer result. The `result` promise settles only after OSN
+ * stops every temporary output and closes the session. No progress callback
+ * runs after settlement, so the caller may then delete temporary provider
+ * resources.
+ */
+export interface IAutoOptimizerResult {
+    status: 'complete' | 'partial' | 'cancelled' | 'failed';
+    error?: IAutoOptimizerError;
+    outputs: IAutoOptimizerOutputResult[];
+}
+
+/** One running Auto Optimizer operation. */
+interface IAutoOptimizerRun {
+    /**
+     * Settles after OSN stops its temporary outputs and closes the session. No
+     * progress callback runs after settlement. It rejects on malformed server
+     * data, an IPC failure, or cleanup failure. To bound a server process that
+     * stops responding, enforce a caller-side deadline and call `cancel()`.
+     */
+    readonly result: Promise<IAutoOptimizerResult>;
+
+    /**
+     * Reports whether YouTube received data for the active probe.
+     * @throws {Error} If this run is already closed or the probe cannot
+     * accept the confirmation
+     */
+    confirmProbeIngest(probeId: string, received: boolean): void;
+
+    /**
+     * Requests cancellation and resolves after OSN closes the session. Repeated
+     * calls are safe after successful cleanup and retry cleanup if the preceding
+     * attempt failed.
+     * @throws {Error} If OSN cannot complete session cleanup
+     */
+    cancel(): Promise<void>;
+}
+
+type AutoOptimizerProbeKind =
+    | 'twitch-standard'
+    | 'twitch-enhanced-broadcasting'
+    | 'youtube-unbound';
+
+interface IAutoOptimizerEventProbe {
+    id: string;
+    kind: AutoOptimizerProbeKind;
+}
+
+/** Auto Optimizer API that manages each run through cleanup. */
+interface IAutoOptimizer {
+    /**
+     * Creates and immediately starts one optimizer run. The progress callback
+     * is registered before work starts. Credentials are used only to configure
+     * probes and are not stored on the returned handle.
+     *
+     * @param request - Input used only for this run
+     * @param onProgress - Receives validated, ordered progress events
+     * @returns A cancellable run whose result settles after session cleanup
+     * @throws {TypeError} If the request or callback has the wrong type
+     * @throws {Error} If request validation or session creation fails
+     *
+     * A server start failure is reported through `result`, rather than thrown,
+     * so the returned handle can still complete cleanup before the caller
+     * releases temporary provider resources. `cancel()` remains retryable if
+     * that initial cleanup attempt fails.
+     */
+    run(request: IAutoOptimizerRequest, onProgress: (event: IAutoOptimizerEvent) => void): IAutoOptimizerRun;
+}
+
+/**
+ * Typed Auto Optimizer surface on the add-on's otherwise dynamic export.
+ */
+interface INodeObs {
+    [key: string]: any;
+
+    /** Starts and manages Auto Optimizer runs. */
+    readonly AutoOptimizer: IAutoOptimizer;
+
+    /**
+     * Initializes the global OBS runtime.
+     * @param options - Required runtime initialization options
+     * @returns The OBS video initialization result code
+     * @throws {TypeError} If exactly one options object is not provided, or if a required option is not a string
+     * @throws {Error} If the IPC call fails or OSN returns an error response without an initialization result
+     */
+    OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+}
+
 export const enum VCamOutputType {
 	Invalid,
 	SceneOutput,
@@ -2054,17 +2463,4 @@ else if (fs.existsSync(path.resolve(__dirname, `obs64.exe`).replace('app.asar', 
 else {
     obs.IPC.setServerPath(path.resolve(__dirname, `obs32.exe`).replace('app.asar', 'app.asar.unpacked'), path.resolve(__dirname).replace('app.asar', 'app.asar.unpacked'));
 }
-export interface INodeObs {
-    [key: string]: any;
-
-    /**
-     * Initializes the global OBS runtime.
-     * @param options - Required runtime initialization options
-     * @returns The OBS video initialization result code
-     * @throws {TypeError} If exactly one options object is not provided, or if a required option is not a string
-     * @throws {Error} If the IPC call fails or OSN returns an error response without an initialization result
-     */
-    OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
-}
-
 export const NodeObs: INodeObs = obs;

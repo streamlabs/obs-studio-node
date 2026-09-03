@@ -434,7 +434,6 @@ Napi::Value osn::Streaming::GetKBitsPerSec(const Napi::CallbackInfo &info)
 
 	return Napi::Number::New(info.Env(), response[1].value_union.fp64);
 }
-
 Napi::Value osn::Streaming::GetDataOutput(const Napi::CallbackInfo &info)
 {
 	auto conn = GetConnection(info);

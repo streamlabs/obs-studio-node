@@ -21,10 +21,28 @@
 #include <obs.h>
 #include "osn-error.hpp"
 #include "shared.hpp"
+#include "osn-streaming.hpp"
+#include "nodeobs_auto_optimizer.h"
 
 // DELETE ME WHEN REMOVING NODEOBS
 #include "nodeobs_configManager.hpp"
 #include "nodeobs_api.h"
+
+namespace {
+// Stop connecting streaming outputs before changing or removing a canvas.
+// Calling obs_set_video_info() or obs_remove_video_info() while an output is
+// connecting can race with libobs video-pointer access.
+void stopConnectingStreamingOutputs()
+{
+	osn::IStreaming::Manager::GetInstance().for_each([](osn::Streaming *streaming) {
+		if (!streaming)
+			return;
+		obs_output_t *output = streaming->GetOutput();
+		if (output && obs_output_connecting(output))
+			obs_output_force_stop(output);
+	});
+}
+} // namespace
 
 void osn::Video::Register(ipc::server &srv)
 {
@@ -339,10 +357,16 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 	video.gpu_conversion = true;
 	video.fps_type = args[10].value_union.ui32;
 
+	// Updating a canvas has the same libobs restriction as removing it. Cancel
+	// active Auto Optimizer work and release its temporary outputs first.
+	if (!autoOptimizer::CancelActiveSession()) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before updating the video context.");
+	}
+
 	int ret = OBS_VIDEO_FAIL;
 	try {
-		// Cannot disrupt video ptr inside obs while outputs are connecting
-		OBS_service::stopConnectingOutputs();
+		// Cannot disrupt video ptr inside obs while outputs are connecting.
+		stopConnectingStreamingOutputs();
 		ret = obs_set_video_info(canvas, &video);
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Failed to set video context %s", error);
@@ -399,14 +423,18 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
 	}
 
+	// OBS cannot remove a video context while Auto Optimizer's temporary outputs,
+	// encoders, or video resources are active. Cancel the run and wait for cleanup
+	// before removing the canvas.
+	if (!autoOptimizer::CancelActiveSession()) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before removing the video context.");
+	}
+
 	int ret = OBS_VIDEO_FAIL;
 	try {
-
-		// Cannot disrupt video ptr inside obs while outputs are connecting
-		OBS_service::stopConnectingOutputs();
-
+		// Cannot disrupt video ptr inside obs while outputs are connecting.
+		stopConnectingStreamingOutputs();
 		ret = obs_remove_video_info(canvas);
-
 	} catch (const char *error) {
 		blog(LOG_ERROR, "Error occurred while removing video %s", error);
 	}

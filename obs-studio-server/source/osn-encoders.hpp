@@ -110,6 +110,11 @@ std::string getInternalEncoderFromSimple(const char *encoder);
 std::string getSimpleEncoderFromInternal(const char *encoder);
 std::string getEncoderFamily(const char *encoder);
 std::string getEncoderPreset(const char *encoder);
+// Metadata matching the public getAvailableEncoders() contract. These helpers
+// deliberately return the concrete encoder option's public values rather than
+// backend-only family constants such as FAMILY_QSV.
+std::string getPublicEncoderFamily(const char *encoder);
+std::string getPublicEncoderTitle(const char *encoder);
 bool isOldJimNvencEncoder(const std::string &encoderId);
 void convertOldJimNvencEncoder(config_t *config, const std::string &configSection, const std::string &streamEncoderSetting,
 			       const std::string &recordingEncoderSetting);

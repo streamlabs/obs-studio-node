@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_settings.h"
+#include "nodeobs_auto_optimizer.h"
 #include "osn-error.hpp"
 #include "nodeobs_api.h"
 #include "shared.hpp"
@@ -3668,12 +3669,28 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 	} else if (nameCategory.compare("Video") == 0) {
 		saveVideoSettings(settings);
 	} else if (nameCategory.compare("Advanced") == 0) {
+		const bool canResetVideo = !OBS_service::isStreamingOutputActive(StreamServiceId::Main) &&
+					   !OBS_service::isStreamingOutputActive(StreamServiceId::Second);
+		if (canResetVideo) {
+			// Advanced color settings reset the process-wide video context. Do
+			// not persist settings that cannot be applied because Auto Optimizer
+			// still has temporary OBS outputs and encoders active.
+			if (!autoOptimizer::CancelActiveSession()) {
+				blog(LOG_ERROR, "Timed out while stopping Auto Optimizer before applying advanced video settings.");
+				return false;
+			}
+		}
+
 		saveAdvancedSettings(settings);
 
-		if (!OBS_service::isStreamingOutputActive(StreamServiceId::Main) && !OBS_service::isStreamingOutputActive(StreamServiceId::Second)) {
+		if (canResetVideo) {
 			struct obs_video_info ovi = {0};
 			obs_get_video_info(&ovi);
-			obs_reset_video(&ovi);
+			const int resetResult = obs_reset_video(&ovi);
+			if (resetResult != OBS_VIDEO_SUCCESS) {
+				blog(LOG_ERROR, "Failed to reset video while applying advanced settings: %d", resetResult);
+				return false;
+			}
 
 			const float sdr_white_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "SdrWhiteLevel");
 			const float hdr_nominal_peak_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "HdrNominalPeakLevel");

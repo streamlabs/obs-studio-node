@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "controller.hpp"
+#include "nodeobs_auto_optimizer.hpp"
 #include <codecvt>
 #include <fstream>
 #include <sstream>
@@ -380,6 +381,10 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 
 void Controller::disconnect()
 {
+	// Stop Auto Optimizer polling and release its callback before disconnecting
+	// IPC so an active run cannot retain the renderer environment or add-on.
+	autoOptimizer::Shutdown();
+
 	if (m_isServer) {
 		m_connection->call_synchronous_helper("System", "Shutdown", {});
 		m_isServer = false;

@@ -162,7 +162,6 @@ public:
 	static void saveService(void);
 	static void saveService(obs_service_t *service, StreamServiceId serviceId);
 	static void updateService(StreamServiceId serviceId);
-	static const char *getStreamOutputType(const obs_service_t *service);
 
 	// Encoders
 	static bool createAudioEncoder(obs_encoder_t **audioEncoder, std::string &id, const std::string &requested_id, int bitrate, const char *name,

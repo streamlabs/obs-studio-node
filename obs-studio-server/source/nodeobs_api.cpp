@@ -25,10 +25,11 @@
 #include "osn-filter.hpp"
 #include "osn-volmeter.hpp"
 #include "osn-fader.hpp"
-#include "nodeobs_autoconfig.h"
+#include "nodeobs_auto_optimizer.h"
 #include "util/lexer.h"
 #include "util-crashmanager.h"
 #include "util-metricsprovider.h"
+#include "nodeobs_service.h"
 
 #include "osn-streaming.hpp"
 #include "osn-recording.hpp"
@@ -1023,6 +1024,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	copyModuleLoadFailures(mfi);
 	obs_log_loaded_modules();
 	obs_post_load_modules();
+	autoOptimizer::RegisterOutputTypes();
 
 	if (!moduleLoadFailures.empty()) {
 		for (const ModuleLoadFailure &failure : moduleLoadFailures) {
@@ -1664,7 +1666,7 @@ void OBS_API::destroyOBS_API(void)
 #endif
 	OBS_content::OBS_content_shutdownDisplays();
 
-	autoConfig::WaitPendingTests();
+	autoOptimizer::Shutdown();
 
 	OBS_service::stopAllOutputs();
 	OBS_service::waitReleaseWorker();

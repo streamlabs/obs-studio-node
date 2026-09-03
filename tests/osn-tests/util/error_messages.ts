@@ -12,22 +12,6 @@ export const enum ETestErrorMsg {
     CoreAudioInputHotkeys = 'Core Audio Input hotkey container is wrong',
     CoreAudioOutputHotkeys = 'Core Audio Output hotkey container is wrong',
 
-    // nodeobs_autoconfig
-    BandwidthTest = 'Bandwidth test',
-    StreamEncoderTest = 'Stream encoder test',
-    RecordingEncoderTest = 'Recording encoder test',
-    CheckSettings = 'Check settings',
-    SaveStreamSettings = 'Save stream settings',
-    SaveSettingsStep = 'Save settings',
-    SetDefaultSettings = 'Set default settings',
-    DefaultOutputMode = 'Applied default settings does not have the expected value for output mode',
-    DefaultVBitrate = 'Applied default settings does not have the expected value for vbitrate',
-    DefaultStreamEncoder = 'Applied default settings does not have the expected value for stream encoder',
-    DefaultRecQuality = 'Applied default settings does not have the expected value for rec quality',
-    DefaultDinamicBitrate = 'Applied default settings does not have the expected value for dinamic bitrate',
-    DefaultVideoOutput = 'Applied default settings does not have the expected value for video output',
-    DefaultFPSType = 'Applied default settings does not have the expected value for fps type',
-    DefaultFPSCommon = 'Applied default settings does not have the expected value for fps common',
     // nodeobs_service
     StreamOutput = 'Stream output',
     RecordingOutput = 'Recording output',

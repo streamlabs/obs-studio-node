@@ -22,12 +22,12 @@
 #include <ipc-server.hpp>
 #include <util/dstr.h>
 #include "utility.hpp"
+#include "osn-streaming-helpers.hpp"
 
 static bool codecListContains(const char **codecs, const char *codec);
-static const char *getStreamOutputType(const obs_service_t *service);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
-static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
+static std::string makePublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
 static std::string getPublicEncoderPreset(const osn::EncoderUtils::EncoderSettings &opt, const std::string &encoderName, bool simpleMode);
 static void convert_nvenc_h264_presets(obs_data_t *data);
 static void convert_nvenc_hevc_presets(obs_data_t *data);
@@ -115,7 +115,7 @@ bool osn::EncoderUtils::isCodecAvailableForService(const char *encoder, obs_serv
 		return codecListContains(supportedCodecs, encoderCodec);
 
 	// Custom services do not expose codec lists, so mirror OBS and fall back to the output type.
-	auto outputType = getStreamOutputType(service);
+	auto outputType = osn::streaming_helpers::getStreamOutputType(service);
 	if (!outputType)
 		return false;
 
@@ -142,45 +142,6 @@ static bool codecListContains(const char **codecs, const char *codec)
 	}
 
 	return false;
-}
-
-// Resolves the OBS output type used by a streaming service.
-// Returns a non-owned output type ID, such as "rtmp_output", or nullptr if no compatible output is registered.
-static const char *getStreamOutputType(const obs_service_t *service)
-{
-	const char *protocol = obs_service_get_protocol(service);
-
-	if (!protocol)
-		return nullptr;
-
-	if (!obs_is_output_protocol_registered(protocol))
-		return nullptr;
-
-	const char *output = obs_service_get_preferred_output_type(service);
-	if (output && (obs_get_output_flags(output) & OBS_OUTPUT_SERVICE) != 0)
-		return output;
-
-	auto canUseOutput = [](const char *prot, const char *output, const char *prot_test1, const char *prot_test2 = nullptr) {
-		return (strcmp(prot, prot_test1) == 0 || (prot_test2 && strcmp(prot, prot_test2) == 0)) &&
-		       (obs_get_output_flags(output) & OBS_OUTPUT_SERVICE) != 0;
-	};
-
-	if (canUseOutput(protocol, "rtmp_output", "RTMP", "RTMPS")) {
-		return "rtmp_output";
-	} else if (canUseOutput(protocol, "ffmpeg_hls_muxer", "HLS")) {
-		return "ffmpeg_hls_muxer";
-	} else if (canUseOutput(protocol, "ffmpeg_mpegts_muxer", "SRT", "RIST")) {
-		return "ffmpeg_mpegts_muxer";
-	}
-
-	auto returnFirstOutputId = [](void *data, const char *id) {
-		const char **output = (const char **)data;
-
-		*output = id;
-		return false;
-	};
-	obs_enum_output_types_with_protocol(protocol, &output, returnFirstOutputId);
-	return output;
 }
 
 bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service_t *service, bool simpleMode, bool recording, const std::string &container,
@@ -269,7 +230,7 @@ bool osn::EncoderUtils::isEncoderCompatibleRecording(const char *encoderToFind, 
 	return validEncoder;
 }
 
-static std::string getPublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName)
+static std::string makePublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName)
 {
 	if (opt.family == FAMILY_OBS)
 		return "x264";
@@ -329,7 +290,7 @@ void osn::EncoderUtils::getAvailableEncoders(std::vector<ipc::value> &rval, obs_
 			rval.push_back(ipc::value(title));
 			rval.push_back(ipc::value(name));
 			rval.push_back(ipc::value(encoderName));
-			rval.push_back(ipc::value(getPublicEncoderFamily(opt, name, encoderName)));
+			rval.push_back(ipc::value(makePublicEncoderFamily(opt, name, encoderName)));
 			rval.push_back(ipc::value(getPublicEncoderPreset(opt, encoderName, simpleMode)));
 			rval.push_back(ipc::value(codec ? codec : ""));
 			rval.push_back(ipc::value(static_cast<uint32_t>(opt.streaming)));
@@ -433,6 +394,40 @@ std::string osn::EncoderUtils::getEncoderFamily(const char *encoder)
 		blog(LOG_WARNING, "GetEncoderFamily - encoder %s is not found.", encoder);
 
 	return family;
+}
+
+std::string osn::EncoderUtils::getPublicEncoderFamily(const char *encoder)
+{
+	if (!encoder)
+		return {};
+
+	for (const auto &option : videoEncoderOptions) {
+		const std::string concrete = option.advanced_name.empty() ? option.simple_name : option.advanced_name;
+		if (concrete == encoder || option.simple_name == encoder || option.simple_internal_name == encoder)
+			return makePublicEncoderFamily(option, option.advanced_name.empty() ? option.simple_name : option.advanced_name, encoder);
+	}
+	return {};
+}
+
+std::string osn::EncoderUtils::getPublicEncoderTitle(const char *encoder)
+{
+	if (!encoder)
+		return {};
+
+	// Prefer the exact concrete catalog row. Some modern encoders also appear
+	// as another row's Simple-mode internal implementation (notably texture
+	// NVENC), whose title describes the alias rather than the selected ID.
+	for (const auto &option : videoEncoderOptions) {
+		const std::string concrete = option.advanced_name.empty() ? option.simple_name : option.advanced_name;
+		if (concrete == encoder)
+			return option.advanced_title.empty() ? option.simple_title : option.advanced_title;
+	}
+
+	for (const auto &option : videoEncoderOptions) {
+		if (option.simple_name == encoder || option.simple_internal_name == encoder)
+			return option.advanced_title.empty() ? option.simple_title : option.advanced_title;
+	}
+	return {};
 }
 
 bool osn::EncoderUtils::isOldJimNvencEncoder(const std::string &encoderId)

@@ -41,7 +41,9 @@ public:
 	bool useAdvanced;
 	std::string customEncSettings;
 
-	void UpdateEncoders();
+	void updateEncoders();
+	void start();
+	void checkOutput();
 };
 
 class ISimpleStreaming : public IStreaming {

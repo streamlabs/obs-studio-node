@@ -45,6 +45,8 @@ SET(OSN_CLIENT_CORE_SOURCES
     "source/polling-pacer.hpp"
     "source/best-effort-gate.cpp"
     "source/best-effort-gate.hpp"
+    "source/auto-optimizer-client-contract.cpp"
+    "source/auto-optimizer-client-contract.hpp"
 )
 
 SET(osn-client_SOURCES
@@ -89,8 +91,8 @@ SET(osn-client_SOURCES
     "source/nodeobs_display.hpp"
     "source/nodeobs_settings.cpp"
     "source/nodeobs_settings.hpp"
-    "source/nodeobs_autoconfig.cpp"
-    "source/nodeobs_autoconfig.hpp"
+    "source/nodeobs_auto_optimizer.cpp"
+    "source/nodeobs_auto_optimizer.hpp"
     "source/main.cpp"
     "source/volmeter.cpp"
     "source/volmeter.hpp"
@@ -180,6 +182,10 @@ if(BUILD_TESTING)
         "tests/polling-pacer-test.cpp"
         "tests/best-effort-gate-test.cpp"
         "tests/polling-pacer-best-effort-gate-test.cpp"
+        "tests/auto-optimizer-probe-policy-test.cpp"
+        "tests/auto-optimizer-quality-policy-test.cpp"
+        "tests/auto-optimizer-enhanced-broadcasting-policy-test.cpp"
+        "tests/auto-optimizer-client-contract-test.cpp"
         ${OSN_CLIENT_CORE_SOURCES}
     )
 
@@ -187,6 +193,8 @@ if(BUILD_TESTING)
         obs_studio_client_unit_tests
         PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/source"
+            "${CMAKE_SOURCE_DIR}/source"
+            "${nlohmannjson_SOURCE_DIR}/single_include"
     )
 
     target_link_libraries(

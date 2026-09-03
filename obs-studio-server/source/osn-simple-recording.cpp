@@ -324,7 +324,7 @@ void osn::SimpleRecording::UpdateEncoders()
 	case RecQuality::Stream: {
 		if (!streaming)
 			return;
-		streaming->UpdateEncoders();
+		streaming->updateEncoders();
 		videoEncoder = streaming->videoEncoder;
 		audioEncoder = streaming->audioEncoder;
 		if (obs_get_multiple_rendering()) {

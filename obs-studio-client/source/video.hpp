@@ -25,11 +25,6 @@ class Video : public Napi::ObjectWrap<osn::Video> {
 public:
 	uint64_t canvasId = 0;
 
-private:
-	std::vector<ipc::value> lastVideo;
-	bool isLastVideoValid = false;
-
-public:
 	static Napi::FunctionReference constructor;
 	static Napi::Object Init(Napi::Env env, Napi::Object exports);
 	Video(const Napi::CallbackInfo &info);
@@ -45,5 +40,9 @@ public:
 
 	Napi::Value GetLegacySettings(const Napi::CallbackInfo &info);
 	void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
+
+	// Read-only ID used by OSN APIs that reference a registered video canvas,
+	// including AutoOptimizer. It matches the key stored by osn::Video::Manager.
+	Napi::Value GetCanvasId(const Napi::CallbackInfo &info);
 };
 }

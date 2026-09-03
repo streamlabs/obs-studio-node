@@ -24,6 +24,7 @@
 #include "nodeobs_audio_encoders.h"
 #include "osn-audio-track.hpp"
 #include "osn-encoders.hpp"
+#include "osn-streaming-helpers.hpp"
 
 void osn::IAdvancedStreaming::Register(ipc::server &srv)
 {
@@ -419,7 +420,7 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	streaming->UpdateEncoders();
 
-	const char *type = OBS_service::getStreamOutputType(streaming->service);
+	const char *type = osn::streaming_helpers::getStreamOutputType(streaming->service);
 	if (!type)
 		type = "rtmp_output";
 

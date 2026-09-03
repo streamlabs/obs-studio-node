@@ -380,8 +380,8 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/nodeobs_api.h"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_audio_encoders.cpp"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_audio_encoders.h"
-    "${PROJECT_SOURCE_DIR}/source/nodeobs_autoconfig.cpp"
-    "${PROJECT_SOURCE_DIR}/source/nodeobs_autoconfig.h"
+    "${PROJECT_SOURCE_DIR}/source/nodeobs_auto_optimizer.cpp"
+    "${PROJECT_SOURCE_DIR}/source/nodeobs_auto_optimizer.h"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_configManager.cpp"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_configManager.hpp"
     "${PROJECT_SOURCE_DIR}/source/nodeobs_display.cpp"
@@ -626,7 +626,9 @@ if(BUILD_TESTING)
         obs_studio_server_unit_tests
         "tests/test-osn-source.cpp"
         "tests/test-osn-file-output.cpp"
+        "tests/test-osn-multitrack-video-output.cpp"
         "tests/test-osn-scene-relative-coordinates.cpp"
+        "tests/test-osn-video-mix-lifecycle.cpp"
         "tests/obs-setup.cpp"
         "tests/obs-setup.hpp"
     )

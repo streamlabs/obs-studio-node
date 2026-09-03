@@ -34,13 +34,6 @@ export interface IOBSOutputSignalInfo {
     service: string;
 }
 
-export interface IConfigProgress {
-    event: TConfigEvent;
-    description: string;
-    percentage?: number;
-    continent?: string;
-}
-
 export interface IVec2 {
     x: number;
     y: number;
@@ -66,8 +59,6 @@ export type TOBSHotkey = {
     HotkeyId: number;
 };
 
-export type TConfigEvent = 'starting_step' | 'progress' | 'stopping_step' | 'error' | 'done';
-
 // OBSHandler class
 export class OBSHandler {
     private path = require('path');
@@ -86,7 +77,6 @@ export class OBSHandler {
     private hasUserFromPool: boolean = false;
     private osnTestName: string;
     signals = new WaitQueue();
-    private progress = new WaitQueue();
     inputTypes: string[];
     filterTypes: string[];
     transitionTypes: string[];
@@ -483,28 +473,6 @@ export class OBSHandler {
         }
 
         throw new Error(timeoutMessage);
-    }
-
-    startAutoconfig() {
-        osn.NodeObs.InitializeAutoConfig((progressInfo: IConfigProgress) => {
-            if (progressInfo.event === 'stopping_step' || progressInfo.event === 'done' || progressInfo.event === 'error') {
-                this.progress.push(progressInfo);
-            }
-        },
-            {
-                service_name: 'Twitch',
-            });
-    }
-
-    getNextProgressInfo(autoconfigStep: string): Promise<IConfigProgress> {
-        return new Promise((resolve, reject) => {
-            this.progress.shift().then(
-                function (progressInfo) {
-                    resolve(progressInfo)
-                }
-            );
-            setTimeout(() => reject(new Error(autoconfigStep + ' step timeout')), 50000);
-        });
     }
 
     createDefaultVideoContext() {
