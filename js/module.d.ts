@@ -1004,12 +1004,12 @@ export interface IAudioTrackFactory {
     importLegacySettings(): void;
     saveLegacySettings(): void;
 }
-type AutoConfigStreamSetup = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
-type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
-type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
-type AutoConfigPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
-type AutoConfigEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'enhanced_broadcasting_dual_output' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
-interface IAutoConfigCurrentSettings {
+type AutoOptimizerStreamSetup = 'direct-single' | 'cloud-multistream' | 'custom-rtmp' | 'dual-output' | 'enhanced-broadcasting' | 'enhanced-broadcasting-dual-output' | 'stream-shift' | 'mixed';
+type AutoOptimizerDisplay = 'horizontal' | 'vertical' | 'both';
+type AutoOptimizerOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
+type AutoOptimizerPlatform = 'twitch' | 'youtube' | 'facebook' | 'kick' | 'tiktok' | 'custom' | 'other';
+type AutoOptimizerEstimateReason = 'non_twitch' | 'custom_rtmp' | 'cloud_multistream' | 'dual_output' | 'enhanced_broadcasting' | 'enhanced_broadcasting_dual_output' | 'stream_shift' | 'mixed_topology' | 'probe_disabled' | 'partial_provider_probes';
+interface IAutoOptimizerCurrentSettings {
     canvasId?: number;
     width: number;
     height: number;
@@ -1019,69 +1019,69 @@ interface IAutoConfigCurrentSettings {
     encoderId: string;
     preset?: string;
 }
-interface IAutoConfigAdditionalVideoRequest {
+interface IAutoOptimizerAdditionalVideoRequest {
     display: 'vertical';
-    current: IAutoConfigCurrentSettings;
-    limits?: IAutoConfigLimits;
+    current: IAutoOptimizerCurrentSettings;
+    limits?: IAutoOptimizerLimits;
 }
-interface IAutoConfigLimits {
+interface IAutoOptimizerLimits {
     maxBitrateKbps?: number;
     maxWidth?: number;
     maxHeight?: number;
     maxFpsNum?: number;
     maxFpsDen?: number;
 }
-interface IAutoConfigOutputRequest {
+interface IAutoOptimizerOutputRequest {
     outputId: string;
-    display: AutoConfigDisplay;
-    outputKind: AutoConfigOutputKind;
-    destinations: AutoConfigPlatform[];
-    current: IAutoConfigCurrentSettings;
-    limits?: IAutoConfigLimits;
-    additionalVideo?: IAutoConfigAdditionalVideoRequest;
-    estimateReason?: AutoConfigEstimateReason;
-    probes?: IAutoConfigProbeRequest[];
+    display: AutoOptimizerDisplay;
+    outputKind: AutoOptimizerOutputKind;
+    destinations: AutoOptimizerPlatform[];
+    current: IAutoOptimizerCurrentSettings;
+    limits?: IAutoOptimizerLimits;
+    additionalVideo?: IAutoOptimizerAdditionalVideoRequest;
+    estimateReason?: AutoOptimizerEstimateReason;
+    probes?: IAutoOptimizerProbeRequest[];
 }
-interface IAutoConfigTwitchProbeRequest {
+interface IAutoOptimizerTwitchProbeRequest {
     id: string;
     kind: 'twitch-standard';
     server: string;
     streamKey: string;
 }
-interface IAutoConfigTwitchEnhancedBroadcastingProbeRequest {
+interface IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest {
     id: string;
     kind: 'twitch-enhanced-broadcasting';
     streamKey: string;
 }
-interface IAutoConfigYoutubeProbeRequest {
+interface IAutoOptimizerYoutubeProbeRequest {
     id: string;
     kind: 'youtube-unbound';
     server: string;
     streamKey: string;
 }
-type IAutoConfigProbeRequest = IAutoConfigTwitchProbeRequest | IAutoConfigTwitchEnhancedBroadcastingProbeRequest | IAutoConfigYoutubeProbeRequest;
-export interface IAutoConfigRequest {
-    streamSetup: AutoConfigStreamSetup;
-    outputs: IAutoConfigOutputRequest[];
+type IAutoOptimizerProbeRequest = IAutoOptimizerTwitchProbeRequest | IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest | IAutoOptimizerYoutubeProbeRequest;
+export interface IAutoOptimizerRequest {
+    streamSetup: AutoOptimizerStreamSetup;
+    outputs: IAutoOptimizerOutputRequest[];
 }
-type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
-type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
-type AutoConfigMeasurementMode = 'active' | 'estimated';
-interface IAutoConfigAdditionalVideoTuple {
+type AutoOptimizerEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
+type AutoOptimizerPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
+type AutoOptimizerMeasurementMode = 'active' | 'estimated';
+interface IAutoOptimizerAdditionalVideoTuple {
     display: 'vertical';
     width: number;
     height: number;
     fpsNum: number;
     fpsDen: number;
 }
-export interface IAutoConfigEvent {
-    type: AutoConfigEventType;
-    phase: AutoConfigPhase;
+export interface IAutoOptimizerEvent {
+    type: AutoOptimizerEventType;
+    phase: AutoOptimizerPhase;
     progress: number;
     code?: string;
     outputId?: string;
-    measurementMode?: AutoConfigMeasurementMode;
-    probe?: IAutoConfigEventProbe;
+    measurementMode?: AutoOptimizerMeasurementMode;
+    probe?: IAutoOptimizerEventProbe;
     targetBitrateKbps?: number;
     encoderId?: string;
     encoderFamily?: string;
@@ -1090,29 +1090,29 @@ export interface IAutoConfigEvent {
     height?: number;
     fpsNum?: number;
     fpsDen?: number;
-    additionalVideo?: IAutoConfigAdditionalVideoTuple;
+    additionalVideo?: IAutoOptimizerAdditionalVideoTuple;
     selectedBitrateKbps?: number;
     availableBitrateKbps?: number;
 }
-interface IAutoConfigMeasurementEvidence {
+interface IAutoOptimizerMeasurementEvidence {
     platform: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     success: boolean;
 }
-interface IAutoConfigMeasurement {
-    mode: AutoConfigMeasurementMode;
+interface IAutoOptimizerMeasurement {
+    mode: AutoOptimizerMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
-    evidence?: IAutoConfigMeasurementEvidence[];
+    evidence?: IAutoOptimizerMeasurementEvidence[];
 }
-interface IAutoConfigVideoRecommendation {
+interface IAutoOptimizerVideoRecommendation {
     display: 'horizontal' | 'vertical';
     width: number;
     height: number;
     fpsNum: number;
     fpsDen: number;
 }
-interface IAutoConfigEncodingRecommendation {
+interface IAutoOptimizerEncodingRecommendation {
     bitrateKbps: number;
     encoderId: string;
     encoderFamily: string;
@@ -1120,37 +1120,37 @@ interface IAutoConfigEncodingRecommendation {
     codec: string;
     preset?: string;
 }
-interface IAutoConfigOutputResult {
+interface IAutoOptimizerOutputResult {
     outputId: string;
-    videos: IAutoConfigVideoRecommendation[];
-    encoding?: IAutoConfigEncodingRecommendation;
-    measurement: IAutoConfigMeasurement;
+    videos: IAutoOptimizerVideoRecommendation[];
+    encoding?: IAutoOptimizerEncodingRecommendation;
+    measurement: IAutoOptimizerMeasurement;
 }
-type AutoConfigFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'autoconfig_worker_failed' | 'autoconfig_worker_launch_failed';
-interface IAutoConfigError {
-    code: AutoConfigFatalErrorCode;
+type AutoOptimizerFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'auto_optimizer_worker_failed' | 'auto_optimizer_worker_launch_failed';
+interface IAutoOptimizerError {
+    code: AutoOptimizerFatalErrorCode;
 }
-export interface IAutoConfigResult {
+export interface IAutoOptimizerResult {
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
-    error?: IAutoConfigError;
-    outputs: IAutoConfigOutputResult[];
+    error?: IAutoOptimizerError;
+    outputs: IAutoOptimizerOutputResult[];
 }
-interface IAutoConfigRun {
-    readonly result: Promise<IAutoConfigResult>;
+interface IAutoOptimizerRun {
+    readonly result: Promise<IAutoOptimizerResult>;
     confirmProbeIngest(probeId: string, received: boolean): void;
     cancel(): Promise<void>;
 }
-type AutoConfigProbeKind = 'twitch-standard' | 'twitch-enhanced-broadcasting' | 'youtube-unbound';
-interface IAutoConfigEventProbe {
+type AutoOptimizerProbeKind = 'twitch-standard' | 'twitch-enhanced-broadcasting' | 'youtube-unbound';
+interface IAutoOptimizerEventProbe {
     id: string;
-    kind: AutoConfigProbeKind;
+    kind: AutoOptimizerProbeKind;
 }
-interface IAutoConfig {
-    run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): IAutoConfigRun;
+interface IAutoOptimizer {
+    run(request: IAutoOptimizerRequest, onProgress: (event: IAutoOptimizerEvent) => void): IAutoOptimizerRun;
 }
 interface INodeObs {
     [key: string]: any;
-    readonly AutoConfig: IAutoConfig;
+    readonly AutoOptimizer: IAutoOptimizer;
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
 }
 export declare const enum VCamOutputType {

@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace autoConfig {
+namespace autoOptimizer {
 namespace probePolicy {
 
 constexpr uint32_t kBasisPointsScale = 10000;
@@ -504,4 +504,4 @@ inline double probeSubstepProgress(double slotStart, double slotEnd, size_t step
 }
 
 } // namespace probePolicy
-} // namespace autoConfig
+} // namespace autoOptimizer

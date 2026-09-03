@@ -19,7 +19,7 @@
 
 #include <napi.h>
 
-namespace autoConfig {
+namespace autoOptimizer {
 void Init(Napi::Env env, Napi::Object exports);
 
 // Stops client-side polling and releases the callback. If a session is active,

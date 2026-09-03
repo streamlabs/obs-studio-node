@@ -11,11 +11,11 @@
 
 #include <obs.h>
 
-namespace autoConfig::videoMix {
+namespace autoOptimizer::videoMix {
 
 constexpr obs_video_rendering_mode activeRenderingMode(bool multipleRendering)
 {
 	return multipleRendering ? OBS_STREAMING_VIDEO_RENDERING : OBS_MAIN_VIDEO_RENDERING;
 }
 
-} // namespace autoConfig::videoMix
+} // namespace autoOptimizer::videoMix

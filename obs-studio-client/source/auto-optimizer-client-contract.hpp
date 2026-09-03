@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace autoConfig::clientContract {
+namespace autoOptimizer::clientContract {
 
 struct VideoContext {
 	std::optional<uint64_t> canvasId;
@@ -96,4 +96,4 @@ private:
 	bool closed = false;
 };
 
-} // namespace autoConfig::clientContract
+} // namespace autoOptimizer::clientContract

@@ -1,8 +1,8 @@
-#include "autoconfig-probe-policy.hpp"
+#include "auto-optimizer-probe-policy.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-namespace policy = autoConfig::probePolicy;
+namespace policy = autoOptimizer::probePolicy;
 
 TEST_CASE("Standard Twitch probes accept only official endpoints and bounded keys")
 {

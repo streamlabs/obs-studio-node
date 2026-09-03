@@ -1,6 +1,6 @@
-#include "autoconfig-client-contract.hpp"
+#include "auto-optimizer-client-contract.hpp"
 
-#include "autoconfig-quality-policy.hpp"
+#include "auto-optimizer-quality-policy.hpp"
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
@@ -12,7 +12,7 @@
 #include <string_view>
 #include <utility>
 
-namespace autoConfig::clientContract {
+namespace autoOptimizer::clientContract {
 namespace {
 using json = nlohmann::json;
 
@@ -42,8 +42,8 @@ const std::set<std::string> fatalErrorCodes = {"cancelled",
 					       "hardware_benchmark_overloaded",
 					       "hardware_benchmark_timeout",
 					       "hardware_benchmark_unavailable",
-					       "autoconfig_worker_failed",
-					       "autoconfig_worker_launch_failed"};
+					       "auto_optimizer_worker_failed",
+					       "auto_optimizer_worker_launch_failed"};
 
 bool boundedString(const json &value, size_t maximum, bool allowEmpty = false)
 {
@@ -1067,4 +1067,4 @@ bool RunState::canRetryClose() const
 	return !closed && !finishing;
 }
 
-} // namespace autoConfig::clientContract
+} // namespace autoOptimizer::clientContract

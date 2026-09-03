@@ -2,15 +2,15 @@
 
 #include <obs.h>
 
-#include "autoconfig-video-mix.hpp"
+#include "auto-optimizer-video-mix.hpp"
 #include "obs-setup.hpp"
 
 namespace {
 
 TEST_CASE("Auto Optimizer selects the active video rendering mode")
 {
-	CHECK(autoConfig::videoMix::activeRenderingMode(false) == OBS_MAIN_VIDEO_RENDERING);
-	CHECK(autoConfig::videoMix::activeRenderingMode(true) == OBS_STREAMING_VIDEO_RENDERING);
+	CHECK(autoOptimizer::videoMix::activeRenderingMode(false) == OBS_MAIN_VIDEO_RENDERING);
+	CHECK(autoOptimizer::videoMix::activeRenderingMode(true) == OBS_STREAMING_VIDEO_RENDERING);
 }
 
 constexpr char TEST_ENCODER_ID[] = "osn_test_texture_encoder";

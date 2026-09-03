@@ -11,7 +11,7 @@
 
 #include <ipc-server.hpp>
 
-namespace autoConfig {
+namespace autoOptimizer {
 
 void Register(ipc::server &srv);
 // Register the video-only output used by temporary hardware benchmarks. Call
@@ -31,4 +31,4 @@ void GetResult(void *data, const int64_t id, const std::vector<ipc::value> &args
 void CancelSession(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 void CloseSession(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
-} // namespace autoConfig
+} // namespace autoOptimizer

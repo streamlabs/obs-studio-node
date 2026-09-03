@@ -29,7 +29,7 @@
 #include <vector>
 #include "osn-error.hpp"
 #include "nodeobs_api.h"
-#include "nodeobs_autoconfig.h"
+#include "nodeobs_auto_optimizer.h"
 #include "nodeobs_content.h"
 #include "nodeobs_service.h"
 #include "nodeobs_settings.h"
@@ -260,7 +260,7 @@ int main(int argc, char *argv[])
 	OBS_service::Register(myServer);
 	OBS_settings::Register(myServer);
 	OBS_settings::Register(myServer);
-	autoConfig::Register(myServer);
+	autoOptimizer::Register(myServer);
 	osn::VideoEncoder::Register(myServer);
 	osn::Service::Register(myServer);
 	osn::Audio::Register(myServer);

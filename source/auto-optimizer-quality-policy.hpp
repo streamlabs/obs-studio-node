@@ -18,7 +18,7 @@
 #include <string_view>
 #include <vector>
 
-namespace autoConfig::qualityPolicy {
+namespace autoOptimizer::qualityPolicy {
 
 inline constexpr size_t kMaximumUploadLegs = 2;
 inline constexpr size_t kMaximumEnhancedBroadcastingDualOutputLegs = 3;
@@ -540,4 +540,4 @@ inline Selection select(const VideoTuple &ceiling, int safeVideoBitrateKbps, con
 	return result;
 }
 
-} // namespace autoConfig::qualityPolicy
+} // namespace autoOptimizer::qualityPolicy

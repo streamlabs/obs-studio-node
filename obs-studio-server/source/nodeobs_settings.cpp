@@ -17,7 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_settings.h"
-#include "nodeobs_autoconfig.h"
+#include "nodeobs_auto_optimizer.h"
 #include "osn-error.hpp"
 #include "nodeobs_api.h"
 #include "shared.hpp"
@@ -3675,7 +3675,7 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 			// Advanced color settings reset the process-wide video context. Do
 			// not persist settings that cannot be applied because Auto Optimizer
 			// still has temporary OBS outputs and encoders active.
-			if (!autoConfig::CancelActiveSession()) {
+			if (!autoOptimizer::CancelActiveSession()) {
 				blog(LOG_ERROR, "Timed out while stopping Auto Optimizer before applying advanced video settings.");
 				return false;
 			}

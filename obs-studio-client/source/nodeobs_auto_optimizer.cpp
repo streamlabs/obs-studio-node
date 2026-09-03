@@ -16,9 +16,9 @@
 
 ******************************************************************************/
 
-#include "nodeobs_autoconfig.hpp"
+#include "nodeobs_auto_optimizer.hpp"
 
-#include "autoconfig-client-contract.hpp"
+#include "auto-optimizer-client-contract.hpp"
 #include "controller.hpp"
 #include "osn-error.hpp"
 #include "polling-pacer.hpp"
@@ -35,7 +35,7 @@
 #include <vector>
 
 namespace {
-using autoConfig::clientContract::RunState;
+using autoOptimizer::clientContract::RunState;
 
 constexpr std::chrono::milliseconds sleepInterval(33);
 
@@ -55,7 +55,7 @@ std::thread *workerThread = nullptr;
 std::mutex sessionMutex;
 std::mutex lifecycleMutex;
 std::string activeSessionId;
-std::shared_ptr<const autoConfig::clientContract::RequestContext> activeRequestContext;
+std::shared_ptr<const autoOptimizer::clientContract::RequestContext> activeRequestContext;
 int64_t lastEventSequence = -1;
 
 enum class CallbackShutdownMode { Release, Abort };
@@ -74,13 +74,13 @@ void SetActiveSessionId(const std::string &sessionId)
 		activeRequestContext.reset();
 }
 
-std::shared_ptr<const autoConfig::clientContract::RequestContext> GetActiveRequestContext()
+std::shared_ptr<const autoOptimizer::clientContract::RequestContext> GetActiveRequestContext()
 {
 	std::lock_guard<std::mutex> lock(sessionMutex);
 	return activeRequestContext;
 }
 
-void SetActiveSession(const std::string &sessionId, std::shared_ptr<const autoConfig::clientContract::RequestContext> context)
+void SetActiveSession(const std::string &sessionId, std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context)
 {
 	std::lock_guard<std::mutex> lock(sessionMutex);
 	activeSessionId = sessionId;
@@ -108,7 +108,7 @@ std::vector<ipc::value> CallServer(const char *method, std::vector<ipc::value> a
 	if (!connection)
 		throw std::runtime_error("Failed to obtain IPC connection.");
 
-	auto response = connection->call_synchronous_helper("AutoConfig", method, std::move(arguments));
+	auto response = connection->call_synchronous_helper("AutoOptimizer", method, std::move(arguments));
 	const std::string error = ResponseError(response);
 	if (!error.empty())
 		throw std::runtime_error(error);
@@ -122,7 +122,7 @@ void BestEffortServerCall(const std::shared_ptr<ipc::client> &connection, const 
 	if (!connection || sessionId.empty())
 		return;
 	try {
-		connection->call_synchronous_helper("AutoConfig", method, {ipc::value(sessionId)});
+		connection->call_synchronous_helper("AutoOptimizer", method, {ipc::value(sessionId)});
 	} catch (...) {
 		// Disconnect and environment teardown must always continue locally.
 	}
@@ -157,11 +157,11 @@ void Worker()
 			const std::string sessionId = GetActiveSessionId();
 			const auto context = GetActiveRequestContext();
 			if (!sessionId.empty() && context) {
-				auto response = CallServer("QueryAutoConfigSession", {ipc::value(sessionId)}, 2);
+				auto response = CallServer("QueryAutoOptimizerSession", {ipc::value(sessionId)}, 2);
 				std::optional<std::string> eventJson;
 				if (response[1].type != ipc::type::Null)
 					eventJson = response[1].value_str;
-				const auto polledEvent = autoConfig::clientContract::decodePolledEvent(eventJson, sessionId, lastEventSequence, *context);
+				const auto polledEvent = autoOptimizer::clientContract::decodePolledEvent(eventJson, sessionId, lastEventSequence, *context);
 				if (polledEvent) {
 					const auto &envelope = *polledEvent;
 					auto *event = new EventData{envelope.json, envelope.error, envelope.terminal};
@@ -257,20 +257,20 @@ struct FinishOutcome {
 	std::string closeFailure;
 };
 
-class AutoConfigRun;
+class AutoOptimizerRun;
 
 class FinishWorker final : public Napi::AsyncWorker {
 public:
-	FinishWorker(AutoConfigRun *run, std::string sessionId, std::shared_ptr<const autoConfig::clientContract::RequestContext> context, bool cancel,
+	FinishWorker(AutoOptimizerRun *run, std::string sessionId, std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context, bool cancel,
 		     bool readResult, std::string preferredError);
 	void Execute() override;
 	void OnOK() override;
 	void OnError(const Napi::Error &error) override;
 
 private:
-	AutoConfigRun *run;
+	AutoOptimizerRun *run;
 	std::string sessionId;
-	std::shared_ptr<const autoConfig::clientContract::RequestContext> context;
+	std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context;
 	bool cancel;
 	bool readResult;
 	std::string preferredError;
@@ -280,19 +280,19 @@ private:
 struct RunInitialization {
 	std::string sessionId;
 	Napi::Function progressCallback;
-	std::shared_ptr<const autoConfig::clientContract::RequestContext> context;
+	std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context;
 };
 
-class AutoConfigRun final : public Napi::ObjectWrap<AutoConfigRun> {
+class AutoOptimizerRun final : public Napi::ObjectWrap<AutoOptimizerRun> {
 public:
 	static Napi::FunctionReference constructor;
 
 	static void Init(Napi::Env env)
 	{
-		Napi::Function function = DefineClass(env, "AutoConfigRun",
-						      {InstanceAccessor("result", &AutoConfigRun::GetResult, nullptr),
-						       InstanceMethod("confirmProbeIngest", &AutoConfigRun::ConfirmProbeIngest),
-						       InstanceMethod("cancel", &AutoConfigRun::Cancel)});
+		Napi::Function function = DefineClass(env, "AutoOptimizerRun",
+						      {InstanceAccessor("result", &AutoOptimizerRun::GetResult, nullptr),
+						       InstanceMethod("confirmProbeIngest", &AutoOptimizerRun::ConfirmProbeIngest),
+						       InstanceMethod("cancel", &AutoOptimizerRun::Cancel)});
 		constructor = Napi::Persistent(function);
 		constructor.SuppressDestruct();
 	}
@@ -302,10 +302,10 @@ public:
 		return constructor.New({Napi::External<RunInitialization>::New(env, &initialization)});
 	}
 
-	explicit AutoConfigRun(const Napi::CallbackInfo &info) : Napi::ObjectWrap<AutoConfigRun>(info), resultDeferred(Napi::Promise::Deferred::New(info.Env()))
+	explicit AutoOptimizerRun(const Napi::CallbackInfo &info) : Napi::ObjectWrap<AutoOptimizerRun>(info), resultDeferred(Napi::Promise::Deferred::New(info.Env()))
 	{
 		if (info.Length() != 1 || !info[0].IsExternal()) {
-			Napi::TypeError::New(info.Env(), "AutoConfigRun cannot be constructed directly").ThrowAsJavaScriptException();
+			Napi::TypeError::New(info.Env(), "AutoOptimizerRun cannot be constructed directly").ThrowAsJavaScriptException();
 			return;
 		}
 		auto *initialization = info[0].As<Napi::External<RunInitialization>>().Data();
@@ -315,7 +315,7 @@ public:
 		resultPromise = Napi::Persistent(resultDeferred.Promise());
 	}
 
-	~AutoConfigRun() override
+	~AutoOptimizerRun() override
 	{
 		progressCallback.Reset();
 		resultPromise.Reset();
@@ -328,10 +328,10 @@ public:
 		Ref();
 		callbackReference = true;
 		try {
-			Napi::Function dispatch = Napi::Function::New(env, DispatchToRun, "AutoConfigEvent", this);
+			Napi::Function dispatch = Napi::Function::New(env, DispatchToRun, "AutoOptimizerEvent", this);
 			jsThread = EventThreadSafeFunction::New(
-				env, dispatch, Value(), "AutoConfigSession", 0, 1, nullptr,
-				[](Napi::Env, AutoConfigRun *run, void *) { run->ReleaseCallbackReference(); }, this);
+				env, dispatch, Value(), "AutoOptimizerSession", 0, 1, nullptr,
+				[](Napi::Env, AutoOptimizerRun *run, void *) { run->ReleaseCallbackReference(); }, this);
 			jsThreadActive = true;
 			jsThread.Unref(env);
 			lastEventSequence = -1;
@@ -442,7 +442,7 @@ private:
 
 	static void DispatchToRun(const Napi::CallbackInfo &info)
 	{
-		auto *run = static_cast<AutoConfigRun *>(info.Data());
+		auto *run = static_cast<AutoOptimizerRun *>(info.Data());
 		if (!run || info.Length() < 3 || !info[0].IsString() || !info[1].IsString() || !info[2].IsBoolean())
 			return;
 		run->HandleEvent(info.Env(), info[0].As<Napi::String>().Utf8Value(), info[1].As<Napi::String>().Utf8Value(),
@@ -510,7 +510,7 @@ private:
 		}
 
 		try {
-			CallServer("ConfirmAutoConfigProbeIngest", {ipc::value(sessionId), ipc::value(probeId),
+			CallServer("ConfirmAutoOptimizerProbeIngest", {ipc::value(sessionId), ipc::value(probeId),
 								    ipc::value(static_cast<uint32_t>(info[1].As<Napi::Boolean>().Value() ? 1 : 0))});
 		} catch (const std::exception &error) {
 			Napi::Error::New(info.Env(), error.what()).ThrowAsJavaScriptException();
@@ -521,7 +521,7 @@ private:
 	Napi::Value Cancel(const Napi::CallbackInfo &info) { return BeginFinish(info.Env(), true); }
 
 	std::string sessionId;
-	std::shared_ptr<const autoConfig::clientContract::RequestContext> context;
+	std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context;
 	Napi::FunctionReference progressCallback;
 	Napi::Promise::Deferred resultDeferred;
 	Napi::Reference<Napi::Promise> resultPromise;
@@ -532,9 +532,9 @@ private:
 	bool callbackReference = false;
 };
 
-Napi::FunctionReference AutoConfigRun::constructor;
+Napi::FunctionReference AutoOptimizerRun::constructor;
 
-FinishWorker::FinishWorker(AutoConfigRun *run, std::string sessionId, std::shared_ptr<const autoConfig::clientContract::RequestContext> context, bool cancel,
+FinishWorker::FinishWorker(AutoOptimizerRun *run, std::string sessionId, std::shared_ptr<const autoOptimizer::clientContract::RequestContext> context, bool cancel,
 			   bool readResult, std::string preferredError)
 	: Napi::AsyncWorker(run->Env()),
 	  run(run),
@@ -553,7 +553,7 @@ void FinishWorker::Execute()
 		outcome.failure = preferredError;
 		if (cancel) {
 			try {
-				CallServer("CancelAutoConfigSession", {ipc::value(sessionId)});
+				CallServer("CancelAutoOptimizerSession", {ipc::value(sessionId)});
 			} catch (const std::exception &error) {
 				if (outcome.failure.empty())
 					outcome.failure = error.what();
@@ -562,8 +562,8 @@ void FinishWorker::Execute()
 
 		if (readResult) {
 			try {
-				auto response = CallServer("GetAutoConfigResult", {ipc::value(sessionId)}, 2);
-				const auto projected = autoConfig::clientContract::projectResult(response[1].value_str, sessionId, *context);
+				auto response = CallServer("GetAutoOptimizerResult", {ipc::value(sessionId)}, 2);
+				const auto projected = autoOptimizer::clientContract::projectResult(response[1].value_str, sessionId, *context);
 				outcome.resultJson = projected.json;
 				if (!projected.valid && outcome.failure.empty())
 					outcome.failure = projected.error;
@@ -574,7 +574,7 @@ void FinishWorker::Execute()
 		}
 
 		try {
-			CallServer("CloseAutoConfigSession", {ipc::value(sessionId)});
+			CallServer("CloseAutoOptimizerSession", {ipc::value(sessionId)});
 		} catch (const std::exception &error) {
 			outcome.closeFailure = error.what();
 		}
@@ -603,7 +603,7 @@ void FinishWorker::OnError(const Napi::Error &error)
 Napi::Value Run(const Napi::CallbackInfo &info)
 {
 	if (info.Length() != 2 || !info[0].IsObject() || !info[1].IsFunction()) {
-		Napi::TypeError::New(info.Env(), "AutoConfig.run expects (request: object, onProgress: function)").ThrowAsJavaScriptException();
+		Napi::TypeError::New(info.Env(), "AutoOptimizer.run expects (request: object, onProgress: function)").ThrowAsJavaScriptException();
 		return info.Env().Undefined();
 	}
 
@@ -615,17 +615,17 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 	if (info.Env().IsExceptionPending())
 		return info.Env().Undefined();
 	if (publicRequestJson.empty()) {
-		Napi::TypeError::New(info.Env(), "AutoConfig.run expects a JSON-serializable request object").ThrowAsJavaScriptException();
+		Napi::TypeError::New(info.Env(), "AutoOptimizer.run expects a JSON-serializable request object").ThrowAsJavaScriptException();
 		return info.Env().Undefined();
 	}
-	auto prepared = autoConfig::clientContract::prepareRequest(publicRequestJson);
+	auto prepared = autoOptimizer::clientContract::prepareRequest(publicRequestJson);
 	publicRequestJson.clear();
 	if (!prepared.valid) {
 		Napi::TypeError::New(info.Env(), prepared.error).ThrowAsJavaScriptException();
 		return info.Env().Undefined();
 	}
 	std::string requestJson = std::move(prepared.wireJson);
-	auto context = std::make_shared<const autoConfig::clientContract::RequestContext>(std::move(prepared.context));
+	auto context = std::make_shared<const autoOptimizer::clientContract::RequestContext>(std::move(prepared.context));
 
 	std::string startFailure;
 	std::string createdSessionId;
@@ -633,16 +633,16 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 	{
 		std::lock_guard<std::mutex> lock(lifecycleMutex);
 		if (!GetActiveSessionId().empty() || IsWorkerRunning()) {
-			Napi::Error::New(info.Env(), "An AutoConfig session is already active").ThrowAsJavaScriptException();
+			Napi::Error::New(info.Env(), "An Auto Optimizer session is already active").ThrowAsJavaScriptException();
 			return info.Env().Undefined();
 		}
 
 		try {
-			auto response = CallServer("CreateAutoConfigSession", {ipc::value(requestJson)}, 2);
+			auto response = CallServer("CreateAutoOptimizerSession", {ipc::value(requestJson)}, 2);
 			requestJson.clear();
 			createdSessionId = response[1].value_str;
 			if (createdSessionId.empty())
-				throw std::runtime_error("CreateAutoConfigSession returned an empty sessionId");
+				throw std::runtime_error("CreateAutoOptimizerSession returned an empty sessionId");
 		} catch (const std::exception &error) {
 			Napi::Error::New(info.Env(), error.what()).ThrowAsJavaScriptException();
 			return info.Env().Undefined();
@@ -650,10 +650,10 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 
 		RunInitialization initialization{createdSessionId, info[1].As<Napi::Function>(), context};
 		try {
-			instance = AutoConfigRun::New(info.Env(), initialization);
-			auto *run = AutoConfigRun::Unwrap(instance);
+			instance = AutoOptimizerRun::New(info.Env(), initialization);
+			auto *run = AutoOptimizerRun::Unwrap(instance);
 			run->Activate(info.Env());
-			CallServer("StartAutoConfigSession", {ipc::value(createdSessionId)});
+			CallServer("StartAutoOptimizerSession", {ipc::value(createdSessionId)});
 			StartWorker();
 		} catch (const std::exception &error) {
 			startFailure = error.what();
@@ -671,20 +671,20 @@ Napi::Value Run(const Napi::CallbackInfo &info)
 		if (instance.IsEmpty()) {
 			std::lock_guard<std::mutex> lock(lifecycleMutex);
 			auto connection = Controller::GetInstance().GetConnection();
-			BestEffortServerCall(connection, "CancelAutoConfigSession", createdSessionId);
-			BestEffortServerCall(connection, "CloseAutoConfigSession", createdSessionId);
+			BestEffortServerCall(connection, "CancelAutoOptimizerSession", createdSessionId);
+			BestEffortServerCall(connection, "CloseAutoOptimizerSession", createdSessionId);
 			StopLocalSession(createdSessionId, CallbackShutdownMode::Release, true);
 			Napi::Error::New(info.Env(), startFailure).ThrowAsJavaScriptException();
 			return info.Env().Undefined();
 		}
-		AutoConfigRun::Unwrap(instance)->BeginFinish(info.Env(), true, startFailure);
+		AutoOptimizerRun::Unwrap(instance)->BeginFinish(info.Env(), true, startFailure);
 	}
 
 	return instance;
 }
 } // namespace
 
-void autoConfig::Shutdown()
+void autoOptimizer::Shutdown()
 {
 	std::lock_guard<std::mutex> lock(lifecycleMutex);
 	const std::string sessionId = GetActiveSessionId();
@@ -695,17 +695,17 @@ void autoConfig::Shutdown()
 
 	workerStop.store(true);
 	auto connection = Controller::GetInstance().GetConnection();
-	BestEffortServerCall(connection, "CancelAutoConfigSession", sessionId);
-	BestEffortServerCall(connection, "CloseAutoConfigSession", sessionId);
+	BestEffortServerCall(connection, "CancelAutoOptimizerSession", sessionId);
+	BestEffortServerCall(connection, "CloseAutoOptimizerSession", sessionId);
 	StopWorker(CallbackShutdownMode::Abort);
 	SetActiveSessionId("");
 }
 
-void autoConfig::Init(Napi::Env env, Napi::Object exports)
+void autoOptimizer::Init(Napi::Env env, Napi::Object exports)
 {
-	env.AddCleanupHook([]() { autoConfig::Shutdown(); });
-	AutoConfigRun::Init(env);
+	env.AddCleanupHook([]() { autoOptimizer::Shutdown(); });
+	AutoOptimizerRun::Init(env);
 	Napi::Object api = Napi::Object::New(env);
 	api.Set("run", Napi::Function::New(env, Run, "run"));
-	exports.Set("AutoConfig", api);
+	exports.Set("AutoOptimizer", api);
 }

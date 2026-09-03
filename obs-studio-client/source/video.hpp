@@ -42,7 +42,7 @@ public:
 	void SetLegacySettings(const Napi::CallbackInfo &info, const Napi::Value &value);
 
 	// Read-only ID used by OSN APIs that reference a registered video canvas,
-	// including AutoConfig. It matches the key stored by osn::Video::Manager.
+	// including AutoOptimizer. It matches the key stored by osn::Video::Manager.
 	Napi::Value GetCanvasId(const Napi::CallbackInfo &info);
 };
 }

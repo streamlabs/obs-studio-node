@@ -2038,7 +2038,7 @@ export interface IAudioTrackFactory {
 
 // ---- Auto Optimizer API ----
 
-type AutoConfigStreamSetup =
+type AutoOptimizerStreamSetup =
     'direct-single' |
     'cloud-multistream' |
     'custom-rtmp' |
@@ -2048,10 +2048,10 @@ type AutoConfigStreamSetup =
     'stream-shift' |
     'mixed';
 
-type AutoConfigDisplay = 'horizontal' | 'vertical' | 'both';
-type AutoConfigOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
+type AutoOptimizerDisplay = 'horizontal' | 'vertical' | 'both';
+type AutoOptimizerOutputKind = 'standard' | 'twitch-enhanced-broadcasting';
 
-type AutoConfigPlatform =
+type AutoOptimizerPlatform =
     'twitch' |
     'youtube' |
     'facebook' |
@@ -2060,7 +2060,7 @@ type AutoConfigPlatform =
     'custom' |
     'other';
 
-type AutoConfigEstimateReason =
+type AutoOptimizerEstimateReason =
     'non_twitch' |
     'custom_rtmp' |
     'cloud_multistream' |
@@ -2072,7 +2072,7 @@ type AutoConfigEstimateReason =
     'probe_disabled' |
     'partial_provider_probes';
 
-interface IAutoConfigCurrentSettings {
+interface IAutoOptimizerCurrentSettings {
     /**
      * Canvas ID from `IVideo.canvasId`; `0` is valid. Active Enhanced
      * Broadcasting and two-output Dual Output require distinct IDs for
@@ -2090,17 +2090,17 @@ interface IAutoConfigCurrentSettings {
     preset?: string;
 }
 
-interface IAutoConfigAdditionalVideoRequest {
+interface IAutoOptimizerAdditionalVideoRequest {
     /**
      * The parent `current` describes the horizontal canvas; this secondary
      * video request describes the vertical canvas.
      */
     display: 'vertical';
-    current: IAutoConfigCurrentSettings;
-    limits?: IAutoConfigLimits;
+    current: IAutoOptimizerCurrentSettings;
+    limits?: IAutoOptimizerLimits;
 }
 
-interface IAutoConfigLimits {
+interface IAutoOptimizerLimits {
     /**
      * Maximum video bitrate OSN may recommend for an output whose encoding
      * settings are managed by Desktop. A provider probe may test above this
@@ -2131,9 +2131,9 @@ interface IAutoConfigLimits {
     maxFpsDen?: number;
 }
 
-interface IAutoConfigOutputRequest {
+interface IAutoOptimizerOutputRequest {
     outputId: string;
-    display: AutoConfigDisplay;
+    display: AutoOptimizerDisplay;
     /**
      * Identifies who supplies the encoding settings. Use `standard` when
      * Desktop selects the encoder and bitrate. Use
@@ -2142,23 +2142,23 @@ interface IAutoConfigOutputRequest {
      * `display: 'both'` for paired horizontal and vertical canvases. Each
      * non-Twitch output remains `standard`.
      */
-    outputKind: AutoConfigOutputKind;
-    destinations: AutoConfigPlatform[];
-    current: IAutoConfigCurrentSettings;
-    limits?: IAutoConfigLimits;
+    outputKind: AutoOptimizerOutputKind;
+    destinations: AutoOptimizerPlatform[];
+    current: IAutoOptimizerCurrentSettings;
+    limits?: IAutoOptimizerLimits;
     /**
      * Optional vertical canvas carried on the same Twitch Enhanced
      * Broadcasting upload as `current`. Valid only with `display: 'both'`. OSN
      * permits active probing only for one Twitch destination, one Enhanced
      * Broadcasting probe, and two distinct registered canvas IDs.
      */
-    additionalVideo?: IAutoConfigAdditionalVideoRequest;
-    estimateReason?: AutoConfigEstimateReason;
+    additionalVideo?: IAutoOptimizerAdditionalVideoRequest;
+    estimateReason?: AutoOptimizerEstimateReason;
     /** Probes for this run, executed in array order. */
-    probes?: IAutoConfigProbeRequest[];
+    probes?: IAutoOptimizerProbeRequest[];
 }
 
-interface IAutoConfigTwitchProbeRequest {
+interface IAutoOptimizerTwitchProbeRequest {
     id: string;
     kind: 'twitch-standard';
     /** Official Twitch ingest URL. OSN selects the Twitch service from `kind`. */
@@ -2167,7 +2167,7 @@ interface IAutoConfigTwitchProbeRequest {
 }
 
 /** Twitch Enhanced Broadcasting probe that tests the complete returned encoding ladder. */
-interface IAutoConfigTwitchEnhancedBroadcastingProbeRequest {
+interface IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest {
     id: string;
     kind: 'twitch-enhanced-broadcasting';
     /**
@@ -2187,7 +2187,7 @@ interface IAutoConfigTwitchEnhancedBroadcastingProbeRequest {
  * ownership or binding. Await the run's cleanup before deleting the
  * `liveStream`.
  */
-interface IAutoConfigYoutubeProbeRequest {
+interface IAutoOptimizerYoutubeProbeRequest {
     id: string;
     kind: 'youtube-unbound';
     /** Official YouTube RTMPS URL. OSN selects the YouTube service from `kind`. */
@@ -2195,18 +2195,18 @@ interface IAutoConfigYoutubeProbeRequest {
     streamKey: string;
 }
 
-type IAutoConfigProbeRequest =
-    | IAutoConfigTwitchProbeRequest
-    | IAutoConfigTwitchEnhancedBroadcastingProbeRequest
-    | IAutoConfigYoutubeProbeRequest;
+type IAutoOptimizerProbeRequest =
+    | IAutoOptimizerTwitchProbeRequest
+    | IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest
+    | IAutoOptimizerYoutubeProbeRequest;
 
 /**
  * Input for one Auto Optimizer run. OSN validates the stream setup, canvas IDs,
  * provider probes, and limits before starting. It never changes persistent
  * settings; the caller validates and applies any recommendation.
  */
-export interface IAutoConfigRequest {
-    streamSetup: AutoConfigStreamSetup;
+export interface IAutoOptimizerRequest {
+    streamSetup: AutoOptimizerStreamSetup;
     /**
      * Outputs and provider probes for this run. OSN validates each probe
      * independently. A shared cloud output may probe only some of its measurable
@@ -2227,15 +2227,15 @@ export interface IAutoConfigRequest {
      * unsupported destinations remain estimate-only, and custom RTMP is
      * rejected. Standard probes finish before OSN tests the combined workload.
      */
-    outputs: IAutoConfigOutputRequest[];
+    outputs: IAutoOptimizerOutputRequest[];
 }
 
-type AutoConfigEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
-type AutoConfigPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
-type AutoConfigMeasurementMode = 'active' | 'estimated';
+type AutoOptimizerEventType = 'phase' | 'progress' | 'result' | 'error' | 'cancelled' | 'complete';
+type AutoOptimizerPhase = 'preflight' | 'hardware' | 'bandwidth' | 'recommendation' | 'cleanup';
+type AutoOptimizerMeasurementMode = 'active' | 'estimated';
 
 /** Vertical canvas settings tested together with the primary canvas. */
-interface IAutoConfigAdditionalVideoTuple {
+interface IAutoOptimizerAdditionalVideoTuple {
     display: 'vertical';
     width: number;
     height: number;
@@ -2244,14 +2244,14 @@ interface IAutoConfigAdditionalVideoTuple {
 }
 
 /**
- * Ordered progress notification delivered to `NodeObs.AutoConfig.run()`.
+ * Ordered progress notification delivered to `NodeObs.AutoOptimizer.run()`.
  * `complete` and `cancelled` are terminal; the run handle then reads the result
  * and releases the run's temporary OSN resources before settling its `result`
  * promise.
  */
-export interface IAutoConfigEvent {
-    type: AutoConfigEventType;
-    phase: AutoConfigPhase;
+export interface IAutoOptimizerEvent {
+    type: AutoOptimizerEventType;
+    phase: AutoOptimizerPhase;
     progress: number;
     /**
      * Machine-readable status or failure code. Important progress codes include:
@@ -2279,8 +2279,8 @@ export interface IAutoConfigEvent {
      */
     code?: string;
     outputId?: string;
-    measurementMode?: AutoConfigMeasurementMode;
-    probe?: IAutoConfigEventProbe;
+    measurementMode?: AutoOptimizerMeasurementMode;
+    probe?: IAutoOptimizerEventProbe;
     /** Applied video bitrate for the active probe substep; audio is additional. */
     targetBitrateKbps?: number;
     /** Concrete encoder currently being tested or selected. */
@@ -2294,28 +2294,28 @@ export interface IAutoConfigEvent {
     fpsNum?: number;
     fpsDen?: number;
     /** Vertical canvas settings tested together with the primary canvas settings. */
-    additionalVideo?: IAutoConfigAdditionalVideoTuple;
+    additionalVideo?: IAutoOptimizerAdditionalVideoTuple;
     /** Video bitrate selected for the recommended resolution and frame rate. */
     selectedBitrateKbps?: number;
     /** Conservative video-bandwidth estimate used to choose the recommended resolution and frame rate. */
     availableBitrateKbps?: number;
 }
 
-interface IAutoConfigMeasurementEvidence {
+interface IAutoOptimizerMeasurementEvidence {
     platform: 'twitch' | 'youtube';
     method: 'twitch-bandwidth-test' | 'twitch-enhanced-broadcasting-test' | 'youtube-unbound-ramp';
     success: boolean;
 }
 
-interface IAutoConfigMeasurement {
-    mode: AutoConfigMeasurementMode;
+interface IAutoOptimizerMeasurement {
+    mode: AutoOptimizerMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
     reason?: string;
     /** Provider measurements that contributed to the result. Detailed throughput and workload data remains internal to OSN. */
-    evidence?: IAutoConfigMeasurementEvidence[];
+    evidence?: IAutoOptimizerMeasurementEvidence[];
 }
 
-interface IAutoConfigVideoRecommendation {
+interface IAutoOptimizerVideoRecommendation {
     display: 'horizontal' | 'vertical';
     width: number;
     height: number;
@@ -2323,7 +2323,7 @@ interface IAutoConfigVideoRecommendation {
     fpsDen: number;
 }
 
-interface IAutoConfigEncodingRecommendation {
+interface IAutoOptimizerEncodingRecommendation {
     bitrateKbps: number;
     encoderId: string;
     encoderFamily: string;
@@ -2332,26 +2332,26 @@ interface IAutoConfigEncodingRecommendation {
     preset?: string;
 }
 
-interface IAutoConfigOutputResult {
+interface IAutoOptimizerOutputResult {
     outputId: string;
     /** One recommended canvas setting, or separate horizontal and vertical settings for a paired output. */
-    videos: IAutoConfigVideoRecommendation[];
+    videos: IAutoOptimizerVideoRecommendation[];
     /** Omitted for Twitch Enhanced Broadcasting because Twitch supplies its encoding ladder. */
-    encoding?: IAutoConfigEncodingRecommendation;
-    measurement: IAutoConfigMeasurement;
+    encoding?: IAutoOptimizerEncodingRecommendation;
+    measurement: IAutoOptimizerMeasurement;
 }
 
-type AutoConfigFatalErrorCode =
+type AutoOptimizerFatalErrorCode =
     | 'cancelled'
     | 'hardware_no_usable_encoder'
     | 'hardware_benchmark_overloaded'
     | 'hardware_benchmark_timeout'
     | 'hardware_benchmark_unavailable'
-    | 'autoconfig_worker_failed'
-    | 'autoconfig_worker_launch_failed';
+    | 'auto_optimizer_worker_failed'
+    | 'auto_optimizer_worker_launch_failed';
 
-interface IAutoConfigError {
-    code: AutoConfigFatalErrorCode;
+interface IAutoOptimizerError {
+    code: AutoOptimizerFatalErrorCode;
 }
 
 /**
@@ -2360,21 +2360,21 @@ interface IAutoConfigError {
  * runs after settlement, so the caller may then delete temporary provider
  * resources.
  */
-export interface IAutoConfigResult {
+export interface IAutoOptimizerResult {
     status: 'complete' | 'partial' | 'cancelled' | 'failed';
-    error?: IAutoConfigError;
-    outputs: IAutoConfigOutputResult[];
+    error?: IAutoOptimizerError;
+    outputs: IAutoOptimizerOutputResult[];
 }
 
 /** One running Auto Optimizer operation. */
-interface IAutoConfigRun {
+interface IAutoOptimizerRun {
     /**
      * Settles after OSN stops its temporary outputs and closes the session. No
      * progress callback runs after settlement. It rejects on malformed server
      * data, an IPC failure, or cleanup failure. To bound a server process that
      * stops responding, enforce a caller-side deadline and call `cancel()`.
      */
-    readonly result: Promise<IAutoConfigResult>;
+    readonly result: Promise<IAutoOptimizerResult>;
 
     /**
      * Reports whether YouTube received data for the active probe.
@@ -2392,18 +2392,18 @@ interface IAutoConfigRun {
     cancel(): Promise<void>;
 }
 
-type AutoConfigProbeKind =
+type AutoOptimizerProbeKind =
     | 'twitch-standard'
     | 'twitch-enhanced-broadcasting'
     | 'youtube-unbound';
 
-interface IAutoConfigEventProbe {
+interface IAutoOptimizerEventProbe {
     id: string;
-    kind: AutoConfigProbeKind;
+    kind: AutoOptimizerProbeKind;
 }
 
 /** Auto Optimizer API that manages each run through cleanup. */
-interface IAutoConfig {
+interface IAutoOptimizer {
     /**
      * Creates and immediately starts one optimizer run. The progress callback
      * is registered before work starts. Credentials are used only to configure
@@ -2420,7 +2420,7 @@ interface IAutoConfig {
      * releases temporary provider resources. `cancel()` remains retryable if
      * that initial cleanup attempt fails.
      */
-    run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): IAutoConfigRun;
+    run(request: IAutoOptimizerRequest, onProgress: (event: IAutoOptimizerEvent) => void): IAutoOptimizerRun;
 }
 
 /**
@@ -2430,7 +2430,7 @@ interface INodeObs {
     [key: string]: any;
 
     /** Starts and manages Auto Optimizer runs. */
-    readonly AutoConfig: IAutoConfig;
+    readonly AutoOptimizer: IAutoOptimizer;
 
     /**
      * Initializes the global OBS runtime.

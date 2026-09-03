@@ -1,4 +1,4 @@
-#include "autoconfig-client-contract.hpp"
+#include "auto-optimizer-client-contract.hpp"
 
 #include "nlohmann/json.hpp"
 
@@ -8,7 +8,7 @@
 #include <optional>
 #include <vector>
 
-namespace contract = autoConfig::clientContract;
+namespace contract = autoOptimizer::clientContract;
 using json = nlohmann::json;
 
 namespace {
@@ -223,7 +223,7 @@ ResultFixture enhancedBroadcastingFixture(bool includeVerticalCompanion = false)
 }
 } // namespace
 
-TEST_CASE("AutoConfig client projects the public request to the private session schema")
+TEST_CASE("Auto Optimizer client projects the public request to the private session schema")
 {
 	json request = {{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}};
 	request["schemaVersion"] = 999;
@@ -248,7 +248,7 @@ TEST_CASE("AutoConfig client projects the public request to the private session 
 	CHECK(prepared.context.outputs[0].probes[0].platform == "twitch");
 }
 
-TEST_CASE("AutoConfig client flattens nested probes in output and probe order")
+TEST_CASE("Auto Optimizer client flattens nested probes in output and probe order")
 {
 	const json request = {{"streamSetup", "dual-output"},
 			      {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe("first"), 1),
@@ -262,7 +262,7 @@ TEST_CASE("AutoConfig client flattens nested probes in output and probe order")
 	CHECK(wire["activeProbes"][1]["legId"] == "vertical");
 }
 
-TEST_CASE("AutoConfig client rejects duplicate public output and probe identities")
+TEST_CASE("Auto Optimizer client rejects duplicate public output and probe identities")
 {
 	json duplicateOutputs = {{"streamSetup", "dual-output"},
 				 {"outputs", json::array({standardOutput("same", "horizontal", "twitch"), standardOutput("same", "vertical", "youtube")})}};
@@ -279,7 +279,7 @@ TEST_CASE("AutoConfig client rejects duplicate public output and probe identitie
 	CHECK_FALSE(contract::prepareRequest(duplicateDestinations.dump()).valid);
 }
 
-TEST_CASE("AutoConfig client validates effective frame rates")
+TEST_CASE("Auto Optimizer client validates effective frame rates")
 {
 	auto request = [] {
 		return json{{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}};
@@ -309,7 +309,7 @@ TEST_CASE("AutoConfig client validates effective frame rates")
 	CHECK_FALSE(contract::prepareRequest(implicitDenominator.dump()).valid);
 }
 
-TEST_CASE("AutoConfig client projects ordered progress without private envelope fields")
+TEST_CASE("Auto Optimizer client projects ordered progress without private envelope fields")
 {
 	const auto prepared =
 		prepare({{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}});
@@ -344,7 +344,7 @@ TEST_CASE("AutoConfig client projects ordered progress without private envelope 
 	CHECK_FALSE(contract::projectEvent(raw.dump(), "run", 8, prepared.context).valid);
 }
 
-TEST_CASE("AutoConfig client omits probe credentials from public progress and results")
+TEST_CASE("Auto Optimizer client omits probe credentials from public progress and results")
 {
 	const auto prepared =
 		prepare({{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}});
@@ -386,7 +386,7 @@ TEST_CASE("AutoConfig client omits probe credentials from public progress and re
 	CHECK(result.json.find("result-secret") == std::string::npos);
 }
 
-TEST_CASE("AutoConfig client treats an empty poll as no event without consuming sequence")
+TEST_CASE("Auto Optimizer client treats an empty poll as no event without consuming sequence")
 {
 	const auto prepared =
 		prepare({{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}});
@@ -398,7 +398,7 @@ TEST_CASE("AutoConfig client treats an empty poll as no event without consuming 
 	CHECK(decoded->sequence == 8);
 }
 
-TEST_CASE("AutoConfig client validates and projects a standard result")
+TEST_CASE("Auto Optimizer client validates and projects a standard result")
 {
 	const auto prepared =
 		prepare({{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe())})}});
@@ -442,7 +442,7 @@ TEST_CASE("AutoConfig client validates and projects a standard result")
 	CHECK_FALSE(contract::projectResult(excessiveBitrate.dump(), "run", prepared.context).valid);
 }
 
-TEST_CASE("AutoConfig client requires the exact active Dual Output aggregate proof")
+TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate proof")
 {
 	const auto fixture = dualOutputFixture();
 	REQUIRE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
@@ -487,7 +487,7 @@ TEST_CASE("AutoConfig client requires the exact active Dual Output aggregate pro
 			  {"divergent preset", [](json &value) { value["legs"][1]["recommendation"]["preset"] = "veryfast"; }}});
 }
 
-TEST_CASE("AutoConfig client requires exact Enhanced Broadcasting combined workload proof")
+TEST_CASE("Auto Optimizer client requires exact Enhanced Broadcasting combined workload proof")
 {
 	const auto fixture = enhancedBroadcastingFixture();
 	const auto result = contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context);
@@ -542,7 +542,7 @@ TEST_CASE("AutoConfig client requires exact Enhanced Broadcasting combined workl
 		 {"missing companion preset", [](json &value) { value["combinedWorkload"]["companionLegs"][0].erase("preset"); }}});
 }
 
-TEST_CASE("AutoConfig client requires one common Enhanced Broadcasting companion configuration")
+TEST_CASE("Auto Optimizer client requires one common Enhanced Broadcasting companion configuration")
 {
 	const auto fixture = enhancedBroadcastingFixture(true);
 	REQUIRE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
@@ -571,21 +571,21 @@ TEST_CASE("AutoConfig client requires one common Enhanced Broadcasting companion
 				     {"divergent companion preset", [](json &value) { value["legs"][2]["recommendation"]["preset"] = "veryfast"; }}});
 }
 
-TEST_CASE("AutoConfig client projects terminal failures without private output data")
+TEST_CASE("Auto Optimizer client projects terminal failures without private output data")
 {
 	const auto prepared = prepare({{"streamSetup", "direct-single"}, {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch")})}});
 	const json raw = {{"schemaVersion", 1},
 			  {"sessionId", "run"},
 			  {"status", "failed"},
-			  {"error", {{"code", "autoconfig_worker_failed"}, {"privateDetail", "not-forwarded"}}},
+			  {"error", {{"code", "auto_optimizer_worker_failed"}, {"privateDetail", "not-forwarded"}}},
 			  {"legs", json::array()}};
 	const auto result = contract::projectResult(raw.dump(), "run", prepared.context);
 	REQUIRE(result.valid);
 	const json projected = json::parse(result.json);
-	CHECK(projected == json{{"status", "failed"}, {"error", {{"code", "autoconfig_worker_failed"}}}, {"outputs", json::array()}});
+	CHECK(projected == json{{"status", "failed"}, {"error", {{"code", "auto_optimizer_worker_failed"}}}, {"outputs", json::array()}});
 }
 
-TEST_CASE("AutoConfig Close failure leaves exactly one retryable finish state")
+TEST_CASE("AutoOptimizer Close failure leaves exactly one retryable finish state")
 {
 	contract::RunState state;
 	CHECK(state.beginFinish());

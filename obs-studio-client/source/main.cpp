@@ -38,7 +38,7 @@
 #include "nodeobs_settings.hpp"
 #include "nodeobs_display.hpp"
 #include "nodeobs_service.hpp"
-#include "nodeobs_autoconfig.hpp"
+#include "nodeobs_auto_optimizer.hpp"
 #include "callback-manager.hpp"
 #include "video-encoder.hpp"
 #include "service.hpp"
@@ -124,7 +124,7 @@ Napi::Object main_node(Napi::Env env, Napi::Object exports)
 	settings::Init(env, exports);
 	display::Init(env, exports);
 	service::Init(env, exports);
-	autoConfig::Init(env, exports);
+	autoOptimizer::Init(env, exports);
 	globalCallback::Init(env, exports);
 	osn::VideoEncoder::Init(env, exports);
 	osn::Service::Init(env, exports);

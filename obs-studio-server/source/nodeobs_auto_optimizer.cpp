@@ -7,12 +7,12 @@
     (at your option) any later version.
 ******************************************************************************/
 
-#include "nodeobs_autoconfig.h"
+#include "nodeobs_auto_optimizer.h"
 
-#include "autoconfig-video-mix.hpp"
-#include "autoconfig-probe-policy.hpp"
-#include "autoconfig-enhanced-broadcasting-policy.hpp"
-#include "autoconfig-quality-policy.hpp"
+#include "auto-optimizer-video-mix.hpp"
+#include "auto-optimizer-probe-policy.hpp"
+#include "auto-optimizer-enhanced-broadcasting-policy.hpp"
+#include "auto-optimizer-quality-policy.hpp"
 #include "osn-audio-bitrate.hpp"
 #include "osn-common.hpp"
 #include "osn-encoders.hpp"
@@ -49,7 +49,7 @@
 #include <utility>
 #include <vector>
 
-namespace autoConfig {
+namespace autoOptimizer {
 namespace {
 
 constexpr int kSchemaVersion = 1;
@@ -592,19 +592,19 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 {
 	obs_data_t *root = obs_data_create_from_json(json.c_str());
 	if (!root) {
-		error = "invalid_autoconfig_request_json";
+		error = "invalid_auto_optimizer_request_json";
 		return false;
 	}
 
 	bool valid = true;
 	if ((int)obs_data_get_int(root, "schemaVersion") != kSchemaVersion) {
-		error = "unsupported_autoconfig_schema";
+		error = "unsupported_auto_optimizer_schema";
 		valid = false;
 	}
 
 	session.topology = obs_data_get_string(root, "topology");
 	if (valid && !isKnownTopology(session.topology)) {
-		error = "invalid_autoconfig_topology";
+		error = "invalid_auto_optimizer_topology";
 		valid = false;
 	}
 
@@ -613,7 +613,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	const size_t maximumLegCount = session.topology == "enhanced-broadcasting-dual-output" ? qualityPolicy::kMaximumEnhancedBroadcastingDualOutputLegs
 											       : qualityPolicy::kMaximumUploadLegs;
 	if (valid && (legCount == 0 || legCount > maximumLegCount)) {
-		error = "invalid_autoconfig_legs";
+		error = "invalid_auto_optimizer_legs";
 		valid = false;
 	}
 
@@ -630,21 +630,21 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		leg.estimateReason = obs_data_get_string(item, "estimateReason");
 
 		if (session.topology == "enhanced-broadcasting-dual-output" && !outputKindExplicit) {
-			error = "invalid_autoconfig_output_kind";
+			error = "invalid_auto_optimizer_output_kind";
 			valid = false;
 		} else if (leg.legId.empty() || leg.legId.size() > 128 || !legIds.insert(leg.legId).second || !isKnownDisplay(leg.display) ||
 			   !isKnownOutputKind(leg.outputKind)) {
-			error = "invalid_autoconfig_leg_identity";
+			error = "invalid_auto_optimizer_leg_identity";
 			valid = false;
 		}
 
 		obs_data_t *current = obs_data_get_obj(item, "current");
 		if (!current) {
-			error = "missing_autoconfig_current_settings";
+			error = "missing_auto_optimizer_current_settings";
 			valid = false;
 		} else {
 			if (!parseCurrentSettings(current, leg.current)) {
-				error = "invalid_autoconfig_current_settings";
+				error = "invalid_auto_optimizer_current_settings";
 				valid = false;
 			}
 			obs_data_release(current);
@@ -653,7 +653,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		obs_data_t *limits = obs_data_get_obj(item, "limits");
 		if (limits) {
 			if (!parseLimits(limits, leg.limits)) {
-				error = "invalid_autoconfig_limits";
+				error = "invalid_auto_optimizer_limits";
 				valid = false;
 			}
 			obs_data_release(limits);
@@ -675,7 +675,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 			if ((session.topology != "enhanced-broadcasting" && session.topology != "enhanced-broadcasting-dual-output") ||
 			    leg.outputKind != "twitch-enhanced-broadcasting" || leg.display != "both" || parsed.display != "vertical" || !settingsValid ||
 			    !limitsValid) {
-				error = "invalid_autoconfig_additional_video";
+				error = "invalid_auto_optimizer_additional_video";
 				valid = false;
 			} else {
 				leg.additionalVideo = std::move(parsed);
@@ -685,7 +685,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		obs_data_array_t *destinations = obs_data_get_array(item, "destinations");
 		const size_t destinationCount = destinations ? obs_data_array_count(destinations) : 0;
 		if (destinationCount == 0 || destinationCount > 16) {
-			error = "invalid_autoconfig_destinations";
+			error = "invalid_auto_optimizer_destinations";
 			valid = false;
 		} else {
 			for (size_t di = 0; di < destinationCount; di++) {
@@ -693,7 +693,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 				Destination parsed{asciiLowerCopy(obs_data_get_string(destination, "platform"))};
 				obs_data_release(destination);
 				if (!isKnownPlatform(parsed.platform)) {
-					error = "invalid_autoconfig_platform";
+					error = "invalid_auto_optimizer_platform";
 					valid = false;
 					break;
 				}
@@ -716,7 +716,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 						      return leg.outputKind == (singleOutputEnhanced ? "twitch-enhanced-broadcasting" : "standard");
 					      });
 		if (!outputKindsValid) {
-			error = "invalid_autoconfig_output_kind";
+			error = "invalid_auto_optimizer_output_kind";
 			valid = false;
 		}
 	}
@@ -724,7 +724,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	obs_data_array_t *probes = obs_data_get_array(root, "activeProbes");
 	const size_t probeCount = probes ? obs_data_array_count(probes) : 0;
 	if (valid && probeCount > 16) {
-		error = "invalid_autoconfig_active_probes";
+		error = "invalid_auto_optimizer_active_probes";
 		valid = false;
 	}
 	std::set<std::string> probeIds;
@@ -742,7 +742,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 		if (probe.probeId.empty() || probe.probeId.size() > 128 || probe.legId.empty() || probe.legId.size() > 128 ||
 		    !probeIds.insert(probe.probeId).second) {
-			error = "invalid_autoconfig_probe_identity";
+			error = "invalid_auto_optimizer_probe_identity";
 			valid = false;
 			break;
 		}
@@ -762,7 +762,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	if (session.topology == "enhanced-broadcasting-dual-output") {
 		session.enhancedBroadcastingDualOutputWorkload = isSupportedEnhancedBroadcastingDualOutputWorkload(session);
 		if (!session.enhancedBroadcastingDualOutputWorkload) {
-			error = "invalid_autoconfig_enhanced_broadcasting_dual_output";
+			error = "invalid_auto_optimizer_enhanced_broadcasting_dual_output";
 			return false;
 		}
 	}
@@ -793,7 +793,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 				return osn::Video::Manager::GetInstance().find(canvasId) != nullptr;
 			});
 		if (probe.kind == "twitch-enhanced-broadcasting" && session.topology == "enhanced-broadcasting" && legFound && !canvasReferencesValid) {
-			error = "invalid_autoconfig_enhanced_broadcasting_canvas";
+			error = "invalid_auto_optimizer_enhanced_broadcasting_canvas";
 			return false;
 		}
 		const bool enhancedBroadcastingCanvasEligible =
@@ -3690,8 +3690,8 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		result.errorCode = "enhanced_broadcasting_service_create_failed";
 		return result;
 	}
-	const std::string autoConfigUrl = osn::MultitrackVideoAutoConfigURL(configurationService);
-	if (autoConfigUrl.empty()) {
+	const std::string goLiveConfigUrl = osn::MultitrackVideoAutoConfigURL(configurationService);
+	if (goLiveConfigUrl.empty()) {
 		result.errorCode = "enhanced_broadcasting_config_url_missing";
 		return result;
 	}
@@ -3794,7 +3794,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 			auto post = osn::constructGoLivePost(requestCanvasPointers, normalizedKey, std::nullopt, std::nullopt, false);
 			post.client.supported_codecs.clear();
 			post.client.supported_codecs.emplace("h264");
-			config = osn::DownloadGoLiveConfig(autoConfigUrl, post);
+			config = osn::DownloadGoLiveConfig(goLiveConfigUrl, post);
 		} catch (const std::exception &exception) {
 			blog(LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Ladder request failed for %ux%u %u/%u FPS: %s", candidate.width,
 			     candidate.height, candidate.fpsNum, candidate.fpsDen, boundedLogValue(exception.what()).c_str());
@@ -5037,16 +5037,16 @@ void RegisterOutputTypes()
 
 void Register(ipc::server &srv)
 {
-	auto collection = std::make_shared<ipc::collection>("AutoConfig");
+	auto collection = std::make_shared<ipc::collection>("AutoOptimizer");
 
-	collection->register_function(std::make_shared<ipc::function>("CreateAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CreateSession));
-	collection->register_function(std::make_shared<ipc::function>("StartAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, StartSession));
+	collection->register_function(std::make_shared<ipc::function>("CreateAutoOptimizerSession", std::vector<ipc::type>{ipc::type::String}, CreateSession));
+	collection->register_function(std::make_shared<ipc::function>("StartAutoOptimizerSession", std::vector<ipc::type>{ipc::type::String}, StartSession));
 	collection->register_function(std::make_shared<ipc::function>(
-		"ConfirmAutoConfigProbeIngest", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::UInt32}, ConfirmProbeIngest));
-	collection->register_function(std::make_shared<ipc::function>("QueryAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, QuerySession));
-	collection->register_function(std::make_shared<ipc::function>("GetAutoConfigResult", std::vector<ipc::type>{ipc::type::String}, GetResult));
-	collection->register_function(std::make_shared<ipc::function>("CancelAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CancelSession));
-	collection->register_function(std::make_shared<ipc::function>("CloseAutoConfigSession", std::vector<ipc::type>{ipc::type::String}, CloseSession));
+		"ConfirmAutoOptimizerProbeIngest", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::UInt32}, ConfirmProbeIngest));
+	collection->register_function(std::make_shared<ipc::function>("QueryAutoOptimizerSession", std::vector<ipc::type>{ipc::type::String}, QuerySession));
+	collection->register_function(std::make_shared<ipc::function>("GetAutoOptimizerResult", std::vector<ipc::type>{ipc::type::String}, GetResult));
+	collection->register_function(std::make_shared<ipc::function>("CancelAutoOptimizerSession", std::vector<ipc::type>{ipc::type::String}, CancelSession));
+	collection->register_function(std::make_shared<ipc::function>("CloseAutoOptimizerSession", std::vector<ipc::type>{ipc::type::String}, CloseSession));
 
 	srv.register_collection(collection);
 }
@@ -5054,16 +5054,16 @@ void Register(ipc::server &srv)
 void CreateSession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
-		returnError(rval, "CreateAutoConfigSession expects request JSON");
+		returnError(rval, "CreateAutoOptimizerSession expects request JSON");
 		return;
 	}
 	if (shuttingDown.load()) {
-		returnError(rval, "autoconfig_shutting_down");
+		returnError(rval, "auto_optimizer_shutting_down");
 		return;
 	}
 
 	auto session = std::make_shared<Session>();
-	session->id = "autoconfig-" + std::to_string(os_gettime_ns()) + "-" + std::to_string(nextSessionId.fetch_add(1));
+	session->id = "auto-optimizer-" + std::to_string(os_gettime_ns()) + "-" + std::to_string(nextSessionId.fetch_add(1));
 	std::string error;
 	if (!parseRequest(args[0].value_str, *session, error)) {
 		returnError(rval, error.c_str());
@@ -5073,11 +5073,11 @@ void CreateSession(void *, const int64_t, const std::vector<ipc::value> &args, s
 	{
 		std::lock_guard<std::mutex> lock(sessionsMutex);
 		if (shuttingDown.load()) {
-			returnError(rval, "autoconfig_shutting_down");
+			returnError(rval, "auto_optimizer_shutting_down");
 			return;
 		}
 		if (activeSession) {
-			returnError(rval, "autoconfig_session_busy");
+			returnError(rval, "auto_optimizer_session_busy");
 			return;
 		}
 		activeSession = session;
@@ -5090,18 +5090,18 @@ void CreateSession(void *, const int64_t, const std::vector<ipc::value> &args, s
 void StartSession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
-		returnError(rval, "StartAutoConfigSession expects sessionId");
+		returnError(rval, "StartAutoOptimizerSession expects sessionId");
 		return;
 	}
 	auto session = findSession(args[0].value_str);
 	if (!session) {
-		returnError(rval, "autoconfig_session_not_found");
+		returnError(rval, "auto_optimizer_session_not_found");
 		return;
 	}
 	std::lock_guard<std::mutex> lifecycleLock(session->lifecycleMutex);
 	SessionState expected = SessionState::Created;
 	if (!session->state.compare_exchange_strong(expected, SessionState::Running)) {
-		returnError(rval, "autoconfig_session_already_started");
+		returnError(rval, "auto_optimizer_session_already_started");
 		return;
 	}
 	try {
@@ -5109,12 +5109,12 @@ void StartSession(void *, const int64_t, const std::vector<ipc::value> &args, st
 			try {
 				runSession(session);
 			} catch (...) {
-				completeFailed(session, "autoconfig_worker_failed");
+				completeFailed(session, "auto_optimizer_worker_failed");
 			}
 		});
 	} catch (...) {
-		completeFailed(session, "autoconfig_worker_launch_failed");
-		returnError(rval, "autoconfig_worker_launch_failed");
+		completeFailed(session, "auto_optimizer_worker_launch_failed");
+		returnError(rval, "auto_optimizer_worker_launch_failed");
 		return;
 	}
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -5123,16 +5123,16 @@ void StartSession(void *, const int64_t, const std::vector<ipc::value> &args, st
 void ConfirmProbeIngest(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 3) {
-		returnError(rval, "ConfirmAutoConfigProbeIngest expects sessionId, probeId, and received");
+		returnError(rval, "ConfirmAutoOptimizerProbeIngest expects sessionId, probeId, and received");
 		return;
 	}
 	auto session = findSession(args[0].value_str);
 	if (!session) {
-		returnError(rval, "autoconfig_session_not_found");
+		returnError(rval, "auto_optimizer_session_not_found");
 		return;
 	}
 	if (session->state.load() != SessionState::Running) {
-		returnError(rval, "autoconfig_session_not_running");
+		returnError(rval, "auto_optimizer_session_not_running");
 		return;
 	}
 	const std::string &probeId = args[1].value_str;
@@ -5140,14 +5140,14 @@ void ConfirmProbeIngest(void *, const int64_t, const std::vector<ipc::value> &ar
 		return candidate.eligible && candidate.provider == "youtube" && candidate.probeId == probeId;
 	});
 	if (probe == session->probes.end()) {
-		returnError(rval, "autoconfig_probe_not_found");
+		returnError(rval, "auto_optimizer_probe_not_found");
 		return;
 	}
 	{
 		std::lock_guard<std::mutex> lock(session->probeConfirmationMutex);
 		auto confirmation = session->probeConfirmations.find(probeId);
 		if (confirmation == session->probeConfirmations.end() || session->activeConfirmationProbeId != probeId) {
-			returnError(rval, "autoconfig_probe_not_confirmable");
+			returnError(rval, "auto_optimizer_probe_not_confirmable");
 			return;
 		}
 		confirmation->second = args[2].value_union.ui32 ? 1 : -1;
@@ -5159,12 +5159,12 @@ void ConfirmProbeIngest(void *, const int64_t, const std::vector<ipc::value> &ar
 void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
-		returnError(rval, "QueryAutoConfigSession expects sessionId");
+		returnError(rval, "QueryAutoOptimizerSession expects sessionId");
 		return;
 	}
 	auto session = findSession(args[0].value_str);
 	if (!session) {
-		returnError(rval, "autoconfig_session_not_found");
+		returnError(rval, "auto_optimizer_session_not_found");
 		return;
 	}
 
@@ -5182,12 +5182,12 @@ void QuerySession(void *, const int64_t, const std::vector<ipc::value> &args, st
 void GetResult(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
-		returnError(rval, "GetAutoConfigResult expects sessionId");
+		returnError(rval, "GetAutoOptimizerResult expects sessionId");
 		return;
 	}
 	auto session = findSession(args[0].value_str);
 	if (!session) {
-		returnError(rval, "autoconfig_session_not_found");
+		returnError(rval, "auto_optimizer_session_not_found");
 		return;
 	}
 	std::lock_guard<std::mutex> lock(session->mutex);
@@ -5198,16 +5198,16 @@ void GetResult(void *, const int64_t, const std::vector<ipc::value> &args, std::
 void CancelSession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
-		returnError(rval, "CancelAutoConfigSession expects sessionId");
+		returnError(rval, "CancelAutoOptimizerSession expects sessionId");
 		return;
 	}
 	auto session = findSession(args[0].value_str);
 	if (!session) {
-		returnError(rval, "autoconfig_session_not_found");
+		returnError(rval, "auto_optimizer_session_not_found");
 		return;
 	}
 	if (!requestCancellation(session)) {
-		returnError(rval, "autoconfig_cleanup_timeout");
+		returnError(rval, "auto_optimizer_cleanup_timeout");
 		return;
 	}
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
@@ -5216,7 +5216,7 @@ void CancelSession(void *, const int64_t, const std::vector<ipc::value> &args, s
 void CloseSession(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	if (args.size() != 1) {
-		returnError(rval, "CloseAutoConfigSession expects sessionId");
+		returnError(rval, "CloseAutoOptimizerSession expects sessionId");
 		return;
 	}
 	auto session = findSession(args[0].value_str);
@@ -5227,14 +5227,14 @@ void CloseSession(void *, const int64_t, const std::vector<ipc::value> &args, st
 	}
 
 	if (!requestCancellation(session)) {
-		returnError(rval, "autoconfig_cleanup_timeout");
+		returnError(rval, "auto_optimizer_cleanup_timeout");
 		return;
 	}
 
 	{
 		std::lock_guard<std::mutex> lifecycleLock(session->lifecycleMutex);
 		if (session->worker.valid() && session->worker.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
-			returnError(rval, "autoconfig_session_still_running");
+			returnError(rval, "auto_optimizer_session_still_running");
 			return;
 		}
 		session->state.store(SessionState::Closed);
@@ -5302,4 +5302,4 @@ void Shutdown()
 	}
 }
 
-} // namespace autoConfig
+} // namespace autoOptimizer

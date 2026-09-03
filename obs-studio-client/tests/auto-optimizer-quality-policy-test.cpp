@@ -4,11 +4,11 @@
 #include <limits>
 #include <utility>
 
-#include "autoconfig-quality-policy.hpp"
+#include "auto-optimizer-quality-policy.hpp"
 
-namespace policy = autoConfig::qualityPolicy;
+namespace policy = autoOptimizer::qualityPolicy;
 
-TEST_CASE("Auto Config accepts only effective frame rates from 1 through 240 FPS")
+TEST_CASE("Auto Optimizer accepts only effective frame rates from 1 through 240 FPS")
 {
 	CHECK_FALSE(policy::isValidFrameRate(0, 1));
 	CHECK_FALSE(policy::isValidFrameRate(1, 0));
@@ -19,7 +19,7 @@ TEST_CASE("Auto Config accepts only effective frame rates from 1 through 240 FPS
 	CHECK_FALSE(policy::isValidFrameRate(240001, 1000));
 }
 
-TEST_CASE("Auto Config Dual Output uses one shared minimum frame rate")
+TEST_CASE("Auto Optimizer Dual Output uses one shared minimum frame rate")
 {
 	SECTION("integer 60 and 30 FPS")
 	{
@@ -44,7 +44,7 @@ TEST_CASE("Auto Config Dual Output uses one shared minimum frame rate")
 	}
 }
 
-TEST_CASE("Auto Config allocates a shared uplink equally across two direct legs")
+TEST_CASE("Auto Optimizer allocates a shared uplink equally across two direct legs")
 {
 	struct Expectation {
 		uint64_t firstSafeVideoKbps;
@@ -65,7 +65,7 @@ TEST_CASE("Auto Config allocates a shared uplink equally across two direct legs"
 	}
 }
 
-TEST_CASE("Auto Config shared two-leg allocation is symmetric")
+TEST_CASE("Auto Optimizer shared two-leg allocation is symmetric")
 {
 	const auto forward = policy::allocateSharedTwoLegBandwidth(6000, 10000);
 	const auto reversed = policy::allocateSharedTwoLegBandwidth(10000, 6000);
@@ -76,7 +76,7 @@ TEST_CASE("Auto Config shared two-leg allocation is symmetric")
 	CHECK(forward.allocatedVideoKbps == reversed.allocatedVideoKbps);
 }
 
-TEST_CASE("Auto Config shared two-leg allocation rejects zero and sub-quantum budgets")
+TEST_CASE("Auto Optimizer shared two-leg allocation rejects zero and sub-quantum budgets")
 {
 	for (const auto &[firstSafeVideoKbps, secondSafeVideoKbps] :
 	     std::initializer_list<std::pair<uint64_t, uint64_t>>{{0, 10000}, {10000, 0}, {0, 0}, {1, 1}, {199, 199}}) {
@@ -95,7 +95,7 @@ TEST_CASE("Auto Config shared two-leg allocation rejects zero and sub-quantum bu
 	CHECK(minimum.allocatedVideoKbps == 200);
 }
 
-TEST_CASE("Auto Config shared two-leg allocation cannot overflow its aggregate budget")
+TEST_CASE("Auto Optimizer shared two-leg allocation cannot overflow its aggregate budget")
 {
 	const uint64_t maximum = std::numeric_limits<uint64_t>::max();
 	const auto allocation = policy::allocateSharedTwoLegBandwidth(maximum, maximum);
@@ -106,7 +106,7 @@ TEST_CASE("Auto Config shared two-leg allocation cannot overflow its aggregate b
 	CHECK(allocation.allocatedVideoKbps <= allocation.aggregateSafeVideoKbps);
 }
 
-TEST_CASE("Auto Config assembles an active Dual Output result only from a complete joint proof")
+TEST_CASE("Auto Optimizer assembles an active Dual Output result only from a complete joint proof")
 {
 	const auto result = policy::assembleSharedTwoLegAllocation(true, true, true, true, 6000, true, 10000);
 	REQUIRE(result.valid);
@@ -115,7 +115,7 @@ TEST_CASE("Auto Config assembles an active Dual Output result only from a comple
 	CHECK(result.allocatedVideoKbps == 10000);
 }
 
-TEST_CASE("Auto Config keeps both Dual Output legs estimated when any joint proof is missing")
+TEST_CASE("Auto Optimizer keeps both Dual Output legs estimated when any joint proof is missing")
 {
 	struct Evidence {
 		bool exactTopologyEligible;
@@ -146,7 +146,7 @@ TEST_CASE("Auto Config keeps both Dual Output legs estimated when any joint proo
 	}
 }
 
-TEST_CASE("Auto Config quality policy exposes only the three approved tiers")
+TEST_CASE("Auto Optimizer quality policy exposes only the three approved tiers")
 {
 	const auto result = policy::candidates({1920, 1080, 60, 1});
 	REQUIRE(result.size() == 6);
@@ -158,7 +158,7 @@ TEST_CASE("Auto Config quality policy exposes only the three approved tiers")
 	CHECK(result[4].height == 540);
 }
 
-TEST_CASE("Auto Config hardware tests high frame rates in product-priority order")
+TEST_CASE("Auto Optimizer hardware tests high frame rates in product-priority order")
 {
 	const policy::VideoTuple ceiling{1920, 1080, 60, 1};
 	std::vector<policy::VideoTuple> result;
@@ -196,7 +196,7 @@ TEST_CASE("Auto Config hardware tests high frame rates in product-priority order
 	CHECK(result[1].fpsNum == 30);
 }
 
-TEST_CASE("Auto Config hardware timeout scales with work and remains bounded")
+TEST_CASE("Auto Optimizer hardware timeout scales with work and remains bounded")
 {
 	const int oneAttempt = policy::hardwarePhaseTimeoutMs(1, 500, 1500, 3000);
 	const int twelveAttempts = policy::hardwarePhaseTimeoutMs(12, 500, 1500, 3000);
@@ -213,14 +213,14 @@ TEST_CASE("Auto Config hardware timeout scales with work and remains bounded")
 	CHECK(excessiveAttempts == 300000);
 }
 
-TEST_CASE("Auto Config distinguishes no usable encoder from overload and timeout")
+TEST_CASE("Auto Optimizer distinguishes no usable encoder from overload and timeout")
 {
 	CHECK(std::string(policy::hardwareFailureCode(false, false)) == "hardware_no_usable_encoder");
 	CHECK(std::string(policy::hardwareFailureCode(false, true)) == "hardware_benchmark_overloaded");
 	CHECK(std::string(policy::hardwareFailureCode(true, true)) == "hardware_benchmark_timeout");
 }
 
-TEST_CASE("Auto Config failure scope preserves lower tiers and the x264 fallback")
+TEST_CASE("Auto Optimizer failure scope preserves lower tiers and the x264 fallback")
 {
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_encoder_create_failed") == policy::HardwareFailureScope::Workload);
 	CHECK(policy::hardwareFailureScope("hardware_benchmark_start_failed") == policy::HardwareFailureScope::Workload);
@@ -236,14 +236,14 @@ TEST_CASE("Auto Config failure scope preserves lower tiers and the x264 fallback
 	CHECK(policy::hardwareFailureScope("", true) == policy::HardwareFailureScope::Phase);
 }
 
-TEST_CASE("Auto Config preserves workload pressure from feeder stalls")
+TEST_CASE("Auto Optimizer preserves workload pressure from feeder stalls")
 {
 	CHECK(policy::hardwareFailureIndicatesOverload("hardware_benchmark_overloaded"));
 	CHECK(policy::hardwareFailureIndicatesOverload("hardware_benchmark_feeder_stalled"));
 	CHECK_FALSE(policy::hardwareFailureIndicatesOverload("hardware_benchmark_start_failed"));
 }
 
-TEST_CASE("Auto Config adopts only conclusive streaming-mix controls")
+TEST_CASE("Auto Optimizer adopts only conclusive streaming-mix controls")
 {
 	CHECK(policy::shouldAdoptHardwareControl(true, false, ""));
 	CHECK(policy::shouldAdoptHardwareControl(false, true, ""));
@@ -254,7 +254,7 @@ TEST_CASE("Auto Config adopts only conclusive streaming-mix controls")
 	CHECK_FALSE(policy::shouldAdoptHardwareControl(false, false, "hardware_benchmark_no_encoded_packets"));
 }
 
-TEST_CASE("Auto Config hardware sample classifier keeps zero packets distinct from overload")
+TEST_CASE("Auto Optimizer hardware sample classifier keeps zero packets distinct from overload")
 {
 	auto result = policy::classifyHardwareSample(false, 0, 0, 0, 0, 34, 2);
 	CHECK_FALSE(result.success);
@@ -289,7 +289,7 @@ TEST_CASE("Auto Config hardware sample classifier keeps zero packets distinct fr
 	CHECK(result.errorCode == nullptr);
 }
 
-TEST_CASE("Auto Config derives only exact frame-rate divisors")
+TEST_CASE("Auto Optimizer derives only exact frame-rate divisors")
 {
 	auto result = policy::frameRateDivisor(60, 1, 30, 1);
 	CHECK(result.supported);
@@ -313,12 +313,12 @@ TEST_CASE("Auto Config derives only exact frame-rate divisors")
 	CHECK_FALSE(result.supported);
 }
 
-TEST_CASE("Auto Config supports two Desktop-managed upload outputs")
+TEST_CASE("Auto Optimizer supports two Desktop-managed upload outputs")
 {
 	CHECK(policy::kMaximumUploadLegs == 2);
 }
 
-TEST_CASE("Auto Config quality policy never upscales the tested ceiling")
+TEST_CASE("Auto Optimizer quality policy never upscales the tested ceiling")
 {
 	const auto result = policy::candidates({1280, 720, 30, 1});
 	REQUIRE(result.size() == 2);
@@ -328,7 +328,7 @@ TEST_CASE("Auto Config quality policy never upscales the tested ceiling")
 	CHECK(policy::select({1280, 720, 30, 1}, 10000, "obs_nvenc_h264_tex").video.width == 1280);
 }
 
-TEST_CASE("Auto Config preserves probe headroom while capping the recommended bitrate")
+TEST_CASE("Auto Optimizer preserves probe headroom while capping the recommended bitrate")
 {
 	const auto stableHeadroom = policy::select({1920, 1080, 60, 1}, 10000, "obs_nvenc_h264_tex");
 	CHECK(stableHeadroom.bitrateKbps == policy::kMaximumRecommendedBitrateKbps);
@@ -337,7 +337,7 @@ TEST_CASE("Auto Config preserves probe headroom while capping the recommended bi
 	CHECK(policy::select({1920, 1080, 60, 1}, 7900, "obs_nvenc_h264_tex").bitrateKbps == 7900);
 }
 
-TEST_CASE("Auto Config composes estimated bitrate limits deterministically")
+TEST_CASE("Auto Optimizer composes estimated bitrate limits deterministically")
 {
 	SECTION("the strictest destination limit wins")
 	{
@@ -366,7 +366,7 @@ TEST_CASE("Auto Config composes estimated bitrate limits deterministically")
 	}
 }
 
-TEST_CASE("Auto Config benchmark ceiling explicitly permits isolated promotion above the current canvas")
+TEST_CASE("Auto Optimizer benchmark ceiling explicitly permits isolated promotion above the current canvas")
 {
 	const policy::VideoTuple current{1280, 720, 30, 1};
 	CHECK(policy::sameVideo(policy::benchmarkCeiling(current, 0, 0), current));
@@ -414,7 +414,7 @@ TEST_CASE("Auto Config benchmark ceiling explicitly permits isolated promotion a
 	CHECK(boundingBox.height == 720);
 }
 
-TEST_CASE("Auto Config adds a raw-input hardware check only above the rendered frame rate")
+TEST_CASE("Auto Optimizer adds a raw-input hardware check only above the rendered frame rate")
 {
 	CHECK(policy::requiresExactHardwareCadenceValidation(true, 30, 1, 60, 1));
 	CHECK(policy::requiresExactHardwareCadenceValidation(true, 30000, 1001, 60000, 1001));
@@ -424,7 +424,7 @@ TEST_CASE("Auto Config adds a raw-input hardware check only above the rendered f
 	CHECK_FALSE(policy::requiresExactHardwareCadenceValidation(true, 0, 1, 60, 1));
 }
 
-TEST_CASE("Auto Config raw-input failures at the exact frame rate reject only that workload")
+TEST_CASE("Auto Optimizer raw-input failures at the exact frame rate reject only that workload")
 {
 	CHECK(policy::exactCadenceValidationFailureScope("hardware_benchmark_encoder_unavailable") == policy::HardwareFailureScope::Workload);
 	CHECK(policy::exactCadenceValidationFailureScope("hardware_benchmark_video_create_failed") == policy::HardwareFailureScope::Workload);
@@ -435,7 +435,7 @@ TEST_CASE("Auto Config raw-input failures at the exact frame rate reject only th
 	CHECK(policy::exactCadenceValidationFailureScope("", true) == policy::HardwareFailureScope::Phase);
 }
 
-TEST_CASE("Auto Config benchmark ceiling preserves portrait orientation")
+TEST_CASE("Auto Optimizer benchmark ceiling preserves portrait orientation")
 {
 	const auto promoted = policy::benchmarkCeiling({720, 1280, 30, 1}, 1080, 1920);
 	CHECK(promoted.width == 1080);
@@ -443,7 +443,7 @@ TEST_CASE("Auto Config benchmark ceiling preserves portrait orientation")
 	CHECK(policy::select(promoted, 6000, "obs_nvenc_h264_tex").video.height == 1920);
 }
 
-TEST_CASE("Auto Config promotes only supported 16:9 and 9:16 aspect ratios")
+TEST_CASE("Auto Optimizer promotes only supported 16:9 and 9:16 aspect ratios")
 {
 	const std::vector<policy::VideoTuple> custom = {
 		{1600, 1000, 30, 1}, // 16:10
@@ -469,7 +469,7 @@ TEST_CASE("Auto Config promotes only supported 16:9 and 9:16 aspect ratios")
 	CHECK(policy::sameVideo(minimumOptions.front(), minimumSafe));
 }
 
-TEST_CASE("Auto Config recommendation promotion requires successful active evidence")
+TEST_CASE("Auto Optimizer recommendation promotion requires successful active evidence")
 {
 	const policy::VideoTuple current{1280, 720, 30, 1};
 	const policy::VideoTuple tested{1920, 1080, 60, 1};
@@ -494,7 +494,7 @@ TEST_CASE("Auto Config recommendation promotion requires successful active evide
 	CHECK(policy::sameVideo(policy::recommendationCeiling(testedFrameRateOnly, current, false), current));
 }
 
-TEST_CASE("Auto Config quality policy preserves orientation aspect ratio and even dimensions")
+TEST_CASE("Auto Optimizer quality policy preserves orientation aspect ratio and even dimensions")
 {
 	const auto result = policy::candidates({1080, 1920, 60000, 1001});
 	REQUIRE(result.size() == 6);
@@ -508,7 +508,7 @@ TEST_CASE("Auto Config quality policy preserves orientation aspect ratio and eve
 	}
 }
 
-TEST_CASE("Auto Config quality selection responds monotonically to bandwidth")
+TEST_CASE("Auto Optimizer quality selection responds monotonically to bandwidth")
 {
 	const policy::VideoTuple ceiling{1920, 1080, 60, 1};
 	const auto high = policy::select(ceiling, 6000, "obs_nvenc_h264_tex");
@@ -536,7 +536,7 @@ TEST_CASE("Every approved quality rung changes eligibility exactly at its bitrat
 	}
 }
 
-TEST_CASE("Auto Config quality policy preserves 50 and 59.94 broadcast-rate families")
+TEST_CASE("Auto Optimizer quality policy preserves 50 and 59.94 broadcast-rate families")
 {
 	const auto pal = policy::candidates({1920, 1080, 50, 1});
 	REQUIRE(pal.size() == 6);
@@ -553,7 +553,7 @@ TEST_CASE("Auto Config quality policy preserves 50 and 59.94 broadcast-rate fami
 	CHECK(ntsc[1].fpsDen == 1001);
 }
 
-TEST_CASE("Auto Config quality policy caps high frame rate inputs to 60 or 59.94")
+TEST_CASE("Auto Optimizer quality policy caps high frame rate inputs to 60 or 59.94")
 {
 	const auto integer = policy::candidates({1920, 1080, 120, 1});
 	REQUIRE(integer.size() == 6);
@@ -648,7 +648,7 @@ TEST_CASE("Twitch quality profile preserves orientation and broadcast-rate famil
 	CHECK(pal.video.fpsDen == 1);
 }
 
-TEST_CASE("Auto Config quality policy reports bandwidth below its minimum tier")
+TEST_CASE("Auto Optimizer quality policy reports bandwidth below its minimum tier")
 {
 	const auto result = policy::select({1920, 1080, 60, 1}, 100, "x264");
 	CHECK(result.video.width == 960);

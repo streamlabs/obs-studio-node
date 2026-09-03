@@ -8,7 +8,7 @@
 
 #include "osn-common.hpp"
 
-namespace autoConfig::enhancedBroadcastingPolicy {
+namespace autoOptimizer::enhancedBroadcastingPolicy {
 
 struct VideoCandidate {
 	uint32_t width;
@@ -152,4 +152,4 @@ inline bool allowsCandidateDescent(std::string_view errorCode)
 	       errorCode == "enhanced_broadcasting_companion_overload";
 }
 
-} // namespace autoConfig::enhancedBroadcastingPolicy
+} // namespace autoOptimizer::enhancedBroadcastingPolicy

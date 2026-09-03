@@ -22,7 +22,7 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "osn-streaming.hpp"
-#include "nodeobs_autoconfig.h"
+#include "nodeobs_auto_optimizer.h"
 
 // DELETE ME WHEN REMOVING NODEOBS
 #include "nodeobs_configManager.hpp"
@@ -359,7 +359,7 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 
 	// Updating a canvas has the same libobs restriction as removing it. Cancel
 	// active Auto Optimizer work and release its temporary outputs first.
-	if (!autoConfig::CancelActiveSession()) {
+	if (!autoOptimizer::CancelActiveSession()) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before updating the video context.");
 	}
 
@@ -426,7 +426,7 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 	// OBS cannot remove a video context while Auto Optimizer's temporary outputs,
 	// encoders, or video resources are active. Cancel the run and wait for cleanup
 	// before removing the canvas.
-	if (!autoConfig::CancelActiveSession()) {
+	if (!autoOptimizer::CancelActiveSession()) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before removing the video context.");
 	}
 

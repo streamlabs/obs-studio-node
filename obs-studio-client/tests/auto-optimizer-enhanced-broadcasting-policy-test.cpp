@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "autoconfig-enhanced-broadcasting-policy.hpp"
+#include "auto-optimizer-enhanced-broadcasting-policy.hpp"
 
-namespace policy = autoConfig::enhancedBroadcastingPolicy;
+namespace policy = autoOptimizer::enhancedBroadcastingPolicy;
 
 TEST_CASE("Enhanced Broadcasting candidates are ordered and capped at 1080p")
 {

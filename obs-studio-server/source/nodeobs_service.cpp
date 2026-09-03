@@ -17,7 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_service.h"
-#include "nodeobs_autoconfig.h"
+#include "nodeobs_auto_optimizer.h"
 #ifdef WIN32
 #include <ShlObj.h>
 #include <windows.h>
@@ -501,7 +501,7 @@ int OBS_service::resetVideoContext(bool reload, bool retryWithDefaultConf)
 {
 	// An Auto Optimizer run uses temporary encoders, outputs, and video mixes.
 	// Wait for their cleanup before changing the process-wide video context.
-	if (!autoConfig::CancelActiveSession()) {
+	if (!autoOptimizer::CancelActiveSession()) {
 		blog(LOG_ERROR, "Timed out while stopping Auto Optimizer before resetting the video context.");
 		return OBS_VIDEO_CURRENTLY_ACTIVE;
 	}

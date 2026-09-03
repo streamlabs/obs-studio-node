@@ -2,9 +2,9 @@ import 'mocha';
 import { expect } from 'chai';
 import * as osn from '../osn';
 import type {
-    IAutoConfigEvent,
-    IAutoConfigRequest,
-    IAutoConfigResult,
+    IAutoOptimizerEvent,
+    IAutoOptimizerRequest,
+    IAutoOptimizerResult,
 } from '../../../js/module';
 import { OBSHandler } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
@@ -30,17 +30,17 @@ describe(testName, function() {
         deleteConfigFiles();
     });
 
-    type AutoConfigOutputRequest = IAutoConfigRequest['outputs'][number];
-    interface AutoConfigRun {
-        readonly result: Promise<IAutoConfigResult>;
+    type AutoOptimizerOutputRequest = IAutoOptimizerRequest['outputs'][number];
+    interface AutoOptimizerRun {
+        readonly result: Promise<IAutoOptimizerResult>;
         confirmProbeIngest(probeId: string, received: boolean): void;
         cancel(): Promise<void>;
     }
-    const autoConfig = osn.NodeObs.AutoConfig as unknown as {
-        run(request: IAutoConfigRequest, onProgress: (event: IAutoConfigEvent) => void): AutoConfigRun;
+    const autoOptimizer = osn.NodeObs.AutoOptimizer as unknown as {
+        run(request: IAutoOptimizerRequest, onProgress: (event: IAutoOptimizerEvent) => void): AutoOptimizerRun;
     };
 
-    function output(overrides: Partial<AutoConfigOutputRequest> = {}): AutoConfigOutputRequest {
+    function output(overrides: Partial<AutoOptimizerOutputRequest> = {}): AutoOptimizerOutputRequest {
         return {
             outputId: 'primary',
             display: 'horizontal',
@@ -60,7 +60,7 @@ describe(testName, function() {
         };
     }
 
-    function pairedEnhancedBroadcastingRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoConfigRequest {
+    function pairedEnhancedBroadcastingRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoOptimizerRequest {
         return {
             streamSetup: 'enhanced-broadcasting',
             outputs: [output({
@@ -87,7 +87,7 @@ describe(testName, function() {
         };
     }
 
-    function enhancedBroadcastingDualOutputRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoConfigRequest {
+    function enhancedBroadcastingDualOutputRequest(primaryCanvasId: number, additionalCanvasId: number): IAutoOptimizerRequest {
         const paired = pairedEnhancedBroadcastingRequest(primaryCanvasId, additionalCanvasId);
         const enhanced = paired.outputs[0];
         enhanced.outputId = 'enhanced';
@@ -114,12 +114,12 @@ describe(testName, function() {
         };
     }
 
-    async function startSessionAtHardwareAttempt(): Promise<AutoConfigRun> {
-        let nativeRun: AutoConfigRun | null = null;
+    async function startSessionAtHardwareAttempt(): Promise<AutoOptimizerRun> {
+        let nativeRun: AutoOptimizerRun | null = null;
         let timeout: ReturnType<typeof setTimeout>;
         const hardwareAttemptStarted = new Promise<void>((resolve, reject) => {
             timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer benchmark workload')), 15000);
-            const onEvent = (event: IAutoConfigEvent) => {
+            const onEvent = (event: IAutoOptimizerEvent) => {
                 if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
                     event.code === 'hardware_testing_x264') {
                     clearTimeout(timeout);
@@ -130,11 +130,11 @@ describe(testName, function() {
                 }
             };
 
-            nativeRun = autoConfig.run(
+            nativeRun = autoOptimizer.run(
                 {
                     streamSetup: 'custom-rtmp',
                     outputs: [output()],
-                } as IAutoConfigRequest,
+                } as IAutoOptimizerRequest,
                 onEvent,
             );
         });
@@ -149,14 +149,14 @@ describe(testName, function() {
         }
     }
 
-    async function run(request: IAutoConfigRequest): Promise<{
-        events: IAutoConfigEvent[];
-        result: IAutoConfigResult;
+    async function run(request: IAutoOptimizerRequest): Promise<{
+        events: IAutoOptimizerEvent[];
+        result: IAutoOptimizerResult;
     }> {
-        const events: IAutoConfigEvent[] = [];
-        const nativeRun = autoConfig.run(request, event => events.push(event));
+        const events: IAutoOptimizerEvent[] = [];
+        const nativeRun = autoOptimizer.run(request, event => events.push(event));
         let timeout: ReturnType<typeof setTimeout>;
-        const timedResult = new Promise<IAutoConfigResult>((_, reject) => {
+        const timedResult = new Promise<IAutoOptimizerResult>((_, reject) => {
             timeout = setTimeout(() => {
                 nativeRun.cancel().then(
                     () => reject(new Error('Auto Optimizer session timed out')),
@@ -190,30 +190,30 @@ describe(testName, function() {
     }
 
     it('exposes only the run-based Auto Optimizer API', function() {
-        expect(autoConfig.run).to.be.a('function');
-        expect(Object.keys(autoConfig)).to.deep.equal(['run']);
+        expect(autoOptimizer.run).to.be.a('function');
+        expect(Object.keys(autoOptimizer)).to.deep.equal(['run']);
         for (const rawMethod of [
-            '__AutoConfigNative',
-            'GetAutoConfigCapabilities',
-            'CreateAutoConfigSession',
-            'StartAutoConfigSession',
-            'ConfirmAutoConfigProbeIngest',
-            'GetAutoConfigResult',
-            'CancelAutoConfigSession',
-            'CloseAutoConfigSession',
+            '__AutoOptimizerNative',
+            'GetAutoOptimizerCapabilities',
+            'CreateAutoOptimizerSession',
+            'StartAutoOptimizerSession',
+            'ConfirmAutoOptimizerProbeIngest',
+            'GetAutoOptimizerResult',
+            'CancelAutoOptimizerSession',
+            'CloseAutoOptimizerSession',
         ]) {
             expect((osn.NodeObs as any)[rawMethod]).to.equal(undefined);
-            expect((osn.NodeObs.AutoConfig as any)[rawMethod]).to.equal(undefined);
+            expect((osn.NodeObs.AutoOptimizer as any)[rawMethod]).to.equal(undefined);
         }
     });
 
     it('accepts registered Enhanced Broadcasting canvas identities 0 and 1', async function() {
         const verticalCanvas = osn.VideoFactory.create();
-        let nativeRun: AutoConfigRun | null = null;
+        let nativeRun: AutoOptimizerRun | null = null;
         try {
             expect(obs.defaultVideoContext.canvasId).to.equal(0);
             expect(verticalCanvas.canvasId).to.equal(1);
-            nativeRun = autoConfig.run(
+            nativeRun = autoOptimizer.run(
                 pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId),
                 () => undefined,
             );
@@ -230,8 +230,8 @@ describe(testName, function() {
         const direct = {
             streamSetup: 'direct-single',
             outputs: [output({ outputKind: 'twitch-enhanced-broadcasting' })],
-        } as IAutoConfigRequest;
-        expect(() => autoConfig.run(direct, () => undefined)).to.throw('invalid_autoconfig_output_kind');
+        } as IAutoOptimizerRequest;
+        expect(() => autoOptimizer.run(direct, () => undefined)).to.throw('invalid_auto_optimizer_output_kind');
 
         const enhanced = {
             streamSetup: 'enhanced-broadcasting',
@@ -239,15 +239,15 @@ describe(testName, function() {
                 outputKind: 'standard',
                 destinations: ['twitch'],
             })],
-        } as IAutoConfigRequest;
-        expect(() => autoConfig.run(enhanced, () => undefined)).to.throw('invalid_autoconfig_output_kind');
+        } as IAutoOptimizerRequest;
+        expect(() => autoOptimizer.run(enhanced, () => undefined)).to.throw('invalid_auto_optimizer_output_kind');
     });
 
     it('accepts the exact Enhanced Broadcasting plus two companion output stream setup', async function() {
         const verticalCanvas = osn.VideoFactory.create();
-        let nativeRun: AutoConfigRun | null = null;
+        let nativeRun: AutoOptimizerRun | null = null;
         try {
-            nativeRun = autoConfig.run(
+            nativeRun = autoOptimizer.run(
                 enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId),
                 () => undefined,
             );
@@ -265,20 +265,20 @@ describe(testName, function() {
         try {
             const wrongCanvas = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
             wrongCanvas.outputs[1].current.canvasId = verticalCanvas.canvasId;
-            expect(() => autoConfig.run(wrongCanvas, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+            expect(() => autoOptimizer.run(wrongCanvas, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_dual_output');
 
             const custom = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
             custom.outputs[1].destinations = ['custom'];
-            expect(() => autoConfig.run(custom, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+            expect(() => autoOptimizer.run(custom, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_dual_output');
 
             const providerOwnedCompanion = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId);
             providerOwnedCompanion.outputs[1].outputKind = 'twitch-enhanced-broadcasting';
-            expect(() => autoConfig.run(providerOwnedCompanion, () => undefined))
-                .to.throw('invalid_autoconfig_enhanced_broadcasting_dual_output');
+            expect(() => autoOptimizer.run(providerOwnedCompanion, () => undefined))
+                .to.throw('invalid_auto_optimizer_enhanced_broadcasting_dual_output');
 
             const implicitOwnership = enhancedBroadcastingDualOutputRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
             delete implicitOwnership.outputs[1].outputKind;
-            expect(() => autoConfig.run(implicitOwnership, () => undefined)).to.throw('Invalid Auto Optimizer output');
+            expect(() => autoOptimizer.run(implicitOwnership, () => undefined)).to.throw('Invalid Auto Optimizer output');
         } finally {
             verticalCanvas.destroy();
         }
@@ -290,7 +290,7 @@ describe(testName, function() {
             outputs: [output()],
         } as any;
         delete request.outputs[0].current.canvasId;
-        const nativeRun = autoConfig.run(request, () => undefined);
+        const nativeRun = autoOptimizer.run(request, () => undefined);
         await nativeRun.cancel();
         expect((await nativeRun.result).status).to.equal('cancelled');
     });
@@ -300,40 +300,40 @@ describe(testName, function() {
         try {
             const missingPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
             delete missingPrimary.outputs[0].current.canvasId;
-            expect(() => autoConfig.run(missingPrimary, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoOptimizer.run(missingPrimary, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_canvas');
 
             const negativePrimary = pairedEnhancedBroadcastingRequest(-1, verticalCanvas.canvasId);
-            expect(() => autoConfig.run(negativePrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
+            expect(() => autoOptimizer.run(negativePrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const missingAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
             delete missingAdditional.outputs[0].additionalVideo.current.canvasId;
-            expect(() => autoConfig.run(missingAdditional, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoOptimizer.run(missingAdditional, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_canvas');
 
             const negativeAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, -1);
-            expect(() => autoConfig.run(negativeAdditional, () => undefined)).to.throw('Invalid Auto Optimizer additional video');
+            expect(() => autoOptimizer.run(negativeAdditional, () => undefined)).to.throw('Invalid Auto Optimizer additional video');
 
             const fractionalPrimary = pairedEnhancedBroadcastingRequest(0.5, verticalCanvas.canvasId);
-            expect(() => autoConfig.run(fractionalPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
+            expect(() => autoOptimizer.run(fractionalPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const stringPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
             stringPrimary.outputs[0].current.canvasId = '0';
-            expect(() => autoConfig.run(stringPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
+            expect(() => autoOptimizer.run(stringPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const nullPrimary = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId) as any;
             nullPrimary.outputs[0].current.canvasId = null;
-            expect(() => autoConfig.run(nullPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
+            expect(() => autoOptimizer.run(nullPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const unsafeIntegerPrimary = pairedEnhancedBroadcastingRequest(Number.MAX_SAFE_INTEGER + 1, verticalCanvas.canvasId);
-            expect(() => autoConfig.run(unsafeIntegerPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
+            expect(() => autoOptimizer.run(unsafeIntegerPrimary, () => undefined)).to.throw('Invalid Auto Optimizer current settings');
 
             const equalCanvasIds = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, obs.defaultVideoContext.canvasId);
-            expect(() => autoConfig.run(equalCanvasIds, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoOptimizer.run(equalCanvasIds, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_canvas');
 
             const unknownPrimary = pairedEnhancedBroadcastingRequest(999999, verticalCanvas.canvasId);
-            expect(() => autoConfig.run(unknownPrimary, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoOptimizer.run(unknownPrimary, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_canvas');
 
             const unknownAdditional = pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, 999999);
-            expect(() => autoConfig.run(unknownAdditional, () => undefined)).to.throw('invalid_autoconfig_enhanced_broadcasting_canvas');
+            expect(() => autoOptimizer.run(unknownAdditional, () => undefined)).to.throw('invalid_auto_optimizer_enhanced_broadcasting_canvas');
         } finally {
             verticalCanvas.destroy();
         }
@@ -410,10 +410,10 @@ describe(testName, function() {
     });
 
     it('cancels a newly started run and makes cleanup observable before returning', async function() {
-        const nativeRun = autoConfig.run({
+        const nativeRun = autoOptimizer.run({
             streamSetup: 'custom-rtmp',
             outputs: [output()],
-        } as IAutoConfigRequest,
+        } as IAutoOptimizerRequest,
             () => undefined);
 
         await nativeRun.cancel();
@@ -423,10 +423,10 @@ describe(testName, function() {
     });
 
     it('cancels a running session only after its benchmark worker has cleaned up', async function() {
-        const nativeRun = autoConfig.run({
+        const nativeRun = autoOptimizer.run({
             streamSetup: 'custom-rtmp',
             outputs: [output()],
-        } as IAutoConfigRequest,
+        } as IAutoOptimizerRequest,
             () => undefined);
         // Wait for hardware testing to start so this cancels active benchmark
         // work rather than a session that has not begun.
@@ -440,14 +440,14 @@ describe(testName, function() {
 
     it('accepts additional unprobed destinations and cancels both concurrent Dual Output hardware workloads before returning', async function() {
         const verticalCanvas = osn.VideoFactory.create();
-        let nativeRun: AutoConfigRun | null = null;
+        let nativeRun: AutoOptimizerRun | null = null;
         try {
             const started = new Promise<void>((resolve, reject) => {
                 const eventCodes: string[] = [];
                 const timeout = setTimeout(
                     () => reject(new Error(`Timed out waiting for the concurrent Dual Output workload; events=${eventCodes.join(',')}`)),
                     15000);
-                nativeRun = autoConfig.run(
+                nativeRun = autoOptimizer.run(
                     {
                         streamSetup: 'dual-output',
                         outputs: [
@@ -480,7 +480,7 @@ describe(testName, function() {
                                 }],
                             }),
                         ],
-                    } as IAutoConfigRequest,
+                    } as IAutoOptimizerRequest,
                     event => {
                         if (event.code)
                             eventCodes.push(event.code);
@@ -540,7 +540,7 @@ describe(testName, function() {
         const UINT32_MODULUS = 2 ** 32;
         const expectInvalid =
             (request: unknown,
-                error: string) => { expect(() => autoConfig.run(request as IAutoConfigRequest, () => undefined)).to.throw(error); };
+                error: string) => { expect(() => autoOptimizer.run(request as IAutoOptimizerRequest, () => undefined)).to.throw(error); };
 
         expectInvalid({
             streamSetup: 'not-a-stream-setup',
@@ -641,23 +641,23 @@ describe(testName, function() {
     });
 
     it('rejects more outputs than Desktop can create', function() {
-        expect(() => autoConfig.run({
+        expect(() => autoOptimizer.run({
             streamSetup: 'dual-output',
             outputs: [
                 output({ outputId: 'horizontal', display: 'horizontal' }),
                 output({ outputId: 'vertical', display: 'vertical' }),
                 output({ outputId: 'unexpected-third', display: 'horizontal' }),
             ],
-        } as IAutoConfigRequest,
+        } as IAutoOptimizerRequest,
             () => undefined))
             .to.throw('Invalid Auto Optimizer outputs');
     });
 
     it('cancels an active session before removing its video context', async function() {
-        const nativeRun = autoConfig.run({
+        const nativeRun = autoOptimizer.run({
             streamSetup: 'custom-rtmp',
             outputs: [output()],
-        } as IAutoConfigRequest,
+        } as IAutoOptimizerRequest,
             () => undefined);
         await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -672,10 +672,10 @@ describe(testName, function() {
     });
 
     it('disconnects cleanly while a session worker is running', async function() {
-        autoConfig.run({
+        autoOptimizer.run({
             streamSetup: 'custom-rtmp',
             outputs: [output()],
-        } as IAutoConfigRequest,
+        } as IAutoOptimizerRequest,
             () => undefined);
         await new Promise(resolve => setTimeout(resolve, 100));
 
