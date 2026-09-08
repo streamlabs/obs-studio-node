@@ -78,8 +78,8 @@ const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEn
 	{"AMD HW H.265 (HEVC)", ADVANCED_ENCODER_AMD_HEVC, "Hardware (AMD, HEVC)", SIMPLE_ENCODER_AMD_HEVC, ADVANCED_ENCODER_AMD_HEVC, "", true, true, true,
 	 true, true, false, PRESET_AMD, FAMILY_AMD},
 	// AMD HW AV1
-	{"AMD HW AV1", SIMPLE_ENCODER_AMD_AV1, "Hardware (AMD, AV1)", SIMPLE_ENCODER_AMD_AV1, ADVANCED_ENCODER_AMD_AV1, "", true, true, true, true, true, false,
-	 PRESET_AMD, FAMILY_AMD},
+	{"AMD HW AV1", ADVANCED_ENCODER_AMD_AV1, "Hardware (AMD, AV1)", SIMPLE_ENCODER_AMD_AV1, ADVANCED_ENCODER_AMD_AV1, "", true, true, true, true, true,
+	 false, PRESET_AMD, FAMILY_AMD},
 	// AOM AV1
 	{"AOM AV1", ENCODER_AV1_AOM_FFMPEG, "", "", "", "", true, true, true, true, true, false, DEFAULT_PRESET, FAMILY_FFMPEG},
 	// SVT-AV1
