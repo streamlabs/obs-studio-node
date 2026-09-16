@@ -2462,22 +2462,6 @@ interface INodeObs {
      * @returns No value; read the category again to obtain normalized values and choices
      * @throws {TypeError} If the settings metadata cannot be converted to the expected JavaScript types
      * @throws {Error} If the IPC request fails or the server rejects the save
-     *
-     * Common RTMP services preserve an enabled server choice, or select the first
-     * enabled choice when the submitted server is invalid. This also applies when
-     * switching from a custom service. Returned server values and choices omit a
-     * trailing slash; native settings retain the catalog's exact endpoint spelling.
-     * Custom service URLs remain unrestricted and keep their submitted spelling.
-     * Entering a common service or changing its provider clears an unchanged stream
-     * key; a replacement key submitted in the same save is retained. Converting a
-     * common service to custom preserves the key and concrete URLs, and resolves
-     * an inherited automatic server selection through the previous common service.
-     * An explicitly supplied replacement URL is retained. If an inherited selection
-     * cannot be resolved to a URL, the save is rejected.
-     *
-     * A rejected Stream save leaves the configured service unchanged. Successful Stream
-     * saves replace it. Previously returned settings arrays and independently created
-     * ServiceFactory services are not updated by this call.
      */
     OBS_settings_saveSettings(category: string, settings: any[]): void;
 }
