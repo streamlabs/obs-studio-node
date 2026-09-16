@@ -1153,6 +1153,7 @@ interface INodeObs {
     [key: string]: any;
     readonly AutoOptimizer: IAutoOptimizer;
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+    OBS_settings_saveSettings(category: string, settings: any[]): void;
 }
 export declare const enum VCamOutputType {
     Invalid = 0,

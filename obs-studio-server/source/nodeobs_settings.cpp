@@ -607,6 +607,14 @@ void OBS_settings::saveGeneralSettings(std::vector<SubCategory> generalSettings,
 	config_close(config);
 }
 
+static std::string getStreamSettingListValue(const char *value)
+{
+	std::string result = value;
+	if (!result.empty() && result.back() == '/')
+		result.pop_back();
+	return result;
+}
+
 std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId serviceId)
 {
 	bool isCategoryEnabled = !OBS_service::isStreamingOutputActive(serviceId);
@@ -744,13 +752,8 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 				param.values.insert(param.values.end(), sizeNameBuffer.begin(), sizeNameBuffer.end());
 				param.values.insert(param.values.end(), name.begin(), name.end());
 
-				std::string value = obs_property_list_item_string(property, i);
+				std::string value = getStreamSettingListValue(obs_property_list_item_string(property, i));
 				uint64_t sizeValue = value.length();
-
-				if (value[sizeValue - 1] == '/') {
-					sizeValue--;
-					value.resize(sizeValue);
-				}
 
 				std::vector<char> sizeValueBuffer;
 				sizeValueBuffer.resize(sizeof(sizeValue));
@@ -859,11 +862,12 @@ std::vector<SubCategory> OBS_settings::getStreamSettings(StreamServiceId service
 				memcpy(param.currentValue.data(), &value, sizeof(value));
 				param.sizeOfCurrentValue = sizeof(value);
 			} else if (format == OBS_COMBO_FORMAT_STRING) {
-				currentServiceName = obs_data_get_string(settings, obs_property_name(property));
+				std::string value = obs_data_get_string(settings, obs_property_name(property));
+				if (param.name == "server" && strcmp(servType, "rtmp_common") == 0)
+					value = getStreamSettingListValue(value.c_str());
 
-				param.currentValue.resize(strlen(currentServiceName));
-				memcpy(param.currentValue.data(), currentServiceName, strlen(currentServiceName));
-				param.sizeOfCurrentValue = strlen(currentServiceName);
+				param.currentValue.assign(value.begin(), value.end());
+				param.sizeOfCurrentValue = value.size();
 			}
 		}
 
@@ -895,19 +899,18 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 	if (!obs_service_is_ready_to_update(currentService))
 		return false;
 
-	obs_data_t *settings = nullptr;
+	OBSDataAutoRelease settings;
 
 	std::string currentStreamType = obs_service_get_type(currentService);
 	std::string newserviceTypeValue;
 
-	std::string currentServiceName = obs_data_get_string(obs_service_get_settings(currentService), "service");
-	std::string newServiceValue;
+	OBSDataAutoRelease currentSettings = obs_service_get_settings(currentService);
+	std::string currentServiceName = obs_data_get_string(currentSettings, "service");
 
 	//get existing key to compare with new key later - if service is changed we will clear the key since keys don't carry over between services
 	const char *currentKey = obs_service_get_connect_info(currentService, OBS_SERVICE_CONNECT_INFO_STREAM_KEY);
 
 	SubCategory sc;
-	bool serviceChanged = false;
 	bool serviceSettingsInvalid = false;
 
 	for (int i = 0; i < streamSettings.size(); i++) {
@@ -949,10 +952,6 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 						serviceSettingsInvalid = true;
 						break;
 					}
-					newServiceValue = value;
-					if (currentServiceName.compare(newServiceValue) != 0) {
-						serviceChanged = true;
-					}
 				}
 				obs_data_set_string(settings, name.c_str(), value.c_str());
 			} else if (type.compare("OBS_PROPERTY_INT") == 0 || type.compare("OBS_PROPERTY_UINT") == 0) {
@@ -968,63 +967,73 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 		}
 	}
 
-	if (serviceSettingsInvalid) {
-		if (settings)
-			obs_data_release(settings);
+	if (serviceSettingsInvalid || !settings)
 		return false;
+
+	if (currentStreamType == "rtmp_common" && newserviceTypeValue == "rtmp_custom") {
+		const std::string server = obs_data_get_string(settings, "server");
+		const std::string currentServer = obs_data_get_string(currentSettings, "server");
+		// Automatic selections belong to the common provider. Resolve an inherited
+		// selection before replacing that service; an explicitly entered URL wins.
+		if (!server.empty() && server == currentServer && server.find("://") == std::string::npos) {
+			// Fresh profiles populate the settings object before the service has
+			// received an update. Resolve from that snapshot without mutating it.
+			OBSServiceAutoRelease resolver = obs_service_create("rtmp_common", "stream_settings_resolver", currentSettings, nullptr);
+			if (!resolver)
+				return false;
+			const char *resolvedServer = obs_service_get_connect_info(resolver, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
+			if (!resolvedServer || std::string(resolvedServer).find("://") == std::string::npos)
+				return false;
+			obs_data_set_string(settings, "server", resolvedServer);
+		}
 	}
 
-	obs_data_t *hotkeyData = obs_hotkeys_save_service(currentService);
+	OBSDataAutoRelease hotkeyData = obs_hotkeys_save_service(currentService);
 
 	obs_service_t *newService = obs_service_create(newserviceTypeValue.c_str(), "default_service", settings, hotkeyData);
+	if (!newService)
+		return false;
 
-	if (serviceChanged) {
-		std::string server = obs_data_get_string(settings, "server");
-		bool serverFound = false;
-		std::string defaultServer;
-
-		// Check if server is valid
+	if (newserviceTypeValue == "rtmp_common") {
+		// Validate after applying the entire form: custom forms carry a server and
+		// key but no service field, so a type change alone must also reconcile them.
+		std::string server = getStreamSettingListValue(obs_data_get_string(settings, "server"));
+		std::string selectedServer;
 		obs_properties_t *properties = obs_service_properties(newService);
-		obs_property_t *property = obs_properties_first(properties);
+		obs_property_t *property = obs_properties_get(properties, "server");
+		const size_t count = obs_property_list_item_count(property);
+		for (size_t i = 0; i < count; i++) {
+			if (obs_property_list_item_disabled(property, i))
+				continue;
 
-		while (property) {
-			std::string name = obs_property_name(property);
-
-			if (name.compare("server") == 0) {
-				int count = (int)obs_property_list_item_count(property);
-				int i = 0;
-
-				while (i < count && !serverFound) {
-					std::string value = obs_property_list_item_string(property, i);
-
-					if (i == 0)
-						defaultServer = value;
-
-					if (value.compare(server) == 0)
-						serverFound = true;
-
-					i++;
-				}
+			// Match the form's normalized spelling, but retain the exact native
+			// endpoint: providers such as Facebook require its trailing slash.
+			std::string value = obs_property_list_item_string(property, i);
+			if (value.empty())
+				continue;
+			if (selectedServer.empty())
+				selectedServer = value;
+			if (getStreamSettingListValue(value.c_str()) == server) {
+				selectedServer = value;
+				break;
 			}
-			obs_property_next(&property);
 		}
+		obs_properties_destroy(properties);
 
-		if (!serverFound && defaultServer.compare("") != 0) {
-			// Server not found, we set the default server
-			obs_data_set_string(settings, "server", defaultServer.c_str());
-			obs_service_update(newService, settings);
+		if (selectedServer.empty()) {
+			obs_service_release(newService);
+			return false;
 		}
+		obs_data_set_string(settings, "server", selectedServer.c_str());
 
-		//if service changed but key didn't we also need to clear out the key since services don't share keys
+		const bool serviceChanged = currentStreamType != newserviceTypeValue || currentServiceName != obs_data_get_string(settings, "service");
+		// An unchanged key belongs to the previous destination. An explicitly
+		// supplied replacement key may be used with the newly selected service.
 		const char *newKey = obs_data_get_string(settings, "key");
-		if (currentKey != nullptr && newKey != nullptr && strcmp(currentKey, newKey) == 0) {
-			blog(LOG_INFO, "MLH clearing stream key since service was changed and key wasn't");
+		if (serviceChanged && currentKey != nullptr && newKey != nullptr && strcmp(currentKey, newKey) == 0)
 			obs_data_set_string(settings, "key", "");
-			obs_service_update(newService, settings);
-		}
+		obs_service_update(newService, settings);
 	}
-
-	obs_data_release(hotkeyData);
 
 	OBS_service::setService(newService, serviceId);
 
@@ -1036,7 +1045,6 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 		blog(LOG_WARNING, "Failed to save service");
 	}
 
-	obs_data_release(hotkeyData);
 	obs_data_release(data);
 	return true;
 }
