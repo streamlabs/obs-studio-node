@@ -1,5 +1,7 @@
 import 'mocha'
 import { expect } from 'chai'
+import * as fs from 'fs';
+import * as path from 'path';
 import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
@@ -116,6 +118,254 @@ describe(testName, function() {
             expect(settings.server).to.equal(updatedSettings.server, GetErrorMessage(ETestErrorMsg.SingleStreamSetting, updatedSettings.server));
         });
     });
+
+    for (const category of [EOBSSettingsCategories.Stream, EOBSSettingsCategories.StreamSecond]) {
+        describe(`${category} server normalization`, function() {
+            const youtubeServer = 'rtmps://a.rtmps.youtube.com:443/live2';
+            const dummyKey = 'synthetic-stream-settings-key';
+            const configFile = category === EOBSSettingsCategories.Stream ? 'service.json' : 'service1.json';
+            const configPath = path.join(__dirname, '..', 'osnData', 'slobs-client', configFile);
+            let originalSettings: any[];
+
+            function readSettings(): any[] {
+                return osn.NodeObs.OBS_settings_getSettings(category).data;
+            }
+
+            function field(name: string, settings = readSettings()): any {
+                const parameters = settings.reduce((parameters, section) => parameters.concat(section.parameters), []);
+                const parameter = parameters.find(parameter => parameter.name === name);
+                expect(parameter, `Missing ${category} setting ${name}`).to.not.equal(undefined);
+                return parameter;
+            }
+
+            function save(changes: osn.ISettings) {
+                // The generic Desktop form submits the complete metadata with only the
+                // edited values changed, including stale server/key fields on type changes.
+                const settings = readSettings();
+                for (const name of Object.keys(changes)) {
+                    field(name, settings).currentValue = changes[name];
+                }
+                osn.NodeObs.OBS_settings_saveSettings(category, settings);
+            }
+
+            function serverChoices(): string[] {
+                return field('server').values.map(value => value[Object.keys(value)[0]]);
+            }
+
+            function expectSaved(changes: osn.ISettings, persistedServer?: string) {
+                const settings = readSettings();
+                const persisted = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                for (const name of Object.keys(changes)) {
+                    expect(field(name, settings).currentValue, `Returned ${category} ${name}`).to.equal(changes[name]);
+                    const expectedPersisted = name === 'server' && persistedServer !== undefined ? persistedServer : changes[name];
+                    expect(name === 'streamType' ? persisted.type : persisted.settings[name], `Persisted ${category} ${name}`).to.equal(expectedPersisted);
+                }
+            }
+
+            function setCustomServer(server = youtubeServer) {
+                save({ streamType: 'rtmp_custom' });
+                save({ server, key: dummyKey });
+            }
+
+            beforeEach(function() {
+                originalSettings = readSettings();
+                save({ streamType: 'rtmp_custom' });
+                save({ streamType: 'rtmp_common' });
+                save({ service: 'Twitch', server: 'auto', key: '' });
+            });
+
+            afterEach(function() {
+                // A destination change may clear an unchanged key on the first save.
+                // Restore once more with the original destination already selected.
+                osn.NodeObs.OBS_settings_saveSettings(category, originalSettings);
+                osn.NodeObs.OBS_settings_saveSettings(category, originalSettings);
+            });
+
+            it('Replaces the custom YouTube server and carried key when switching to common streaming', function() {
+                setCustomServer();
+                save({ streamType: 'rtmp_common' });
+
+                expect(serverChoices()).to.include('auto').and.not.include(youtubeServer);
+                expectSaved({ streamType: 'rtmp_common', service: 'Twitch', server: 'auto', key: '' });
+            });
+
+            it('Keeps an explicitly replaced key when switching from custom to common streaming', function() {
+                setCustomServer();
+                save({ streamType: 'rtmp_common', key: 'synthetic-replacement-key' });
+
+                expectSaved({ service: 'Twitch', server: 'auto', key: 'synthetic-replacement-key' });
+            });
+
+            it('Replaces an invalid server and unchanged key when changing the common provider', function() {
+                save({ service: 'YouTube - RTMPS' });
+                save({ server: youtubeServer, key: dummyKey });
+                save({ service: 'Twitch' });
+
+                expect(serverChoices()).to.include('auto').and.not.include(youtubeServer);
+                expectSaved({ service: 'Twitch', server: 'auto', key: '' });
+            });
+
+            it('Keeps an explicitly replaced key when changing the common provider', function() {
+                save({ service: 'YouTube - RTMPS' });
+                save({ server: youtubeServer, key: dummyKey });
+                save({ service: 'Twitch', key: 'synthetic-replacement-key' });
+
+                expectSaved({ service: 'Twitch', server: 'auto', key: 'synthetic-replacement-key' });
+            });
+
+            it('Preserves a manually selected common server and key on unrelated saves', function() {
+                save({ service: 'YouTube - RTMPS' });
+                const choices = serverChoices();
+                expect(choices.length, 'Expected a non-default YouTube ingest').to.be.greaterThan(1);
+                const selectedServer = choices[1];
+                save({ server: selectedServer, key: dummyKey });
+                save({ show_all: !field('show_all').currentValue });
+
+                expectSaved({ service: 'YouTube - RTMPS', server: selectedServer, key: dummyKey });
+            });
+
+            it('Preserves a non-default catalog server whose metadata strips its trailing slash', function() {
+                save({ show_all: true });
+                save({ service: 'Nimo TV' });
+                const choices = serverChoices();
+                expect(choices.length, 'Expected a non-default Nimo ingest').to.be.greaterThan(1);
+                const selectedServer = choices[1];
+                expect(selectedServer.endsWith('/')).to.equal(false);
+                save({ server: selectedServer, key: dummyKey });
+                expectSaved({ service: 'Nimo TV', server: selectedServer, key: dummyKey }, `${selectedServer}/`);
+
+                // The persisted native spelling and the form spelling select the same
+                // server; the returned value must always belong to the returned choices.
+                save({ server: `${selectedServer}/` });
+                expect(serverChoices()).to.include(selectedServer);
+                expectSaved({ service: 'Nimo TV', server: selectedServer, key: dummyKey }, `${selectedServer}/`);
+            });
+
+            it('Keeps the Facebook catalog URL intact while returning a matching server choice', function() {
+                save({ service: 'Facebook Live' });
+                const choices = serverChoices();
+                expect(choices.length, 'Expected a Facebook ingest').to.be.greaterThan(0);
+                const selectedServer = choices[0];
+                expect(selectedServer.endsWith('/rtmp')).to.equal(true);
+
+                // The Facebook catalog URL includes a final slash that the generic
+                // form omits from the displayed choice.
+                save({ server: selectedServer, key: dummyKey });
+                expectSaved({ service: 'Facebook Live', server: selectedServer, key: dummyKey }, `${selectedServer}/`);
+                save({ show_all: true });
+                expect(serverChoices()).to.include(field('server').currentValue);
+                expectSaved({ service: 'Facebook Live', server: selectedServer, key: dummyKey }, `${selectedServer}/`);
+            });
+
+            it('Preserves an arbitrary custom URL and key on unrelated saves', function() {
+                const customServer = 'rtmps://custom.example.invalid:443/application/';
+                setCustomServer(customServer);
+                save({ use_auth: !field('use_auth').currentValue });
+
+                expectSaved({ streamType: 'rtmp_custom', server: customServer, key: dummyKey });
+            });
+
+            it('Preserves the common server and key when switching to custom streaming', function() {
+                save({ service: 'YouTube - RTMPS' });
+                save({ server: youtubeServer, key: dummyKey });
+                save({ streamType: 'rtmp_custom' });
+
+                expectSaved({ streamType: 'rtmp_custom', server: youtubeServer, key: dummyKey });
+            });
+
+            it('Preserves the Facebook catalog URL when switching to custom streaming', function() {
+                save({ service: 'Facebook Live' });
+                save({ key: dummyKey });
+                const formServer = field('server').currentValue;
+                const nativeServer = JSON.parse(fs.readFileSync(configPath, 'utf8')).settings.server;
+                expect(nativeServer).to.equal(`${formServer}/`);
+
+                save({ streamType: 'rtmp_custom' });
+
+                expectSaved({ streamType: 'rtmp_custom', server: nativeServer, key: dummyKey });
+
+                // After conversion the custom field exposes the exact URL, so a
+                // deliberate removal of its trailing slash must remain possible.
+                save({ server: formServer });
+                expectSaved({ streamType: 'rtmp_custom', server: formServer, key: dummyKey });
+            });
+
+            it('Keeps an explicit replacement URL when leaving Facebook common streaming', function() {
+                save({ service: 'Facebook Live' });
+                save({ key: dummyKey });
+                const server = 'rtmps://custom.example.invalid:443/application/';
+
+                save({ streamType: 'rtmp_custom', server });
+
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
+            });
+
+            it('Keeps an explicitly added trailing slash when switching to custom streaming', function() {
+                save({ service: 'YouTube - RTMPS' });
+                save({ server: youtubeServer, key: dummyKey });
+                expect(field('server').currentValue).to.equal(youtubeServer);
+                const server = `${youtubeServer}/`;
+
+                save({ streamType: 'rtmp_custom', server });
+
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
+            });
+
+            it('Resolves the automatic Twitch server when switching to custom streaming', function() {
+                save({ key: dummyKey });
+                expect(field('server').currentValue).to.equal('auto');
+                save({ streamType: 'rtmp_custom' });
+
+                const server = field('server').currentValue;
+                expect(server).to.match(/^rtmps?:\/\/[^/]+\/.+/);
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
+            });
+
+            it('Keeps an explicitly supplied custom URL instead of resolving the automatic server', function() {
+                save({ key: dummyKey });
+                const server = 'rtmps://custom.example.invalid:443/application/';
+                save({ streamType: 'rtmp_custom', server });
+
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
+            });
+
+            it('Preserves a regional Twitch server when switching to custom streaming', function() {
+                const server = serverChoices().find(value => /^rtmps?:\/\//.test(value));
+                expect(server, 'Expected a concrete Twitch ingest').to.be.a('string');
+                save({ server, key: dummyKey });
+                save({ streamType: 'rtmp_custom' });
+
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
+            });
+
+            it('Repairs a stale common server submitted without a provider change', function() {
+                save({ key: dummyKey });
+                expect(field('service').currentValue).to.equal('Twitch');
+                expect(serverChoices()).to.not.include(youtubeServer);
+
+                // Re-submit the mismatched form produced by older settings saves,
+                // keeping both the common stream type and provider unchanged.
+                save({ server: youtubeServer, show_all: true });
+
+                expectSaved({ service: 'Twitch', server: 'auto', key: dummyKey });
+            });
+
+            it('Rejects an unknown common provider without replacing or persisting the current settings', function() {
+                save({ key: dummyKey });
+                const previousSettings = readSettings();
+                const previousFile = fs.readFileSync(configPath, 'utf8');
+
+                expect(() => save({
+                    service: 'synthetic-unknown-stream-provider',
+                    server: youtubeServer,
+                    key: 'synthetic-replacement-key',
+                })).to.throw(Error);
+
+                expect(readSettings()).to.deep.equal(previousSettings);
+                expect(fs.readFileSync(configPath, 'utf8')).to.equal(previousFile);
+            });
+        });
+    }
 
     it('Get and set simple output settings', function() {
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');

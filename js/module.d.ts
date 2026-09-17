@@ -988,4 +988,8 @@ export declare const enum VCamOutputType {
     ProgramView = 3,
     PreviewOutput = 4
 }
-export declare const NodeObs: any;
+interface INodeObs {
+    [key: string]: any;
+    OBS_settings_saveSettings(category: string, settings: any[]): void;
+}
+export declare const NodeObs: INodeObs;
