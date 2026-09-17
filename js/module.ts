@@ -1946,6 +1946,9 @@ interface INodeObs {
 
     /**
      * Saves a complete legacy settings category, including native field metadata.
+     * Converting a common RTMP service to custom restores the exact native URL
+     * when the submitted server matches the previous form value. Inherited automatic
+     * selections are resolved to a URL; explicitly edited server values are preserved.
      * @param category - Category name, such as `Stream` or `StreamSecond`
      * @param settings - The `data` array from `OBS_settings_getSettings(category)`,
      * with edited `currentValue` fields; keep the stream type field first

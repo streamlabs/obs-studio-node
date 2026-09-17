@@ -891,18 +891,23 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 	if (currentStreamType == "rtmp_common" && newserviceTypeValue == "rtmp_custom") {
 		const std::string server = obs_data_get_string(settings, "server");
 		const std::string currentServer = obs_data_get_string(currentSettings, "server");
-		// Automatic selections belong to the common provider. Resolve an inherited
-		// selection before replacing that service; an explicitly entered URL wins.
-		if (!server.empty() && server == currentServer && server.find("://") == std::string::npos) {
-			// Fresh profiles populate the settings object before the service has
-			// received an update. Resolve from that snapshot without mutating it.
-			OBSServiceAutoRelease resolver = obs_service_create("rtmp_common", "stream_settings_resolver", currentSettings, nullptr);
-			if (!resolver)
-				return false;
-			const char *resolvedServer = obs_service_get_connect_info(resolver, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
-			if (!resolvedServer || std::string(resolvedServer).find("://") == std::string::npos)
-				return false;
-			obs_data_set_string(settings, "server", resolvedServer);
+		// Compare against the previous form value, which omits a trailing slash.
+		// Keep the submitted spelling intact when the user explicitly changes it.
+		if (!server.empty() && server == getStreamSettingListValue(currentServer.c_str())) {
+			if (currentServer.find("://") != std::string::npos) {
+				obs_data_set_string(settings, "server", currentServer.c_str());
+			} else {
+				// Automatic selections belong to the common provider. Fresh profiles
+				// populate settings before updating the service, so resolve from that
+				// snapshot without mutating the current service.
+				OBSServiceAutoRelease resolver = obs_service_create("rtmp_common", "stream_settings_resolver", currentSettings, nullptr);
+				if (!resolver)
+					return false;
+				const char *resolvedServer = obs_service_get_connect_info(resolver, OBS_SERVICE_CONNECT_INFO_SERVER_URL);
+				if (!resolvedServer || std::string(resolvedServer).find("://") == std::string::npos)
+					return false;
+				obs_data_set_string(settings, "server", resolvedServer);
+			}
 		}
 	}
 
@@ -925,7 +930,7 @@ bool OBS_settings::saveStreamSettings(std::vector<SubCategory> streamSettings, S
 				continue;
 
 			// Match the form's normalized spelling, but retain the exact native
-			// endpoint: providers such as Facebook require its trailing slash.
+			// endpoint, including any trailing slash in the catalog.
 			std::string value = obs_property_list_item_string(property, i);
 			if (value.empty())
 				continue;

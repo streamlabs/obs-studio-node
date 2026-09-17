@@ -248,8 +248,8 @@ describe(testName, function() {
                 const selectedServer = choices[0];
                 expect(selectedServer.endsWith('/rtmp')).to.equal(true);
 
-                // Facebook validates the exact native URL, including its final slash.
-                // The generic form exposes that same choice without the final slash.
+                // The Facebook catalog URL includes a final slash that the generic
+                // form omits from the displayed choice.
                 save({ server: selectedServer, key: dummyKey });
                 expectSaved({ service: 'Facebook Live', server: selectedServer, key: dummyKey }, `${selectedServer}/`);
                 save({ show_all: true });
@@ -271,6 +271,44 @@ describe(testName, function() {
                 save({ streamType: 'rtmp_custom' });
 
                 expectSaved({ streamType: 'rtmp_custom', server: youtubeServer, key: dummyKey });
+            });
+
+            it('Preserves the Facebook catalog URL when switching to custom streaming', function() {
+                save({ service: 'Facebook Live' });
+                save({ key: dummyKey });
+                const formServer = field('server').currentValue;
+                const nativeServer = JSON.parse(fs.readFileSync(configPath, 'utf8')).settings.server;
+                expect(nativeServer).to.equal(`${formServer}/`);
+
+                save({ streamType: 'rtmp_custom' });
+
+                expectSaved({ streamType: 'rtmp_custom', server: nativeServer, key: dummyKey });
+
+                // After conversion the custom field exposes the exact URL, so a
+                // deliberate removal of its trailing slash must remain possible.
+                save({ server: formServer });
+                expectSaved({ streamType: 'rtmp_custom', server: formServer, key: dummyKey });
+            });
+
+            it('Keeps an explicit replacement URL when leaving Facebook common streaming', function() {
+                save({ service: 'Facebook Live' });
+                save({ key: dummyKey });
+                const server = 'rtmps://custom.example.invalid:443/application/';
+
+                save({ streamType: 'rtmp_custom', server });
+
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
+            });
+
+            it('Keeps an explicitly added trailing slash when switching to custom streaming', function() {
+                save({ service: 'YouTube - RTMPS' });
+                save({ server: youtubeServer, key: dummyKey });
+                expect(field('server').currentValue).to.equal(youtubeServer);
+                const server = `${youtubeServer}/`;
+
+                save({ streamType: 'rtmp_custom', server });
+
+                expectSaved({ streamType: 'rtmp_custom', server, key: dummyKey });
             });
 
             it('Resolves the automatic Twitch server when switching to custom streaming', function() {
