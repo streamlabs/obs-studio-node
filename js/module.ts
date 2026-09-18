@@ -2323,6 +2323,7 @@ interface IAutoOptimizerMeasurementEvidence {
 interface IAutoOptimizerMeasurement {
     mode: AutoOptimizerMeasurementMode;
     confidence: 'high' | 'medium' | 'low';
+    /** Optional explanation code for an estimate or measured result, including why higher-quality settings were rejected. */
     reason?: string;
     /** Provider measurements that contributed to the result. Detailed throughput and workload data remains internal to OSN. */
     evidence?: IAutoOptimizerMeasurementEvidence[];

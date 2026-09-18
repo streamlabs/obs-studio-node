@@ -80,8 +80,9 @@ constexpr int kYoutubeProbeTotalTimeoutMs = 100000;
 constexpr int kYoutubeProbeBudgetSlackMs = 250;
 constexpr int kYoutubeProbeMaximumConfirmationEpisodes = 2;
 constexpr int kYoutubeProbeBudgetEstimatePercent = 115;
-constexpr float kProbeCongestionHigh = 0.20f;
-constexpr float kProbeCongestionSevere = 0.50f;
+// All probes and recovery checks share this cutoff. Keep the sample counters
+// used by the duration-based policies, but count both from the same threshold.
+constexpr float kProbeCongestionThreshold = 0.50f;
 constexpr int kTwitchProbeAudioBitrateKbps = 32;
 constexpr int kYoutubeProbeAudioBitrateKbps = 128;
 constexpr int kHardwareWarmupMs = 500;
@@ -1378,6 +1379,7 @@ struct ProbeResult {
 	uint64_t configuredAggregateBitrateKbps = 0;
 	bool pairedCadenceEvidence = false;
 	std::vector<CompanionWorkload> companionWorkloads;
+	enhancedBroadcastingPolicy::CandidateFallbackEvidence candidateFallback;
 };
 
 static bool silentAudioCallback(void *, uint64_t startTimestamp, uint64_t, uint64_t *outputTimestamp, uint32_t, struct audio_data_mixes_outputs *)
@@ -2737,10 +2739,10 @@ static bool runTwitchProbeSample(const std::shared_ptr<Session> &session, Scratc
 	sample.congestionSamples = (uint32_t)congestionValues.size();
 	for (float congestion : congestionValues) {
 		sample.maximumCongestion = std::max(sample.maximumCongestion, congestion);
-		if (congestion >= kProbeCongestionHigh)
+		if (congestion >= kProbeCongestionThreshold) {
 			sample.congestionHighSamples++;
-		if (congestion >= kProbeCongestionSevere)
 			sample.congestionSevereSamples++;
+		}
 	}
 	std::sort(congestionValues.begin(), congestionValues.end());
 	if (!congestionValues.empty()) {
@@ -2850,7 +2852,7 @@ static bool waitForYoutubeRecoveryDrain(const std::shared_ptr<Session> &session,
 			return false;
 		}
 
-		if (recoveryGate.observe(lastCongestion < kProbeCongestionHigh, droppedFramesUnchanged)) {
+		if (recoveryGate.observe(lastCongestion < kProbeCongestionThreshold, droppedFramesUnchanged)) {
 			recovered = true;
 			break;
 		}
@@ -3026,10 +3028,10 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 	sample.congestionSamples = (uint32_t)congestionValues.size();
 	for (float congestion : congestionValues) {
 		sample.maximumCongestion = std::max(sample.maximumCongestion, congestion);
-		if (congestion >= kProbeCongestionHigh)
+		if (congestion >= kProbeCongestionThreshold) {
 			sample.congestionHighSamples++;
-		if (congestion >= kProbeCongestionSevere)
 			sample.congestionSevereSamples++;
+		}
 	}
 	std::sort(congestionValues.begin(), congestionValues.end());
 	if (!congestionValues.empty()) {
@@ -3298,6 +3300,13 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 		attempt.errorCode = "enhanced_broadcasting_output_setup_failed";
 		return false;
 	}
+
+	// Encoder groups synchronize startup to the renderer's clock, which the
+	// standalone synthetic input does not share. Release this probe-owned group
+	// before capture starts; the output retains the encoders and A/V pairing is
+	// unchanged. Texture probes keep the normal grouped startup.
+	if (!usePrivateTextureMix)
+		resources.multitrackVideoEncoderGroup.reset();
 
 	std::vector<bool> canvasInputsBound(candidates.size(), false);
 	for (size_t index = 0; index < config.encoder_configurations.size(); index++) {
@@ -3593,7 +3602,7 @@ static bool runEnhancedBroadcastingOutputAttempt(const std::shared_ptr<Session> 
 	const char *outputError = obs_output_get_last_error(resources.output);
 	const bool encoderFramesPassed = std::equal(attempt.encodedFrames.begin(), attempt.encodedFrames.end(), attempt.minimumEncodedFrames.begin(),
 						    [](uint32_t encoded, uint32_t minimum) { return encoded >= minimum; });
-	const bool transportPassed = attempt.outputDroppedFrames == 0 && attempt.maximumCongestion < kProbeCongestionHigh;
+	const bool transportPassed = attempt.outputDroppedFrames == 0 && attempt.maximumCongestion < kProbeCongestionThreshold;
 	bool companionsPassed = true;
 	for (const CompanionSample &sample : companionSamples) {
 		const uint32_t encoded = obs_encoder_get_encoded_frames(sample.resources->videoEncoder) - sample.encodedStart;
@@ -3843,6 +3852,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 						   : textureAttempt.errorCode;
 			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 				return result;
+			result.candidateFallback.record(result.errorCode);
 			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
 				  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 			continue;
@@ -3866,6 +3876,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 							   : exactAttempt.errorCode;
 				if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 					return result;
+				result.candidateFallback.record(result.errorCode);
 				pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
 					  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 				continue;
@@ -4828,7 +4839,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 			const ProbeResult &tested = **enhancedResult;
 			recommendation.measurementMode = "active";
 			recommendation.confidence = tested.pairedCadenceEvidence ? "medium" : "high";
-			recommendation.reason.clear();
+			recommendation.reason = tested.candidateFallback.reason();
 			recommendation.value.width = (int)tested.testedWidth;
 			recommendation.value.height = (int)tested.testedHeight;
 			recommendation.value.fpsNum = (int)tested.testedFpsNum;
