@@ -24,6 +24,18 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 # V8 (v8config.h) hard-errors on __cplusplus <= 201703L, so the node headers
 # won't compile without it.
 if(MSVC)
+	# The Windows CEF 6533 v4 wrapper and sandbox are Release-only /MT
+	# libraries. Keep every source-built target on the same CRT, including
+	# static dependencies that are linked into obs64.exe and its unit tests.
+	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+	# The matching CEF libraries are Release /MT even in a Debug consumer.
+	# Remove MSVC's Debug macro after its default definitions, then use the
+	# corresponding STL and assertion settings for every source-built target.
+	add_compile_definitions(
+		$<$<CONFIG:Debug>:NDEBUG>
+		$<$<CONFIG:Debug>:_HAS_ITERATOR_DEBUGGING=0>
+	)
+	add_compile_options($<$<CONFIG:Debug>:/U_DEBUG>)
 	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
 endif()
 
