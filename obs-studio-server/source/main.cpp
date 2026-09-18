@@ -64,6 +64,10 @@
 #include "osn-enhanced-broadcasting-simple-streaming.hpp"
 #include "osn-enhanced-broadcasting-advanced-streaming.hpp"
 
+#ifdef _WIN32
+#include "cef-sandbox-host.hpp"
+#endif
+
 #include "util-crashmanager.h"
 #include "shared.hpp"
 
@@ -85,48 +89,6 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#endif
-
-#if defined(_WIN32)
-#include "Shlobj.h"
-
-// Checks ForceGPUAsRenderDevice setting
-extern "C" __declspec(dllexport) DWORD NvOptimusEnablement = [] {
-	LPWSTR roamingPath;
-	std::wstring filePath;
-	std::string line;
-	std::fstream file;
-	bool settingValue = true; // Default value (NvOptimusEnablement = 1)
-
-	if (FAILED(SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roamingPath))) {
-		// Couldn't find roaming app data folder path, assume default value
-		return settingValue;
-	} else {
-		filePath.assign(roamingPath);
-		filePath.append(L"\\slobs-client\\basic.ini");
-		CoTaskMemFree(roamingPath);
-	}
-
-	file.open(filePath);
-
-	if (file.is_open()) {
-		while (std::getline(file, line)) {
-			if (line.find("ForceGPUAsRenderDevice", 0) != std::string::npos) {
-				if (line.substr(line.find('=') + 1) == "false") {
-					settingValue = false;
-					file.close();
-					break;
-				}
-			}
-		}
-	} else {
-		//Couldn't open config file, assume default value
-		return settingValue;
-	}
-
-	// Return setting value
-	return settingValue;
-}();
 #endif
 
 #define BUFFSIZE 512
@@ -170,6 +132,10 @@ static void Shutdown(void *data, const int64_t id, const std::vector<ipc::value>
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+	if (const auto cef_exit_code = osn::cef::DispatchSubprocessIfNeeded(argc, argv))
+		return *cef_exit_code;
+#endif
 #ifdef __APPLE__
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");
 	std::string_view slobsStdErrPath("/tmp/slobs-stderr");
