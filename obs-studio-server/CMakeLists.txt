@@ -235,7 +235,7 @@ endif()
 
 if (WIN32)
 	set(PROJECT_LIBRARIES
-		lib-streamlabs-ipc
+		lib-streamlabs-ipc-obs64
 		OBS::libobs
 		dwmapi.lib
         dxgi.lib
@@ -470,6 +470,8 @@ add_library(
     obs-studio-server-lib STATIC
     ${OSN_SERVER_CORE_SOURCES}
 )
+osn_target_uses_static_msvc_runtime(obs-studio-server-lib)
+osn_verify_msvc_runtime(obs-studio-server-lib "MultiThreaded")
 
 IF(WIN32)
     target_compile_definitions(
@@ -496,6 +498,8 @@ add_executable(
     ${PROJECT_NAME}
     "${PROJECT_SOURCE_DIR}/source/main.cpp"
 )
+osn_target_uses_static_msvc_runtime(${PROJECT_NAME})
+osn_verify_msvc_runtime(${PROJECT_NAME} "MultiThreaded")
 
 if(WIN32)
     if(NOT TARGET OBS::cef-sandbox)
@@ -698,6 +702,7 @@ if(BUILD_TESTING)
             Catch2::Catch2WithMain
             obs-studio-server-lib
     )
+    osn_target_uses_static_msvc_runtime(obs_studio_server_unit_tests)
 
     if(WIN32)
         target_sources(obs_studio_server_unit_tests PRIVATE "tests/test-cef-subprocess.cpp")

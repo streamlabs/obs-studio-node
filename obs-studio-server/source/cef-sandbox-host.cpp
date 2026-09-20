@@ -213,14 +213,10 @@ int ExecuteSubprocess()
 
 	const int exit_code = execute_subprocess(sandbox_info);
 	destroy_sandbox_info();
-	FreeLibrary(browser_module);
-	RemoveDllDirectory(plugin_cookie);
-
 	if (exit_code < 0) {
 		std::cerr << "CEF child dispatcher returned an invalid negative exit code: " << exit_code << std::endl;
 		return dispatch_failure;
 	}
-
 	return exit_code;
 }
 
@@ -233,7 +229,10 @@ std::optional<int> DispatchSubprocessIfNeeded(int argc, char *argv[])
 		return std::nullopt;
 
 	if (invocation.kind == InvocationKind::Invalid) {
-		std::cerr << "Rejected CEF child process invocation: " << invocation.error << std::endl;
+		std::cerr << "Rejected CEF child process invocation: " << invocation.error;
+		if (invocation.sandbox_opt_out)
+			std::cerr << "; argv=" << RenderInvocationArguments(argc, argv);
+		std::cerr << std::endl;
 		return dispatch_failure;
 	}
 
