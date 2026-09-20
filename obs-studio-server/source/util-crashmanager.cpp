@@ -64,11 +64,12 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 
-#ifdef ENABLE_CRASHREPORT
+#if defined(_WIN32)
+#include "crashpad-bridge.h"
+#elif defined(ENABLE_CRASHREPORT)
 #include "client/crash_report_database.h"
 #include "client/crashpad_client.h"
 #include "client/settings.h"
-#include "nodeobs_api.h"
 #endif
 
 #include "nlohmann/json.hpp"
@@ -86,7 +87,6 @@ std::vector<std::string> handledOBSCrashes;
 PDH_HQUERY cpuQuery;
 PDH_HCOUNTER cpuTotal;
 util::MetricsProvider metricsClient;
-LPTOP_LEVEL_EXCEPTION_FILTER crashpadInternalExceptionFilterMethod = nullptr;
 HANDLE memoryDumpEvent = INVALID_HANDLE_VALUE;
 std::filesystem::path memoryDumpFolder;
 #elif defined(__APPLE__)
@@ -97,17 +97,20 @@ struct sigaction oldBus = {};
 
 std::string appState = "starting"; // "starting","idle","encoding","shutdown"
 std::string reportServerUrl = "";
+// Declared in util-crashmanager.h. It remains available on Windows even
+// though the Windows Crashpad bridge does not need the handler's directory.
+std::string workingDirectory;
 // Crashpad variables
 #ifdef ENABLE_CRASHREPORT
 std::wstring globalAppData_path;
+#if !defined(_WIN32)
 std::wstring appdata_path;
 crashpad::CrashpadClient client;
 std::unique_ptr<crashpad::CrashReportDatabase> database;
-std::string url;
 base::FilePath db;
 base::FilePath handler;
 std::vector<std::string> arguments;
-std::string workingDirectory;
+#endif
 static nlohmann::json briefCrashInfo;
 static std::mutex briefCrashInfoMutex;
 static std::wstring_view briefCrashInfoBasename(L"brief-crash-info.json");
@@ -536,19 +539,6 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 	// There's a static local wstring inside this function, now it's cached for thread safe read access
 	util::CrashManager::GetMemoryDumpName();
 
-	// Setup the windows exeption filter
-	auto ExceptionHandlerMethod = [](struct _EXCEPTION_POINTERS *ExceptionInfo) {
-		HandleCrash("UnhandledExceptionFilter", false);
-
-		// Call the crashpad internal exception filter method since we overrided it here and
-		// it must be called to proper generate a report
-		return crashpadInternalExceptionFilterMethod(ExceptionInfo);
-	};
-
-	// This method will substitute the crashpad unhandled exception filter method by our one, returning
-	// the old method used by it, we will store this method pointer to be able to call it directly
-	crashpadInternalExceptionFilterMethod = SetUnhandledExceptionFilter(ExceptionHandlerMethod);
-
 	// Setup the metrics query for the CPU usage
 	// Ref: https://stackoverflow.com/questions/63166/how-to-determine-cpu-and-memory-consumption-from-inside-a-process
 	PdhOpenQuery(NULL, NULL, &cpuQuery);
@@ -591,29 +581,31 @@ bool util::CrashManager::SetupCrashpad()
 #ifdef ENABLE_CRASHREPORT
 
 #if defined(_WIN32)
-	HRESULT hResult;
-	PWSTR ppszPath;
+	std::vector<const char *> annotation_keys;
+	std::vector<const char *> annotation_values;
+	annotation_keys.reserve(annotations.size());
+	annotation_values.reserve(annotations.size());
+	for (const auto &[key, value] : annotations) {
+		annotation_keys.push_back(key.c_str());
+		annotation_values.push_back(value.c_str());
+	}
 
-	hResult = SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, NULL, &ppszPath);
+	const char *const arguments[] = {"--no-rate-limit"};
+	const bool started = osn_crashpad_bridge_start(reportServerUrl.c_str(), annotation_keys.data(), annotation_values.data(),
+						       static_cast<uint32_t>(annotation_keys.size()), arguments, 1);
+	if (!started) {
+		blog(LOG_WARNING, "Unable to start crash handler");
+		return false;
+	}
 
-	appdata_path.assign(ppszPath);
-	appdata_path.append(L"\\obs-studio-node-server");
-
-	CoTaskMemFree(ppszPath);
-#endif
-
-	arguments.push_back("--no-rate-limit");
-
-#ifdef WIN32
-	std::wstring handler_path(L"crashpad_handler.exe");
+	const osn_crashpad_exception_callback exception_callback = [](void *) { HandleCrash("UnhandledExceptionFilter", false); };
+	return osn_crashpad_bridge_set_exception_callback(exception_callback);
 #else
+	arguments.push_back("--no-rate-limit");
 	std::string handler_path = workingDirectory + '/';
 	handler_path.append("crashpad_handler");
-#endif
 
-#ifdef __APPLE__
 	std::string appdata_path = wstring_to_utf8(globalAppData_path) + "/Crashpad";
-#endif
 	db = base::FilePath(appdata_path);
 	handler = base::FilePath(handler_path);
 
@@ -622,10 +614,7 @@ bool util::CrashManager::SetupCrashpad()
 		return false;
 
 	database->GetSettings()->SetUploadsEnabled(true);
-	bool asynchronous_start = true;
-#if defined(__APPLE__)
-	asynchronous_start = false;
-#endif
+	bool asynchronous_start = false;
 
 	bool rc = client.StartHandler(handler, db, db, reportServerUrl, annotations, arguments, /* restartable */ true, asynchronous_start);
 	if (!rc) {
@@ -633,13 +622,7 @@ bool util::CrashManager::SetupCrashpad()
 		return false;
 	}
 
-#ifdef WIN32
-	// Windows will wait since asynchronous_start is set to true.
-	rc = client.WaitForHandlerStart(INFINITE);
-	if (!rc)
-		return false;
 #endif
-
 #endif
 
 	return true;
@@ -1323,9 +1306,13 @@ void util::CrashManager::DisableReports()
 
 #ifdef ENABLE_CRASHREPORT
 
+#if defined(_WIN32)
+	osn_crashpad_bridge_shutdown();
+#else
 	client.~CrashpadClient();
 	database->~CrashReportDatabase();
 	database = nullptr;
+#endif
 
 #endif
 }

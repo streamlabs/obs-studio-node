@@ -174,6 +174,11 @@ add_nodejs_module(
     ${osn-client_SOURCES}
 )
 
+# Node modules are loaded into Electron, whose dynamic CRT must remain shared
+# with the addon and its normal IPC archive.
+osn_target_uses_dynamic_msvc_runtime(obs_studio_client)
+osn_verify_msvc_runtime(obs_studio_client "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+
 if(BUILD_TESTING)
     include(Catch)
 
@@ -202,6 +207,10 @@ if(BUILD_TESTING)
         PRIVATE
             Catch2::Catch2WithMain
     )
+
+    # Catch2 is a static test dependency of the obs64 tests, so it is /MT.
+    # Keep this standalone test executable compatible with that archive too.
+    osn_target_uses_static_msvc_runtime(obs_studio_client_unit_tests)
 
     if(APPLE)
         add_custom_command(

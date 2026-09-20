@@ -45,6 +45,21 @@ describe(testName, () => {
     it('Open all module types and initialize them', () => {
         let moduleTypes: string[] = [];
         let modulePath: string;
+        const nonModuleLibraries = new Set([
+            'chrome_elf.dll',
+            'd3dcompiler_47.dll',
+            'dxcompiler.dll',
+            'dxil.dll',
+            'libcef.dll',
+            'libEGL.dll',
+            'libGLESv2.dll',
+            'Spout.dll',
+            'SpoutDX.dll',
+            'SpoutLibrary.dll',
+            'vk_swiftshader.dll',
+            'vulkan-1.dll',
+            'mediasoup-connector.dll', // Doesn't build in debug mode
+        ]);
 
         if (obs.os == 'win32') {
             modulePath = path.join(path.normalize(osn.DefaultPluginPath), '64bit');
@@ -53,30 +68,21 @@ describe(testName, () => {
         }
 
         fs.readdirSync(modulePath).forEach(file => {
-            if (file.endsWith('.dll')) {
-                if (file != 'chrome_elf.dll' && 
-                    file != 'libcef.dll' &&
-                    file != 'libEGL.dll' &&
-                    file != 'libGLESv2.dll' &&
-                    file != 'Spout.dll' &&
-                    file != 'SpoutDX.dll' &&
-                    file != 'SpoutLibrary.dll' &&
-                    file != 'mediasoup-connector.dll') { // Doesn't build in debug mode
-                    // Opening module
-                    console.log('Opening module: ' + file);
-                    const moduleType = osn.ModuleFactory.open(path.join(modulePath, '/' + file), path.normalize(osn.DefaultDataPath));
-                    console.log('Opened module: ' + file + ' successfully ' + moduleType);
-                    // Checking if module was opened properly
-                    expect(moduleType).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.OpenModule, file));
+            if (file.endsWith('.dll') && !nonModuleLibraries.has(file)) {
+                // Opening module
+                console.log('Opening module: ' + file);
+                const moduleType = osn.ModuleFactory.open(path.join(modulePath, '/' + file), path.normalize(osn.DefaultDataPath));
+                console.log('Opened module: ' + file + ' successfully ' + moduleType);
+                // Checking if module was opened properly
+                expect(moduleType).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.OpenModule, file));
 
-                    // Initializing module
-                    expect(function () {
-                        moduleType.initialize();
-                    }).to.not.throw();
+                // Initializing module
+                expect(function () {
+                    moduleType.initialize();
+                }).to.not.throw();
 
-                    // Adding to moduleArrays to use in check later
-                    moduleTypes.push(path.join(modulePath, '/' + file));
-                }   
+                // Adding to moduleArrays to use in check later
+                moduleTypes.push(path.join(modulePath, '/' + file));
             }
         });
 

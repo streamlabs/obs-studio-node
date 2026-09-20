@@ -235,7 +235,7 @@ endif()
 
 if (WIN32)
 	set(PROJECT_LIBRARIES
-		lib-streamlabs-ipc
+		lib-streamlabs-ipc-obs64
 		OBS::libobs
 		dwmapi.lib
         dxgi.lib
@@ -247,8 +247,6 @@ if (WIN32)
 		"${libobs_SOURCE_DIR}/include"
 		"${stackwalker_SOURCE_DIR}/Main/StackWalker"
 		"${nlohmannjson_SOURCE_DIR}/single_include"
-		"${source_dir}/include/third_party/mini_chromium/mini_chromium"
-		"${source_dir}/include"
 	)
 else ()
 	set(PROJECT_LIBRARIES
@@ -265,6 +263,31 @@ else ()
 		"${source_dir}/include"
 	)
 endif ()
+
+# Crashpad's prebuilt static libraries use /MD and contain Chromium base
+# symbols that conflict with CEF's /MT sandbox. Keep them in a small /MD DLL
+# rather than letting either the server library or obs64 link them directly.
+if(WIN32)
+    add_library(
+        crashpad-bridge
+        SHARED
+        "${PROJECT_SOURCE_DIR}/source/crashpad-bridge.cpp"
+        "${PROJECT_SOURCE_DIR}/source/crashpad-bridge.h"
+    )
+    add_library(OSN::crashpad-bridge ALIAS crashpad-bridge)
+
+    target_link_libraries(crashpad-bridge PRIVATE crashpad shell32 ole32)
+    set_target_properties(
+        crashpad-bridge
+        PROPERTIES
+            OUTPUT_NAME "osn-crashpad-bridge"
+            MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
+    )
+    target_compile_definitions(crashpad-bridge PRIVATE NDEBUG _HAS_ITERATOR_DEBUGGING=0)
+    if(MSVC)
+        target_compile_options(crashpad-bridge PRIVATE /U_DEBUG)
+    endif()
+endif()
 
 set(PROJECT_DATA "${PROJECT_SOURCE_DIR}/resources")
 
@@ -434,6 +457,8 @@ elseif(WIN32)
     LIST(
         APPEND
         osn-server_SOURCES
+        "${PROJECT_SOURCE_DIR}/source/cef-subprocess.cpp"
+        "${PROJECT_SOURCE_DIR}/source/cef-subprocess.hpp"
         "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
     )
 endif ()
@@ -445,6 +470,8 @@ add_library(
     obs-studio-server-lib STATIC
     ${OSN_SERVER_CORE_SOURCES}
 )
+osn_target_uses_static_msvc_runtime(obs-studio-server-lib)
+osn_verify_msvc_runtime(obs-studio-server-lib "MultiThreaded")
 
 IF(WIN32)
     target_compile_definitions(
@@ -460,7 +487,7 @@ ENDIF()
 target_include_directories(obs-studio-server-lib PUBLIC ${PROJECT_INCLUDE_PATHS})
 
 if(WIN32)
-    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} optimized crashpad strmiids StackWalker)
+    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad-bridge strmiids StackWalker)
 else()
     target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
 endif()
@@ -471,12 +498,32 @@ add_executable(
     ${PROJECT_NAME}
     "${PROJECT_SOURCE_DIR}/source/main.cpp"
 )
+osn_target_uses_static_msvc_runtime(${PROJECT_NAME})
+osn_verify_msvc_runtime(${PROJECT_NAME} "MultiThreaded")
 
 if(WIN32)
-    target_sources(${PROJECT_NAME} PUBLIC "${PROJECT_BINARY_DIR}/version.rc")
+    if(NOT TARGET OBS::cef-sandbox)
+        message(FATAL_ERROR "The libobs development package does not provide required target OBS::cef-sandbox")
+    endif()
+
+    target_sources(
+        ${PROJECT_NAME}
+        PRIVATE
+            "${PROJECT_BINARY_DIR}/version.rc"
+            "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.cpp"
+            "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.hpp"
+    )
+
 endif()
 
-target_link_libraries(${PROJECT_NAME} obs-studio-server-lib)
+target_link_libraries(${PROJECT_NAME} PRIVATE obs-studio-server-lib)
+
+if(WIN32)
+    # The packaged CEF 6533 v4 sandbox archive is Release-only and built with
+    # /MT. Link it into obs64.exe itself, where the CEF sandbox contract
+    # requires cef_sandbox_info_create/destroy to reside.
+    target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-sandbox)
+endif()
 
 if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
@@ -532,6 +579,7 @@ set(PROGRAM_PERMISSIONS_DEFAULT
 
 if (WIN32)
 	install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
+	install(TARGETS crashpad-bridge RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 ELSE()
 	install(TARGETS obs-studio-server RUNTIME DESTINATION "./bin" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	set(_COMMAND
@@ -544,6 +592,9 @@ ENDIF()
 
 IF(WIN32 AND NOT CLANG_ANALYZE_CONFIG)
     install(FILES $<TARGET_PDB_FILE:obs-studio-server> DESTINATION "./" OPTIONAL)
+    if(MSVC)
+        install(FILES $<TARGET_PDB_FILE:crashpad-bridge> DESTINATION "./" OPTIONAL)
+    endif()
 ENDIF()
 install(DIRECTORY ${PROJECT_DATA} DESTINATION "./" OPTIONAL USE_SOURCE_PERMISSIONS)
 install(DIRECTORY ${crashpad_SOURCE_DIR}/bin/ DESTINATION "./" USE_SOURCE_PERMISSIONS)
@@ -651,6 +702,11 @@ if(BUILD_TESTING)
             Catch2::Catch2WithMain
             obs-studio-server-lib
     )
+    osn_target_uses_static_msvc_runtime(obs_studio_server_unit_tests)
+
+    if(WIN32)
+        target_sources(obs_studio_server_unit_tests PRIVATE "tests/test-cef-subprocess.cpp")
+    endif()
 
     if(APPLE)
         add_custom_command(
@@ -671,7 +727,7 @@ if(BUILD_TESTING)
     if(APPLE)
         list(APPEND _osn_server_test_dl_paths "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks")
     elseif(WIN32)
-        list(APPEND _osn_server_test_dl_paths "${libobs_SOURCE_DIR}/bin/64bit")
+        list(APPEND _osn_server_test_dl_paths "${libobs_SOURCE_DIR}/bin/64bit" "$<TARGET_FILE_DIR:crashpad-bridge>")
     endif()
 
     catch_discover_tests(
