@@ -24,20 +24,42 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 # V8 (v8config.h) hard-errors on __cplusplus <= 201703L, so the node headers
 # won't compile without it.
 if(MSVC)
-	# The Windows CEF 6533 v4 wrapper and sandbox are Release-only /MT
-	# libraries. Keep every source-built target on the same CRT, including
-	# static dependencies that are linked into obs64.exe and its unit tests.
-	set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-	# The matching CEF libraries are Release /MT even in a Debug consumer.
-	# Remove MSVC's Debug macro after its default definitions, then use the
-	# corresponding STL and assertion settings for every source-built target.
-	add_compile_definitions(
-		$<$<CONFIG:Debug>:NDEBUG>
-		$<$<CONFIG:Debug>:_HAS_ITERATOR_DEBUGGING=0>
-	)
-	add_compile_options($<$<CONFIG:Debug>:/U_DEBUG>)
 	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
 endif()
+
+# The Windows CEF 6533 v4 sandbox archive is Release-only and built with /MT.
+# Apply its ABI requirements only to the obs64 link closure.  In particular,
+# never change the addon's runtime: it is loaded into Electron and must retain
+# the dynamic CRT selected by its host.
+function(osn_target_uses_static_msvc_runtime target)
+	if(MSVC)
+		set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded")
+		target_compile_definitions(
+			${target}
+			PRIVATE
+				$<$<CONFIG:Debug>:NDEBUG>
+				$<$<CONFIG:Debug>:_HAS_ITERATOR_DEBUGGING=0>
+		)
+		target_compile_options(${target} PRIVATE $<$<CONFIG:Debug>:/U_DEBUG>)
+	endif()
+endfunction()
+
+function(osn_target_uses_dynamic_msvc_runtime target)
+	if(MSVC)
+		set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+	endif()
+endfunction()
+
+# A configure-time guard against accidentally widening the CEF CRT setting to
+# Electron's native addon again.
+function(osn_verify_msvc_runtime target expected_runtime)
+	if(MSVC)
+		get_property(actual_runtime TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY)
+		if(NOT actual_runtime STREQUAL expected_runtime)
+			message(FATAL_ERROR "${target} must use ${expected_runtime}; found ${actual_runtime}")
+		endif()
+	endif()
+endfunction()
 
 # CppCheck
 IF( NOT CLANG_ANALYZE_CONFIG)
@@ -126,6 +148,10 @@ if (WIN32)
 	FetchContent_Populate(stackwalker)
 	add_subdirectory(${stackwalker_SOURCE_DIR} ${stackwalker_BINARY_DIR} EXCLUDE_FROM_ALL)
 	endif()
+	if(TARGET StackWalker)
+		osn_target_uses_static_msvc_runtime(StackWalker)
+		osn_verify_msvc_runtime(StackWalker "MultiThreaded")
+	endif()
 endif()
 
 # Nlohmann JSON (modern JSON for C++)
@@ -152,6 +178,14 @@ if(BUILD_TESTING)
   set(CATCH_DEVELOPMENT_BUILD OFF CACHE BOOL "" FORCE)
 
   FetchContent_MakeAvailable(Catch2)
+	if(TARGET Catch2)
+		osn_target_uses_static_msvc_runtime(Catch2)
+		osn_verify_msvc_runtime(Catch2 "MultiThreaded")
+	endif()
+	if(TARGET Catch2WithMain)
+		osn_target_uses_static_msvc_runtime(Catch2WithMain)
+		osn_verify_msvc_runtime(Catch2WithMain "MultiThreaded")
+	endif()
   list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 endif()
 
@@ -186,7 +220,52 @@ endif()
   add_subdirectory(${libcurl_SOURCE_DIR} ${libcurl_BINARY_DIR} EXCLUDE_FROM_ALL)
 endif()
 
+if(TARGET libcurl)
+  osn_target_uses_static_msvc_runtime(libcurl)
+  osn_verify_msvc_runtime(libcurl "MultiThreaded")
+endif()
+
 add_subdirectory(lib-streamlabs-ipc)
+
+if(WIN32)
+  # lib-streamlabs-ipc is a shared static archive for both binaries. Clone its
+  # target-local build settings into a second archive so the Electron addon
+  # remains /MD while obs64 gets the /MT CEF-compatible objects.
+  get_target_property(OSN_IPC_SOURCES lib-streamlabs-ipc SOURCES)
+  get_target_property(OSN_IPC_INCLUDE_DIRECTORIES lib-streamlabs-ipc INCLUDE_DIRECTORIES)
+  get_target_property(OSN_IPC_COMPILE_DEFINITIONS lib-streamlabs-ipc COMPILE_DEFINITIONS)
+  get_target_property(OSN_IPC_COMPILE_OPTIONS lib-streamlabs-ipc COMPILE_OPTIONS)
+  get_target_property(OSN_IPC_LINK_LIBRARIES lib-streamlabs-ipc LINK_LIBRARIES)
+  get_target_property(OSN_IPC_SOURCE_DIRECTORY lib-streamlabs-ipc SOURCE_DIR)
+  get_property(
+    OSN_IPC_DIRECTORY_COMPILE_DEFINITIONS
+    DIRECTORY "${OSN_IPC_SOURCE_DIRECTORY}"
+    PROPERTY COMPILE_DEFINITIONS
+  )
+
+  add_library(lib-streamlabs-ipc-obs64 STATIC ${OSN_IPC_SOURCES})
+  if(OSN_IPC_INCLUDE_DIRECTORIES)
+    target_include_directories(lib-streamlabs-ipc-obs64 PRIVATE ${OSN_IPC_INCLUDE_DIRECTORIES})
+  endif()
+  if(OSN_IPC_COMPILE_DEFINITIONS)
+    target_compile_definitions(lib-streamlabs-ipc-obs64 PRIVATE ${OSN_IPC_COMPILE_DEFINITIONS})
+  endif()
+  if(OSN_IPC_DIRECTORY_COMPILE_DEFINITIONS)
+    target_compile_definitions(lib-streamlabs-ipc-obs64 PRIVATE ${OSN_IPC_DIRECTORY_COMPILE_DEFINITIONS})
+  endif()
+  if(OSN_IPC_COMPILE_OPTIONS)
+    target_compile_options(lib-streamlabs-ipc-obs64 PRIVATE ${OSN_IPC_COMPILE_OPTIONS})
+  endif()
+  if(OSN_IPC_LINK_LIBRARIES)
+    target_link_libraries(lib-streamlabs-ipc-obs64 PRIVATE ${OSN_IPC_LINK_LIBRARIES})
+  endif()
+
+  osn_target_uses_dynamic_msvc_runtime(lib-streamlabs-ipc)
+  osn_target_uses_static_msvc_runtime(lib-streamlabs-ipc-obs64)
+  osn_verify_msvc_runtime(lib-streamlabs-ipc "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+  osn_verify_msvc_runtime(lib-streamlabs-ipc-obs64 "MultiThreaded")
+endif()
+
 add_subdirectory(obs-studio-client)
 add_subdirectory(obs-studio-server)
 

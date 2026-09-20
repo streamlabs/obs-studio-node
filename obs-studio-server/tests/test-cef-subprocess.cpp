@@ -59,10 +59,30 @@ TEST_CASE("Malformed CEF child invocations fail closed", "[cef-sandbox]")
 
 	SECTION("sandbox opt out")
 	{
-		CHECK(Classify({"obs64.exe", "--type=renderer", "--no-sandbox"}).kind == osn::cef::InvocationKind::Invalid);
-		CHECK(Classify({"obs64.exe", "--no-sandbox"}).kind == osn::cef::InvocationKind::Invalid);
-		CHECK(Classify({"obs64.exe", "--type=renderer", "--no-sandbox=1"}).kind == osn::cef::InvocationKind::Invalid);
+		for (const auto invocation : {
+			     Classify({"obs64.exe", "--type=renderer", "--no-sandbox"}),
+			     Classify({"obs64.exe", "--no-sandbox"}),
+			     Classify({"obs64.exe", "--type=renderer", "--no-sandbox=1"}),
+		     }) {
+			CHECK(invocation.kind == osn::cef::InvocationKind::Invalid);
+			CHECK(invocation.sandbox_opt_out);
+		}
+
+		const auto malformed = Classify({"obs64.exe", "--type", "renderer", "--no-sandbox"});
+		CHECK(malformed.kind == osn::cef::InvocationKind::Invalid);
+		CHECK(malformed.sandbox_opt_out);
 	}
+}
+
+TEST_CASE("Rejected CEF invocations render every argument safely", "[cef-sandbox]")
+{
+	const char *arguments[] = {"obs64.exe", "--type=renderer", "--no-sandbox=1", "line\nbreak", "quote\"slash\\", "\x01"};
+	CHECK(osn::cef::RenderInvocationArguments(6, arguments) ==
+	      "\"obs64.exe\" \"--type=renderer\" \"--no-sandbox=1\" \"line\\nbreak\" \"quote\\\"slash\\\\\" \"\\x01\"");
+
+	const char *with_null[] = {"obs64.exe", nullptr};
+	CHECK(osn::cef::RenderInvocationArguments(2, with_null) == R"("obs64.exe" <null>)");
+	CHECK(osn::cef::RenderInvocationArguments(0, nullptr) == "<missing argv>");
 }
 
 TEST_CASE("Pre-main initialization recognizes CEF process switches", "[cef-sandbox]")

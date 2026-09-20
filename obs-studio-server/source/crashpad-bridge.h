@@ -2,7 +2,9 @@
 
 // This interface deliberately exposes only C-compatible values. The server is
 // built with /MT, while the Crashpad bridge uses /MD, so C++ objects and heap
-// ownership must not cross this boundary.
+// ownership must not cross this boundary. Inputs are caller-owned and copied
+// synchronously; the API returns no allocated memory, FILE*, fd/HANDLE, or
+// errno state. The exception callback receives a non-owning OS payload only.
 #if defined(_WIN32)
 #include <stdint.h>
 
