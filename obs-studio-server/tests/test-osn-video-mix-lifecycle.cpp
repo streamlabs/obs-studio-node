@@ -379,6 +379,14 @@ public:
 		return true;
 	}
 
+	void releaseVideoEncoderGroup()
+	{
+		if (encoderGroup) {
+			obs_encoder_group_destroy(encoderGroup);
+			encoderGroup = nullptr;
+		}
+	}
+
 	bool initializeEncoders() { return obs_output_initialize_encoders(output, 0); }
 	bool start() { return obs_output_start(output); }
 	bool hasVideoInput() const { return obs_encoder_video(videoEncoders[0]) != nullptr; }
@@ -439,10 +447,7 @@ public:
 			obs_output_release(output);
 			output = nullptr;
 		}
-		if (encoderGroup) {
-			obs_encoder_group_destroy(encoderGroup);
-			encoderGroup = nullptr;
-		}
+		releaseVideoEncoderGroup();
 		for (auto *&encoder : videoEncoders) {
 			if (encoder)
 				obs_encoder_release(encoder);
@@ -476,19 +481,23 @@ private:
 	obs_output_t *output = nullptr;
 };
 
-void checkStandaloneMultitrackPackets(bool grouped)
+void checkStandaloneMultitrackPackets(bool releaseGroupBeforeStart)
 {
 	osn::tests::ObsSetup setup;
 	registerTestTypes();
 
-	// Exercise a fresh output twice so a failed startup must also release the
-	// encoder group, its audio pairing, and the independent input safely.
+	// Exercise a fresh output twice to check that releasing the group and
+	// cleaning up capture leave no stale encoder, audio-pairing, or input state.
 	for (int iteration = 0; iteration < 2; iteration++) {
-		INFO("lifecycle iteration " << iteration << ", grouped=" << grouped);
+		INFO("lifecycle iteration " << iteration << ", release group before start=" << releaseGroupBeforeStart);
 		AudioVideoResources resources;
 		REQUIRE(resources.initialize(true, AudioVideoWorkload::Multitrack60Fps));
-		if (grouped)
+		if (releaseGroupBeforeStart) {
 			REQUIRE(resources.groupVideoEncoders());
+			// Match the optimizer's synthetic probe: release the renderer-clock
+			// group before capture while the output still owns all encoders.
+			resources.releaseVideoEncoderGroup();
+		}
 		REQUIRE(resources.start());
 		resources.waitForAudioVideoPackets();
 		CHECK(resources.inputFrames() >= 3);
@@ -545,7 +554,7 @@ TEST_CASE("Ungrouped standalone 60 FPS ladder delivers A/V with a 30 FPS rendere
 	checkStandaloneMultitrackPackets(false);
 }
 
-TEST_CASE("Grouped standalone 60 FPS ladder delivers A/V with a 30 FPS renderer", "[video-mix][standalone-av][multitrack-cadence]")
+TEST_CASE("Standalone 60 FPS ladder delivers A/V after releasing the renderer encoder group", "[video-mix][standalone-av][multitrack-cadence]")
 {
 	checkStandaloneMultitrackPackets(true);
 }
