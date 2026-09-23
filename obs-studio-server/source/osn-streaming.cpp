@@ -322,17 +322,17 @@ void osn::IStreaming::SetNetwork(void *data, const int64_t id, const std::vector
 
 bool osn::Streaming::isTwitchVODSupported()
 {
-	if (!service)
+	// Custom destinations can carry stale settings from a common Twitch service.
+	// Only the actual common-service type may opt into Twitch's second audio track.
+	if (!service || strcmp(obs_service_get_id(service), "rtmp_common") != 0)
 		return false;
 
 	obs_data_t *settings = obs_service_get_settings(service);
 	const char *serviceName = obs_data_get_string(settings, "service");
+	const bool supported = serviceName && strcmp(serviceName, "Twitch") == 0;
 	obs_data_release(settings);
 
-	if (serviceName && strcmp(serviceName, "Twitch") != 0)
-		return false;
-
-	return true;
+	return supported;
 }
 
 void osn::IStreaming::Query(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

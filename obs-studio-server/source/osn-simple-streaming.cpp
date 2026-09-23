@@ -237,19 +237,14 @@ static void SetupTwitchSoundtrackAudio(osn::SimpleStreaming *streaming)
 
 static void StopTwitchSoundtrackAudio(osn::Streaming *streaming)
 {
-	if (streaming->streamArchive) {
-		obs_encoder_release(streaming->streamArchive);
-		streaming->streamArchive = nullptr;
-	}
+	if (!streaming->streamArchive || obs_output_active(streaming->GetOutput()))
+		return;
 
-	auto desktopSource1 = obs_get_output_source(1);
-	auto desktopSource2 = obs_get_output_source(2);
-
-	obs_source_set_audio_mixers(desktopSource1, streaming->oldMixer_desktopSource1);
-	obs_source_set_audio_mixers(desktopSource2, streaming->oldMixer_desktopSource2);
-
-	obs_source_release(desktopSource1);
-	obs_source_release(desktopSource2);
+	// The output retains its own reference across stop/start cycles. Keep cleanup
+	// output-local: another stream may still use the shared source mixer routing.
+	obs_output_set_audio_encoder(streaming->GetOutput(), nullptr, kSoundtrackArchiveEncoderIdx);
+	obs_encoder_release(streaming->streamArchive);
+	streaming->streamArchive = nullptr;
 }
 
 void UpdateStreamingSettings_amd(obs_data_t *settings, int bitrate, bool useAdvanced)
@@ -336,11 +331,11 @@ void osn::SimpleStreaming::start()
 
 	obs_output_set_video_encoder(GetOutput(), videoEncoder);
 
-	if (enableTwitchVOD) {
-		twitchVODSupported = isTwitchVODSupported();
-		if (twitchVODSupported)
-			SetupTwitchSoundtrackAudio(this);
-	}
+	twitchVODSupported = isTwitchVODSupported();
+	if (enableTwitchVOD && twitchVODSupported)
+		SetupTwitchSoundtrackAudio(this);
+	else
+		StopTwitchSoundtrackAudio(this);
 
 	obs_output_set_service(GetOutput(), service);
 

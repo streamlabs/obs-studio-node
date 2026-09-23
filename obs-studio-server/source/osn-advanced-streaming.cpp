@@ -331,6 +331,12 @@ static void SetupTwitchSoundtrackAudio(osn::AdvancedStreaming *streaming)
 
 static void StopTwitchSoundtrackAudio(osn::Streaming *streaming)
 {
+	if (obs_output_active(streaming->GetOutput()))
+		return;
+
+	// Retained outputs own a reference independently of streamArchive. Clear the
+	// slot before releasing ours so the next start cannot send a stale VOD track.
+	obs_output_set_audio_encoder(streaming->GetOutput(), nullptr, kVodEncoderSlot);
 	if (streaming->streamArchive) {
 		obs_encoder_release(streaming->streamArchive);
 		streaming->streamArchive = nullptr;
@@ -457,11 +463,11 @@ void osn::IAdvancedStreaming::Start(void *data, const int64_t id, const std::vec
 
 	obs_output_set_video_encoder(streaming->GetOutput(), streaming->videoEncoder);
 
-	if (streaming->enableTwitchVOD) {
-		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
-		if (streaming->twitchVODSupported)
-			SetupTwitchSoundtrackAudio(streaming);
-	}
+	streaming->twitchVODSupported = streaming->isTwitchVODSupported();
+	if (streaming->enableTwitchVOD && streaming->twitchVODSupported && osn::IAudioTrack::GetTrackConfig(streaming->twitchTrack))
+		SetupTwitchSoundtrackAudio(streaming);
+	else
+		StopTwitchSoundtrackAudio(streaming);
 
 	obs_output_set_service(streaming->GetOutput(), streaming->service);
 
