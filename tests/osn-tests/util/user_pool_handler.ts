@@ -19,6 +19,14 @@ interface ITestUser {
     platforms: Record<string, { streamKey: string }>;
 }
 
+export class InvalidUserPoolResponseError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'InvalidUserPoolResponseError';
+        Object.setPrototypeOf(this, InvalidUserPoolResponseError.prototype);
+    }
+}
+
 export class UserPoolHandler {
     private static excludedUsers: Set<string> = new Set();
     private user: ITestUser | null = null;
@@ -64,48 +72,54 @@ export class UserPoolHandler {
     }
 
     async getStreamKey(): Promise<string> {
-        let attempt: number = 1;
-        let totalAttempts: number = 3;
+        const totalAttempts = 3;
+        const releaseTypes: TPlatform[] = ['twitch', 'youtube', 'mixer', 'facebook'];
+        let sawInvalidUser = false;
+        let lastRequestError: unknown;
 
-        while(attempt <= totalAttempts) {
+        for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+            let reservedUser: ITestUser;
             try {
                 logInfo(this.osnTestName, 'Requesting user from pool ('+ attempt + '/' + totalAttempts + ')');
-                const reservedUser = await this.requestUser();
-
-                if (this.isUserExcluded(reservedUser.email)) {
-                    logWarning(this.osnTestName, `Discarding excluded user ${reservedUser.email} from pool response`);
-
-                    try {
-                        await this.releaseReservedUser(reservedUser);
-                    } catch (releaseError) {
-                        logWarning(this.osnTestName, `Unable to release excluded user ${reservedUser.email}: ${releaseError}`);
-                    }
-
-                    if (attempt < totalAttempts) {
-                        await sleep(2000);
-                    }
-
-                    attempt++;
-                    continue;
-                }
-
-                this.user = reservedUser;
-                break;
+                reservedUser = await this.requestUser();
             } catch(e) {
+                lastRequestError = e;
                 if (attempt < totalAttempts) {
                     await sleep(20000);
                 }
+                continue;
             }
 
-            attempt++;
+            if (!reservedUser || typeof reservedUser.email !== 'string' || !reservedUser.email
+                || releaseTypes.indexOf(reservedUser.type) < 0) {
+                throw new InvalidUserPoolResponseError('User pool returned a reservation without a usable release identity.');
+            }
+
+            const streamKey = reservedUser.platforms?.twitch?.streamKey;
+            const excluded = this.isUserExcluded(reservedUser.email);
+            if (excluded || reservedUser.type !== 'twitch' || typeof streamKey !== 'string' || !streamKey.trim()) {
+                if (!excluded) sawInvalidUser = true;
+                logWarning(this.osnTestName, `Discarding ${excluded ? 'excluded' : 'invalid'} user ${reservedUser.email} from pool response`);
+                try {
+                    await this.releaseReservedUser(reservedUser);
+                } catch (releaseError) {
+                    throw new InvalidUserPoolResponseError(`Unable to release rejected user ${reservedUser.email}: ${releaseError}`);
+                }
+                if (attempt < totalAttempts) await sleep(2000);
+                continue;
+            }
+
+            this.user = reservedUser;
+            logInfo(this.osnTestName, 'Got user ' + reservedUser.email);
+            return streamKey;
         }
 
-        if (!this.user) {
-            throw new Error('Unable to get user from pool.');
+        if (sawInvalidUser) {
+            throw new InvalidUserPoolResponseError('Unable to get a Twitch user with a stream key from the pool.');
         }
-
-        logInfo(this.osnTestName, 'Got user ' + this.user.email);
-        return this.user.platforms.twitch.streamKey;
+        throw new Error(lastRequestError
+            ? `Unable to get user from pool: ${lastRequestError}`
+            : 'Unable to get user from pool: no available accounts.');
     }
 
     markCurrentUserUnhealthy(reason: string) {

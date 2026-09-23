@@ -1,6 +1,6 @@
 import * as osn from '../osn';
 import { logInfo, logWarning } from '../util/logger';
-import { UserPoolHandler } from './user_pool_handler';
+import { InvalidUserPoolResponseError, UserPoolHandler } from './user_pool_handler';
 import { CacheUploader } from '../util/cache-uploader'
 import { EOBSOutputType, EOBSOutputSignal, EOBSSettingsCategories } from '../util/obs_enums'
 import { sleep } from './general';
@@ -75,6 +75,8 @@ export class OBSHandler {
     private userPoolHandler: UserPoolHandler;
     private cacheUploader: CacheUploader;
     private hasUserFromPool: boolean = false;
+    // Preserve the suite's credential requirement when a retry rotates its account.
+    private requirePoolUserForStreaming: boolean = false;
     private osnTestName: string;
     signals = new WaitQueue();
     inputTypes: string[];
@@ -155,7 +157,8 @@ export class OBSHandler {
         this.userPoolHandler = new UserPoolHandler(testName);
     }
 
-    async reserveUser() {
+    async reserveUser(options: { requirePoolUser?: boolean } = {}) {
+        if (options.requirePoolUser !== undefined) this.requirePoolUserForStreaming = options.requirePoolUser;
         this.userStreamKey = "";
 
         try {
@@ -164,6 +167,10 @@ export class OBSHandler {
             this.hasUserFromPool = true;
         } catch (e) {
             logWarning(this.osnTestName, e);
+            if (this.requirePoolUserForStreaming || e instanceof InvalidUserPoolResponseError) throw e;
+            if (!process.env.SLOBS_BE_STREAMKEY) {
+                throw new Error('User pool failed and SLOBS_BE_STREAMKEY is unavailable.');
+            }
             logWarning(this.osnTestName, 'Using predefined stream key');
             this.userStreamKey = process.env.SLOBS_BE_STREAMKEY;
             this.hasUserFromPool = false;

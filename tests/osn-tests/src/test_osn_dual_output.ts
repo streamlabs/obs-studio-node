@@ -24,6 +24,10 @@ describe(testName, () => {
     let newSourceName: string = 'image_source_' + randomUUID();
     const media_path = path.join(path.normalize(__dirname), '..', 'media');
     let secondContext;
+    let legacyStreamingStarted = false;
+    let unfinishedScene: osn.IScene | null = null;
+    let previousOutputSource: osn.ISource | null = null;
+    const secondUsers = new Set<UserPoolHandler>();
 
     // Initialize OBS process
     before(async () => {
@@ -33,8 +37,8 @@ describe(testName, () => {
 
         obs.instantiateUserPool(testName);
 
-        // Reserving user from pool
-        await obs.reserveUser();
+        // Both streams need distinct valid pool accounts, including on retries.
+        await obs.reserveUser({ requirePoolUser: true });
 
         // Connecting output signals
         obs.connectOutputSignals();
@@ -58,12 +62,15 @@ describe(testName, () => {
 
     // Shutdown OBS process
     after(async function () {
-        // Releasing user got from pool
-        await obs.releaseUser();
-
-        secondContext.destroy();
-
-        obs.shutdown();
+        try {
+            await obs.releaseUser();
+        } finally {
+            try {
+                if (secondContext) secondContext.destroy();
+            } finally {
+                obs.shutdown();
+            }
+        }
 
         if (hasTestFailed === true) {
             logInfo(testName, 'One or more test cases failed. Uploading cache');
@@ -98,19 +105,41 @@ describe(testName, () => {
     });
 
     afterEach(async function () {
-        const scene = osn.SceneFactory.fromName(newSceneName);
-        scene.release();
-
-        hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
+        try {
+            if (legacyStreamingStarted) {
+                osn.NodeObs.OBS_service_stopStreaming(true, "horizontal");
+                osn.NodeObs.OBS_service_stopStreaming(true, "vertical");
+                legacyStreamingStarted = false;
+            }
+            if (unfinishedScene) {
+                if (previousOutputSource) osn.Global.setOutputSource(0, previousOutputSource);
+                for (const item of unfinishedScene.getItems()) {
+                    item.source.release();
+                    item.remove();
+                }
+                unfinishedScene.release();
+                unfinishedScene = null;
+                previousOutputSource = null;
+            }
+            const scene = osn.SceneFactory.fromName(newSceneName);
+            scene.release();
+        } finally {
+            try {
+                for (const user of Array.from(secondUsers)) await user.releaseUser();
+                secondUsers.clear();
+            } finally {
+                hasTestFailed = (await obs.finalizeRetryableTest(this)) || hasTestFailed;
+            }
+        }
     });
 
     async function handleStreamSignals(expectedType: EOBSOutputType, expectedSignal: EOBSOutputSignal, errorMessage: string): Promise<void> {
         const signalInfo = await obs.getNextSignalInfo(expectedType, expectedSignal);
         expect(signalInfo.type).to.equal(expectedType, GetErrorMessage(errorMessage));
-        expect(signalInfo.signal).to.equal(expectedSignal, GetErrorMessage(errorMessage));
         if (signalInfo.signal === EOBSOutputSignal.Stop && signalInfo.code !== 0) {
             throw Error(GetErrorMessage(ETestErrorMsg.StreamOutputStoppedWithError, signalInfo.code.toString(), signalInfo.error));
         }
+        expect(signalInfo.signal).to.equal(expectedSignal, GetErrorMessage(errorMessage));
     }
 
     it('Start Dual Output with advanced recording using the same user audio track', async function() {
@@ -627,6 +656,7 @@ describe(testName, () => {
 
         // reserve a user account of a second stream
         let secondStreamUserPoolHandler = new UserPoolHandler(testName + "secondStream");
+        secondUsers.add(secondStreamUserPoolHandler);
         let userStreamKey = await secondStreamUserPoolHandler.getStreamKey();
         obs.setSetting(EOBSSettingsCategories.StreamSecond, 'key', userStreamKey);
 
@@ -636,6 +666,7 @@ describe(testName, () => {
         let signalInfo: IOBSOutputSignalInfo;
 
         //start first stream
+        legacyStreamingStarted = true;
         osn.NodeObs.OBS_service_startStreaming("horizontal");
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Starting, ETestErrorMsg.StreamOutput);
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Activate, ETestErrorMsg.StreamOutput);
@@ -667,7 +698,8 @@ describe(testName, () => {
         }
 
         const secondStreamUserPoolHandler = new UserPoolHandler(testName + "secondAdvancedStream");
-        let secondStreamKey: string | undefined;
+        secondUsers.add(secondStreamUserPoolHandler);
+        const secondStreamKey = await secondStreamUserPoolHandler.getStreamKey();
         const stream = osn.AdvancedStreamingFactory.create();
         const stream2 = osn.AdvancedStreamingFactory.create();
         const track1 = osn.AudioTrackFactory.create(160, 'track1');
@@ -680,7 +712,6 @@ describe(testName, () => {
         stream.signalHandler = (signal) => { obs.signals.push(signal) };
 
         stream2.videoEncoder = osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-test-streaming-shared-track-2');
-        secondStreamKey = await secondStreamUserPoolHandler.getStreamKey();
         stream2.service = osn.ServiceFactory.create('rtmp_common', 'advanced-shared-track-second-service', {});
         stream2.service.update({
             service: 'Twitch',
@@ -737,6 +768,7 @@ describe(testName, () => {
 
         // reserve a user account of a second stream
         let secondStreamUserPoolHandler = new UserPoolHandler(testName + "secondStream");
+        secondUsers.add(secondStreamUserPoolHandler);
         let userStreamKey = await secondStreamUserPoolHandler.getStreamKey();
         obs.setSetting(EOBSSettingsCategories.StreamSecond, 'key', userStreamKey);
 
@@ -746,8 +778,10 @@ describe(testName, () => {
         let signalInfo: IOBSOutputSignalInfo;
         // Getting scene
         const returnSource = osn.Global.getOutputSource(0);
+        previousOutputSource = returnSource;
         let secondSceneName = 'scene_' + randomUUID();
         const scene = osn.SceneFactory.create(secondSceneName);
+        unfinishedScene = scene;
         osn.Global.setOutputSource(0, scene);
 
         // Getting source
@@ -777,6 +811,7 @@ describe(testName, () => {
         sceneItem2.position = position2;
 
         // Start first stream
+        legacyStreamingStarted = true;
         osn.NodeObs.OBS_service_startStreaming("horizontal");
 
         await handleStreamSignals(EOBSOutputType.Streaming, EOBSOutputSignal.Starting, ETestErrorMsg.StreamOutput);
@@ -818,5 +853,7 @@ describe(testName, () => {
         sceneItem2.remove();
 
         scene.release();
+        unfinishedScene = null;
+        previousOutputSource = null;
     });
 });
