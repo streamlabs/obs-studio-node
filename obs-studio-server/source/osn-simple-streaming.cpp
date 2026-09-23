@@ -236,19 +236,14 @@ static void SetupTwitchSoundtrackAudio(osn::SimpleStreaming *streaming)
 
 static void StopTwitchSoundtrackAudio(osn::Streaming *streaming)
 {
-	if (streaming->streamArchive) {
-		obs_encoder_release(streaming->streamArchive);
-		streaming->streamArchive = nullptr;
-	}
+	if (!streaming->streamArchive || obs_output_active(streaming->GetOutput()))
+		return;
 
-	auto desktopSource1 = obs_get_output_source(1);
-	auto desktopSource2 = obs_get_output_source(2);
-
-	obs_source_set_audio_mixers(desktopSource1, streaming->oldMixer_desktopSource1);
-	obs_source_set_audio_mixers(desktopSource2, streaming->oldMixer_desktopSource2);
-
-	obs_source_release(desktopSource1);
-	obs_source_release(desktopSource2);
+	// The output retains its own reference across stop/start cycles. Keep cleanup
+	// output-local: another stream may still use the shared source mixer routing.
+	obs_output_set_audio_encoder(streaming->GetOutput(), nullptr, kSoundtrackArchiveEncoderIdx);
+	obs_encoder_release(streaming->streamArchive);
+	streaming->streamArchive = nullptr;
 }
 
 void UpdateStreamingSettings_amd(obs_data_t *settings, int bitrate)
@@ -340,7 +335,11 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 	if (!type)
 		type = "rtmp_output";
 
-	if (!streaming->GetOutput() || strcmp(obs_output_get_id(streaming->GetOutput()), type) != 0)
+	// OBS 31 keeps the old service linked when a retained output adopts a new one.
+	// Recreate the stopped output so releasing that service cannot detach its replacement.
+	obs_service_t *previousService = streaming->GetOutput() ? obs_output_get_service(streaming->GetOutput()) : nullptr;
+	if (!streaming->GetOutput() || strcmp(obs_output_get_id(streaming->GetOutput()), type) != 0 ||
+	    (previousService && previousService != streaming->service))
 		streaming->CreateOutput(type, "stream");
 
 	if (!streaming->GetOutput()) {
@@ -377,11 +376,11 @@ void osn::ISimpleStreaming::Start(void *data, const int64_t id, const std::vecto
 
 	obs_output_set_video_encoder(streaming->GetOutput(), streaming->videoEncoder);
 
-	if (streaming->enableTwitchVOD) {
-		streaming->twitchVODSupported = streaming->isTwitchVODSupported();
-		if (streaming->twitchVODSupported)
-			SetupTwitchSoundtrackAudio(streaming);
-	}
+	streaming->twitchVODSupported = streaming->isTwitchVODSupported();
+	if (streaming->enableTwitchVOD && streaming->twitchVODSupported)
+		SetupTwitchSoundtrackAudio(streaming);
+	else
+		StopTwitchSoundtrackAudio(streaming);
 
 	obs_output_set_service(streaming->GetOutput(), streaming->service);
 
