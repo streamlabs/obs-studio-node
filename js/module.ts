@@ -1706,6 +1706,12 @@ export interface IStreaming {
     videoEncoder?: IVideoEncoder,
     service: IService,
     enforceServiceBitrate: boolean,
+    /**
+     * Requests a separate VOD audio track for a common Twitch service. Custom
+     * services are ineligible even if their settings contain a Twitch label.
+     * Standard streaming reconciles this track on each explicit start, including
+     * retained instances. Change the preference and service only while stopped.
+     */
     enableTwitchVOD: boolean,
     delay: IDelay,
     reconnect: IReconnect,
