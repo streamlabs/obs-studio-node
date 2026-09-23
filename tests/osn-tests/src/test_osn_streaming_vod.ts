@@ -129,6 +129,7 @@ describe(testName, function () {
             });
             outputs.push(output);
             let previousAttempt = 0;
+            // Repeat both transitions on the retained output to catch stale VOD tracks after removal and re-addition.
             for (const enabled of [true, false, true, false]) {
                 output.stream.enableTwitchVOD = enabled;
                 await output.start();
