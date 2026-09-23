@@ -4,9 +4,11 @@
 #include <media-io/video-frame.h>
 #include <util/platform.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <string>
 #include <thread>
 
 #include "auto-optimizer-video-mix.hpp"
@@ -25,6 +27,7 @@ constexpr char TEST_OUTPUT_ID[] = "osn_test_video_output";
 constexpr char TEST_RAW_VIDEO_ENCODER_ID[] = "osn_test_raw_video_encoder";
 constexpr char TEST_AUDIO_ENCODER_ID[] = "osn_test_audio_encoder";
 constexpr char TEST_AV_OUTPUT_ID[] = "osn_test_av_output";
+constexpr char TEST_MULTITRACK_AV_OUTPUT_ID[] = "osn_test_multitrack_av_output";
 constexpr uint32_t SOURCE_WIDTH = 1280;
 constexpr uint32_t SOURCE_HEIGHT = 720;
 constexpr uint32_t SCALED_WIDTH = 960;
@@ -50,7 +53,7 @@ bool testEncoderEncodeTexture(void *, encoder_texture *, int64_t, uint64_t, uint
 
 struct TestOutputContext {
 	obs_output_t *output = nullptr;
-	std::atomic<uint32_t> videoPackets{0};
+	std::array<std::atomic<uint32_t>, MAX_OUTPUT_VIDEO_ENCODERS> videoPackets{};
 	std::atomic<uint32_t> audioPackets{0};
 };
 
@@ -89,8 +92,8 @@ void testOutputPacket(void *data, encoder_packet *packet)
 	auto *context = static_cast<TestOutputContext *>(data);
 	if (!packet)
 		return;
-	if (packet->type == OBS_ENCODER_VIDEO)
-		context->videoPackets.fetch_add(1);
+	if (packet->type == OBS_ENCODER_VIDEO && packet->track_idx < context->videoPackets.size())
+		context->videoPackets[packet->track_idx].fetch_add(1);
 	else if (packet->type == OBS_ENCODER_AUDIO)
 		context->audioPackets.fetch_add(1);
 }
@@ -159,6 +162,10 @@ void registerTestTypes()
 
 	outputInfo.id = TEST_AV_OUTPUT_ID;
 	outputInfo.flags |= OBS_OUTPUT_AUDIO;
+	obs_register_output(&outputInfo);
+
+	outputInfo.id = TEST_MULTITRACK_AV_OUTPUT_ID;
+	outputInfo.flags |= OBS_OUTPUT_MULTI_TRACK_VIDEO;
 	obs_register_output(&outputInfo);
 }
 
@@ -279,13 +286,23 @@ private:
 	bool cleaned = false;
 };
 
+enum class AudioVideoWorkload {
+	SingleTrack,
+	Multitrack60Fps,
+};
+
 class AudioVideoResources {
 public:
 	~AudioVideoResources() { cleanup(); }
 
-	bool initialize(bool standaloneVideo = true)
+	bool initialize(bool standaloneVideo = true, AudioVideoWorkload workload = AudioVideoWorkload::SingleTrack)
 	{
+		const bool multitrack = workload == AudioVideoWorkload::Multitrack60Fps;
+		trackCount = multitrack ? videoEncoders.size() : 1;
+		inputFps = multitrack ? 60 : 30;
 		obs_video_info info = makeVideoInfo();
+		if (multitrack)
+			info.fps_num = 30;
 		if (obs_reset_video(&info) != OBS_VIDEO_SUCCESS)
 			return false;
 		canvas = obs_get_video_info_by_index2(0);
@@ -296,7 +313,7 @@ public:
 			video_output_info videoInfo{};
 			videoInfo.name = "osn standalone A/V input";
 			videoInfo.format = VIDEO_FORMAT_NV12;
-			videoInfo.fps_num = 30;
+			videoInfo.fps_num = inputFps;
 			videoInfo.fps_den = 1;
 			videoInfo.width = 64;
 			videoInfo.height = 64;
@@ -316,44 +333,85 @@ public:
 		if (audio_output_open(&audio, &audioInfo) != AUDIO_OUTPUT_SUCCESS)
 			return false;
 
-		videoEncoder = obs_video_encoder_create(TEST_RAW_VIDEO_ENCODER_ID, "osn A/V video encoder", nullptr, nullptr);
 		audioEncoder = obs_audio_encoder_create(TEST_AUDIO_ENCODER_ID, "osn A/V audio encoder", nullptr, 0, nullptr);
-		if (!videoEncoder || !audioEncoder)
+		if (!audioEncoder)
 			return false;
-		if (ownedVideo) {
-			obs_encoder_set_video(videoEncoder, ownedVideo);
-		} else {
-			// obs_get_video() belongs to the core main canvas, which survives a
-			// partial video reset. Bind the registered canvas removed by this test.
-			obs_core_video_mix_t *mix = obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING);
-			if (!mix)
+		for (size_t track = 0; track < trackCount; track++) {
+			const auto name = "osn A/V video encoder " + std::to_string(track);
+			auto *&encoder = videoEncoders[track];
+			encoder = obs_video_encoder_create(TEST_RAW_VIDEO_ENCODER_ID, name.c_str(), nullptr, nullptr);
+			if (!encoder)
 				return false;
-			obs_encoder_set_video_mix(videoEncoder, mix);
+			if (ownedVideo) {
+				obs_encoder_set_video(encoder, ownedVideo);
+			} else {
+				// obs_get_video() belongs to the core main canvas, which survives a
+				// partial video reset. Bind the registered canvas removed by this test.
+				obs_core_video_mix_t *mix = obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING);
+				if (!mix)
+					return false;
+				obs_encoder_set_video_mix(encoder, mix);
+			}
+			// Match the 60/60/30/30 FPS ladder returned by Twitch for the failed
+			// promotion, without requiring NVENC, Twitch credentials, or a network.
+			obs_encoder_set_frame_rate_divisor(encoder, track < 2 ? 1 : 2);
 		}
 		obs_encoder_set_audio(audioEncoder, audio);
 
-		output = obs_output_create(TEST_AV_OUTPUT_ID, "osn A/V output", nullptr, nullptr);
+		output = obs_output_create(multitrack ? TEST_MULTITRACK_AV_OUTPUT_ID : TEST_AV_OUTPUT_ID, "osn A/V output", nullptr, nullptr);
 		if (!output)
 			return false;
-		obs_output_set_video_encoder(output, videoEncoder);
+		for (size_t track = 0; track < trackCount; track++)
+			obs_output_set_video_encoder2(output, videoEncoders[track], track);
 		obs_output_set_audio_encoder(output, audioEncoder, 0);
 		return true;
 	}
 
+	bool groupVideoEncoders()
+	{
+		encoderGroup = obs_encoder_group_create();
+		if (!encoderGroup)
+			return false;
+		for (size_t track = 0; track < trackCount; track++) {
+			if (!obs_encoder_set_group(videoEncoders[track], encoderGroup))
+				return false;
+		}
+		return true;
+	}
+
+	void releaseVideoEncoderGroup()
+	{
+		if (encoderGroup) {
+			obs_encoder_group_destroy(encoderGroup);
+			encoderGroup = nullptr;
+		}
+	}
+
 	bool initializeEncoders() { return obs_output_initialize_encoders(output, 0); }
 	bool start() { return obs_output_start(output); }
-	bool hasVideoInput() const { return obs_encoder_video(videoEncoder) != nullptr; }
+	bool hasVideoInput() const { return obs_encoder_video(videoEncoders[0]) != nullptr; }
+	uint32_t inputFrames() const { return video_output_get_total_frames(ownedVideo); }
+	uint32_t videoPackets(size_t track) const { return static_cast<TestOutputContext *>(obs_obj_get_data(output))->videoPackets[track].load(); }
+	uint32_t audioPackets() const { return static_cast<TestOutputContext *>(obs_obj_get_data(output))->audioPackets.load(); }
 
 	bool waitForAudioVideoPackets()
 	{
-		auto *context = static_cast<TestOutputContext *>(obs_obj_get_data(output));
 		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+		const auto frameDuration = std::chrono::nanoseconds(1000000000ULL / inputFps);
+		auto nextFrame = std::chrono::steady_clock::now();
+		// This input deliberately has its own timestamp origin, just like the
+		// optimizer's synthetic feeder. Do not align it to the graphics thread:
+		// doing so would hide the grouped-encoder startup regression.
+		uint64_t timestamp = os_gettime_ns();
 		while (std::chrono::steady_clock::now() < deadline) {
-			if (context->videoPackets.load() >= 3 && context->audioPackets.load() >= 3)
+			bool allTracksDelivered = audioPackets() >= 3;
+			for (size_t track = 0; track < trackCount; track++)
+				allTracksDelivered = allTracksDelivered && videoPackets(track) >= 3;
+			if (allTracksDelivered)
 				return true;
 
 			video_frame frame{};
-			if (video_output_lock_frame(ownedVideo, &frame, 1, os_gettime_ns())) {
+			if (video_output_lock_frame(ownedVideo, &frame, 1, timestamp)) {
 				for (size_t row = 0; row < 64; row++)
 					std::memset(frame.data[0] + row * frame.linesize[0], 16, 64);
 				for (size_t row = 0; row < 32; row++)
@@ -362,7 +420,9 @@ public:
 			}
 			// Feed on this bounded test loop, avoiding a worker that could outlive
 			// an assertion failure and retain the standalone video input.
-			std::this_thread::sleep_for(std::chrono::milliseconds(33));
+			timestamp += frameDuration.count();
+			nextFrame += frameDuration;
+			std::this_thread::sleep_until(nextFrame);
 		}
 		return false;
 	}
@@ -387,9 +447,11 @@ public:
 			obs_output_release(output);
 			output = nullptr;
 		}
-		if (videoEncoder) {
-			obs_encoder_release(videoEncoder);
-			videoEncoder = nullptr;
+		releaseVideoEncoderGroup();
+		for (auto *&encoder : videoEncoders) {
+			if (encoder)
+				obs_encoder_release(encoder);
+			encoder = nullptr;
 		}
 		if (audioEncoder) {
 			obs_encoder_release(audioEncoder);
@@ -411,10 +473,45 @@ private:
 	obs_video_info *canvas = nullptr;
 	video_t *ownedVideo = nullptr;
 	audio_t *audio = nullptr;
-	obs_encoder_t *videoEncoder = nullptr;
+	std::array<obs_encoder_t *, 4> videoEncoders{};
+	size_t trackCount = 1;
+	uint32_t inputFps = 30;
+	obs_encoder_group_t *encoderGroup = nullptr;
 	obs_encoder_t *audioEncoder = nullptr;
 	obs_output_t *output = nullptr;
 };
+
+void checkStandaloneMultitrackPackets(bool releaseGroupBeforeStart)
+{
+	osn::tests::ObsSetup setup;
+	registerTestTypes();
+
+	// Exercise a fresh output twice to check that releasing the group and
+	// cleaning up capture leave no stale encoder, audio-pairing, or input state.
+	for (int iteration = 0; iteration < 2; iteration++) {
+		INFO("lifecycle iteration " << iteration << ", release group before start=" << releaseGroupBeforeStart);
+		AudioVideoResources resources;
+		REQUIRE(resources.initialize(true, AudioVideoWorkload::Multitrack60Fps));
+		if (releaseGroupBeforeStart) {
+			REQUIRE(resources.groupVideoEncoders());
+			// Match the optimizer's synthetic probe: release the renderer-clock
+			// group before capture while the output still owns all encoders.
+			resources.releaseVideoEncoderGroup();
+		}
+		REQUIRE(resources.start());
+		resources.waitForAudioVideoPackets();
+		CHECK(resources.inputFrames() >= 3);
+		for (size_t track = 0; track < 4; track++) {
+			INFO("video track " << track);
+			CHECK(resources.videoPackets(track) >= 3);
+		}
+		CHECK(resources.audioPackets() >= 3);
+		const auto cleanupStart = std::chrono::steady_clock::now();
+		CHECK(resources.cleanup() == OBS_VIDEO_SUCCESS);
+		CHECK(std::chrono::steady_clock::now() - cleanupStart < std::chrono::seconds(3));
+		CHECK(obs_get_video_info_by_index2(0) == nullptr);
+	}
+}
 
 } // namespace
 
@@ -450,6 +547,16 @@ TEST_CASE("Encoded A/V output cannot start after its canvas input is removed", "
 	REQUIRE_FALSE(resources.hasVideoInput());
 	CHECK_FALSE(resources.start());
 	CHECK(resources.cleanup() == OBS_VIDEO_SUCCESS);
+}
+
+TEST_CASE("Ungrouped standalone 60 FPS ladder delivers A/V with a 30 FPS renderer", "[video-mix][standalone-av][multitrack-cadence]")
+{
+	checkStandaloneMultitrackPackets(false);
+}
+
+TEST_CASE("Standalone 60 FPS ladder delivers A/V after releasing the renderer encoder group", "[video-mix][standalone-av][multitrack-cadence]")
+{
+	checkStandaloneMultitrackPackets(true);
 }
 
 TEST_CASE("Encoder GPU rescale supports a canvas-owned identity across reinitialization", "[video-mix][canvas-identity]")

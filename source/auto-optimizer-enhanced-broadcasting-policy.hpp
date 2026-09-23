@@ -152,4 +152,29 @@ inline bool allowsCandidateDescent(std::string_view errorCode)
 	       errorCode == "enhanced_broadcasting_companion_overload";
 }
 
+// Keep earlier candidate failures after a lower-quality candidate passes so the
+// measured recommendation can explain the fallback without claiming it failed.
+struct CandidateFallbackEvidence {
+	bool transportPressure = false;
+	bool workloadPressure = false;
+
+	void record(std::string_view errorCode)
+	{
+		transportPressure |= errorCode == "enhanced_broadcasting_transport_pressure";
+		workloadPressure |= errorCode == "enhanced_broadcasting_encoder_underload" || errorCode == "enhanced_broadcasting_render_overload" ||
+				    errorCode == "enhanced_broadcasting_companion_overload";
+	}
+
+	std::string_view reason() const
+	{
+		if (transportPressure && workloadPressure)
+			return "enhanced_broadcasting_transport_and_workload_fallback";
+		if (transportPressure)
+			return "enhanced_broadcasting_transport_fallback";
+		if (workloadPressure)
+			return "enhanced_broadcasting_workload_fallback";
+		return {};
+	}
+};
+
 } // namespace autoOptimizer::enhancedBroadcastingPolicy

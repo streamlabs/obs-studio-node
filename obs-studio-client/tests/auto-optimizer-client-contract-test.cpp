@@ -487,6 +487,25 @@ TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate
 			  {"divergent preset", [](json &value) { value["legs"][1]["recommendation"]["preset"] = "veryfast"; }}});
 }
 
+TEST_CASE("Auto Optimizer client preserves measured Enhanced Broadcasting fallback explanations")
+{
+	for (const auto reason :
+	     {"enhanced_broadcasting_transport_fallback", "enhanced_broadcasting_workload_fallback", "enhanced_broadcasting_transport_and_workload_fallback"}) {
+		CAPTURE(reason);
+		auto fixture = enhancedBroadcastingFixture();
+		fixture.result["legs"][0]["measurement"]["reason"] = reason;
+		const auto result = contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context);
+		REQUIRE(result.valid);
+		const json projected = json::parse(result.json);
+		const auto &output = projected["outputs"][0];
+		CHECK(output["measurement"]["reason"] == reason);
+		CHECK(output["measurement"]["mode"] == "active");
+		CHECK(output["measurement"]["confidence"] == "high");
+		CHECK(output["measurement"]["evidence"][0]["success"] == true);
+		CHECK_FALSE(output.contains("encoding"));
+	}
+}
+
 TEST_CASE("Auto Optimizer client requires exact Enhanced Broadcasting combined workload proof")
 {
 	const auto fixture = enhancedBroadcastingFixture();

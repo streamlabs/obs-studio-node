@@ -138,3 +138,35 @@ TEST_CASE("Composite Enhanced Broadcasting maps only local joint-load failures t
 	CHECK_FALSE(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_output_connect_failed"));
 	CHECK_FALSE(policy::isCompositeCandidateLoadFailure("enhanced_broadcasting_transport_pressure"));
 }
+
+TEST_CASE("Enhanced Broadcasting fallback reports retain earlier upload instability")
+{
+	policy::CandidateFallbackEvidence evidence;
+	CHECK(evidence.reason().empty());
+	evidence.record("enhanced_broadcasting_ladder_below_candidate");
+	CHECK(evidence.reason().empty());
+	evidence.record("enhanced_broadcasting_transport_pressure");
+	CHECK(evidence.reason() == "enhanced_broadcasting_transport_fallback");
+	evidence.record("enhanced_broadcasting_ladder_below_candidate");
+	evidence.record("");
+	CHECK(evidence.reason() == "enhanced_broadcasting_transport_fallback");
+	CHECK(policy::CandidateFallbackEvidence{}.reason().empty());
+}
+
+TEST_CASE("Enhanced Broadcasting fallback reports distinguish workload and upload failures")
+{
+	for (const auto error :
+	     {"enhanced_broadcasting_encoder_underload", "enhanced_broadcasting_render_overload", "enhanced_broadcasting_companion_overload"}) {
+		CAPTURE(error);
+		policy::CandidateFallbackEvidence evidence;
+		evidence.record(error);
+		CHECK(evidence.reason() == "enhanced_broadcasting_workload_fallback");
+		evidence.record("enhanced_broadcasting_transport_pressure");
+		CHECK(evidence.reason() == "enhanced_broadcasting_transport_and_workload_fallback");
+
+		policy::CandidateFallbackEvidence reversed;
+		reversed.record("enhanced_broadcasting_transport_pressure");
+		reversed.record(error);
+		CHECK(reversed.reason() == evidence.reason());
+	}
+}
