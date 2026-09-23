@@ -3,6 +3,7 @@ import { expect } from 'chai';
 import { connect, Socket } from 'net';
 import { decodeAmf, decodeMediaPacket, encodeAmf, encodeRtmpMessage, IRtmpMessage, RtmpChunkDecoder } from '../util/rtmp-protocol';
 import { RtmpTestServer } from '../util/rtmp-test-server';
+import { expectAudioTracks, expectVideoFrames } from '../util/rtmp-assertions';
 
 describe('RTMP test receiver', () => {
     it('decodes compressed headers across arbitrary TCP boundaries', () => {
@@ -124,5 +125,40 @@ describe('RTMP test receiver', () => {
         await closing.close();
         expect(await pending).to.contain('closed while waiting');
         await closing.close();
+    });
+
+    it('media assertions require complete audio tracks and encoded video frames', async () => {
+        const server = await RtmpTestServer.start();
+        try {
+            const client = await publish(server, 'assertions');
+            const session = await server.waitForPublish('assertions');
+            client.write(Buffer.concat([
+                encodeRtmpMessage(8, Buffer.from('af01ff', 'hex'), 1),
+                encodeRtmpMessage(9, Buffer.from('170000000001', 'hex'), 1),
+                encodeRtmpMessage(9, Buffer.from('1702000000', 'hex'), 1),
+            ]));
+            await session.waitForMedia({ audioPackets: 1 });
+            expect(() => expectAudioTracks(session, [0])).to.throw('audio track 0 header');
+            expect(() => expectVideoFrames(session)).to.throw('video frames');
+
+            client.write(Buffer.concat([
+                encodeRtmpMessage(8, Buffer.from('af001210', 'hex'), 1),
+                encodeRtmpMessage(8, Buffer.from('95006d703461011210', 'hex'), 1),
+                encodeRtmpMessage(8, Buffer.from('af01ff', 'hex'), 1),
+            ]));
+            await session.waitForMedia({ audioPackets: 2 });
+            expect(() => expectAudioTracks(session, [0, 1])).to.throw('audio track 1 frames');
+            expect(() => expectVideoFrames(session)).to.throw('video frames');
+
+            client.write(Buffer.concat([
+                encodeRtmpMessage(8, Buffer.from('95016d70346101ff', 'hex'), 1),
+                encodeRtmpMessage(9, Buffer.from('2701000000ff', 'hex'), 1),
+            ]));
+            await session.waitForMedia({ audioPackets: 3, videoPackets: 1 });
+            expectAudioTracks(session, [1, 0]);
+            expectVideoFrames(session);
+            expect(() => expectAudioTracks(session, [0])).to.throw('audio tracks');
+            server.assertHealthy();
+        } finally { await server.close(); }
     });
 });

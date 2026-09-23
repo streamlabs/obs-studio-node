@@ -7,6 +7,9 @@ import { OBSHandler } from '../util/obs_handler'
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import * as inputSettings from '../util/input_settings';
+import { createStreamingOutput, ITestStreamingOutput } from '../util/streaming_output';
+import { RtmpTestServer } from '../util/rtmp-test-server';
+import { expectAudioTracks, expectVideoFrames } from '../util/rtmp-assertions';
 
 import * as path from 'path';
 
@@ -154,96 +157,6 @@ describe(testName, () => {
         osn.SimpleStreamingFactory.destroy(stream);
     });
 
-    it('Start streaming', async function() {
-        if (obs.isDarwin()) {
-            this.skip();
-        }
-        const stream = osn.SimpleStreamingFactory.create();
-        stream.videoEncoder =
-            osn.VideoEncoderFactory.create('obs_x264', 'video-encoder-simple-streaming-1');
-        stream.service = osn.ServiceFactory.legacySettings;
-        stream.delay =
-            osn.DelayFactory.create();
-        stream.reconnect =
-            osn.ReconnectFactory.create();
-        stream.network =
-            osn.NetworkFactory.create();
-        stream.video = obs.defaultVideoContext;
-        stream.audioEncoder = osn.AudioEncoderFactory.create("ffmpeg_aac", "audio-encoder-simple-streaming-4");
-        stream.signalHandler = (signal) => {obs.signals.push(signal)};
-
-        stream.start();
-
-        let signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Starting);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Starting, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Activate);
-
-        if (signalInfo.signal == EOBSOutputSignal.Stop) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.StreamOutputDidNotStart, signalInfo.code.toString(), signalInfo.error));
-        }
-
-        expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(EOBSOutputSignal.Activate, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Start);
-        expect(signalInfo.type).to.equal(EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(EOBSOutputSignal.Start, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        await sleep(500);
-
-        expect(stream.droppedFrames).to.not.equal(
-            undefined, "Undefined droppedFrames");
-        expect(stream.totalFrames).to.not.equal(
-            undefined, "Undefined totalFrames");
-        expect(stream.kbitsPerSec).to.not.equal(
-            undefined, "Undefined kbitsPerSec");
-        expect(stream.dataOutput).to.not.equal(
-            undefined, "Undefined dataOutput");
-
-        stream.stop();
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Stopping);
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(EOBSOutputType.Streaming, EOBSOutputSignal.Stop);
-
-        if (signalInfo.code != 0) {
-            throw Error(GetErrorMessage(
-                ETestErrorMsg.StreamOutputStoppedWithError,
-                signalInfo.code.toString(), signalInfo.error));
-        }
-
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Stop, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        signalInfo = await obs.getNextSignalInfo(
-            EOBSOutputType.Streaming, EOBSOutputSignal.Deactivate);
-        expect(signalInfo.type).to.equal(
-            EOBSOutputType.Streaming, GetErrorMessage(ETestErrorMsg.StreamOutput));
-        expect(signalInfo.signal).to.equal(
-            EOBSOutputSignal.Deactivate, GetErrorMessage(ETestErrorMsg.StreamOutput));
-
-        const streamEncoder = stream.videoEncoder;
-        const audioEncoder = stream.audioEncoder;
-        osn.SimpleStreamingFactory.destroy(stream);
-        streamEncoder.release();
-        audioEncoder.release();
-    });
-
     it('Simple Streaming honors stream delay', async function() {
         if (obs.isDarwin()) {
             this.skip();
@@ -378,6 +291,78 @@ describe(testName, () => {
             osn.SimpleStreamingFactory.destroy(stream);
             videoEncoder.release();
             audioEncoder.release();
+        }
+    });
+});
+
+// These output checks use a local receiver and do not reserve a provider account.
+describe(`${testName} (local)`, function () {
+    this.timeout(30000);
+    let obs: OBSHandler;
+
+    before(() => {
+        deleteConfigFiles();
+        obs = new OBSHandler(testName);
+        obs.defaultVideoContext.video = {
+            ...obs.defaultVideoContext.video,
+            fpsNum: 30, fpsDen: 1, baseWidth: 320, baseHeight: 180, outputWidth: 320, outputHeight: 180,
+        };
+    });
+
+    after(() => {
+        if (obs) obs.shutdown();
+    });
+
+    it('Start streaming', async () => {
+        const receiver = await RtmpTestServer.start();
+        let service: osn.IService;
+        let output: ITestStreamingOutput;
+        try {
+            service = osn.ServiceFactory.create('rtmp_custom', 'simple-stream', { server: receiver.url, key: 'simple' });
+            output = createStreamingOutput({ mode: 'Simple', name: 'simple', video: obs.defaultVideoContext, service });
+            await output.start();
+            const session = await receiver.waitForPublish('simple');
+            await session.waitForMedia({ audioPackets: 25, videoPackets: 15 });
+
+            expect(output.stream.droppedFrames).to.not.equal(undefined, 'Undefined droppedFrames');
+            expect(output.stream.totalFrames).to.be.greaterThan(0, 'No encoded video frames');
+            expect(output.stream.kbitsPerSec).to.not.equal(undefined, 'Undefined kbitsPerSec');
+            expect(output.stream.dataOutput).to.be.greaterThan(0, 'No transmitted media');
+
+            await output.stop();
+            expectAudioTracks(session, [0]);
+            expectVideoFrames(session);
+            receiver.assertHealthy();
+        } finally {
+            try {
+                if (output) await output.destroy();
+                if (service) osn.ServiceFactory.destroy(service);
+            } finally { await receiver.close(); }
+        }
+    });
+
+    it('Releases a failed output without destroying its borrowed service', async () => {
+        const receiver = await RtmpTestServer.start();
+        const unavailableServer = receiver.url;
+        await receiver.close();
+        let service: osn.IService;
+        let output: ITestStreamingOutput;
+        try {
+            service = osn.ServiceFactory.create('rtmp_custom', 'failed-stream', { server: unavailableServer, key: 'failed' });
+            output = createStreamingOutput({ mode: 'Simple', name: 'failed', video: obs.defaultVideoContext, service });
+            const startError = await output.start().then(() => undefined, error => error);
+            expect(startError).to.be.instanceOf(Error);
+            expect(startError.message).to.contain(`"code":${osn.EOutputCode.ConnectFailed}`);
+
+            // destroy reports the native error after terminal cleanup, then becomes a no-op.
+            const destroyError = await output.destroy().then(() => undefined, error => error);
+            expect(destroyError).to.be.instanceOf(Error);
+            expect(destroyError.message).to.equal(startError.message);
+            await output.destroy();
+            expect(service.settings.server).to.equal(unavailableServer);
+        } finally {
+            if (output) await output.destroy();
+            if (service) osn.ServiceFactory.destroy(service);
         }
     });
 });
