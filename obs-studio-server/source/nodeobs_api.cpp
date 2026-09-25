@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_api.h"
+#include <atomic>
 #include "osn-source.hpp"
 #include "osn-scene.hpp"
 #include "osn-sceneitem.hpp"
@@ -144,7 +145,7 @@ struct ModuleLoadFailure {
 static std::vector<ModuleLoadFailure> moduleLoadFailures;
 
 static bool browserAccel = true;
-static bool mediaFileCaching = true;
+static std::atomic<bool> mediaFileCaching{true};
 static uint32_t sdrWhiteLevel = 300;
 static uint32_t hdrNominalPeakLevel = 1000;
 static bool lowLatencyAudioBuffering = false;
@@ -1773,10 +1774,13 @@ void OBS_API::destroyOBS_API(void)
 			delete fileOutput;
 	});
 
+	// Stop the cache worker before draining destruction: it can still own the
+	// last reference to a removed source and enqueue its destruction later.
+	// Both source-registry walks below connect/disconnect signals while holding
+	// the registry mutex; a concurrent destroy callback takes those locks in the
+	// opposite order. Join the worker, then drain its callbacks before either walk.
+	MediaCacheManager::GetInstance().shutdown();
 	obs_wait_for_destroy_queue();
-	// obs_set_output_source might cause destruction of some sources.
-	// Wait for the destruction thread to destroy the sources to be sure
-	// |for_each| below will only return actual remaining sources.
 
 	// Check if the frontend was able to shutdown correctly:
 	// If there are some sources here it's because it ended unexpectedly, this represents a
@@ -1857,16 +1861,11 @@ void OBS_API::destroyOBS_API(void)
 		// manager only contains sources that are still hanging around unexpectedly.
 		obs_wait_for_destroy_queue();
 
-		// Detach node-side destroy/remove callbacks from the remaining leaked
-		// sources, then drop the memory manager refs they still hold.
+		// The cache worker is stopped and deferred destruction has drained, so
+		// detach node-side destroy/remove callbacks from the remaining leaked sources.
 		blog(LOG_WARNING, "OBS_API::destroyOBS_API - obs_wait_for_destroy_queue has finished, osn::Source::Manager::GetInstance() size is %d",
 		     osn::Source::Manager::GetInstance().size());
 		osn::Source::Manager::GetInstance().for_each([&sources](obs_source_t *source) { osn::Source::detach_source_signals(source); });
-		MemoryManager::GetInstance().shutdownAllSources();
-
-		// Releasing the memory manager refs can enqueue/complete more deferred
-		// libobs destruction. Wait for that before obs_shutdown().
-		obs_wait_for_destroy_queue();
 
 #ifdef WIN32
 		// Directly blame the frontend since it didn't release all objects and that could cause
@@ -2147,7 +2146,7 @@ void OBS_API::SetMediaFileCaching(void *data, const int64_t id, const std::vecto
 	mediaFileCaching = args[0].value_union.ui32;
 	config_set_bool(ConfigManager::getInstance().getGlobal(), "General", "fileCaching", mediaFileCaching);
 	config_save_safe(ConfigManager::getInstance().getGlobal(), "tmp", nullptr);
-	MemoryManager::GetInstance().updateSourcesCache();
+	MediaCacheManager::GetInstance().requestAllCacheUpdates();
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
@@ -2195,7 +2194,7 @@ void OBS_API::GetBrowserAcceleration(void *data, const int64_t id, const std::ve
 void OBS_API::GetMediaFileCaching(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value((uint32_t)mediaFileCaching));
+	rval.push_back(ipc::value((uint32_t)mediaFileCaching.load()));
 	AUTO_DEBUG;
 }
 

@@ -3712,7 +3712,7 @@ void OBS_settings::saveAdvancedSettings(std::vector<SubCategory> advancedSetting
 
 	mediaFilesSettings.push_back(advancedSettings.at(index++));
 	saveGenericSettings(mediaFilesSettings, "General", ConfigManager::getInstance().getGlobal());
-	MemoryManager::GetInstance().updateSourcesCache();
+	MediaCacheManager::GetInstance().requestAllCacheUpdates();
 }
 
 std::vector<SubCategory> OBS_settings::getSettings(std::string nameCategory, CategoryTypes &type)

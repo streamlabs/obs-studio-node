@@ -624,6 +624,7 @@ if(BUILD_TESTING)
 
     add_executable(
         obs_studio_server_unit_tests
+        "tests/test-memory-manager.cpp"
         "tests/test-osn-source.cpp"
         "tests/test-osn-encoder-settings.cpp"
         "tests/test-osn-file-output.cpp"
@@ -679,5 +680,6 @@ if(BUILD_TESTING)
         TEST_PREFIX "obs_studio_server_unit_tests::"
         DL_PATHS
             ${_osn_server_test_dl_paths}
+        PROPERTIES TIMEOUT 60
     )
 endif()

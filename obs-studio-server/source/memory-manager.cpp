@@ -18,63 +18,173 @@
 
 #include "memory-manager.h"
 #include "nodeobs_api.h"
+#include <obs.hpp>
+#include <algorithm>
+#include <atomic>
+#include <cstring>
+#include <limits>
+#include <utility>
 
-struct MemoryManager::source_info {
-	bool cached = false;
-	uint64_t size = 0;
-	obs_source_t *source = nullptr;
-	std::vector<std::thread> workers;
-	std::mutex mtx;
-	bool have_video = false;
+#ifdef WIN32
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <shared.hpp>
+#endif
+
+namespace {
+constexpr uint64_t CACHE_LIMIT = 2004800000;
+constexpr unsigned MAX_POLLS = 10;
+constexpr size_t JOBS_PER_TICK = 8;
+
+uint64_t cacheBudget()
+{
+#ifdef WIN32
+	MEMORYSTATUSEX status{};
+	status.dwLength = sizeof(status);
+	if (GlobalMemoryStatusEx(&status))
+		return std::min<uint64_t>(CACHE_LIMIT, status.ullTotalPhys / 2);
+#elif defined(__APPLE__)
+	if (g_util_osx)
+		return std::min<uint64_t>(CACHE_LIMIT, g_util_osx->getTotalPhysicalMemory() / 2);
+#endif
+	return CACHE_LIMIT;
+}
+}
+
+struct MediaCacheManager::SourceEntry {
+	explicit SourceEntry(obs_source_t *source) : source(obs_source_get_ref(source)) {}
+	~SourceEntry() { obs_source_release(source); }
+	// Keeps the OBS source alive; its current media player can still be replaced.
+	obs_source_t *source;
+	std::atomic<uint64_t> revision{1};
+	std::atomic<bool> removed{false};
+
+	// Only the worker changes these fields, under the queue mutex.
+	uint64_t scheduledRevision = 0;
+	uint64_t reservedBytes = 0; // Includes an enable operation awaiting completion.
+	std::string file;
+	unsigned retries = 0;
+	bool initialized = false;
+	bool hasPendingGraphicsJob = false;
+	bool waitingForBudget = false;
+	Clock::time_point retryAt = Clock::time_point::max();
 };
 
-MemoryManager &MemoryManager::GetInstance()
+MediaCacheManager &MediaCacheManager::GetInstance()
 {
-	static MemoryManager instance;
+	static MediaCacheManager instance;
 	return instance;
 }
 
-MemoryManager::MemoryManager()
-{
-	blog(LOG_INFO, "MemoryManager: constructor called");
-#ifdef WIN32
-	MEMORYSTATUSEX statex;
-	statex.dwLength = sizeof(statex);
-	current_cached_size = 0;
+MediaCacheManager::MediaCacheManager(uint64_t budget) : m_cacheBudgetBytes(budget ? budget : cacheBudget()) {}
 
-	if (::GlobalMemoryStatusEx(&statex)) {
-		available_memory = statex.ullTotalPhys;
-		allowed_cached_size = std::min<uint64_t>(LIMIT, available_memory / 2);
-	} else {
-		available_memory = 0;
-		allowed_cached_size = LIMIT;
-	}
-#elif __APPLE__
-	available_memory = g_util_osx->getTotalPhysicalMemory();
-	allowed_cached_size = std::min((uint64_t)LIMIT, (uint64_t)available_memory / 2);
-#endif
+MediaCacheManager::~MediaCacheManager()
+{
+	shutdown();
 }
 
-MemoryManager::~MemoryManager()
+void MediaCacheManager::initialize()
 {
-	blog(LOG_INFO, "MemoryManager: destructor called");
-
-	for (auto &source : sources) {
-		unregisterSource(source.second->source);
-	}
+	// Initialization and shutdown are serialized by the OBS API lifecycle.
+	if (m_worker.joinable())
+		return;
+	m_stopping = false;
+	m_accepting = true;
+	m_notified = false;
+	m_rebalance = false;
+	m_reservedCacheBytes = 0;
+	obs_add_tick_callback(graphicsTick, this);
+	m_worker = std::thread(&MediaCacheManager::run, this);
 }
 
-// Not thread safe. 'si.mtx' should be locked
-void MemoryManager::calculateRawSize(source_info &si)
+void MediaCacheManager::registerSource(obs_source_t *source)
 {
-	calldata_t cd = {0};
-	proc_handler_t *ph = obs_source_get_proc_handler(si.source);
-	proc_handler_call(ph, "get_file_info", &cd);
-	si.have_video = calldata_bool(&cd, "have_video");
+	if (!source)
+		return;
+	const char *id = obs_source_get_unversioned_id(source);
+	if (!id || strcmp(id, "ffmpeg_source") != 0)
+		return;
 
-	const uint64_t pix_fmt = calldata_int(&cd, "pix_format");
+	// Keep every possible last release outside the queue lock.
+	auto entry = std::make_shared<SourceEntry>(source);
+	{
+		std::lock_guard lock(m_mutex);
+		if (!m_accepting)
+			return;
+		m_sources.emplace(source, entry);
+		m_notified = true;
+	}
+	m_changed.notify_all();
+}
+
+void MediaCacheManager::unregisterSource(obs_source_t *source)
+{
+	{
+		std::lock_guard lock(m_mutex);
+		auto it = m_sources.find(source);
+		if (it == m_sources.end())
+			return;
+		it->second->removed = true;
+		++it->second->revision;
+		m_retiredEntries.push_back(std::move(it->second));
+		m_sources.erase(it);
+		m_notified = true;
+	}
+	m_changed.notify_all();
+}
+
+void MediaCacheManager::requestCacheUpdate(obs_source_t *source)
+{
+	{
+		std::lock_guard lock(m_mutex);
+		auto it = m_sources.find(source);
+		if (!m_accepting || it == m_sources.end())
+			return;
+		++it->second->revision;
+		m_notified = true;
+	}
+	m_changed.notify_all();
+}
+
+void MediaCacheManager::requestAllCacheUpdates()
+{
+	{
+		std::lock_guard lock(m_mutex);
+		if (!m_accepting)
+			return;
+		for (auto &item : m_sources)
+			++item.second->revision;
+		m_notified = true;
+	}
+	m_changed.notify_all();
+}
+
+MediaCacheManager::Snapshot MediaCacheManager::readSettings(obs_source_t *source)
+{
+	OBSDataAutoRelease settings = obs_source_get_settings(source);
+	Snapshot snapshot;
+	snapshot.file = obs_data_get_string(settings, "local_file");
+	snapshot.caching = obs_data_get_bool(settings, "caching");
+	snapshot.eligible = !obs_source_removed(source) && OBS_API::getMediaFileCaching() && obs_data_get_bool(settings, "looping") &&
+			    obs_data_get_bool(settings, "is_local_file") && (obs_source_showing(source) || !obs_data_get_bool(settings, "close_when_inactive"));
+	return snapshot;
+}
+
+void MediaCacheManager::queryMediaOnGraphicsThread(obs_source_t *source, Snapshot &snapshot)
+{
+	// These handlers dereference the plugin's current media player. Run them on
+	// graphics, alongside the plugin's deferred update and video_tick, and never
+	// carry a player pointer across ticks. Cached players do not expose this info.
+	if (!snapshot.eligible || snapshot.caching)
+		return;
+	calldata_t cd{};
+	proc_handler_t *handler = obs_source_get_proc_handler(source);
+	proc_handler_call(handler, "get_file_info", &cd);
+	const auto width = calldata_int(&cd, "width");
+	const auto height = calldata_int(&cd, "height");
+	const auto frames = calldata_int(&cd, "num_frames");
 	double bpp = 0;
-	switch (pix_fmt) {
+	switch (calldata_int(&cd, "pix_format")) {
 	case VIDEO_FORMAT_I420:
 	case VIDEO_FORMAT_NV12:
 	case VIDEO_FORMAT_I40A:
@@ -98,298 +208,226 @@ void MemoryManager::calculateRawSize(source_info &si)
 		bpp = 4;
 		break;
 	}
-
-	const uint64_t width = calldata_int(&cd, "width");
-	const uint64_t height = calldata_int(&cd, "height");
-	const uint64_t nb_frames = calldata_int(&cd, "num_frames");
-	si.size = static_cast<uint64_t>(width * height * bpp * nb_frames);
+	const long double bytes = static_cast<long double>(width) * height * frames * bpp;
+	if (calldata_bool(&cd, "have_video") && width > 0 && height > 0 && frames > 0 && bytes > 0 && bytes < std::numeric_limits<uint64_t>::max())
+		snapshot.estimatedCacheBytes = static_cast<uint64_t>(bytes);
+	calldata_free(&cd);
+	calldata_init(&cd);
+	proc_handler_call(handler, "get_playing", &cd);
+	snapshot.playing = calldata_bool(&cd, "playing");
+	calldata_free(&cd);
 }
 
-// Not thread safe. 'si.mtx' AND 'manager_mutex' should be locked
-bool MemoryManager::shouldCacheSource(source_info &si)
+void MediaCacheManager::setCaching(obs_source_t *source, bool caching)
 {
-	obs_data_t *settings = obs_source_get_settings(si.source);
-
-	const bool looping = obs_data_get_bool(settings, "looping");
-	const bool local_file = obs_data_get_bool(settings, "is_local_file");
-	const bool enable_caching = OBS_API::getMediaFileCaching();
-	bool showing = obs_source_showing(si.source);
-
-	const bool is_small = obs_data_get_bool(settings, "caching") ? current_cached_size < allowed_cached_size
-								     : current_cached_size + si.size < allowed_cached_size;
-
-	if (!showing && !obs_data_get_bool(settings, "close_when_inactive"))
-		showing = true;
-
-	obs_data_release(settings);
-
-	return looping && local_file && enable_caching && is_small && showing;
+	// Apply only our setting; never write back an old copy of the source's
+	// unrelated settings after the user has edited them.
+	OBSDataAutoRelease patch = obs_data_create();
+	// "caching" is a custom Streamlabs setting, OBS does not use it
+	obs_data_set_bool(patch, "caching", caching);
+	obs_source_update(source, patch);
 }
 
-void updateSource(obs_source_t *source, bool caching)
+void MediaCacheManager::graphicsTick(void *param, float)
 {
-	obs_data_t *settings = obs_source_get_settings(source);
-	if (!settings)
-		return;
+	auto &manager = *static_cast<MediaCacheManager *>(param);
+	std::vector<Completion> results;
+	{
+		std::lock_guard lock(manager.m_mutex);
+		if (!manager.m_accepting)
+			return;
 
-	if (obs_data_get_bool(settings, "caching") != caching) {
-		obs_data_set_bool(settings, "caching", caching);
-		obs_source_update(source, settings);
+		// Take one batch per tick.
+		while (!manager.m_graphicsJobs.empty() && results.size() < JOBS_PER_TICK) {
+			results.push_back({std::move(manager.m_graphicsJobs.front())});
+			manager.m_graphicsJobs.pop_front();
+		}
 	}
-	obs_data_release(settings);
-}
-
-// Not thread safe. 'manager_mutex' and 'si.mtx' should be locked
-void MemoryManager::addCachedMemory(source_info &si)
-{
-	if (!si.size || si.cached || current_cached_size + si.size > allowed_cached_size)
+	if (results.empty())
 		return;
 
-	int32_t retry = MAX_POLLS;
-
-	proc_handler_t *ph = obs_source_get_proc_handler(si.source);
-	bool playing = false;
-	while (retry > 0) {
-		calldata_t cd = {0};
-		proc_handler_call(ph, "get_playing", &cd);
-		playing = calldata_bool(&cd, "playing");
-		if (playing)
-			break;
-
-		retry--;
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
-	}
-
-	if (!playing)
-		return;
-
-	blog(LOG_INFO, "adding %dMB, source: %s", si.size / 1000000, obs_source_get_name(si.source));
-	current_cached_size += si.size;
-	si.cached = true;
-
-	updateSource(si.source, true);
-}
-
-// Not thread safe. 'manager_mutex' and 'si.mtx' should be locked
-void MemoryManager::removeCachedMemory(source_info &si, bool cacheNewFiles, const std::string &sourceName)
-{
-	if (!si.cached)
-		return;
-
-	blog(LOG_INFO, "removing %dMB, source: %s", si.size / 1000000, sourceName.c_str());
-	current_cached_size -= si.size;
-	si.cached = false;
-
-	updateSource(si.source, false);
-
-	if (!cacheNewFiles || current_cached_size >= allowed_cached_size)
-		return;
-
-	for (const auto &data : sources) {
-		if (data.second.get() == &si) {
-			// Do not check self
+	// Process only the batch taken above. After a SetCaching job, any follow-up
+	// QuerySource job must wait for a later tick so ffmpeg_source can process
+	// its deferred settings update first.
+	for (auto &result : results) {
+		auto &job = result.job;
+		if (job.source->removed || job.source->revision != job.revision)
 			continue;
+		result.valid = true;
+		result.snapshot = readSettings(job.source->source);
+		if (job.type == JobType::QuerySource) {
+			queryMediaOnGraphicsThread(job.source->source, result.snapshot);
+		} else if (!job.targetCachingEnabled || (result.snapshot.eligible && result.snapshot.file == job.file)) {
+			if (result.snapshot.caching != job.targetCachingEnabled)
+				setCaching(job.source->source, job.targetCachingEnabled);
+			result.applied = true;
 		}
+	}
+	{
+		std::lock_guard lock(manager.m_mutex);
+		for (auto &result : results)
+			manager.m_completions.push_back(std::move(result));
+		manager.m_notified = true;
+	}
+	manager.m_changed.notify_all();
+}
 
-		std::unique_lock ulock(data.second->mtx);
-		if (shouldCacheSource(*data.second))
-			addCachedMemory(*data.second);
+void MediaCacheManager::releaseBudget(SourceEntry &source)
+{
+	if (source.reservedBytes) {
+		m_reservedCacheBytes -= source.reservedBytes;
+		source.reservedBytes = 0;
+		m_rebalance = true;
 	}
 }
 
-void MemoryManager::sourceManager(const std::string &sourceName)
+void MediaCacheManager::queueCacheSettingUpdate(const std::shared_ptr<SourceEntry> &source, uint64_t revision, bool targetCachingEnabled)
 {
-	std::shared_ptr<source_info> si;
-	{
-		std::unique_lock manager_lock(manager_mutex);
-		auto it = sources.find(sourceName);
-		if (it == sources.end()) {
-			return;
-		}
-		si = it->second;
-		si->mtx.lock();
+	source->hasPendingGraphicsJob = true;
+	m_graphicsJobs.push_back({source, revision, JobType::SetCaching, targetCachingEnabled, source->file});
+}
+
+void MediaCacheManager::complete(Completion &result)
+{
+	auto &entry = *result.job.source;
+	entry.hasPendingGraphicsJob = false;
+	if (entry.removed)
+		return;
+
+	if (result.job.type == JobType::SetCaching) {
+		// Graphics completion confirms only that the caching setting was applied
+		// or already matched. Decoder cache creation is deferred.
+		// Process this even if a newer notification arrived during the operation.
+		if ((result.job.targetCachingEnabled && !result.applied) || (!result.job.targetCachingEnabled && result.applied))
+			releaseBudget(entry);
+		if (!result.applied || !result.job.targetCachingEnabled)
+			entry.scheduledRevision = 0;
+		if (result.applied)
+			entry.initialized = true;
+		return;
+	}
+	if (!result.valid || entry.revision != result.job.revision) {
+		entry.scheduledRevision = 0;
+		return;
 	}
 
-	bool need_get_size = false;
-	{
-		std::unique_lock si_mtx_lock(si->mtx, std::adopt_lock);
-
-		obs_data_t *settings = obs_source_get_settings(si->source);
-		const bool looping = obs_data_get_bool(settings, "looping");
-		const bool local_file = obs_data_get_bool(settings, "is_local_file");
-		obs_data_release(settings);
-
-		if (!looping || !local_file) {
-			return;
-		}
-
-		need_get_size = si->size == 0;
+	const auto &snapshot = result.snapshot;
+	const bool fileChanged = entry.file != snapshot.file;
+	entry.file = snapshot.file;
+	if (snapshot.caching && (!entry.initialized || fileChanged || !snapshot.eligible || !entry.reservedBytes)) {
+		queueCacheSettingUpdate(result.job.source, result.job.revision, false);
+		return;
 	}
+	entry.initialized = true;
+	if (snapshot.caching)
+		return;
+	releaseBudget(entry);
+	if (!snapshot.eligible)
+		return;
+	if (!snapshot.estimatedCacheBytes || !snapshot.playing) {
+		if (++entry.retries < MAX_POLLS)
+			entry.retryAt = m_now() + (snapshot.estimatedCacheBytes ? std::chrono::milliseconds(100) : std::chrono::milliseconds(500));
+		return;
+	}
+	if (snapshot.estimatedCacheBytes > m_cacheBudgetBytes - m_reservedCacheBytes) {
+		entry.waitingForBudget = true;
+		return;
+	}
+	entry.reservedBytes = snapshot.estimatedCacheBytes;
+	m_reservedCacheBytes += snapshot.estimatedCacheBytes;
+	queueCacheSettingUpdate(result.job.source, result.job.revision, true);
+}
 
-	if (need_get_size) {
-		uint32_t retry = MAX_POLLS;
-		while (retry > 0) {
-			{
-				std::unique_lock si_mtx_lock(si->mtx);
-				// Double-check if source still registered in the manager before proceeding
-				{
-					std::unique_lock manager_lock(manager_mutex);
-					if (sources.find(sourceName) == sources.end()) {
-						return;
-					}
-				}
-				calculateRawSize(*si); // This also sets 'si.have_video'
-				if (si->size || !si->have_video) {
-					break;
-				}
+void MediaCacheManager::run()
+{
+	std::unique_lock lock(m_mutex);
+	while (!m_stopping) {
+		m_notified = false;
+		std::vector<std::shared_ptr<SourceEntry>> released;
+		released.swap(m_retiredEntries);
+		for (auto &entry : released)
+			releaseBudget(*entry);
+		std::vector<GraphicsJob> cancelled;
+		for (auto it = m_graphicsJobs.begin(); it != m_graphicsJobs.end();) {
+			if (it->source->removed) {
+				cancelled.push_back(std::move(*it));
+				it = m_graphicsJobs.erase(it);
+			} else {
+				++it;
 			}
-			retry--;
-			std::this_thread::sleep_for(std::chrono::milliseconds(500));
 		}
-	}
+		std::vector<Completion> finished;
+		finished.swap(m_completions);
+		for (auto &result : finished)
+			complete(result);
 
-	{
-		std::unique_lock si_mtx_lock(si->mtx);
-		if (!si->size) {
-			return;
-		}
-
-		// Double-check if source still registered in the manager before proceeding
-		{
-			std::unique_lock manager_lock(manager_mutex);
-			if (sources.find(sourceName) == sources.end()) {
-				return;
+		const auto currentTime = m_now();
+		auto nextRetry = Clock::time_point::max();
+		for (auto &item : m_sources) {
+			auto &entry = *item.second;
+			if (entry.removed || entry.hasPendingGraphicsJob)
+				continue;
+			const auto revision = entry.revision.load();
+			const bool updated = entry.scheduledRevision != revision;
+			if (updated || (m_rebalance && entry.waitingForBudget) || entry.retryAt <= currentTime) {
+				if (updated)
+					entry.retries = 0;
+				entry.scheduledRevision = revision;
+				entry.retryAt = Clock::time_point::max();
+				entry.waitingForBudget = false;
+				entry.hasPendingGraphicsJob = true;
+				m_graphicsJobs.push_back({item.second, revision, JobType::QuerySource});
+			} else {
+				nextRetry = std::min(nextRetry, entry.retryAt);
 			}
 		}
+		m_rebalance = false;
+		m_changed.notify_all();
 
-		const bool should_cache = shouldCacheSource(*si);
-		if (should_cache) {
-			addCachedMemory(*si);
-		} else {
-			removeCachedMemory(*si, true, sourceName);
-		}
+		// Final source release performs synchronous OBS cleanup and can invoke
+		// callbacks, so release references without holding m_mutex.
+		// Destruction also queues deferred callbacks; these clears do not wait
+		// for them to finish.
+		lock.unlock();
+		released.clear();
+		cancelled.clear();
+		finished.clear();
+		lock.lock();
+		if (nextRetry == Clock::time_point::max())
+			m_changed.wait(lock, [this] { return m_stopping || m_notified; });
+		else
+			m_changed.wait_for(lock, nextRetry - m_now(), [this] { return m_stopping || m_notified; });
 	}
+
+	// These locals keep source references alive until after the mutex is unlocked.
+	// Final release can acquire OBS locks or invoke callbacks that reenter the
+	// manager; doing that while holding the mutex could deadlock.
+	auto old_sources = std::exchange(m_sources, {});
+	auto old_graphicsJobs = std::exchange(m_graphicsJobs, {});
+	auto old_completions = std::exchange(m_completions, {});
+	auto old_retiredEntries = std::exchange(m_retiredEntries, {});
+	m_reservedCacheBytes = 0;
+	lock.unlock();
 }
 
-// Not thread safe, should be called with locked 'manager_mutex'
-void MemoryManager::updateSettings(obs_source_t *source)
+void MediaCacheManager::shutdown()
 {
-	std::string sourceName = obs_source_get_name(source);
-	auto it = sources.find(sourceName);
-	if (it == sources.end()) {
+	if (!m_worker.joinable())
 		return;
-	}
-
-	std::unique_lock si_lock(it->second->mtx);
-	it->second->workers.push_back(std::thread(&MemoryManager::sourceManager, this, sourceName));
-}
-
-void MemoryManager::updateSourceCache(obs_source_t *source)
-{
-	std::unique_lock ulock(manager_mutex);
-
-	updateSettings(source);
-}
-
-void MemoryManager::updateSourcesCache()
-{
-	std::unique_lock ulock(manager_mutex);
-
-	for (const auto &data : sources)
-		updateSettings(data.second->source);
-}
-
-bool MemoryManager::isSourceValid(obs_source_t *source) const
-{
-	if (!source)
-		return false;
-
-	const char *source_id = obs_source_get_unversioned_id(source);
-	if (!source_id)
-		return false;
-
-	if (strcmp(source_id, "ffmpeg_source") != 0)
-		return false;
-
-	return true;
-}
-
-void MemoryManager::registerSource(obs_source_t *source)
-{
-	if (!isSourceValid(source)) {
-		return;
-	}
-
-	std::unique_lock ulock(manager_mutex);
-
-	auto si = std::make_shared<source_info>();
-	si->source = obs_source_get_ref(source);
-	sources.emplace(obs_source_get_name(source), si);
-	updateSource(source, false);
-}
-
-void MemoryManager::unregisterSource(obs_source_t *source)
-{
-	if (!isSourceValid(source)) {
-		return;
-	}
-
-	const std::string source_name = obs_source_get_name(source);
-
-	std::shared_ptr<source_info> moved_ptr;
-	std::vector<std::thread> workers_to_join;
 	{
-		std::unique_lock ulock(manager_mutex);
-		auto it = sources.find(source_name);
-		if (it == sources.end()) {
-			return;
-		}
-		std::unique_lock si_lock(it->second->mtx);
-
-		// Moving pointer to have a valid object when proceeding with further deinit.
-		moved_ptr = std::move(it->second);
-		// Removing object from the collection early to be sure that it is unavailable anymore for outer clients
-		// and someone can not spawn a new worker while we are waiting for worker threads to join.
-		// Also this prevents data race if someone called 'unregisterSource' from other thread
-		// while removal is in progress.
-		workers_to_join = std::move(moved_ptr->workers);
-		sources.erase(source_name);
+		std::lock_guard lock(m_mutex);
+		m_accepting = false;
+		for (auto &item : m_sources)
+			item.second->removed = true;
 	}
-
-	for (auto &worker : workers_to_join) {
-		if (worker.joinable()) {
-			worker.join();
-		}
-	}
-
+	// OBS synchronizes removal with any tick currently executing. Our queue is
+	// owned here, not by obs_queue_task: reset/stopped video cannot discard a
+	// task payload or strand the worker waiting for a graphics completion.
+	obs_remove_tick_callback(graphicsTick, this);
 	{
-		std::lock_guard lock(moved_ptr->mtx);
-		removeCachedMemory(*moved_ptr, true, source_name);
-		obs_source_release(moved_ptr->source);
+		std::lock_guard lock(m_mutex);
+		m_stopping = true;
 	}
-}
-
-void MemoryManager::shutdownAllSources()
-{
-	std::vector<std::pair<std::string, std::shared_ptr<source_info>>> sources_to_shutdown;
-	{
-		std::unique_lock ulock(manager_mutex);
-		for (auto &pair : sources) {
-			sources_to_shutdown.emplace_back(pair.first, std::move(pair.second));
-		}
-		sources.clear();
-	}
-
-	for (const auto &[key, value] : sources_to_shutdown) {
-		blog(LOG_INFO, "MemoryManager: shutdownAllSources: source %s", key.c_str());
-
-		for (auto &worker : value->workers) {
-			if (worker.joinable())
-				worker.join();
-		}
-
-		std::scoped_lock lock(manager_mutex, value->mtx);
-		removeCachedMemory(*value, false, key);
-		obs_source_release(value->source);
-	}
+	m_changed.notify_all();
+	m_worker.join();
 }
