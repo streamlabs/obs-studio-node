@@ -34,6 +34,7 @@
 
 void osn::Source::initialize_global_signals()
 {
+	MediaCacheManager::GetInstance().initialize();
 	signal_handler_t *sh = obs_get_signal_handler();
 	signal_handler_connect(sh, "source_create", osn::Source::global_source_create_cb, nullptr);
 	signal_handler_connect(sh, "source_activate", osn::Source::global_source_activate_cb, nullptr);
@@ -44,6 +45,8 @@ void osn::Source::finalize_global_signals()
 {
 	signal_handler_t *sh = obs_get_signal_handler();
 	signal_handler_disconnect(sh, "source_create", osn::Source::global_source_create_cb, nullptr);
+	signal_handler_disconnect(sh, "source_activate", osn::Source::global_source_activate_cb, nullptr);
+	signal_handler_disconnect(sh, "source_deactivate", osn::Source::global_source_deactivate_cb, nullptr);
 }
 
 void osn::Source::attach_source_signals(obs_source_t *src)
@@ -74,7 +77,7 @@ void osn::Source::global_source_create_cb(void *ptr, calldata_t *cd)
 	osn::Source::Manager::GetInstance().allocate(source);
 	osn::Source::attach_source_signals(source);
 	CallbackManager::addSource(source);
-	MemoryManager::GetInstance().registerSource(source);
+	MediaCacheManager::GetInstance().registerSource(source);
 }
 
 void osn::Source::global_source_activate_cb(void *ptr, calldata_t *cd)
@@ -83,7 +86,7 @@ void osn::Source::global_source_activate_cb(void *ptr, calldata_t *cd)
 	if (!calldata_get_ptr(cd, "source", &source)) {
 		throw std::runtime_error("calldata did not contain source pointer");
 	}
-	MemoryManager::GetInstance().updateSourceCache(source);
+	MediaCacheManager::GetInstance().requestCacheUpdate(source);
 }
 
 void osn::Source::global_source_deactivate_cb(void *ptr, calldata_t *cd)
@@ -92,7 +95,7 @@ void osn::Source::global_source_deactivate_cb(void *ptr, calldata_t *cd)
 	if (!calldata_get_ptr(cd, "source", &source)) {
 		throw std::runtime_error("calldata did not contain source pointer");
 	}
-	MemoryManager::GetInstance().updateSourceCache(source);
+	MediaCacheManager::GetInstance().requestCacheUpdate(source);
 }
 
 void osn::Source::global_source_destroy_cb(void *ptr, calldata_t *cd)
@@ -114,7 +117,7 @@ void osn::Source::global_source_remove_cb(void *ptr, calldata_t *cd)
 		throw std::runtime_error("calldata did not contain source pointer");
 	}
 
-	MemoryManager::GetInstance().unregisterSource(source);
+	MediaCacheManager::GetInstance().unregisterSource(source);
 	obs_source_release(source);
 }
 
@@ -352,7 +355,7 @@ void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::va
 	}
 
 	obs_source_update(src, sets);
-	MemoryManager::GetInstance().updateSourceCache(src);
+	MediaCacheManager::GetInstance().requestCacheUpdate(src);
 	obs_data_release(sets);
 
 	obs_data_t *updatedSettings = obs_source_get_settings(src);

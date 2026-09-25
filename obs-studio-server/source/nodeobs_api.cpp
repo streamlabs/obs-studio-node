@@ -17,6 +17,7 @@
 ******************************************************************************/
 
 #include "nodeobs_api.h"
+#include <atomic>
 #include "osn-source.hpp"
 #include "osn-scene.hpp"
 #include "osn-sceneitem.hpp"
@@ -144,7 +145,7 @@ struct ModuleLoadFailure {
 static std::vector<ModuleLoadFailure> moduleLoadFailures;
 
 static bool browserAccel = true;
-static bool mediaFileCaching = true;
+static std::atomic<bool> mediaFileCaching{true};
 static uint32_t sdrWhiteLevel = 300;
 static uint32_t hdrNominalPeakLevel = 1000;
 static bool lowLatencyAudioBuffering = false;
@@ -1862,9 +1863,9 @@ void OBS_API::destroyOBS_API(void)
 		blog(LOG_WARNING, "OBS_API::destroyOBS_API - obs_wait_for_destroy_queue has finished, osn::Source::Manager::GetInstance() size is %d",
 		     osn::Source::Manager::GetInstance().size());
 		osn::Source::Manager::GetInstance().for_each([&sources](obs_source_t *source) { osn::Source::detach_source_signals(source); });
-		MemoryManager::GetInstance().shutdownAllSources();
+		MediaCacheManager::GetInstance().shutdown();
 
-		// Releasing the memory manager refs can enqueue/complete more deferred
+		// Releasing the media cache manager refs can enqueue/complete more deferred
 		// libobs destruction. Wait for that before obs_shutdown().
 		obs_wait_for_destroy_queue();
 
@@ -1905,6 +1906,9 @@ void OBS_API::destroyOBS_API(void)
 		}
 
 	} else {
+		// The cache worker exists even when there are no remaining media sources.
+		// Remove its graphics callback before the OBS core goes away.
+		MediaCacheManager::GetInstance().shutdown();
 		blog(LOG_DEBUG, "OBS_API::destroyOBS_API calling obs_shutdown, objects allocated %d", bnum_allocs());
 		obs_shutdown();
 	}
@@ -2147,7 +2151,7 @@ void OBS_API::SetMediaFileCaching(void *data, const int64_t id, const std::vecto
 	mediaFileCaching = args[0].value_union.ui32;
 	config_set_bool(ConfigManager::getInstance().getGlobal(), "General", "fileCaching", mediaFileCaching);
 	config_save_safe(ConfigManager::getInstance().getGlobal(), "tmp", nullptr);
-	MemoryManager::GetInstance().updateSourcesCache();
+	MediaCacheManager::GetInstance().requestAllCacheUpdates();
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
@@ -2195,7 +2199,7 @@ void OBS_API::GetBrowserAcceleration(void *data, const int64_t id, const std::ve
 void OBS_API::GetMediaFileCaching(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	rval.push_back(ipc::value((uint32_t)mediaFileCaching));
+	rval.push_back(ipc::value((uint32_t)mediaFileCaching.load()));
 	AUTO_DEBUG;
 }
 
