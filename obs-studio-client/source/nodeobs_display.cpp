@@ -344,6 +344,44 @@ Napi::Value display::OBS_content_createIOSurface(const Napi::CallbackInfo &info)
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }
 
+Napi::Value display::OBS_content_takeScreenshot(const Napi::CallbackInfo &info)
+{
+	if (info.Length() < 3 || !info[0].IsObject() || !info[1].IsString() || !info[2].IsString()) {
+		Napi::TypeError::New(info.Env(),
+				     "OBS_content_takeScreenshot(video, directory, filenameFormat, noSpace?) expects a Video object and two strings.")
+			.ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[0].ToObject());
+	if (!video) {
+		Napi::TypeError::New(info.Env(), "OBS_content_takeScreenshot: first argument is not a Video object.").ThrowAsJavaScriptException();
+		return info.Env().Undefined();
+	}
+
+	uint64_t canvasId = video->canvasId;
+	std::string directory = info[1].ToString().Utf8Value();
+	std::string filenameFormat = info[2].ToString().Utf8Value();
+	/* ipc::value has no bool constructor; a bare bool would promote to int32 and mismatch the registered UInt32. */
+	uint32_t noSpace = (info.Length() > 3 && !info[3].IsUndefined() && info[3].ToBoolean().Value()) ? 1 : 0;
+
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper(
+		"Display", "OBS_content_takeScreenshot", {ipc::value(canvasId), ipc::value(directory), ipc::value(filenameFormat), ipc::value(noSpace)});
+
+	if (!ValidateResponse(info, response))
+		return info.Env().Undefined();
+
+	Napi::Object result = Napi::Object::New(info.Env());
+	result.Set("path", Napi::String::New(info.Env(), response[1].value_str));
+	result.Set("width", Napi::Number::New(info.Env(), response[2].value_union.ui32));
+	result.Set("height", Napi::Number::New(info.Env(), response[3].value_union.ui32));
+	return result;
+}
+
 void display::Init(Napi::Env env, Napi::Object exports)
 {
 	exports.Set(Napi::String::New(env, "OBS_content_setDayTheme"), Napi::Function::New(env, display::OBS_content_setDayTheme));
@@ -362,4 +400,5 @@ void display::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "OBS_content_setDrawGuideLines"), Napi::Function::New(env, display::OBS_content_setDrawGuideLines));
 	exports.Set(Napi::String::New(env, "OBS_content_setDrawRotationHandle"), Napi::Function::New(env, display::OBS_content_setDrawRotationHandle));
 	exports.Set(Napi::String::New(env, "OBS_content_createIOSurface"), Napi::Function::New(env, display::OBS_content_createIOSurface));
+	exports.Set(Napi::String::New(env, "OBS_content_takeScreenshot"), Napi::Function::New(env, display::OBS_content_takeScreenshot));
 }

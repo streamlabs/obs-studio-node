@@ -1504,6 +1504,16 @@ export interface IVideoInfo {
     fpsType: EFPSType;
 }
 
+/** Result of `NodeObs.OBS_content_takeScreenshot`. */
+export interface IScreenshotResult {
+    /** Full path of the PNG that was written. */
+    path: string;
+    /** Image width in pixels (the canvas base width). */
+    width: number;
+    /** Image height in pixels (the canvas base height). */
+    height: number;
+}
+
 export interface IVideo {
     video: IVideoInfo;
     legacySettings: IVideoInfo;
@@ -2473,6 +2483,25 @@ interface INodeObs {
      * @throws {Error} If the IPC request fails or the server rejects the save
      */
     OBS_settings_saveSettings(category: string, settings: any[]): void;
+
+    /**
+     * Renders the program output of `video` at its base resolution and writes
+     * it as a PNG, mirroring OBS Studio's "Screenshot Output". The file is
+     * named `Screenshot <filenameFormat>.png` with the OBS filename tokens
+     * expanded; when `noSpace` is true every space becomes `_`. If the name is
+     * taken, ` (2)`, ` (3)`, ... (or `_2`, `_3`, ...) is inserted before the
+     * extension. Synchronous: the caller blocks while the frame is rendered,
+     * read back from the GPU and encoded.
+     * @param video - Video context whose main (program) mix is captured
+     * @param directory - Existing directory to write into
+     * @param filenameFormat - OBS filename formatting pattern, e.g. `%CCYY-%MM-%DD %hh-%mm-%ss`
+     * @param noSpace - Replace spaces in the generated file name with underscores
+     * @returns The path written and the image dimensions
+     * @throws {TypeError} If `video` is not an `IVideo` instance or a string argument is missing
+     * @throws {Error} If the canvas has no running video, the directory does not exist,
+     * rendering, readback or PNG encoding fails, or the IPC call fails
+     */
+    OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): IScreenshotResult;
 }
 
 export const enum VCamOutputType {
