@@ -1,5 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "memory-manager.h"
+#include "obs-setup.hpp"
+#include "osn-source.hpp"
 #include <obs.hpp>
 #include <algorithm>
 #include <array>
@@ -53,6 +55,11 @@ public:
 	{
 		std::lock_guard lock(manager.m_mutex);
 		return manager.m_reservedCacheBytes;
+	}
+	static bool isAcceptingRequests(MediaCacheManager &manager)
+	{
+		std::lock_guard lock(manager.m_mutex);
+		return manager.m_accepting;
 	}
 };
 
@@ -248,6 +255,89 @@ TEST_CASE("Media cache shutdown cancels work without graphics and can restart", 
 		CHECK(MediaCacheManagerTestAccess::reservedBytes(*manager) == 0);
 		manager->initialize();
 	}
+}
+
+namespace {
+void checkApiShutdown(bool removeMedia)
+{
+	std::atomic<unsigned> mediaDestroys{0};
+	std::atomic<bool> observerDestroyed{false};
+	std::atomic<bool> cacheAcceptingAtDestroy{true};
+	struct Observation {
+		std::atomic<bool> &destroyed;
+		std::atomic<bool> &cacheAccepting;
+	} observation{observerDestroyed, cacheAcceptingAtDestroy};
+	{
+		// Use the real OSN source registry, callbacks and shutdown entry point,
+		// including the crash-reporting state required by leftover-source cleanup.
+		osn::tests::ObsSetup setup;
+		auto &manager = MediaCacheManager::GetInstance();
+		// Initialization removes its temporary video mix. Leave graphics stopped
+		// so the cache query remains pending until shutdown cancels it.
+		REQUIRE(obs_get_video_info_by_index2(0) == nullptr);
+		OBSDataAutoRelease settings = obs_data_create();
+		obs_data_set_bool(settings, "is_local_file", true);
+		obs_data_set_bool(settings, "looping", true);
+		OBSSourceAutoRelease media = obs_source_create("ffmpeg_source", "pending at API shutdown", settings, nullptr);
+		REQUIRE(media != nullptr);
+		REQUIRE(MediaCacheManagerTestAccess::waitForQueuedGraphicsJob(manager));
+		signal_handler_connect(
+			obs_source_get_signal_handler(media), "destroy", [](void *data, calldata_t *) { ++*static_cast<std::atomic<unsigned> *>(data); },
+			&mediaDestroys);
+
+		// Leave one frontend-owned reference for the API's leftover-source cleanup.
+		// The cache manager holds its own reference until shutdown joins the worker.
+		obs_source_get_ref(media);
+		obs_source_info info{};
+		info.id = "cache_shutdown_observer";
+		info.type = OBS_SOURCE_TYPE_INPUT;
+		info.get_name = [](void *) { return "Cache shutdown observer"; };
+		info.create = [](obs_data_t *, obs_source_t *source) -> void * { return source; };
+		info.destroy = [](void *) {};
+		obs_register_source(&info);
+		obs_source_t *observer = obs_source_create(info.id, "shutdown observer", nullptr, nullptr);
+		REQUIRE(observer != nullptr);
+		// This input is not retained by the media cache. Its destroy callback therefore
+		// runs during the API's explicit source-release/drain phase. Stopping the
+		// cache worker after that phase is too late to protect the registry walks.
+		signal_handler_connect(
+			obs_source_get_signal_handler(observer), "destroy",
+			[](void *data, calldata_t *) {
+				auto &result = *static_cast<Observation *>(data);
+				result.cacheAccepting = MediaCacheManagerTestAccess::isAcceptingRequests(MediaCacheManager::GetInstance());
+				result.destroyed = true;
+			},
+			&observation);
+
+		if (removeMedia)
+			obs_source_remove(media);
+	}
+	CHECK(observerDestroyed);
+	CHECK_FALSE(cacheAcceptingAtDestroy);
+	CHECK(mediaDestroys == 1);
+	CHECK(osn::Source::Manager::GetInstance().size() == 0);
+	CHECK_FALSE(MediaCacheManagerTestAccess::isAcceptingRequests(MediaCacheManager::GetInstance()));
+}
+}
+
+TEST_CASE("OBS API stops the media cache before source teardown", "[media-cache][shutdown]")
+{
+	checkApiShutdown(false);
+}
+
+TEST_CASE("OBS API stops the media cache after removing a source", "[media-cache][shutdown]")
+{
+	checkApiShutdown(true);
+}
+
+TEST_CASE("OBS API stops the media cache with an empty source registry", "[media-cache][shutdown]")
+{
+	{
+		osn::tests::ObsSetup setup;
+		CHECK(MediaCacheManagerTestAccess::isAcceptingRequests(MediaCacheManager::GetInstance()));
+		CHECK(osn::Source::Manager::GetInstance().size() == 0);
+	}
+	CHECK_FALSE(MediaCacheManagerTestAccess::isAcceptingRequests(MediaCacheManager::GetInstance()));
 }
 
 TEST_CASE("Media cache uses graphics across video reset and permits callback reentry", "[media-cache][graphics]")

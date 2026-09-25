@@ -1774,10 +1774,13 @@ void OBS_API::destroyOBS_API(void)
 			delete fileOutput;
 	});
 
+	// Stop the cache worker before draining destruction: it can still own the
+	// last reference to a removed source and enqueue its destruction later.
+	// Both source-registry walks below connect/disconnect signals while holding
+	// the registry mutex; a concurrent destroy callback takes those locks in the
+	// opposite order. Join the worker, then drain its callbacks before either walk.
+	MediaCacheManager::GetInstance().shutdown();
 	obs_wait_for_destroy_queue();
-	// obs_set_output_source might cause destruction of some sources.
-	// Wait for the destruction thread to destroy the sources to be sure
-	// |for_each| below will only return actual remaining sources.
 
 	// Check if the frontend was able to shutdown correctly:
 	// If there are some sources here it's because it ended unexpectedly, this represents a
@@ -1858,16 +1861,11 @@ void OBS_API::destroyOBS_API(void)
 		// manager only contains sources that are still hanging around unexpectedly.
 		obs_wait_for_destroy_queue();
 
-		// Detach node-side destroy/remove callbacks from the remaining leaked
-		// sources, then drop the memory manager refs they still hold.
+		// The cache worker is stopped and deferred destruction has drained, so
+		// detach node-side destroy/remove callbacks from the remaining leaked sources.
 		blog(LOG_WARNING, "OBS_API::destroyOBS_API - obs_wait_for_destroy_queue has finished, osn::Source::Manager::GetInstance() size is %d",
 		     osn::Source::Manager::GetInstance().size());
 		osn::Source::Manager::GetInstance().for_each([&sources](obs_source_t *source) { osn::Source::detach_source_signals(source); });
-		MediaCacheManager::GetInstance().shutdown();
-
-		// Releasing the media cache manager refs can enqueue/complete more deferred
-		// libobs destruction. Wait for that before obs_shutdown().
-		obs_wait_for_destroy_queue();
 
 #ifdef WIN32
 		// Directly blame the frontend since it didn't release all objects and that could cause
@@ -1906,9 +1904,6 @@ void OBS_API::destroyOBS_API(void)
 		}
 
 	} else {
-		// The cache worker exists even when there are no remaining media sources.
-		// Remove its graphics callback before the OBS core goes away.
-		MediaCacheManager::GetInstance().shutdown();
 		blog(LOG_DEBUG, "OBS_API::destroyOBS_API calling obs_shutdown, objects allocated %d", bnum_allocs());
 		obs_shutdown();
 	}

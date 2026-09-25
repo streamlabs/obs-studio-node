@@ -93,6 +93,8 @@ public:
 	// shutdown() or initialize(). Waits for any executing tick callback and worker,
 	// but can cancel queued work with stopped or uninitialized video.
 	// Does nothing if already stopped. Does not drain OBS's deferred destroy queue.
+	// During OSN teardown, call this and then obs_wait_for_destroy_queue() before
+	// traversing the source registry to connect/disconnect source signals.
 	void shutdown();
 
 private:
