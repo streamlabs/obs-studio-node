@@ -37,4 +37,5 @@ Napi::Value OBS_content_setShouldDrawUI(const Napi::CallbackInfo &info);
 Napi::Value OBS_content_setDrawGuideLines(const Napi::CallbackInfo &info);
 Napi::Value OBS_content_setDrawRotationHandle(const Napi::CallbackInfo &info);
 Napi::Value OBS_content_createIOSurface(const Napi::CallbackInfo &info);
+Napi::Value OBS_content_takeScreenshot(const Napi::CallbackInfo &info);
 }

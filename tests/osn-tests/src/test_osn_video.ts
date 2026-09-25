@@ -1,4 +1,7 @@
 import 'mocha';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { expect } from 'chai';
 import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
@@ -201,5 +204,88 @@ describe(testName, () => {
             expect(device).to.have.property('description');
             logInfo(testName, `Video Capture Device Found: ${device.description} with id: ${device.id}`);
         }
+    });
+
+    describe('Take screenshot', () => {
+        const screenshotFormat = '%CCYY-%MM-%DD %hh-%mm-%ss';
+        let context: osn.IVideo;
+        let dir: string;
+
+        // Reads the IHDR chunk of a PNG: 8-byte signature, 4-byte length, 4-byte "IHDR", then width and height.
+        function readPngSize(file: string): { width: number; height: number } {
+            const bytes = fs.readFileSync(file);
+            expect(bytes.length).to.be.greaterThan(24, 'PNG is too short to hold a header');
+            expect(bytes.subarray(0, 8)).to.deep.equal(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'PNG signature mismatch');
+            expect(bytes.subarray(12, 16).toString('ascii')).to.equal('IHDR', 'first PNG chunk is not IHDR');
+            return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+        }
+
+        beforeEach(() => {
+            dir = fs.mkdtempSync(path.join(os.tmpdir(), 'osn-screenshot-'));
+            context = osn.VideoFactory.create();
+            context.video = {
+                fpsNum: 30,
+                fpsDen: 1,
+                baseWidth: 1280,
+                baseHeight: 720,
+                outputWidth: 1280,
+                outputHeight: 720,
+                outputFormat: osn.EVideoFormat.NV12,
+                colorspace: osn.EColorSpace.CS709,
+                range: osn.ERangeType.Partial,
+                scaleType: osn.EScaleType.Bilinear,
+                fpsType: osn.EFPSType.Fractional,
+            };
+        });
+
+        afterEach(() => {
+            context.destroy();
+            fs.rmSync(dir, { recursive: true, force: true });
+        });
+
+        it('Writes a PNG of the canvas at base resolution into the directory', () => {
+            const result = osn.NodeObs.OBS_content_takeScreenshot(context, dir, screenshotFormat, false);
+
+            expect(result).to.not.equal(undefined, 'takeScreenshot returned nothing');
+            expect(path.dirname(result.path)).to.equal(dir, 'screenshot was written outside the requested directory');
+            expect(path.basename(result.path)).to.match(/^Screenshot \d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\.png$/);
+            expect(result.width).to.equal(1280);
+            expect(result.height).to.equal(720);
+
+            const size = readPngSize(result.path);
+            expect(size.width).to.equal(1280, 'PNG width does not match the canvas base width');
+            expect(size.height).to.equal(720, 'PNG height does not match the canvas base height');
+        });
+
+        it('Never overwrites: a second screenshot with the same name gets a " (2)" suffix', () => {
+            // Same second, so the same generated name.
+            const first = osn.NodeObs.OBS_content_takeScreenshot(context, dir, 'same-name', false);
+            const second = osn.NodeObs.OBS_content_takeScreenshot(context, dir, 'same-name', false);
+
+            expect(path.basename(first.path)).to.equal('Screenshot same-name.png');
+            expect(path.basename(second.path)).to.equal('Screenshot same-name (2).png');
+            expect(fs.existsSync(first.path)).to.equal(true);
+            expect(fs.existsSync(second.path)).to.equal(true);
+        });
+
+        it('Replaces spaces with underscores when noSpace is set', () => {
+            const result = osn.NodeObs.OBS_content_takeScreenshot(context, dir, 'no space', true);
+            expect(path.basename(result.path)).to.equal('Screenshot_no_space.png');
+
+            const again = osn.NodeObs.OBS_content_takeScreenshot(context, dir, 'no space', true);
+            expect(path.basename(again.path)).to.equal('Screenshot_no_space_2.png');
+        });
+
+        it('Throws when the directory does not exist', () => {
+            const missing = path.join(dir, 'does-not-exist');
+            expect(() => osn.NodeObs.OBS_content_takeScreenshot(context, missing, screenshotFormat, false)).to.throw();
+        });
+
+        it('Throws when the first argument is not a video context', () => {
+            // N-API rejects the unwrap of a plain object ("Invalid argument") before the binding's own check runs.
+            expect(() => osn.NodeObs.OBS_content_takeScreenshot({} as any, dir, screenshotFormat, false)).to.throw(
+                /Invalid argument|not a Video object/,
+            );
+        });
     });
 });

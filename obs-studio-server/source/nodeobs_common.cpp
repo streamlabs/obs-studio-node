@@ -30,6 +30,19 @@
 
 #include <thread>
 
+/* Screenshot support: PNG encoding through the vendored stb_image_write.
+ * STBI_WRITE_NO_STDIO removes stb's own fopen()-based writers; bytes are
+ * streamed through libobs' os_fopen so UTF-8 paths work on Windows. This is
+ * the single translation unit that owns the implementation. */
+#include <graphics/vec4.h>
+#include <util/platform.h>
+#include <cerrno>
+#include <cstring>
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STB_IMAGE_WRITE_STATIC
+#define STBI_WRITE_NO_STDIO
+#include "third-party/stb_image_write.h"
+
 std::map<std::string, OBS::Display *> displays;
 std::recursive_mutex displaysMutex;
 std::string sourceSelected;
@@ -217,6 +230,10 @@ void OBS_content::Register(ipc::server &srv)
 
 	cls->register_function(
 		std::make_shared<ipc::function>("OBS_content_createIOSurface", std::vector<ipc::type>{ipc::type::String}, OBS_content_createIOSurface));
+
+	cls->register_function(std::make_shared<ipc::function>(
+		"OBS_content_takeScreenshot", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String, ipc::type::String, ipc::type::UInt32},
+		OBS_content_takeScreenshot));
 
 	srv.register_collection(cls);
 	g_srv = &srv;
@@ -675,5 +692,277 @@ void OBS_content::OBS_content_createIOSurface(void *data, const int64_t id, cons
 #elif WIN32
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 #endif
+	AUTO_DEBUG;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Screenshot of a canvas' program output, mirroring OBS Studio's
+ * "Screenshot Output" (frontend/utility/ScreenshotObj.cpp): render the main
+ * mix at base resolution into a texrender, stage it, copy the pixels out and
+ * write a PNG named "Screenshot <Filename Formatting>.png" into the recording
+ * folder. OBS spreads the GPU work over three ticks because it runs on the Qt
+ * thread; here it happens synchronously inside one IPC call, the way
+ * obs-websocket's TakeSourceScreenshot does it. */
+
+namespace {
+
+struct ScreenshotPixels {
+	uint32_t width = 0;
+	uint32_t height = 0;
+	std::vector<uint8_t> rgba; /* tightly packed, stride = width * 4, alpha forced opaque */
+};
+
+/* Enters and leaves the graphics context itself; the caller must not hold it.
+ * Only render + stage + map + copy happen under the lock. */
+static bool RenderCanvasToPixels(obs_video_info *canvas, ScreenshotPixels &out, std::string &error)
+{
+	const uint32_t width = canvas->base_width;
+	const uint32_t height = canvas->base_height;
+	if (width == 0 || height == 0) {
+		error = "Canvas has no base resolution.";
+		return false;
+	}
+
+	/* Same lookup the preview display uses (OBS::Display::DisplayCallback). */
+	obs_core_video_mix_t *mix = obs_video_mix_get(canvas, OBS_MAIN_VIDEO_RENDERING);
+	if (!mix) {
+		error = "Canvas has no active video mix; video must be running to take a screenshot.";
+		return false;
+	}
+
+	bool ok = false;
+	obs_enter_graphics();
+
+	gs_texrender_t *texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+	gs_stagesurf_t *stagesurf = nullptr;
+
+	if (!texrender) {
+		error = "Failed to create texture renderer.";
+	} else if (!gs_texrender_begin_with_color_space(texrender, width, height, GS_CS_SRGB)) {
+		error = "Failed to begin texture render.";
+	} else {
+		vec4 black;
+		vec4_set(&black, 0.0f, 0.0f, 0.0f, 1.0f);
+		gs_clear(GS_CLEAR_COLOR, &black, 0.0f, 0);
+
+		gs_viewport_push();
+		gs_projection_push();
+		gs_ortho(0.0f, float(width), 0.0f, float(height), -100.0f, 100.0f);
+		gs_set_viewport(0, 0, int(width), int(height));
+
+		gs_blend_state_push();
+		gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+
+		/* Same sequence as OBS::Display::DisplayCallback for a main preview. */
+		obs_set_video_render_context(mix);
+		obs_set_video_rendering_mode(OBS_MAIN_VIDEO_RENDERING);
+		obs_render_texture(canvas, OBS_MAIN_VIDEO_RENDERING);
+
+		gs_blend_state_pop();
+		gs_projection_pop();
+		gs_viewport_pop();
+		gs_texrender_end(texrender);
+
+		gs_texture_t *tex = gs_texrender_get_texture(texrender);
+		if (tex)
+			stagesurf = gs_stagesurface_create(width, height, GS_RGBA);
+
+		if (!stagesurf) {
+			error = "Failed to create staging surface.";
+		} else {
+			gs_stage_texture(stagesurf, tex);
+
+			uint8_t *data = nullptr;
+			uint32_t linesize = 0;
+			if (!gs_stagesurface_map(stagesurf, &data, &linesize)) {
+				error = "Failed to map staging surface.";
+			} else {
+				const size_t rowBytes = size_t(width) * 4;
+				out.width = width;
+				out.height = height;
+				out.rgba.resize(rowBytes * height);
+
+				/* linesize may exceed width * 4 (driver row pitch), so repack row by
+				 * row. Alpha is forced opaque to match OBS, which saves through
+				 * QImage::Format_RGBX8888. */
+				for (uint32_t y = 0; y < height; ++y) {
+					const uint8_t *src = data + size_t(y) * linesize;
+					uint8_t *dst = out.rgba.data() + size_t(y) * rowBytes;
+					memcpy(dst, src, rowBytes);
+					for (size_t x = 3; x < rowBytes; x += 4)
+						dst[x] = 0xFF;
+				}
+				gs_stagesurface_unmap(stagesurf);
+				ok = true;
+			}
+		}
+	}
+
+	if (stagesurf)
+		gs_stagesurface_destroy(stagesurf);
+	if (texrender)
+		gs_texrender_destroy(texrender);
+	obs_leave_graphics();
+
+	return ok;
+}
+
+/* Same behaviour as OBS Studio's FindBestFilename: append " (2)", " (3)"...
+ * or "_2", "_3"... before the extension until the name is free. */
+static void FindBestScreenshotFilename(std::string &strPath, bool noSpace)
+{
+	int num = 2;
+
+	if (!os_file_exists(strPath.c_str()))
+		return;
+
+	const char *ext = strrchr(strPath.c_str(), '.');
+	if (!ext)
+		return;
+
+	int extStart = int(ext - strPath.c_str());
+	for (;;) {
+		std::string testPath = strPath;
+		std::string numStr = noSpace ? "_" : " (";
+		numStr += std::to_string(num++);
+		if (!noSpace)
+			numStr += ")";
+
+		testPath.insert(extStart, numStr);
+
+		if (!os_file_exists(testPath.c_str())) {
+			strPath = testPath;
+			break;
+		}
+	}
+}
+
+static std::string JoinPath(const std::string &directory, const std::string &file)
+{
+	if (directory.empty())
+		return file;
+	const char last = directory.back();
+	if (last == '/' || last == '\\')
+		return directory + file;
+	return directory + "/" + file;
+}
+
+/* OBS: GetOutputFilename(rec_path, "png", noSpace, overwrite = false,
+ * GetFormatString(format, "Screenshot", nullptr)). The prefix is inserted in
+ * front of the format; os_generate_formatted_filename(space = false) then
+ * turns every space into '_', which is why noSpace yields "Screenshot_...". */
+static bool BuildScreenshotPath(const std::string &directory, const std::string &format, bool noSpace, obs_video_info *canvas, std::string &outPath,
+				std::string &error)
+{
+	const std::string fullFormat = "Screenshot " + format;
+	char *filename = os_generate_formatted_filename("png", !noSpace, fullFormat.c_str(), canvas);
+	if (!filename || !*filename) {
+		bfree(filename);
+		error = "Failed to generate a screenshot filename from format '" + format + "'.";
+		return false;
+	}
+
+	outPath = JoinPath(directory, filename);
+	bfree(filename);
+
+	FindBestScreenshotFilename(outPath, noSpace);
+	return true;
+}
+
+struct StbFileContext {
+	FILE *file = nullptr;
+	bool failed = false;
+};
+
+static void StbWriteToFile(void *context, void *data, int size)
+{
+	StbFileContext *ctx = static_cast<StbFileContext *>(context);
+	if (ctx->failed || size <= 0)
+		return;
+	if (fwrite(data, 1, size_t(size), ctx->file) != size_t(size))
+		ctx->failed = true;
+}
+
+static bool WriteScreenshotPng(const std::string &path, const ScreenshotPixels &px, std::string &error)
+{
+	StbFileContext ctx;
+	ctx.file = os_fopen(path.c_str(), "wb");
+	if (!ctx.file) {
+		error = "Failed to open '" + path + "' for writing: " + std::string(strerror(errno));
+		return false;
+	}
+
+	const int written = stbi_write_png_to_func(StbWriteToFile, &ctx, int(px.width), int(px.height), 4, px.rgba.data(), int(px.width * 4));
+	const bool closeFailed = fclose(ctx.file) != 0;
+
+	if (!written || ctx.failed || closeFailed) {
+		os_unlink(path.c_str());
+		error = "Failed to encode or write PNG '" + path + "'.";
+		return false;
+	}
+	return true;
+}
+
+} // namespace
+
+void OBS_content::OBS_content_takeScreenshot(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	if (args.size() < 4) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("takeScreenshot expects (canvasId, directory, filenameFormat, noSpace)."));
+		return;
+	}
+
+	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[0].value_union.ui64);
+	if (!canvas) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Invalid canvas id provided to takeScreenshot: " + std::to_string(args[0].value_union.ui64)));
+		return;
+	}
+
+	const std::string directory = args[1].value_str;
+	const std::string format = args[2].value_str;
+	const bool noSpace = args[3].value_union.ui32 != 0;
+
+	if (directory.empty() || !os_file_exists(directory.c_str())) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Screenshot directory does not exist: " + directory));
+		return;
+	}
+
+	std::string error;
+
+	/* 1. GPU work under the graphics lock (render + stage + map + copy), nothing else. */
+	ScreenshotPixels pixels;
+	if (!RenderCanvasToPixels(canvas, pixels, error)) {
+		blog(LOG_ERROR, "[SCREENSHOT] %s", error.c_str());
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value(error));
+		return;
+	}
+
+	/* 2. Name the file after capture so the timestamp reflects the captured frame. */
+	std::string path;
+	if (!BuildScreenshotPath(directory, format, noSpace, canvas, path, error)) {
+		blog(LOG_ERROR, "[SCREENSHOT] %s", error.c_str());
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value(error));
+		return;
+	}
+
+	/* 3. Encode and write outside the graphics lock. */
+	if (!WriteScreenshotPng(path, pixels, error)) {
+		blog(LOG_ERROR, "[SCREENSHOT] %s", error.c_str());
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value(error));
+		return;
+	}
+
+	blog(LOG_INFO, "[SCREENSHOT] Saved %ux%u screenshot to '%s'", pixels.width, pixels.height, path.c_str());
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(path));
+	rval.push_back(ipc::value((uint32_t)pixels.width));
+	rval.push_back(ipc::value((uint32_t)pixels.height));
 	AUTO_DEBUG;
 }
