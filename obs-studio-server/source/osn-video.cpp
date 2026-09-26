@@ -19,6 +19,9 @@
 #include "osn-video.hpp"
 #include <ipc-server.hpp>
 #include <obs.h>
+#include <cstring>
+#include <mutex>
+#include <unordered_map>
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "osn-streaming.hpp"
@@ -311,6 +314,49 @@ enum video_range_type osn::Video::ColoRangeFromStr(const std::string &value)
 	return VIDEO_RANGE_DEFAULT;
 }
 
+// Settings last applied successfully to each canvas through SetVideoContext. libobs rebuilds the
+// canvas' whole video pipeline on every obs_set_video_info call (~130 ms), even when nothing
+// changes, so identical re-applies are skipped. Keyed on the canvas pointer; entries are
+// dropped when the canvas is removed.
+static std::mutex lastAppliedVideoMutex;
+static std::unordered_map<const obs_video_info *, obs_video_info> lastAppliedVideo;
+
+static bool SameVideoInfo(const obs_video_info &a, const obs_video_info &b)
+{
+	const char *ga = a.graphics_module ? a.graphics_module : "";
+	const char *gb = b.graphics_module ? b.graphics_module : "";
+	return strcmp(ga, gb) == 0 && a.fps_num == b.fps_num && a.fps_den == b.fps_den && a.fps_type == b.fps_type && a.base_width == b.base_width &&
+	       a.base_height == b.base_height && a.output_width == b.output_width && a.output_height == b.output_height && a.output_format == b.output_format &&
+	       a.colorspace == b.colorspace && a.range == b.range && a.scale_type == b.scale_type && a.adapter == b.adapter &&
+	       a.gpu_conversion == b.gpu_conversion;
+}
+
+static bool VideoInfoUnchanged(const obs_video_info *canvas, const obs_video_info &requested)
+{
+	std::lock_guard<std::mutex> lock(lastAppliedVideoMutex);
+	const auto it = lastAppliedVideo.find(canvas);
+	return it != lastAppliedVideo.end() && SameVideoInfo(it->second, requested);
+}
+
+static void RememberAppliedVideoInfo(const obs_video_info *canvas, const obs_video_info &applied)
+{
+	std::lock_guard<std::mutex> lock(lastAppliedVideoMutex);
+	lastAppliedVideo[canvas] = applied;
+}
+
+static void ForgetAppliedVideoInfo(const obs_video_info *canvas)
+{
+	std::lock_guard<std::mutex> lock(lastAppliedVideoMutex);
+	lastAppliedVideo.erase(canvas);
+}
+
+static void ApplyConfiguredVideoLevels()
+{
+	const float sdr_white_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "SdrWhiteLevel");
+	const float hdr_nominal_peak_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "HdrNominalPeakLevel");
+	obs_set_video_levels(sdr_white_level, hdr_nominal_peak_level);
+}
+
 void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	blog(LOG_INFO, "[VIDEO_CANVAS] Set video context called");
@@ -357,6 +403,14 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 	video.gpu_conversion = true;
 	video.fps_type = args[10].value_union.ui32;
 
+	if (VideoInfoUnchanged(canvas, video)) {
+		blog(LOG_INFO, "[VIDEO_CANVAS] Set video context skipped for 0x%" PRIXPTR ": settings unchanged", (uintptr_t)canvas);
+		ApplyConfiguredVideoLevels();
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		AUTO_DEBUG;
+		return;
+	}
+
 	// Updating a canvas has the same libobs restriction as removing it. Cancel
 	// active Auto Optimizer work and release its temporary outputs first.
 	if (!autoOptimizer::CancelActiveSession()) {
@@ -379,10 +433,8 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 		blog(LOG_ERROR, "Failed to set video context");
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
 	} else {
-		const float sdr_white_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "SdrWhiteLevel");
-		const float hdr_nominal_peak_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "HdrNominalPeakLevel");
-		obs_set_video_levels(sdr_white_level, hdr_nominal_peak_level);
-
+		RememberAppliedVideoInfo(canvas, video);
+		ApplyConfiguredVideoLevels();
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	}
 
@@ -442,6 +494,7 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 	if (ret == OBS_VIDEO_INFO_IN_USE) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while scene items are assigned to it.");
 	} else if (ret == OBS_VIDEO_REINITIALIZATION_FAILED) {
+		ForgetAppliedVideoInfo(canvas);
 		osn::Video::Manager::GetInstance().free(args[0].value_union.ui64);
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video context was removed, but the remaining video contexts failed to initialize.");
 	} else if (ret == OBS_VIDEO_CURRENTLY_ACTIVE) {
@@ -449,6 +502,7 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 	} else if (ret != OBS_VIDEO_SUCCESS) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to remove video context.");
 	} else {
+		ForgetAppliedVideoInfo(canvas);
 		osn::Video::Manager::GetInstance().free(args[0].value_union.ui64);
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	}
