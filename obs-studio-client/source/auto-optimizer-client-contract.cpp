@@ -1,6 +1,7 @@
 #include "auto-optimizer-client-contract.hpp"
 
 #include "auto-optimizer-quality-policy.hpp"
+#include "auto-optimizer-probe-policy.hpp"
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
@@ -645,7 +646,7 @@ const std::map<std::string, std::string> encoderPresets = {{"obs_nvenc_h264_tex"
 							   {"obs_x264", "veryfast"}};
 
 bool parseRecommendation(const json &value, const OutputContext &output, const std::string &measurementMode, const std::vector<Evidence> &evidence,
-			 RecommendationValue &result, json &projected)
+			 RecommendationValue &result, json &projected, bool sharedUploadEstimate)
 {
 	if (!value.is_object() || !requiredInteger(value, "width", 2, 16384, result.width) || !requiredInteger(value, "height", 2, 16384, result.height) ||
 	    !requiredInteger(value, "fpsNum", 1, 1000000, result.fpsNum) || !requiredInteger(value, "fpsDen", 1, 1000000, result.fpsDen) ||
@@ -674,7 +675,7 @@ bool parseRecommendation(const json &value, const OutputContext &output, const s
 
 	const bool providerOwned = output.outputKind == "twitch-enhanced-broadcasting";
 	if (providerOwned) {
-		if ((output.display == "both") != result.additionalVideo.has_value() || (output.display != "both" && output.display != "horizontal"))
+		if ((output.display == "both") != result.additionalVideo.has_value() || (measurementMode == "active" && output.display == "vertical"))
 			return false;
 	} else {
 		if (output.display == "both" || result.additionalVideo)
@@ -700,7 +701,7 @@ bool parseRecommendation(const json &value, const OutputContext &output, const s
 			return false;
 	}
 
-	if (measurementMode == "estimated" &&
+	if (measurementMode == "estimated" && !sharedUploadEstimate &&
 	    (tuplePromotes(result, output.current) || (output.current.bitrateKbps > 0 && result.bitrateKbps > output.current.bitrateKbps)))
 		return false;
 	if (measurementMode == "active") {
@@ -793,9 +794,16 @@ bool parseOutputResult(const json &value, const OutputContext &expected, ParsedO
 		return false;
 
 	result.expected = &expected;
+	const bool sharedUploadEstimate = result.reason == "shared_upload_estimate";
+	if (sharedUploadEstimate && (expected.outputKind != "standard" || result.measurementMode != "estimated" || result.confidence == "high" ||
+				     !expected.probes.empty() || !result.evidence.empty() ||
+				     std::any_of(expected.destinations.begin(), expected.destinations.end(),
+						 [](const std::string &platform) { return platform == "twitch" || platform == "youtube"; })))
+		return false;
 	result.projected = {{"outputId", expected.outputId}};
 	json recommendationProjection = json::object();
-	if (!parseRecommendation(value["recommendation"], expected, result.measurementMode, result.evidence, result.recommendation, recommendationProjection))
+	if (!parseRecommendation(value["recommendation"], expected, result.measurementMode, result.evidence, result.recommendation, recommendationProjection,
+				 sharedUploadEstimate))
 		return false;
 	result.projected.update(std::move(recommendationProjection));
 	result.projected["measurement"] = {{"mode", result.measurementMode}, {"confidence", result.confidence}};
@@ -806,42 +814,49 @@ bool parseOutputResult(const json &value, const OutputContext &expected, ParsedO
 	return true;
 }
 
-const Evidence *findEvidence(const std::vector<ParsedOutput> &outputs, std::string_view platform)
-{
-	const Evidence *result = nullptr;
-	for (const auto &output : outputs) {
-		for (const auto &evidence : output.evidence) {
-			if (evidence.platform != platform)
-				continue;
-			if (result)
-				return nullptr;
-			result = &evidence;
-		}
-	}
-	return result;
-}
-
 bool validDualOutputProof(const json &document, const RequestContext &context, const std::vector<ParsedOutput> &outputs)
 {
-	if (context.streamSetup != "dual-output" || context.outputs.size() != 2)
-		return !document.contains("aggregateUpload");
+	const bool hasSharedEstimate =
+		std::any_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) { return output.reason == "shared_upload_estimate"; });
+	if (context.outputs.size() != 2 ||
+	    std::any_of(context.outputs.begin(), context.outputs.end(), [](const OutputContext &output) { return output.outputKind != "standard"; }))
+		return !document.contains("aggregateUpload") && !hasSharedEstimate;
 	if (document.value("status", "") != "complete")
 		return false;
 	const bool anyActive = std::any_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) { return output.measurementMode == "active"; });
 	if (!anyActive) {
-		return !document.contains("aggregateUpload") &&
+		return !document.contains("aggregateUpload") && !hasSharedEstimate &&
 		       std::all_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) { return output.measurementMode == "estimated"; });
 	}
-	if (!std::all_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) { return output.measurementMode == "active"; }) ||
-	    !document.contains("aggregateUpload") || !document["aggregateUpload"].is_object())
+	if (!document.contains("aggregateUpload") || !document["aggregateUpload"].is_object())
 		return false;
 
-	const Evidence *twitch = findEvidence(outputs, "twitch");
-	const Evidence *youtube = findEvidence(outputs, "youtube");
-	if (!twitch || !youtube || twitch->method != "twitch-bandwidth-test" || youtube->method != "youtube-unbound-ramp" || !twitch->success ||
-	    !youtube->success || !twitch->safeKbps || !youtube->safeKbps)
+	const auto &a = context.outputs[0];
+	const auto &b = context.outputs[1];
+	if (!probePolicy::standardDualOutputCanvasPairIsValid(a.display, a.current.canvasId.value_or(UINT64_MAX), a.current.canvasId.has_value(), b.display,
+							      b.current.canvasId.value_or(UINT64_MAX), b.current.canvasId.has_value()))
 		return false;
-	const auto allocation = qualityPolicy::allocateSharedTwoLegBandwidth(*twitch->safeKbps, *youtube->safeKbps);
+	uint64_t safeByLeg[2] = {};
+	for (size_t index = 0; index < outputs.size(); ++index) {
+		const auto &output = outputs[index];
+		std::set<std::string> expectedPlatforms;
+		for (const auto &platform : output.expected->destinations) {
+			if (platform == "twitch" || platform == "youtube")
+				expectedPlatforms.insert(platform);
+		}
+		std::set<std::string> measuredPlatforms;
+		for (const auto &evidence : output.evidence) {
+			if (!evidence.success || !evidence.safeKbps || *evidence.safeKbps == 0 || !evidence.measuredKbps || *evidence.measuredKbps == 0 ||
+			    (evidence.method != "twitch-bandwidth-test" && evidence.method != "youtube-unbound-ramp"))
+				return false;
+			measuredPlatforms.insert(evidence.platform);
+			safeByLeg[index] = safeByLeg[index] ? std::min(safeByLeg[index], *evidence.safeKbps) : *evidence.safeKbps;
+		}
+		if (expectedPlatforms != measuredPlatforms ||
+		    (expectedPlatforms.empty() ? output.reason != "shared_upload_estimate" : output.measurementMode != "active"))
+			return false;
+	}
+	const auto allocation = qualityPolicy::allocateSharedTwoLegBandwidth(safeByLeg[0], safeByLeg[1]);
 	if (!allocation.valid)
 		return false;
 
@@ -851,16 +866,15 @@ bool validDualOutputProof(const json &document, const RequestContext &context, c
 	if (aggregate.value("method", "") != "dual-output-isolated-lower-bound" || aggregate.value("concurrentHardwareValidated", false) != true ||
 	    !requiredInteger(aggregate, "safeVideoKbps", 1, 200000, safeVideoKbps) ||
 	    !requiredInteger(aggregate, "allocatedVideoKbps", 1, 200000, allocatedVideoKbps) ||
-	    safeVideoKbps != static_cast<int>(allocation.aggregateSafeVideoKbps) || allocatedVideoKbps != static_cast<int>(allocation.allocatedVideoKbps))
+	    safeVideoKbps != static_cast<int>(allocation.aggregateSafeVideoKbps) || allocatedVideoKbps > static_cast<int>(allocation.allocatedVideoKbps))
 		return false;
 
 	const auto &first = outputs[0].recommendation;
 	const auto &second = outputs[1].recommendation;
 	const bool sameFps = static_cast<int64_t>(first.fpsNum) * second.fpsDen == static_cast<int64_t>(second.fpsNum) * first.fpsDen;
 	const bool sameEncoder = first.encoderId == second.encoderId && first.encoderFamily == second.encoderFamily && first.preset == second.preset;
-	return first.bitrateKbps == static_cast<int>(allocation.perLegVideoKbps) && second.bitrateKbps == static_cast<int>(allocation.perLegVideoKbps) &&
-	       sameFps && sameEncoder && static_cast<uint64_t>(first.bitrateKbps + second.bitrateKbps) == allocation.allocatedVideoKbps &&
-	       allocation.allocatedVideoKbps <= allocation.aggregateSafeVideoKbps;
+	return first.bitrateKbps <= static_cast<int>(allocation.perLegVideoKbps) && second.bitrateKbps == first.bitrateKbps && sameFps && sameEncoder &&
+	       first.bitrateKbps + second.bitrateKbps == allocatedVideoKbps && allocation.allocatedVideoKbps <= allocation.aggregateSafeVideoKbps;
 }
 
 const ParsedOutput *findParsedOutput(const std::vector<ParsedOutput> &outputs, std::string_view outputId)
@@ -873,7 +887,11 @@ bool validEnhancedBroadcastingCombinedProof(const json &document, const RequestC
 {
 	if (context.streamSetup != "enhanced-broadcasting-dual-output")
 		return !document.contains("combinedWorkload");
-	if (document.value("status", "") != "complete" || !document.contains("combinedWorkload") || !document["combinedWorkload"].is_object())
+	if (!document.contains("combinedWorkload"))
+		return std::all_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) {
+			return output.measurementMode == "estimated" && output.reason != "shared_upload_estimate";
+		});
+	if (document.value("status", "") != "complete" || !document["combinedWorkload"].is_object())
 		return false;
 
 	std::vector<const OutputContext *> enhanced;

@@ -90,35 +90,79 @@ TEST_CASE("Unbound YouTube probes accept only the official RTMPS endpoint and bo
 	}
 }
 
-TEST_CASE("Active probe eligibility preserves specific Dual Output denials")
+TEST_CASE("Active bandwidth probes do not depend on the combined workload mode")
 {
-	const auto eligible = policy::decideActiveProbeEligibility(true, true, true, true, true, false, false);
+	const auto eligible = policy::decideActiveProbeEligibility(true, true, true, true, true);
 	CHECK(eligible.eligible);
 	CHECK(eligible.denialReason.empty());
 
-	const auto customProvider = policy::decideActiveProbeEligibility(false, true, true, true, true, false, false);
+	const auto customProvider = policy::decideActiveProbeEligibility(false, true, true, true, true);
 	CHECK_FALSE(customProvider.eligible);
 	CHECK(customProvider.denialReason == "active_probe_not_eligible");
 
-	const auto nonOfficialEndpoint = policy::decideActiveProbeEligibility(true, true, true, false, true, false, false);
+	const auto nonOfficialEndpoint = policy::decideActiveProbeEligibility(true, true, true, false, true);
 	CHECK_FALSE(nonOfficialEndpoint.eligible);
 	CHECK(nonOfficialEndpoint.denialReason == "active_probe_not_eligible");
 
-	CHECK_FALSE(policy::decideActiveProbeEligibility(true, false, true, true, true, false, false).eligible);
-	CHECK_FALSE(policy::decideActiveProbeEligibility(true, true, false, true, true, false, false).eligible);
-	CHECK_FALSE(policy::decideActiveProbeEligibility(true, true, true, true, false, false, false).eligible);
-
-	const auto unsupportedJointPair = policy::decideActiveProbeEligibility(true, true, true, true, true, true, false);
-	CHECK_FALSE(unsupportedJointPair.eligible);
-	CHECK(unsupportedJointPair.denialReason == "dual_output_multiple_active_legs");
-
-	const auto supportedJointPair = policy::decideActiveProbeEligibility(true, true, true, true, true, true, true);
-	CHECK(supportedJointPair.eligible);
-	CHECK(supportedJointPair.denialReason.empty());
-
-	const auto duplicateJointProbe = policy::decideActiveProbeEligibility(true, true, true, true, false, true, true);
+	CHECK_FALSE(policy::decideActiveProbeEligibility(true, false, true, true, true).eligible);
+	CHECK_FALSE(policy::decideActiveProbeEligibility(true, true, false, true, true).eligible);
+	const auto duplicateJointProbe = policy::decideActiveProbeEligibility(true, true, true, true, false);
 	CHECK_FALSE(duplicateJointProbe.eligible);
 	CHECK(duplicateJointProbe.denialReason == "active_probe_not_eligible");
+}
+
+TEST_CASE("YouTube probes measure a larger shared budget without raising the single-output ceiling")
+{
+	CHECK(policy::youtubeProbeMaximumBitrateKbps(false) == 10000);
+	CHECK(policy::youtubeProbeMaximumBitrateKbps(true) == 12000);
+	CHECK(policy::youtubeProbeRampSampleMs(10000) == 5000);
+	CHECK(policy::youtubeProbeRampSampleMs(12000) == 10000);
+}
+
+TEST_CASE("Identical ordinary bandwidth connections are tested once for all canvases")
+{
+	for (const auto *kind : {"youtube-unbound", "twitch-standard"}) {
+		CAPTURE(kind);
+		const policy::BandwidthProbeConnection connection{kind, "endpoint", "test-key"};
+		const auto groups = policy::groupBandwidthProbes({connection, connection});
+		REQUIRE(groups.size() == 1);
+		CHECK(groups.front() == std::vector<size_t>{0, 1});
+	}
+	CHECK(policy::groupBandwidthProbes({}).empty());
+}
+
+TEST_CASE("Twitch and YouTube keep separate sequential bandwidth probes")
+{
+	const policy::BandwidthProbeConnection twitch{"twitch-standard", "auto", "twitch-test-key"};
+	const policy::BandwidthProbeConnection youtube{"youtube-unbound", "rtmps://a.rtmps.youtube.com/live2", "youtube-test-key"};
+	const auto groups = policy::groupBandwidthProbes({twitch, youtube});
+	REQUIRE(groups.size() == 2);
+	CHECK(groups[0] == std::vector<size_t>{0});
+	CHECK(groups[1] == std::vector<size_t>{1});
+	const auto sharedYoutube = policy::groupBandwidthProbes({twitch, youtube, youtube});
+	REQUIRE(sharedYoutube.size() == 2);
+	CHECK(sharedYoutube[0] == std::vector<size_t>{0});
+	CHECK(sharedYoutube[1] == std::vector<size_t>{1, 2});
+}
+
+TEST_CASE("Probe sharing never crosses credentials endpoints kinds or Enhanced Broadcasting workloads")
+{
+	const policy::BandwidthProbeConnection youtube{"youtube-unbound", "endpoint", "test-key"};
+	for (const auto &different : std::vector<policy::BandwidthProbeConnection>{
+		     {"youtube-unbound", "another-endpoint", "test-key"},
+		     {"youtube-unbound", "endpoint", "another-key"},
+		     {"twitch-standard", "endpoint", "test-key"},
+		     {"twitch-enhanced-broadcasting", "endpoint", "test-key"},
+	     }) {
+		CHECK(policy::groupBandwidthProbes({youtube, different}).size() == 2);
+	}
+	for (const auto &unshareable : std::vector<policy::BandwidthProbeConnection>{
+		     {"twitch-enhanced-broadcasting", "auto", "test-key"},
+		     {"youtube-unbound", "endpoint", ""},
+		     {"youtube-unbound", "", "test-key"},
+	     }) {
+		CHECK(policy::groupBandwidthProbes({unshareable, unshareable}).size() == 2);
+	}
 }
 
 TEST_CASE("Standard Dual Output probing requires distinct registered horizontal and vertical canvases")
@@ -148,7 +192,7 @@ TEST_CASE("Provider probe coverage distinguishes absent, partial, and complete e
 	CHECK_FALSE(policy::probeSafeValueContributesToActiveRecommendation(true, true, 6000, 0));
 }
 
-TEST_CASE("Dual Output requires two conclusive provider measurements")
+TEST_CASE("Dual Output requires conclusive evidence for every measured connection")
 {
 	CHECK(policy::dualOutputProviderProbeIsUsable(true, true, 6000, 6000));
 	CHECK_FALSE(policy::dualOutputProviderProbeIsUsable(false, true, 6000, 6000));

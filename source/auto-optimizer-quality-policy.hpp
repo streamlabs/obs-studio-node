@@ -161,7 +161,7 @@ struct Selection {
 // successful provider probe is an isolated lower bound on the shared uplink,
 // so the larger of the two bounds is the aggregate budget that was actually
 // demonstrated. Split that budget evenly while keeping each leg at or below
-// both provider-safe values. No additional percentage reservation is applied.
+// every available platform-safe value. No additional percentage reservation is applied.
 struct SharedTwoLegAllocation {
 	bool valid = false;
 	uint64_t aggregateSafeVideoKbps = 0;
@@ -169,13 +169,19 @@ struct SharedTwoLegAllocation {
 	uint64_t allocatedVideoKbps = 0;
 };
 
-inline SharedTwoLegAllocation allocateSharedTwoLegBandwidth(uint64_t firstSafeVideoKbps, uint64_t secondSafeVideoKbps)
+inline SharedTwoLegAllocation allocateSharedTwoLegBandwidth(uint64_t firstSafeVideoKbps, uint64_t secondSafeVideoKbps,
+							    uint64_t perLegLimitKbps = kMaximumRecommendedBitrateKbps)
 {
-	if (firstSafeVideoKbps == 0 || secondSafeVideoKbps == 0)
+	if (firstSafeVideoKbps == 0 && secondSafeVideoKbps == 0)
 		return {};
 
 	const uint64_t aggregateSafeVideoKbps = std::max(firstSafeVideoKbps, secondSafeVideoKbps);
-	const uint64_t unroundedPerLegVideoKbps = std::min({firstSafeVideoKbps, secondSafeVideoKbps, aggregateSafeVideoKbps / 2});
+	// Zero denotes a destination without a supported probe, not a failed test.
+	// Its share is estimated from the measured uplink; callers must reject failed
+	// or incomplete supported probes before using this allocation.
+	const uint64_t unroundedPerLegVideoKbps =
+		std::min({firstSafeVideoKbps ? firstSafeVideoKbps : aggregateSafeVideoKbps, secondSafeVideoKbps ? secondSafeVideoKbps : aggregateSafeVideoKbps,
+			  aggregateSafeVideoKbps / 2, perLegLimitKbps});
 	constexpr uint64_t quantumKbps = 100;
 	const uint64_t perLegVideoKbps = unroundedPerLegVideoKbps - unroundedPerLegVideoKbps % quantumKbps;
 	if (perLegVideoKbps == 0)
@@ -186,19 +192,16 @@ inline SharedTwoLegAllocation allocateSharedTwoLegBandwidth(uint64_t firstSafeVi
 	return {true, aggregateSafeVideoKbps, perLegVideoKbps, perLegVideoKbps * 2};
 }
 
-// Return an active mixed-provider Dual Output allocation only when the request
-// matches the supported stream setup, both encoders sustain the common frame rate,
-// and both provider probes produce usable lower bounds. Otherwise return an
-// invalid allocation so the caller keeps both outputs estimated; never activate
-// only one output.
-inline SharedTwoLegAllocation assembleSharedTwoLegAllocation(bool exactTopologyEligible, bool concurrentHardwareValidated, bool allHardwareWorkloadsPassed,
-							     bool firstProviderProbeUsable, uint64_t firstSafeVideoKbps, bool secondProviderProbeUsable,
-							     uint64_t secondSafeVideoKbps)
+// Only jointly tested encoders with complete coverage of the supported platforms
+// may use a measured shared budget. Unsupported destinations need no probe but
+// their own connection must still be reported as estimated.
+inline SharedTwoLegAllocation assembleSharedTwoLegAllocation(bool concurrentHardwareValidated, bool allHardwareWorkloadsPassed, bool completeProbeCoverage,
+							     uint64_t firstSafeVideoKbps, uint64_t secondSafeVideoKbps,
+							     uint64_t perLegLimitKbps = kMaximumRecommendedBitrateKbps)
 {
-	if (!exactTopologyEligible || !concurrentHardwareValidated || !allHardwareWorkloadsPassed || !firstProviderProbeUsable || !secondProviderProbeUsable)
+	if (!concurrentHardwareValidated || !allHardwareWorkloadsPassed || !completeProbeCoverage)
 		return {};
-
-	return allocateSharedTwoLegBandwidth(firstSafeVideoKbps, secondSafeVideoKbps);
+	return allocateSharedTwoLegBandwidth(firstSafeVideoKbps, secondSafeVideoKbps, perLegLimitKbps);
 }
 
 enum class QualityProfile {
