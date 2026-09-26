@@ -67,7 +67,6 @@ constexpr int kCancelTimeoutMs = 8000;
 constexpr uint64_t kProbeMaxBytes = 25ULL * 1024ULL * 1024ULL;
 constexpr uint64_t kYoutubeProbeMaxBytes = 64ULL * 1024ULL * 1024ULL;
 constexpr int kProbeMaximumBitrateKbps = qualityPolicy::kMaximumRecommendedBitrateKbps;
-constexpr int kYoutubeProbeMaximumBitrateKbps = 10000;
 constexpr int kYoutubeProbeInitialBitrateKbps = 1000;
 constexpr int kYoutubeProbeSettleMs = 500;
 constexpr int kYoutubeProbeSampleMs = 5000;
@@ -309,7 +308,7 @@ struct Session : std::enable_shared_from_this<Session> {
 	std::string topology;
 	std::vector<LegRequest> legs;
 	std::vector<ProbeRequest> probes;
-	bool dualOutputActiveProbePair = false;
+	bool standardDualOutputWorkload = false;
 	bool concurrentHardwareValidated = false;
 	bool enhancedBroadcastingDualOutputWorkload = false;
 
@@ -369,9 +368,10 @@ static bool probeProviderContractIsValid(const ProbeRequest &probe)
 		probePolicy::isBoundedYoutubeKey(probe.streamKey));
 }
 
-static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
+static bool isSupportedStandardDualOutputWorkload(const Session &session)
 {
-	if (session.topology != "dual-output" || session.legs.size() != 2 || session.probes.size() != 2)
+	if (session.legs.size() != 2 ||
+	    std::any_of(session.legs.begin(), session.legs.end(), [](const LegRequest &leg) { return leg.outputKind != "standard"; }))
 		return false;
 	const auto reject = [](const char *reason) {
 		blog(LOG_INFO, "[Auto Optimizer][Dual Output] joint active probing is ineligible: %s", reason);
@@ -395,8 +395,7 @@ static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
 			providers.insert(destination.platform);
 	}
 
-	std::set<std::string> probeProviders;
-	std::set<std::string> probedLegs;
+	std::set<std::pair<std::string, std::string>> probesByLeg;
 	for (const auto &probe : session.probes) {
 		const auto destinations = destinationProvidersByLeg.find(probe.legId);
 		if (destinations == destinationProvidersByLeg.end() || !destinations->second.contains(probe.provider))
@@ -405,10 +404,10 @@ static bool isSupportedStandardDualOutputActiveProbePair(const Session &session)
 			return reject("only standard Twitch and unbound YouTube probes are supported");
 		if (!probeProviderContractIsValid(probe))
 			return reject("a provider probe failed its credential or endpoint contract");
-		if (!probeProviders.insert(probe.provider).second || !probedLegs.insert(probe.legId).second)
-			return reject("each provider and leg must have exactly one probe");
+		if (!probesByLeg.emplace(probe.legId, probe.provider).second)
+			return reject("a platform may be probed only once per leg");
 	}
-	return probeProviders == std::set<std::string>{"twitch", "youtube"} && probedLegs.size() == 2;
+	return true;
 }
 
 static bool sameVideoTuple(const CurrentSettings &left, const CurrentSettings &right)
@@ -710,10 +709,12 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	if (legs)
 		obs_data_array_release(legs);
 	if (valid && session.topology != "enhanced-broadcasting-dual-output") {
-		const bool singleOutputEnhanced = session.topology == "enhanced-broadcasting";
-		const bool outputKindsValid = (!singleOutputEnhanced || session.legs.size() == 1) &&
+		const bool enhanced = session.topology == "enhanced-broadcasting";
+		const bool hasEnhancedOutput = std::any_of(session.legs.begin(), session.legs.end(),
+							   [](const LegRequest &leg) { return leg.outputKind == "twitch-enhanced-broadcasting"; });
+		const bool outputKindsValid = (!enhanced || hasEnhancedOutput) &&
 					      std::all_of(session.legs.begin(), session.legs.end(), [&](const LegRequest &leg) {
-						      return leg.outputKind == (singleOutputEnhanced ? "twitch-enhanced-broadcasting" : "standard");
+						      return leg.outputKind == "standard" || (enhanced && leg.outputKind == "twitch-enhanced-broadcasting");
 					      });
 		if (!outputKindsValid) {
 			error = "invalid_auto_optimizer_output_kind";
@@ -761,7 +762,11 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 
 	if (session.topology == "enhanced-broadcasting-dual-output") {
 		session.enhancedBroadcastingDualOutputWorkload = isSupportedEnhancedBroadcastingDualOutputWorkload(session);
-		if (!session.enhancedBroadcastingDualOutputWorkload) {
+		// A requested combined ladder must describe an exact, safe workload. If
+		// its resources were unavailable, ordinary companion probes can still run.
+		const bool requestsCombinedLadder = std::any_of(session.probes.begin(), session.probes.end(),
+								[](const ProbeRequest &probe) { return probe.kind == "twitch-enhanced-broadcasting"; });
+		if (requestsCombinedLadder && !session.enhancedBroadcastingDualOutputWorkload) {
 			error = "invalid_auto_optimizer_enhanced_broadcasting_dual_output";
 			return false;
 		}
@@ -770,8 +775,7 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 	// Keep probe credentials only when the probe kind, output, stream setup, and
 	// destination match an allowed active-probe configuration. Otherwise clear
 	// them before any network work.
-	const bool multipleDualOutputLegs = session.topology == "dual-output" && session.legs.size() > 1;
-	session.dualOutputActiveProbePair = isSupportedStandardDualOutputActiveProbePair(session);
+	session.standardDualOutputWorkload = isSupportedStandardDualOutputWorkload(session);
 	std::map<std::string, size_t> probePairCounts;
 	for (const auto &probe : session.probes)
 		probePairCounts[probe.legId + "\n" + probe.provider]++;
@@ -781,10 +785,6 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		const bool legFound = legIt != session.legs.end();
 		const bool destinationFound = legFound && std::any_of(legIt->destinations.begin(), legIt->destinations.end(),
 								      [&](const Destination &destination) { return destination.platform == probe.provider; });
-		const bool directEligible = session.topology == "direct-single" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1;
-		const bool dualEligible = (session.topology == "dual-output" && session.legs.size() == 1 && legFound && legIt->destinations.size() == 1) ||
-					  session.dualOutputActiveProbePair;
-		const bool cloudEligible = session.topology == "cloud-multistream" && session.legs.size() == 1 && legFound;
 		std::optional<uint64_t> additionalCanvasId;
 		if (legFound && legIt->additionalVideo)
 			additionalCanvasId = legIt->additionalVideo->current.canvasId;
@@ -811,10 +811,9 @@ static bool parseRequest(const std::string &json, Session &session, std::string 
 		const bool providerValid = probeProviderContractIsValid(probe);
 
 		const bool topologyEligible = singleOutputEnhancedBroadcastingEligible || compositeEnhancedBroadcastingEligible ||
-					      (probe.kind != "twitch-enhanced-broadcasting" && (directEligible || dualEligible || cloudEligible));
+					      (probe.kind != "twitch-enhanced-broadcasting" && legFound);
 		const auto eligibility = probePolicy::decideActiveProbeEligibility(!probe.provider.empty(), destinationFound, topologyEligible, providerValid,
-										   probePairCounts[probe.legId + "\n" + probe.provider] == 1,
-										   multipleDualOutputLegs, session.dualOutputActiveProbePair);
+										   probePairCounts[probe.legId + "\n" + probe.provider] == 1);
 		probe.eligible = eligibility.eligible;
 		if (!probe.eligible) {
 			probe.denialReason = eligibility.denialReason;
@@ -2192,7 +2191,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 				const CurrentSettings candidate = hardwareCandidate(leg, encoder, tier);
 				workloadCandidates.push_back(candidate);
 			}
-			if (session->dualOutputActiveProbePair)
+			if (session->standardDualOutputWorkload)
 				applySharedDualOutputCadence(workloadCandidates);
 			for (const auto &candidate : workloadCandidates)
 				workloadKey += std::to_string(candidate.width) + "x" + std::to_string(candidate.height) + "@" +
@@ -2246,7 +2245,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 			CurrentSettings candidate = hardwareCandidate(leg, encoder, tier);
 			selected.push_back(std::move(candidate));
 		}
-		if (session->dualOutputActiveProbePair)
+		if (session->standardDualOutputWorkload)
 			applySharedDualOutputCadence(selected);
 		for (const auto &candidate : selected)
 			workloadKey += std::to_string(candidate.width) + "x" + std::to_string(candidate.height) + "@" + std::to_string(candidate.fpsNum) + "/" +
@@ -2254,7 +2253,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 		if (!attemptedWorkloads[encoder.id].insert(workloadKey).second)
 			return false;
 
-		if (session->dualOutputActiveProbePair) {
+		if (session->standardDualOutputWorkload) {
 			const double jointWorkloadProgress = 15.0 + 14.0 * (double)attemptOrdinal / (double)plannedAttempts;
 			pushEvent(session, "progress", "hardware", jointWorkloadProgress, "dual_output_testing_workload", {}, {}, {}, {}, 0,
 				  selected.empty() ? nullptr : &selected.front());
@@ -2470,7 +2469,7 @@ static std::vector<HardwareAssessment> assessSessionHardware(const std::shared_p
 					continue;
 				}
 
-				if (session->dualOutputActiveProbePair)
+				if (session->standardDualOutputWorkload)
 					session->concurrentHardwareValidated = true;
 				for (size_t index = 0; index < assessments.size(); index++) {
 					assessments[index].passed = true;
@@ -3931,7 +3930,8 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		return result;
 	}
 
-	const int maximumBitrate = probe.provider == "youtube" ? kYoutubeProbeMaximumBitrateKbps : kProbeMaximumBitrateKbps;
+	const int maximumBitrate = probe.provider == "youtube" ? probePolicy::youtubeProbeMaximumBitrateKbps(session->standardDualOutputWorkload)
+							       : kProbeMaximumBitrateKbps;
 	const int requested = probe.provider == "youtube" ? kYoutubeProbeInitialBitrateKbps
 							  : std::clamp(std::max(leg.current.bitrateKbps, 6000), 500, maximumBitrate);
 	obs_data_t *platformProbe = obs_data_create();
@@ -4080,13 +4080,13 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		     extendedSampleUsed ? "true" : "false", decision.targetPassed ? "true" : "false", (unsigned long long)result.safeKbps,
 		     result.platformCapKbps, leg.limits.maxBitrateKbps);
 	} else {
-		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000};
+		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
 		uint64_t totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
 		probePolicy::YoutubeRampEvidence rampEvidence;
 		// maxBitrateKbps caps the recommendation returned to Desktop. YouTube may
-		// test one higher bitrate to verify stability, but records the extra
-		// capacity only as measurement evidence.
-		const int effectiveCeilingKbps = probePolicy::effectiveProbeCeilingKbps(kYoutubeProbeMaximumBitrateKbps, result.platformCapKbps, 0);
+		// measure the aggregate needed by two standard outputs without raising
+		// either output's recommendation cap. Time and byte budgets still apply.
+		const int effectiveCeilingKbps = probePolicy::effectiveProbeCeilingKbps(maximumBitrate, result.platformCapKbps, 0);
 		std::vector<std::pair<int, int>> plannedTargets;
 		int lastPlannedTarget = 0;
 		for (int ladderTarget : ladder) {
@@ -4214,8 +4214,14 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 
 						for (size_t targetIndex = 1; targetIndex < plannedTargets.size() && !result.ceilingReached; targetIndex++) {
 							const auto &[ladderTarget, plannedTarget] = plannedTargets[targetIndex];
+							const int sampleMs = probePolicy::youtubeProbeRampSampleMs(plannedTarget);
+							const std::vector<std::pair<int, int>> extraSample =
+								sampleMs > kYoutubeProbeSampleMs
+									? std::vector<std::pair<int, int>>{{plannedTarget, sampleMs - kYoutubeProbeSampleMs}}
+									: std::vector<std::pair<int, int>>{};
 							totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
-							if (!youtubeSampleGroupFits(youtubeDeadline, totalProbeBytes, activeTarget, {plannedTarget})) {
+							if (!youtubeSampleGroupFits(youtubeDeadline, totalProbeBytes, activeTarget, {plannedTarget},
+										    extraSample)) {
 								terminationReason = "budget_before_next_rung";
 								break;
 							}
@@ -4225,7 +4231,7 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 										   probeBudgetStartBytes, totalProbeBytes,
 										   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, targetIndex,
 													    plannedTargets.size(), 0.20),
-										   "youtube_probe_measuring", highFirst, result))
+										   "youtube_probe_measuring", highFirst, result, sampleMs))
 								return result;
 
 							const probePolicy::YoutubeProbeLoadResult highFirstLoad =
@@ -4640,14 +4646,29 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const int rightPriority = priority(right);
 		return leftPriority < rightPriority;
 	});
+	std::vector<probePolicy::BandwidthProbeConnection> connections;
+	for (const auto *probe : orderedProbes)
+		connections.push_back({probe->kind, probe->server, probe->streamKey});
+	const auto probeGroups = probePolicy::groupBandwidthProbes(connections);
+	connections.clear();
+	blog(LOG_INFO, "[Auto Optimizer][Bandwidth] eligible_probes=%zu unique_connections=%zu", orderedProbes.size(), probeGroups.size());
+	for (const auto &group : probeGroups) {
+		// Only the representative opens a connection or requests ingest confirmation.
+		// Discard duplicate credentials now, before the representative starts work.
+		for (size_t index = 1; index < group.size(); ++index) {
+			auto &duplicate = *orderedProbes[group[index]];
+			duplicate.server.clear();
+			duplicate.streamKey.clear();
+		}
+	}
 	size_t completedProbeCount = 0;
-	for (ProbeRequest *probePointer : orderedProbes) {
-		ProbeRequest &probe = *probePointer;
+	for (const auto &group : probeGroups) {
+		ProbeRequest &probe = *orderedProbes[group.front()];
 		const auto legIt = std::find_if(preparedLegs.begin(), preparedLegs.end(), [&](const LegRequest &leg) { return leg.legId == probe.legId; });
 		if (legIt == preparedLegs.end())
 			continue;
-		const double startProgress = 30.0 + (35.0 * (double)completedProbeCount / (double)std::max<size_t>(1, eligibleProbeCount));
-		const double endProgress = 30.0 + (35.0 * (double)(completedProbeCount + 1) / (double)std::max<size_t>(1, eligibleProbeCount));
+		const double startProgress = 30.0 + (35.0 * (double)completedProbeCount / (double)probeGroups.size());
+		const double endProgress = 30.0 + (35.0 * (double)(completedProbeCount + 1) / (double)probeGroups.size());
 		const std::string startCode = probe.kind == "twitch-enhanced-broadcasting" ? "enhanced_broadcasting_requesting_ladder"
 											   : probe.provider + "_probe_started";
 		pushEvent(session, "phase", "bandwidth", startProgress, startCode, probe.legId, "active", probe.probeId, probe.provider);
@@ -4713,7 +4734,14 @@ static void runSession(const std::shared_ptr<Session> &session)
 												: result.provider + "_probe_failed_estimate_used";
 		pushEvent(session, "progress", "bandwidth", endProgress, completionCode, result.legId, result.success ? "active" : "estimated", probe.probeId,
 			  probe.provider);
-		probeResults.push_back(std::move(result));
+		// Bandwidth belongs to the connection, not the canvas. Share successes and
+		// failures without another ladder or a duplicate progress/confirmation cycle.
+		// The allocator takes the largest demonstrated bound, never their sum.
+		for (const auto index : group) {
+			ProbeResult shared = result;
+			shared.legId = orderedProbes[index]->legId;
+			probeResults.push_back(std::move(shared));
+		}
 	}
 	clearProbeSecrets(*session);
 	if (eligibleProbeCount == 0)
@@ -4725,33 +4753,61 @@ static void runSession(const std::shared_ptr<Session> &session)
 	}
 
 	std::optional<qualityPolicy::SharedTwoLegAllocation> dualOutputAllocation;
-	if (session->dualOutputActiveProbePair) {
-		const auto twitchResult =
-			std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) { return result.provider == "twitch"; });
-		const auto youtubeResult =
-			std::find_if(probeResults.begin(), probeResults.end(), [](const ProbeResult &result) { return result.provider == "youtube"; });
-		const auto usable = [](const ProbeResult &result) {
-			return probePolicy::dualOutputProviderProbeIsUsable(result.success, result.observedThroughputReliable, result.measuredKbps,
-									    result.safeKbps);
-		};
-		if (twitchResult != probeResults.end() && youtubeResult != probeResults.end()) {
+	std::optional<int> dualOutputFallbackBitrate;
+	if (session->standardDualOutputWorkload) {
+		uint64_t safeByLeg[2] = {};
+		uint64_t commonLimit = qualityPolicy::kMaximumRecommendedBitrateKbps;
+		bool completeCoverage = true;
+		for (size_t index = 0; index < preparedLegs.size(); ++index) {
+			const auto &leg = preparedLegs[index];
+			std::set<std::string> measuredPlatforms;
+			for (const auto &result : probeResults) {
+				if (result.legId != leg.legId)
+					continue;
+				if (!probePolicy::dualOutputProviderProbeIsUsable(result.success, result.observedThroughputReliable, result.measuredKbps,
+										  result.safeKbps)) {
+					completeCoverage = false;
+					if (!result.observedThroughputReliable || result.measuredKbps == 0 || result.safeKbps == 0)
+						continue;
+				} else {
+					measuredPlatforms.insert(result.provider);
+				}
+				safeByLeg[index] = safeByLeg[index] ? std::min(safeByLeg[index], result.safeKbps) : result.safeKbps;
+			}
+			// An unsupported destination may borrow the measured upload budget.
+			// A missing or failed supported probe must not masquerade as one.
+			completeCoverage &= measuredPlatforms.size() == probeableProviderCount(leg);
+			if (leg.limits.maxBitrateKbps > 0)
+				commonLimit = std::min(commonLimit, (uint64_t)leg.limits.maxBitrateKbps);
+		}
+		if (completeCoverage && session->concurrentHardwareValidated) {
 			const bool allHardwareWorkloadsPassed = hardwareAssessments.size() == preparedLegs.size() &&
 								std::all_of(hardwareAssessments.begin(), hardwareAssessments.end(),
 									    [](const HardwareAssessment &assessment) { return assessment.passed; });
-			const auto allocation = qualityPolicy::assembleSharedTwoLegAllocation(session->dualOutputActiveProbePair,
-											      session->concurrentHardwareValidated, allHardwareWorkloadsPassed,
-											      usable(*twitchResult), twitchResult->safeKbps,
-											      usable(*youtubeResult), youtubeResult->safeKbps);
+			const auto allocation = qualityPolicy::assembleSharedTwoLegAllocation(session->concurrentHardwareValidated, allHardwareWorkloadsPassed,
+											      completeCoverage, safeByLeg[0], safeByLeg[1], commonLimit);
 			if (allocation.valid) {
 				dualOutputAllocation = allocation;
 				blog(LOG_INFO,
-				     "[Auto Optimizer][Dual Output] twitch_safe=%llu Kbps youtube_safe=%llu Kbps aggregate_safe=%llu Kbps "
+				     "[Auto Optimizer][Dual Output] first_safe=%llu Kbps second_safe=%llu Kbps aggregate_safe=%llu Kbps "
 				     "per_leg=%llu Kbps allocated=%llu Kbps concurrent_hardware=true",
-				     (unsigned long long)twitchResult->safeKbps, (unsigned long long)youtubeResult->safeKbps,
-				     (unsigned long long)allocation.aggregateSafeVideoKbps, (unsigned long long)allocation.perLegVideoKbps,
-				     (unsigned long long)allocation.allocatedVideoKbps);
+				     (unsigned long long)safeByLeg[0], (unsigned long long)safeByLeg[1], (unsigned long long)allocation.aggregateSafeVideoKbps,
+				     (unsigned long long)allocation.perLegVideoKbps, (unsigned long long)allocation.allocatedVideoKbps);
 			}
 		}
+	}
+	if (session->standardDualOutputWorkload && !dualOutputAllocation) {
+		// Desktop applies one bitrate to both standard outputs. Preserve reliable
+		// measured bounds after a partial test, but never promote these estimates.
+		int fallback = std::min(baseRecommendation(preparedLegs[0]).bitrateKbps, baseRecommendation(preparedLegs[1]).bitrateKbps);
+		uint64_t observedSafe = 0;
+		for (const auto &result : probeResults) {
+			if (result.observedThroughputReliable && result.measuredKbps > 0 && result.safeKbps > 0)
+				observedSafe = observedSafe ? std::min(observedSafe, result.safeKbps) : result.safeKbps;
+		}
+		if (observedSafe > 0)
+			fallback = std::min(fallback, (int)std::max<uint64_t>(1, observedSafe / 2));
+		dualOutputFallbackBitrate = fallback;
 	}
 	const bool dualOutputJointActive = dualOutputAllocation.has_value();
 	std::optional<CombinedWorkloadResult> combinedWorkload;
@@ -4763,7 +4819,38 @@ static void runSession(const std::shared_ptr<Session> &session)
 			combinedWorkload = CombinedWorkloadResult{tested->legId, tested->companionWorkloads};
 	}
 	const bool compositeWorkloadValidated = combinedWorkload.has_value();
+	const bool standardWorkloadValidated = preparedLegs.size() == 1 || dualOutputJointActive || compositeWorkloadValidated;
+	const bool sharedTwitchQualityProfile = dualOutputJointActive && std::any_of(preparedLegs.begin(), preparedLegs.end(), [](const LegRequest &leg) {
+							return std::any_of(leg.destinations.begin(), leg.destinations.end(),
+									   [](const Destination &destination) { return destination.platform == "twitch"; });
+						});
 
+	std::vector<CurrentSettings> qualityCeilings;
+	if (session->standardDualOutputWorkload) {
+		for (size_t index = 0; index < preparedLegs.size(); ++index) {
+			auto value = estimateRecommendation(preparedLegs[index], hardwareAssessments[index]);
+			if (!dualOutputJointActive) {
+				const auto current = baseRecommendation(preparedLegs[index]);
+				value.width = std::min(value.width, current.width);
+				value.height = std::min(value.height, current.height);
+				capFps(value, current.fpsNum, current.fpsDen);
+			}
+			const bool twitch = sharedTwitchQualityProfile ||
+					    std::any_of(preparedLegs[index].destinations.begin(), preparedLegs[index].destinations.end(),
+							[](const Destination &destination) { return destination.platform == "twitch"; });
+			const int bitrate = dualOutputJointActive ? (int)dualOutputAllocation->perLegVideoKbps : *dualOutputFallbackBitrate;
+			const auto selected = qualityPolicy::select(
+				{value.width, value.height, value.fpsNum, value.fpsDen},
+				qualityPolicy::clampRecommendedBitrateKbps(probePolicy::roundDownRecommendationBitrateKbps(bitrate)), value.encoderFamily,
+				twitch ? qualityPolicy::QualityProfile::Twitch : qualityPolicy::QualityProfile::Generic);
+			value.fpsNum = selected.video.fpsNum;
+			value.fpsDen = selected.video.fpsDen;
+			qualityCeilings.push_back(value);
+		}
+		// Different canvas sizes can select different FPS at the same bitrate.
+		// Re-select below at their shared lower cadence so the result is applicable.
+		applySharedDualOutputCadence(qualityCeilings);
+	}
 	pushEvent(session, "phase", "recommendation", 75);
 	if (dualOutputJointActive)
 		pushEvent(session, "progress", "recommendation", 75, "dual_output_allocating_upload", {}, "active", {}, {}, 0, nullptr,
@@ -4834,8 +4921,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.value.fpsNum = (int)tested.testedFpsNum;
 			recommendation.value.fpsDen = (int)tested.testedFpsDen;
 			recommendation.additionalVideo = tested.testedAdditionalVideo;
-		} else if (hasSuccessfulProbe && (!session->dualOutputActiveProbePair || dualOutputJointActive) &&
-			   (!session->enhancedBroadcastingDualOutputWorkload || compositeWorkloadValidated)) {
+		} else if (hasSuccessfulProbe && leg.outputKind == "standard" && standardWorkloadValidated) {
 			recommendation.measurementMode = "active";
 			if (hasPartialProviderCoverage) {
 				recommendation.confidence = "low";
@@ -4888,11 +4974,18 @@ static void runSession(const std::shared_ptr<Session> &session)
 				recommendation.reason = "insufficient_bandwidth";
 			}
 			recommendation.value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps(safeKbps);
+		} else if (dualOutputJointActive && probeableProviderCount(leg) == 0) {
+			// Only the upload budget and concurrent encoder workload were tested.
+			// Preserve estimated provenance for this output's untested destination.
+			recommendation.confidence = "medium";
+			recommendation.reason = "shared_upload_estimate";
+			recommendation.value.bitrateKbps = (int)dualOutputAllocation->perLegVideoKbps;
 		} else if (requiredProbeCount > 0) {
 			recommendation.confidence = "low";
 			const bool hasUnstableProbe = std::any_of(legProbeResults.begin(), legProbeResults.end(),
 								  [](const ProbeResult *result) { return result->stability == ProbeStability::Unstable; });
-			recommendation.reason = session->enhancedBroadcastingDualOutputWorkload && !compositeWorkloadValidated
+			recommendation.reason = hasSuccessfulProbe ? "combined_workload_unvalidated"
+						: session->enhancedBroadcastingDualOutputWorkload && !compositeWorkloadValidated
 							? "enhanced_broadcasting_combined_workload_failed"
 						: hasUnstableProbe                         ? "unstable_connection"
 						: session->topology == "cloud-multistream" ? "indirect_provider_probe_failed"
@@ -4921,6 +5014,8 @@ static void runSession(const std::shared_ptr<Session> &session)
 		// stable, conservative bitrate. Round it before choosing resolution and
 		// frame rate so the recommendation fits the applied bitrate.
 		if (!providerOwnsEncoding(session->topology, leg)) {
+			if (dualOutputFallbackBitrate)
+				recommendation.value.bitrateKbps = *dualOutputFallbackBitrate;
 			recommendation.value.bitrateKbps = qualityPolicy::clampRecommendedBitrateKbps(
 				probePolicy::roundDownRecommendationBitrateKbps((uint64_t)std::max(0, recommendation.value.bitrateKbps)));
 		}
@@ -4928,23 +5023,24 @@ static void runSession(const std::shared_ptr<Session> &session)
 		const double selectingProgress = 75.0 + 19.0 * (double)index / (double)std::max<size_t>(1, preparedLegs.size());
 		const double selectedProgress = 75.0 + 19.0 * (double)(index + 1) / (double)std::max<size_t>(1, preparedLegs.size());
 		if (!providerOwnsEncoding(session->topology, leg) && hardware.passed) {
-			// Complete successful provider coverage is required before raising the
-			// current resolution or frame rate. Estimate-only, failed, and partial
-			// paths may still select lower tested resolution and frame-rate settings,
-			// but never promote from
-			// incomplete bandwidth evidence.
+			if (!qualityCeilings.empty())
+				capFps(recommendation.value, qualityCeilings[index].fpsNum, qualityCeilings[index].fpsDen);
+			// Raising quality requires complete supported-platform coverage and a
+			// tested encoder workload. A jointly tested unprobed canvas can use the
+			// shared budget; other estimates and partial tests cannot promote.
 			const CurrentSettings currentCeiling = baseRecommendation(leg);
 			const auto eligibleCeiling = qualityPolicy::recommendationCeiling(
 				{recommendation.value.width, recommendation.value.height, recommendation.value.fpsNum, recommendation.value.fpsDen},
 				{currentCeiling.width, currentCeiling.height, currentCeiling.fpsNum, currentCeiling.fpsDen},
-				probePolicy::providerProbeCoverageAllowsQualityPromotion(recommendation.measurementMode == "active", coverage));
+				dualOutputJointActive ||
+					probePolicy::providerProbeCoverageAllowsQualityPromotion(recommendation.measurementMode == "active", coverage));
 			recommendation.value.width = eligibleCeiling.width;
 			recommendation.value.height = eligibleCeiling.height;
 			recommendation.value.fpsNum = eligibleCeiling.fpsNum;
 			recommendation.value.fpsDen = eligibleCeiling.fpsDen;
 			pushEvent(session, "progress", "recommendation", selectingProgress, "recommendation_selecting_quality", leg.legId,
 				  recommendation.measurementMode, {}, {}, 0, &recommendation.value, 0, (uint32_t)std::max(0, recommendation.value.bitrateKbps));
-			const bool hasTwitchDestination = dualOutputJointActive ||
+			const bool hasTwitchDestination = sharedTwitchQualityProfile ||
 							  std::any_of(leg.destinations.begin(), leg.destinations.end(),
 								      [](const Destination &destination) { return destination.platform == "twitch"; });
 			const auto qualityProfile = hasTwitchDestination ? qualityPolicy::QualityProfile::Twitch : qualityPolicy::QualityProfile::Generic;
@@ -4958,10 +5054,12 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.value.bitrateKbps = selected.bitrateKbps;
 			if (selected.insufficientBandwidth) {
 				recommendation.confidence = "low";
-				recommendation.reason = "insufficient_bandwidth";
+				if (recommendation.reason != "shared_upload_estimate")
+					recommendation.reason = "insufficient_bandwidth";
 			} else if (qualityPolicy::isQualityPromotion({leg.current.width, leg.current.height, leg.current.fpsNum, leg.current.fpsDen},
 								     selected.video) &&
-				   recommendation.confidence != "low" && recommendation.reason != "probe_source_underfill") {
+				   recommendation.confidence != "low" && recommendation.reason != "probe_source_underfill" &&
+				   recommendation.reason != "shared_upload_estimate") {
 				// Synthetic encoder validation plus a successful provider probe is
 				// enough to offer the higher tier, but not to claim the same
 				// confidence as a recommendation that leaves video quality unchanged.

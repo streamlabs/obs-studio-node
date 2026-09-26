@@ -442,6 +442,61 @@ TEST_CASE("Auto Optimizer client validates and projects a standard result")
 	CHECK_FALSE(contract::projectResult(excessiveBitrate.dump(), "run", prepared.context).valid);
 }
 
+TEST_CASE("Auto Optimizer accepts shared YouTube evidence without doubling upload capacity")
+{
+	for (const auto *mode : {"dual-output", "mixed", "stream-shift"}) {
+		CAPTURE(mode);
+		auto fixture = dualOutputFixture();
+		fixture.prepared =
+			prepare({{"streamSetup", mode},
+				 {"outputs", json::array({standardOutput("horizontal", "horizontal", "youtube", youtubeProbe("youtube-horizontal"), 1),
+							  standardOutput("vertical", "vertical", "youtube", youtubeProbe("youtube-vertical"), 2)})}});
+		fixture.result["legs"][0] = returnedStandardOutput("horizontal", "horizontal", "youtube", "youtube", "youtube-unbound-ramp", 12000, 6000);
+		fixture.result["legs"][1] = returnedStandardOutput("vertical", "vertical", "youtube", "youtube", "youtube-unbound-ramp", 12000, 6000);
+		fixture.result["aggregateUpload"]["safeVideoKbps"] = 12000;
+		fixture.result["aggregateUpload"]["allocatedVideoKbps"] = 12000;
+		REQUIRE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
+		checkInvalidResultMutations(
+			fixture, {
+					 {"missing concurrent proof", [](json &value) { value.erase("aggregateUpload"); }},
+					 {"shared evidence counted twice", [](json &value) { value["aggregateUpload"]["safeVideoKbps"] = 24000; }},
+					 {"failed second probe", [](json &value) { value["legs"][1]["measurement"]["probes"][0]["success"] = false; }},
+				 });
+	}
+}
+
+TEST_CASE("Auto Optimizer shares a measured upload with an unprobed destination only with joint proof")
+{
+	auto fixture = dualOutputFixture();
+	fixture.prepared = prepare({{"streamSetup", "dual-output"},
+				    {"outputs", json::array({standardOutput("horizontal", "horizontal", "kick", nullptr, 1),
+							     standardOutput("vertical", "vertical", "youtube", youtubeProbe(), 2)})}});
+	fixture.result["legs"][0] = returnedStandardOutput("horizontal", "horizontal", "kick", "youtube", "youtube-unbound-ramp", 12000, 6000);
+	fixture.result["legs"][0]["measurement"] = {{"mode", "estimated"}, {"confidence", "medium"}, {"reason", "shared_upload_estimate"}};
+	fixture.result["legs"][0]["recommendation"]["width"] = 1920;
+	fixture.result["legs"][0]["recommendation"]["height"] = 1080;
+	fixture.result["legs"][1] = returnedStandardOutput("vertical", "vertical", "youtube", "youtube", "youtube-unbound-ramp", 12000, 6000);
+	fixture.result["aggregateUpload"]["safeVideoKbps"] = 12000;
+	fixture.result["aggregateUpload"]["allocatedVideoKbps"] = 12000;
+	const auto result = contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context);
+	REQUIRE(result.valid);
+	const auto projected = json::parse(result.json);
+	CHECK(projected["outputs"][0]["measurement"]["mode"] == "estimated");
+	CHECK_FALSE(projected["outputs"][0]["measurement"].contains("evidence"));
+	checkInvalidResultMutations(
+		fixture, {
+				 {"missing joint proof", [](json &value) { value.erase("aggregateUpload"); }},
+				 {"no concurrent encoding", [](json &value) { value["aggregateUpload"]["concurrentHardwareValidated"] = false; }},
+				 {"claims Kick was measured", [](json &value) { value["legs"][0]["measurement"]["mode"] = "active"; }},
+				 {"borrows failed measurement", [](json &value) { value["legs"][1]["measurement"]["probes"][0]["success"] = false; }},
+				 {"missing measured output", [](json &value) { value["legs"].erase(1); }},
+				 {"unjustified increase", [](json &value) { value["legs"][0]["recommendation"]["bitrateKbps"] = 7000; }},
+			 });
+	fixture.prepared.context.outputs[0].destinations = {"twitch"};
+	fixture.result["legs"][0]["destinations"][0]["platform"] = "twitch";
+	CHECK_FALSE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
+}
+
 TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate proof")
 {
 	const auto fixture = dualOutputFixture();

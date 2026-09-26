@@ -2157,9 +2157,10 @@ interface IAutoOptimizerOutputRequest {
      * Identifies who supplies the encoding settings. Use `standard` when
      * Desktop selects the encoder and bitrate. Use
      * `twitch-enhanced-broadcasting` when Twitch supplies the ladder. That
-     * Twitch-only output uses `display: 'horizontal'` for one canvas or
-     * `display: 'both'` for paired horizontal and vertical canvases. Each
-     * non-Twitch output remains `standard`.
+     * ladder can be validated for `display: 'horizontal'` or `display: 'both'`
+     * with paired horizontal and vertical canvases. Other Twitch-managed shapes
+     * retain conservative settings while ordinary bandwidth probes may run.
+     * Each non-Twitch output remains `standard`.
      */
     outputKind: AutoOptimizerOutputKind;
     destinations: AutoOptimizerPlatform[];
@@ -2168,12 +2169,18 @@ interface IAutoOptimizerOutputRequest {
     /**
      * Optional vertical canvas carried on the same Twitch Enhanced
      * Broadcasting upload as `current`. Valid only with `display: 'both'`. OSN
-     * permits active probing only for one Twitch destination, one Enhanced
+     * validates the paired ladder only for one Twitch destination, one Enhanced
      * Broadcasting probe, and two distinct registered canvas IDs.
      */
     additionalVideo?: IAutoOptimizerAdditionalVideoRequest;
     estimateReason?: AutoOptimizerEstimateReason;
-    /** Probes for this run, executed in array order. */
+    /**
+     * Probes for this output. Ordinary probes with the same kind, endpoint,
+     * and stream key run once per session and share their evidence across outputs.
+     * Progress and ingest confirmation use the representative probe's ID only.
+     * Distinct connections run sequentially; Enhanced Broadcasting workload
+     * probes remain separate and follow their companion bandwidth probes.
+     */
     probes?: IAutoOptimizerProbeRequest[];
 }
 
@@ -2203,8 +2210,10 @@ interface IAutoOptimizerTwitchEnhancedBroadcastingProbeRequest {
  * the required Auto Optimizer marker and leave it unbound to a
  * `liveBroadcast`. Desktop must confirm ingest for that same resource. OSN
  * validates the official RTMPS endpoint but cannot verify YouTube resource
- * ownership or binding. Await the run's cleanup before deleting the
- * `liveStream`.
+ * ownership or binding. Sequential probes may share this resource, but each
+ * must have a unique probe ID and its own ingest confirmation. OSN stops each
+ * probe output before starting the next. Await the run's cleanup before deleting
+ * the `liveStream`.
  */
 interface IAutoOptimizerYoutubeProbeRequest {
     id: string;
@@ -2232,19 +2241,22 @@ export interface IAutoOptimizerRequest {
      * destinations; successful partial coverage produces active evidence with
      * low confidence instead of disabling all provider measurement.
      *
-     * Active Dual Output requires one horizontal and one vertical output with
-     * distinct live canvas IDs. One output containing Twitch must have a
-     * `twitch-standard` probe, and the other output containing YouTube must have
-     * a `youtube-unbound` probe. Either output may include additional unprobed
-     * destinations. The probes run sequentially, and both must produce usable
-     * evidence before OSN promotes either output.
+     * Standard Twitch and YouTube bandwidth probes are independent of stream
+     * mode. A combined Dual Output recommendation requires distinct live
+     * horizontal and vertical canvases and concurrent encoder validation.
+     * Either or both canvases may use the same platform. An output without a
+     * supported probe may use a share of the measured upload budget, reported
+     * as estimated rather than measured on that destination. Missing or failed
+     * supported probes prevent promotion of the combined recommendation.
      *
      * `enhanced-broadcasting-dual-output` requires one Twitch Enhanced
      * Broadcasting probe and one or two standard outputs. Each standard output
      * must match the canvas ID, resolution, and frame rate of the corresponding
      * Twitch canvas. A standard output may include one YouTube probe;
-     * unsupported destinations remain estimate-only, and custom RTMP is
-     * rejected. Standard probes finish before OSN tests the combined workload.
+     * unsupported destinations remain estimate-only. Other shapes can still
+     * run ordinary bandwidth probes but do not claim a validated combined
+     * Enhanced Broadcasting workload. Standard probes finish before OSN tests
+     * the combined workload.
      */
     outputs: IAutoOptimizerOutputRequest[];
 }

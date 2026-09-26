@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace autoOptimizer {
 namespace probePolicy {
@@ -120,19 +121,60 @@ inline bool standardDualOutputCanvasPairIsValid(std::string_view firstDisplay, u
 }
 
 /**
- * Make the final active-probe decision after the caller validates topology and
- * any live canvas references. A multi-leg Dual Output request receives its
- * more specific denial reason only when it is not the supported joint pair.
+ * Validate the selected platform and its safe probe contract. Stream mode only
+ * restricts the specialized Enhanced Broadcasting workload, never an ordinary
+ * bandwidth test. Combined workload validation is a separate decision.
  */
 inline ActiveProbeEligibility decideActiveProbeEligibility(bool providerKnown, bool destinationPresent, bool topologyEligible, bool providerContractValid,
-							   bool uniqueLegProviderProbe, bool multipleDualOutputLegs, bool supportedJointProbePair)
+							   bool uniqueLegProviderProbe)
 {
-	const bool jointProbeShapeAllowed = !multipleDualOutputLegs || supportedJointProbePair;
-	const bool eligible = providerKnown && destinationPresent && topologyEligible && providerContractValid && uniqueLegProviderProbe &&
-			      jointProbeShapeAllowed;
+	const bool eligible = providerKnown && destinationPresent && topologyEligible && providerContractValid && uniqueLegProviderProbe;
 	if (eligible)
 		return {true, {}};
-	return {false, multipleDualOutputLegs && !supportedJointProbePair ? "dual_output_multiple_active_legs" : "active_probe_not_eligible"};
+	return {false, "active_probe_not_eligible"};
+}
+
+struct BandwidthProbeConnection {
+	std::string_view kind;
+	std::string_view server;
+	std::string_view streamKey;
+};
+
+/**
+ * Group already eligible ordinary probes by their exact connection. One test
+ * supplies evidence for every output in its group; it is not extra capacity.
+ * Enhanced Broadcasting tests a canvas-specific ladder and must remain separate.
+ * Views borrow credentials only while planning; the returned indices contain no secrets.
+ */
+inline std::vector<std::vector<size_t>> groupBandwidthProbes(const std::vector<BandwidthProbeConnection> &connections)
+{
+	std::vector<std::vector<size_t>> groups;
+	for (size_t index = 0; index < connections.size(); ++index) {
+		const auto &connection = connections[index];
+		const bool shareable = (connection.kind == "youtube-unbound" || connection.kind == "twitch-standard") && !connection.server.empty() &&
+				       !connection.streamKey.empty();
+		const auto match = std::find_if(groups.begin(), groups.end(), [&](const auto &group) {
+			const auto &first = connections[group.front()];
+			return shareable && first.kind == connection.kind && first.server == connection.server && first.streamKey == connection.streamKey;
+		});
+		if (match == groups.end())
+			groups.push_back({index});
+		else
+			match->push_back(index);
+	}
+	return groups;
+}
+
+/** Two standard uploads need an aggregate measurement, not two single-upload caps. */
+inline int youtubeProbeMaximumBitrateKbps(bool sharedUpload)
+{
+	return sharedUpload ? 12000 : 10000;
+}
+
+/** Give the additional aggregate-upload rung a longer sustained observation. */
+inline int youtubeProbeRampSampleMs(int targetKbps)
+{
+	return targetKbps > 10000 ? 10000 : 5000;
 }
 
 struct YoutubeProbeSampleMetrics {
