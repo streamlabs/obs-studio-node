@@ -22,7 +22,6 @@
 #include "nodeobs_api.h"
 #include "shared.hpp"
 #include <sstream>
-#include "memory-manager.h"
 #include "osn-video.hpp"
 #include "osn-encoders.hpp"
 
@@ -3712,7 +3711,7 @@ void OBS_settings::saveAdvancedSettings(std::vector<SubCategory> advancedSetting
 
 	mediaFilesSettings.push_back(advancedSettings.at(index++));
 	saveGenericSettings(mediaFilesSettings, "General", ConfigManager::getInstance().getGlobal());
-	MediaCacheManager::GetInstance().requestAllCacheUpdates();
+	OBS_API::applyMediaFileCachingSetting();
 }
 
 std::vector<SubCategory> OBS_settings::getSettings(std::string nameCategory, CategoryTypes &type)

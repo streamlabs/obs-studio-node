@@ -106,6 +106,10 @@ public:
 
 	static bool getBrowserAcceleration();
 	static bool getMediaFileCaching();
+	// Publishes General/fileCaching to the runtime flag before reevaluating sources.
+	// Call on the settings thread after loading or saving the global configuration.
+	// Cache changes are asynchronous and require graphics ticks.
+	static void applyMediaFileCachingSetting();
 
 public:
 	static void initAPI(void);

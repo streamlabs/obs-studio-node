@@ -624,6 +624,7 @@ if(BUILD_TESTING)
 
     add_executable(
         obs_studio_server_unit_tests
+        "tests/test-media-cache-settings.cpp"
         "tests/test-memory-manager.cpp"
         "tests/test-osn-source.cpp"
         "tests/test-osn-encoder-settings.cpp"

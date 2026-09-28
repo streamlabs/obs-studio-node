@@ -1010,6 +1010,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	ConfigManager::getInstance().setAppdataPath(appdata);
 
 	browserAccel = config_get_bool(ConfigManager::getInstance().getGlobal(), "General", "BrowserHWAccel");
+	applyMediaFileCachingSetting();
 
 	/* Set global private settings for whomever it concerns */
 	obs_data_t *private_settings = obs_data_create();
@@ -2143,10 +2144,9 @@ void OBS_API::SetBrowserAcceleration(void *data, const int64_t id, const std::ve
 
 void OBS_API::SetMediaFileCaching(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	mediaFileCaching = args[0].value_union.ui32;
-	config_set_bool(ConfigManager::getInstance().getGlobal(), "General", "fileCaching", mediaFileCaching);
+	config_set_bool(ConfigManager::getInstance().getGlobal(), "General", "fileCaching", args[0].value_union.ui32 != 0);
 	config_save_safe(ConfigManager::getInstance().getGlobal(), "tmp", nullptr);
-	MediaCacheManager::GetInstance().requestAllCacheUpdates();
+	applyMediaFileCachingSetting();
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
@@ -2182,6 +2182,13 @@ bool OBS_API::getBrowserAcceleration()
 bool OBS_API::getMediaFileCaching()
 {
 	return mediaFileCaching;
+}
+
+void OBS_API::applyMediaFileCachingSetting()
+{
+	// Cache evaluation reads the atomic preference rather than the mutable configuration.
+	mediaFileCaching = config_get_bool(ConfigManager::getInstance().getGlobal(), "General", "fileCaching");
+	MediaCacheManager::GetInstance().requestAllCacheUpdates();
 }
 
 void OBS_API::GetBrowserAcceleration(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

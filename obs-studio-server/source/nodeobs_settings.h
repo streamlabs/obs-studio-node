@@ -162,6 +162,8 @@ public:
 	static void OBS_settings_setEnhancedBroadcasting(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 
 private:
+	friend class OBSSettingsTestAccess;
+
 	// Exposed methods to the frontend
 	static std::vector<SubCategory> getSettings(std::string nameCategory, CategoryTypes &);
 	static bool saveSettings(std::string nameCategory, std::vector<SubCategory> settings);
