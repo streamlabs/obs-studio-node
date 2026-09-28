@@ -2249,14 +2249,15 @@ export interface IAutoOptimizerRequest {
      * as estimated rather than measured on that destination. Missing or failed
      * supported probes prevent promotion of the combined recommendation.
      *
-     * `enhanced-broadcasting-dual-output` requires one Twitch Enhanced
-     * Broadcasting probe and one or two standard outputs. Each standard output
-     * must match the canvas ID, resolution, and frame rate of the corresponding
-     * Twitch canvas. A standard output may include one YouTube probe;
-     * unsupported destinations remain estimate-only. Other shapes can still
-     * run ordinary bandwidth probes but do not claim a validated combined
-     * Enhanced Broadcasting workload. Standard probes finish before OSN tests
-     * the combined workload.
+     * Validating a combined workload in `enhanced-broadcasting-dual-output`
+     * requires one Twitch Enhanced Broadcasting probe and one or two standard
+     * outputs. Each standard output must match the canvas ID, resolution, and
+     * frame rate of the corresponding Twitch canvas. A standard output may
+     * include one YouTube probe; unsupported destinations remain estimate-only.
+     * Other shapes can still run ordinary bandwidth probes but do not claim a
+     * validated combined Enhanced Broadcasting workload. Two standard outputs use
+     * ordinary Dual Output validation regardless of the stream setup label.
+     * Standard probes finish before OSN tests the combined workload.
      */
     outputs: IAutoOptimizerOutputRequest[];
 }

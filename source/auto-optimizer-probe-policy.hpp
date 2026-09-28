@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace autoOptimizer {
@@ -145,17 +146,26 @@ struct BandwidthProbeConnection {
  * supplies evidence for every output in its group; it is not extra capacity.
  * Enhanced Broadcasting tests a canvas-specific ladder and must remain separate.
  * Views borrow credentials only while planning; the returned indices contain no secrets.
+ * When supplied, the Twitch normalizer must match connection setup. It changes
+ * only the grouping keys, leaving the original probe credentials untouched.
  */
-inline std::vector<std::vector<size_t>> groupBandwidthProbes(const std::vector<BandwidthProbeConnection> &connections)
+inline std::vector<std::vector<size_t>> groupBandwidthProbes(const std::vector<BandwidthProbeConnection> &connections,
+							     std::string (*normalizeTwitchKey)(std::string) = nullptr)
 {
 	std::vector<std::vector<size_t>> groups;
+	std::vector<std::string> groupingKeys;
+	groupingKeys.reserve(connections.size());
 	for (size_t index = 0; index < connections.size(); ++index) {
 		const auto &connection = connections[index];
+		groupingKeys.emplace_back(connection.streamKey);
+		if (normalizeTwitchKey && connection.kind == "twitch-standard" && !groupingKeys.back().empty())
+			groupingKeys.back() = normalizeTwitchKey(std::move(groupingKeys.back()));
 		const bool shareable = (connection.kind == "youtube-unbound" || connection.kind == "twitch-standard") && !connection.server.empty() &&
 				       !connection.streamKey.empty();
 		const auto match = std::find_if(groups.begin(), groups.end(), [&](const auto &group) {
 			const auto &first = connections[group.front()];
-			return shareable && first.kind == connection.kind && first.server == connection.server && first.streamKey == connection.streamKey;
+			return shareable && first.kind == connection.kind && first.server == connection.server &&
+			       groupingKeys[group.front()] == groupingKeys[index];
 		});
 		if (match == groups.end())
 			groups.push_back({index});

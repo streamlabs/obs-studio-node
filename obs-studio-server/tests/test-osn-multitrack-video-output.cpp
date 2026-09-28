@@ -1,6 +1,48 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "osn-multitrack-video-output.hpp"
+#include "auto-optimizer-probe-policy.hpp"
+
+namespace probePolicy = autoOptimizer::probePolicy;
+
+TEST_CASE("Ordinary Twitch probes share their normalized bandwidth-test connection", "[auto-optimizer][bandwidth-test]")
+{
+	const std::vector<probePolicy::BandwidthProbeConnection> connections = {
+		{"twitch-standard", "auto", "live_key"},
+		{"twitch-standard", "auto", "live_key?bandwidthtest=true"},
+		{"twitch-standard", "auto", "live_key?BANDWIDTHTEST=false&%62andwidthtest=TRUE"},
+		{"twitch-standard", "auto", "live_key?auth=token"},
+		{"twitch-standard", "auto", "live_key?auth=token&bandwidthtest=false"},
+	};
+	const auto groups = probePolicy::groupBandwidthProbes(connections, osn::NormalizeTwitchBandwidthTestKey);
+	REQUIRE(groups.size() == 2);
+	CHECK(groups[0] == std::vector<size_t>{0, 1, 2});
+	CHECK(groups[1] == std::vector<size_t>{3, 4});
+	CHECK(connections[0].streamKey == "live_key");
+	CHECK(connections[2].streamKey == "live_key?BANDWIDTHTEST=false&%62andwidthtest=TRUE");
+}
+
+TEST_CASE("Normalized Twitch probe grouping preserves connection and workload boundaries", "[auto-optimizer][bandwidth-test]")
+{
+	const probePolicy::BandwidthProbeConnection twitch{"twitch-standard", "auto", "live_key"};
+	for (const auto &different : std::vector<probePolicy::BandwidthProbeConnection>{
+		     {"twitch-standard", "another-endpoint", "live_key?bandwidthtest=true"},
+		     {"twitch-standard", "auto", "another-key?bandwidthtest=true"},
+		     {"twitch-standard", "auto", "live_key?auth=token&bandwidthtest=true"},
+		     {"youtube-unbound", "auto", "live_key?bandwidthtest=true"},
+		     {"twitch-enhanced-broadcasting", "auto", "live_key?bandwidthtest=true"},
+	     }) {
+		CHECK(probePolicy::groupBandwidthProbes({twitch, different}, osn::NormalizeTwitchBandwidthTestKey).size() == 2);
+	}
+	const probePolicy::BandwidthProbeConnection enhanced{"twitch-enhanced-broadcasting", "auto", "live_key"};
+	CHECK(probePolicy::groupBandwidthProbes({enhanced, enhanced}, osn::NormalizeTwitchBandwidthTestKey).size() == 2);
+	const probePolicy::BandwidthProbeConnection emptyKey{"twitch-standard", "auto", ""};
+	CHECK(probePolicy::groupBandwidthProbes({emptyKey, emptyKey}, osn::NormalizeTwitchBandwidthTestKey).size() == 2);
+	const probePolicy::BandwidthProbeConnection youtube{"youtube-unbound", "endpoint", "youtube-key"};
+	CHECK(probePolicy::groupBandwidthProbes({youtube, youtube}, osn::NormalizeTwitchBandwidthTestKey).size() == 1);
+	const probePolicy::BandwidthProbeConnection otherYoutube{"youtube-unbound", "endpoint", "youtube-key?bandwidthtest=true"};
+	CHECK(probePolicy::groupBandwidthProbes({youtube, otherYoutube}, osn::NormalizeTwitchBandwidthTestKey).size() == 2);
+}
 
 TEST_CASE("Twitch bandwidth-test authentication is normalized fail closed", "[enhanced-broadcasting][bandwidth-test]")
 {

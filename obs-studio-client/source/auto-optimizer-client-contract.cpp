@@ -887,6 +887,11 @@ bool validEnhancedBroadcastingCombinedProof(const json &document, const RequestC
 {
 	if (context.streamSetup != "enhanced-broadcasting-dual-output")
 		return !document.contains("combinedWorkload");
+	// Two standard outputs use the aggregate proof already checked by
+	// validDualOutputProof, regardless of the stream setup label.
+	if (context.outputs.size() == 2 &&
+	    std::all_of(context.outputs.begin(), context.outputs.end(), [](const OutputContext &output) { return output.outputKind == "standard"; }))
+		return !document.contains("combinedWorkload");
 	if (!document.contains("combinedWorkload"))
 		return std::all_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) {
 			return output.measurementMode == "estimated" && output.reason != "shared_upload_estimate";

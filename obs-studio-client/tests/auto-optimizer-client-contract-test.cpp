@@ -3,6 +3,7 @@
 #include "nlohmann/json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <functional>
 #include <optional>
@@ -109,9 +110,9 @@ void checkInvalidResultMutations(const ResultFixture &fixture, const std::vector
 	}
 }
 
-ResultFixture dualOutputFixture()
+ResultFixture dualOutputFixture(std::string streamSetup = "dual-output")
 {
-	const auto prepared = prepare({{"streamSetup", "dual-output"},
+	const auto prepared = prepare({{"streamSetup", std::move(streamSetup)},
 				       {"outputs", json::array({standardOutput("horizontal", "horizontal", "twitch", twitchProbe(), 1),
 								standardOutput("vertical", "vertical", "youtube", youtubeProbe(), 2)})}});
 	json vertical = returnedStandardOutput("vertical", "vertical", "youtube", "youtube", "youtube-unbound-ramp", 10000, 5000);
@@ -444,7 +445,7 @@ TEST_CASE("Auto Optimizer client validates and projects a standard result")
 
 TEST_CASE("Auto Optimizer accepts shared YouTube evidence without doubling upload capacity")
 {
-	for (const auto *mode : {"dual-output", "mixed", "stream-shift"}) {
+	for (const auto *mode : {"dual-output", "mixed", "stream-shift", "enhanced-broadcasting-dual-output"}) {
 		CAPTURE(mode);
 		auto fixture = dualOutputFixture();
 		fixture.prepared =
@@ -467,8 +468,10 @@ TEST_CASE("Auto Optimizer accepts shared YouTube evidence without doubling uploa
 
 TEST_CASE("Auto Optimizer shares a measured upload with an unprobed destination only with joint proof")
 {
+	const auto streamSetup = GENERATE("dual-output", "enhanced-broadcasting-dual-output");
+	CAPTURE(streamSetup);
 	auto fixture = dualOutputFixture();
-	fixture.prepared = prepare({{"streamSetup", "dual-output"},
+	fixture.prepared = prepare({{"streamSetup", streamSetup},
 				    {"outputs", json::array({standardOutput("horizontal", "horizontal", "kick", nullptr, 1),
 							     standardOutput("vertical", "vertical", "youtube", youtubeProbe(), 2)})}});
 	fixture.result["legs"][0] = returnedStandardOutput("horizontal", "horizontal", "kick", "youtube", "youtube-unbound-ramp", 12000, 6000);
@@ -536,7 +539,9 @@ TEST_CASE("Auto Optimizer client projects conservative unmeasured asymmetric can
 
 TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate proof")
 {
-	const auto fixture = dualOutputFixture();
+	const auto streamSetup = GENERATE("dual-output", "enhanced-broadcasting-dual-output");
+	CAPTURE(streamSetup);
+	const auto fixture = dualOutputFixture(streamSetup);
 	REQUIRE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
 	auto estimated = fixture.result;
 	estimated.erase("aggregateUpload");
@@ -550,6 +555,7 @@ TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate
 	checkInvalidResultMutations(
 		fixture, {{"partial result status", [](json &value) { value["status"] = "partial"; }},
 			  {"missing aggregate proof", [](json &value) { value.erase("aggregateUpload"); }},
+			  {"unexpected Enhanced Broadcasting proof", [](json &value) { value["combinedWorkload"] = json::object(); }},
 			  {"wrong aggregate proof method", [](json &value) { value["aggregateUpload"]["method"] = "unexpected"; }},
 			  {"missing aggregate proof method", [](json &value) { value["aggregateUpload"].erase("method"); }},
 			  {"false concurrent hardware flag", [](json &value) { value["aggregateUpload"]["concurrentHardwareValidated"] = false; }},

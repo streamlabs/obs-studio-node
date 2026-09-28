@@ -4649,7 +4649,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 	std::vector<probePolicy::BandwidthProbeConnection> connections;
 	for (const auto *probe : orderedProbes)
 		connections.push_back({probe->kind, probe->server, probe->streamKey});
-	const auto probeGroups = probePolicy::groupBandwidthProbes(connections);
+	const auto probeGroups = probePolicy::groupBandwidthProbes(connections, osn::NormalizeTwitchBandwidthTestKey);
 	connections.clear();
 	blog(LOG_INFO, "[Auto Optimizer][Bandwidth] eligible_probes=%zu unique_connections=%zu", orderedProbes.size(), probeGroups.size());
 	for (const auto &group : probeGroups) {
