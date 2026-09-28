@@ -509,48 +509,6 @@ describe(testName, function() {
         });
     }
 
-    it('keeps unmeasured standard canvases on one conservative bitrate and frame rate', async function() {
-        const verticalCanvas = osn.VideoFactory.create();
-        try {
-            // No probe credentials are supplied, so this exercises fallback
-            // result assembly without contacting a streaming platform.
-            const response = await run({
-                streamSetup: 'dual-output',
-                outputs: [
-                    output({
-                        outputId: 'horizontal',
-                        destinations: ['youtube', 'kick'],
-                        current: { ...output().current, width: 1920, height: 1080, bitrateKbps: 4500 },
-                    }),
-                    output({
-                        outputId: 'vertical',
-                        display: 'vertical',
-                        destinations: ['youtube'],
-                        current: {
-                            ...output().current,
-                            canvasId: verticalCanvas.canvasId,
-                            width: 720,
-                            height: 1280,
-                            fpsNum: 60,
-                            bitrateKbps: 6000,
-                        },
-                    }),
-                ],
-            });
-            expect(response.result.status).to.equal('complete');
-            const [horizontal, vertical] = response.result.outputs;
-            expect(horizontal.measurement.mode).to.equal('estimated');
-            expect(vertical.measurement.mode).to.equal('estimated');
-            expect(horizontal.encoding!.bitrateKbps).to.be.at.most(4500);
-            expect(vertical.encoding!.bitrateKbps).to.equal(horizontal.encoding!.bitrateKbps);
-            expect(horizontal.videos[0].fpsNum / horizontal.videos[0].fpsDen).to.be.at.most(30);
-            expect(vertical.videos[0].fpsNum * horizontal.videos[0].fpsDen)
-                .to.equal(horizontal.videos[0].fpsNum * vertical.videos[0].fpsDen);
-        } finally {
-            verticalCanvas.destroy();
-        }
-    });
-
     it('cancels an active session before OBS_service resets its video context', async function() {
         const nativeRun = await startSessionAtHardwareAttempt();
 

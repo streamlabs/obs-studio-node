@@ -4799,15 +4799,13 @@ static void runSession(const std::shared_ptr<Session> &session)
 	if (session->standardDualOutputWorkload && !dualOutputAllocation) {
 		// Desktop applies one bitrate to both standard outputs. Preserve reliable
 		// measured bounds after a partial test, but never promote these estimates.
-		int fallback = std::min(baseRecommendation(preparedLegs[0]).bitrateKbps, baseRecommendation(preparedLegs[1]).bitrateKbps);
 		uint64_t observedSafe = 0;
 		for (const auto &result : probeResults) {
 			if (result.observedThroughputReliable && result.measuredKbps > 0 && result.safeKbps > 0)
 				observedSafe = observedSafe ? std::min(observedSafe, result.safeKbps) : result.safeKbps;
 		}
-		if (observedSafe > 0)
-			fallback = std::min(fallback, (int)std::max<uint64_t>(1, observedSafe / 2));
-		dualOutputFallbackBitrate = fallback;
+		dualOutputFallbackBitrate = qualityPolicy::composeSharedFallbackBitrateKbps(baseRecommendation(preparedLegs[0]).bitrateKbps,
+											    baseRecommendation(preparedLegs[1]).bitrateKbps, observedSafe);
 	}
 	const bool dualOutputJointActive = dualOutputAllocation.has_value();
 	std::optional<CombinedWorkloadResult> combinedWorkload;

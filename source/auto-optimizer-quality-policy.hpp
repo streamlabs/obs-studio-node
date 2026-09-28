@@ -55,6 +55,17 @@ inline int composeEstimatedBitrateKbps(int currentBitrateKbps, int requestMaximu
 	return clampRecommendedBitrateKbps((uint64_t)std::max(1, bitrateKbps));
 }
 
+// Both inputs are already capped per-output estimates. Without complete probe
+// coverage, never raise either estimate. If a reliable safe video rate was
+// observed, divide that bound between the two uploads; zero means no such evidence.
+inline int composeSharedFallbackBitrateKbps(int firstEstimateKbps, int secondEstimateKbps, uint64_t observedSafeKbps = 0)
+{
+	const int fallback = std::min(firstEstimateKbps, secondEstimateKbps);
+	if (observedSafeKbps == 0)
+		return fallback;
+	return (int)std::min<uint64_t>(fallback, std::max<uint64_t>(1, observedSafeKbps / 2));
+}
+
 enum class HardwareFailureScope {
 	Workload,
 	Encoder,

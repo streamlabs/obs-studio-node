@@ -497,6 +497,43 @@ TEST_CASE("Auto Optimizer shares a measured upload with an unprobed destination 
 	CHECK_FALSE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
 }
 
+TEST_CASE("Auto Optimizer client projects conservative unmeasured asymmetric canvases")
+{
+	json horizontal = standardOutput("horizontal", "horizontal", "youtube", nullptr, 1);
+	horizontal["destinations"].push_back("kick");
+	horizontal["current"] = current(1920, 1080, 4500, 1);
+	horizontal["current"]["fpsNum"] = 30;
+	horizontal.erase("limits");
+	json vertical = standardOutput("vertical", "vertical", "youtube", nullptr, 2);
+	vertical["current"] = current(720, 1280, 6000, 2);
+	vertical.erase("limits");
+	const auto prepared = prepare({{"streamSetup", "dual-output"}, {"outputs", json::array({horizontal, vertical})}});
+	auto result = dualOutputFixture().result;
+	result.erase("aggregateUpload");
+	for (auto &output : result["legs"]) {
+		const bool isHorizontal = output["legId"] == "horizontal";
+		output["destinations"] = json::array({{{"platform", "youtube"}}});
+		if (isHorizontal)
+			output["destinations"].push_back({{"platform", "kick"}});
+		output["measurement"] = {{"mode", "estimated"}, {"confidence", "low"}, {"reason", "dual_output"}};
+		output["recommendation"] = recommendation(isHorizontal ? 1920 : 720, isHorizontal ? 1080 : 1280, 4500);
+		output["recommendation"]["fpsNum"] = 30;
+		output.erase("limits");
+	}
+	const auto projectedResult = contract::projectResult(result.dump(), "run", prepared.context);
+	REQUIRE(projectedResult.valid);
+	const auto projected = json::parse(projectedResult.json);
+	CHECK(projected["status"] == "complete");
+	REQUIRE(projected["outputs"].size() == 2);
+	for (const auto &output : projected["outputs"]) {
+		CHECK(output["measurement"]["mode"] == "estimated");
+		CHECK(output["measurement"].value("evidence", json::array()).empty());
+		CHECK(output["encoding"]["bitrateKbps"] == 4500);
+		CHECK(output["videos"][0]["fpsNum"] == 30);
+		CHECK(output["videos"][0]["fpsDen"] == 1);
+	}
+}
+
 TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate proof")
 {
 	const auto fixture = dualOutputFixture();

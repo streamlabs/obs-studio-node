@@ -85,6 +85,50 @@ TEST_CASE("Auto Optimizer reselects asymmetric canvas tiers at one shared cadenc
 	CHECK(second.fpsDen == first.fpsDen);
 }
 
+TEST_CASE("Auto Optimizer shared fallback preserves estimates and partial probe bounds")
+{
+	CHECK(policy::composeSharedFallbackBitrateKbps(4500, 6000) == 4500);
+	CHECK(policy::composeSharedFallbackBitrateKbps(6000, 4500) == 4500);
+	CHECK(policy::composeSharedFallbackBitrateKbps(4500, 6000, 6000) == 3000);
+	CHECK(policy::composeSharedFallbackBitrateKbps(6000, 4500, 6000) == 3000);
+	CHECK(policy::composeSharedFallbackBitrateKbps(4500, 6000, 12000) == 4500);
+	CHECK(policy::composeSharedFallbackBitrateKbps(4500, 6000, 5999) == 2999);
+	CHECK(policy::composeSharedFallbackBitrateKbps(4500, 6000, 1) == 1);
+	CHECK(policy::composeSharedFallbackBitrateKbps(4500, 6000, std::numeric_limits<uint64_t>::max()) == 4500);
+	const int requestLimitedEstimate = policy::composeEstimatedBitrateKbps(4500, 1800);
+	CHECK(policy::composeSharedFallbackBitrateKbps(requestLimitedEstimate, 6000, 6000) == 1800);
+}
+
+TEST_CASE("Auto Optimizer keeps unmeasured asymmetric canvases on one conservative bitrate and frame rate")
+{
+	// Exercise fallback selection without making policy coverage depend on the
+	// runner sustaining two real encoder workloads. Integration tests cover their
+	// startup and cancellation separately.
+	const policy::VideoTuple horizontalCurrent{1920, 1080, 30, 1};
+	const policy::VideoTuple verticalCurrent{720, 1280, 60, 1};
+	for (const uint64_t observedSafeKbps : {0ULL, 6000ULL}) {
+		CAPTURE(observedSafeKbps);
+		const int bitrate = policy::composeSharedFallbackBitrateKbps(4500, 6000, observedSafeKbps);
+		CHECK(bitrate == (observedSafeKbps == 0 ? 4500 : 3000));
+		for (const auto *encoderFamily : {"obs_nvenc_h264_tex", "x264"}) {
+			CAPTURE(encoderFamily);
+			auto horizontal = policy::select(horizontalCurrent, bitrate, encoderFamily).video;
+			auto vertical = policy::select(verticalCurrent, bitrate, encoderFamily).video;
+			REQUIRE(horizontal.fpsNum != vertical.fpsNum);
+			policy::applySharedMinimumCadence(horizontal, vertical);
+			const auto first = policy::select(horizontal, bitrate, encoderFamily);
+			const auto second = policy::select(vertical, bitrate, encoderFamily);
+			CHECK(first.bitrateKbps == bitrate);
+			CHECK(second.bitrateKbps == first.bitrateKbps);
+			CHECK(first.video.fpsNum == 30);
+			CHECK(first.video.fpsDen == 1);
+			CHECK(second.video.fpsNum * first.video.fpsDen == first.video.fpsNum * second.video.fpsDen);
+			CHECK_FALSE(policy::isQualityPromotion(horizontalCurrent, first.video));
+			CHECK_FALSE(policy::isQualityPromotion(verticalCurrent, second.video));
+		}
+	}
+}
+
 TEST_CASE("Auto Optimizer shared two-leg allocation is symmetric")
 {
 	const auto forward = policy::allocateSharedTwoLegBandwidth(6000, 10000);
