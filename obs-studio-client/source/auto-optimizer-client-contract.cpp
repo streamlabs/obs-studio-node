@@ -816,6 +816,8 @@ bool parseOutputResult(const json &value, const OutputContext &expected, ParsedO
 
 bool validDualOutputProof(const json &document, const RequestContext &context, const std::vector<ParsedOutput> &outputs)
 {
+	if (outputs.size() != context.outputs.size())
+		return false;
 	const bool hasSharedEstimate =
 		std::any_of(outputs.begin(), outputs.end(), [](const ParsedOutput &output) { return output.reason == "shared_upload_estimate"; });
 	if (context.outputs.size() != 2 ||
