@@ -3781,6 +3781,7 @@ bool OBS_settings::saveSettings(std::string nameCategory, std::vector<SubCategor
 			struct obs_video_info ovi = {0};
 			obs_get_video_info(&ovi);
 			const int resetResult = obs_reset_video(&ovi);
+			osn::Video::InvalidateAppliedVideoInfo();
 			if (resetResult != OBS_VIDEO_SUCCESS) {
 				blog(LOG_ERROR, "Failed to reset video while applying advanced settings: %d", resetResult);
 				return false;

@@ -350,6 +350,13 @@ static void ForgetAppliedVideoInfo(const obs_video_info *canvas)
 	lastAppliedVideo.erase(canvas);
 }
 
+// libobs video state is process-wide, so a failed call can leave every canvas torn down.
+void osn::Video::InvalidateAppliedVideoInfo()
+{
+	std::lock_guard<std::mutex> lock(lastAppliedVideoMutex);
+	lastAppliedVideo.clear();
+}
+
 static void ApplyConfiguredVideoLevels()
 {
 	const float sdr_white_level = (float)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "SdrWhiteLevel");
@@ -431,6 +438,7 @@ void osn::Video::SetVideoContext(void *data, const int64_t id, const std::vector
 
 	if (ret != OBS_VIDEO_SUCCESS) {
 		blog(LOG_ERROR, "Failed to set video context");
+		InvalidateAppliedVideoInfo();
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
 	} else {
 		RememberAppliedVideoInfo(canvas, video);
@@ -494,12 +502,13 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 	if (ret == OBS_VIDEO_INFO_IN_USE) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while scene items are assigned to it.");
 	} else if (ret == OBS_VIDEO_REINITIALIZATION_FAILED) {
-		ForgetAppliedVideoInfo(canvas);
+		InvalidateAppliedVideoInfo();
 		osn::Video::Manager::GetInstance().free(args[0].value_union.ui64);
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Video context was removed, but the remaining video contexts failed to initialize.");
 	} else if (ret == OBS_VIDEO_CURRENTLY_ACTIVE) {
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while video is active.");
 	} else if (ret != OBS_VIDEO_SUCCESS) {
+		InvalidateAppliedVideoInfo();
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Failed to remove video context.");
 	} else {
 		ForgetAppliedVideoInfo(canvas);
