@@ -387,9 +387,11 @@ enum class ScreenshotJobState : uint32_t { Pending = 0, Done = 1, Failed = 2 };
 // batch, so a single canvas failure rejects the whole call.
 class ScreenshotWaitWorker : public Napi::AsyncWorker {
 public:
-	ScreenshotWaitWorker(Napi::Env env, Napi::Promise::Deferred deferred, std::vector<uint64_t> jobIds, std::vector<uint64_t> canvasIds, bool isArrayCall)
+	ScreenshotWaitWorker(Napi::Env env, Napi::Promise::Deferred deferred, std::shared_ptr<ipc::client> conn, std::vector<uint64_t> jobIds,
+			     std::vector<uint64_t> canvasIds, bool isArrayCall)
 		: Napi::AsyncWorker(env),
 		  deferred(deferred),
+		  conn(std::move(conn)),
 		  jobIds(std::move(jobIds)),
 		  canvasIds(std::move(canvasIds)),
 		  isArrayCall(isArrayCall),
@@ -399,12 +401,6 @@ public:
 
 	void Execute() override
 	{
-		auto conn = Controller::GetInstance().GetConnection();
-		if (!conn) {
-			SetError("Lost IPC connection while waiting for a screenshot.");
-			return;
-		}
-
 		std::vector<bool> done(jobIds.size(), false);
 		size_t remaining = jobIds.size();
 		std::string firstError;
@@ -479,6 +475,7 @@ private:
 	};
 
 	Napi::Promise::Deferred deferred;
+	std::shared_ptr<ipc::client> conn;
 	std::vector<uint64_t> jobIds;
 	std::vector<uint64_t> canvasIds;
 	bool isArrayCall;
@@ -555,7 +552,7 @@ Napi::Value display::OBS_content_takeScreenshot(const Napi::CallbackInfo &info)
 	std::vector<uint64_t> jobIds(jobIdBytes.size() / sizeof(uint64_t));
 	memcpy(jobIds.data(), jobIdBytes.data(), jobIdBytes.size());
 
-	auto worker = std::make_unique<ScreenshotWaitWorker>(env, deferred, std::move(jobIds), std::move(canvasIds), isArrayCall);
+	auto worker = std::make_unique<ScreenshotWaitWorker>(env, deferred, conn, std::move(jobIds), std::move(canvasIds), isArrayCall);
 	worker->Queue();
 	worker.release();
 

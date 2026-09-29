@@ -156,9 +156,9 @@ bool ScreenshotManager::Submit(const std::vector<uint64_t> &canvasIds, const std
 		std::lock_guard<std::mutex> lock(m_mutex);
 		PruneStaleJobsLocked();
 
-		size_t activeCount = 0;
+		size_t activeCount = m_encodesInFlight;
 		for (auto &item : m_jobs) {
-			if (!item.second.abandoned)
+			if (!item.second.abandoned && item.second.renderStage != RenderStage::Handed)
 				++activeCount;
 		}
 		if (activeCount + prepared.size() > kMaxActiveJobs) {
@@ -223,7 +223,7 @@ ScreenshotManager::Result ScreenshotManager::Query(uint64_t jobId)
 
 	/* Once GPU resources are gone this job has nothing left to report; a job
 	 * that timed out while still staged is left for RunTick to free and erase. */
-	if (job.state != State::Pending && !job.texrender && !job.stagesurf)
+	if (job.state != State::Pending && !job.texrender && !job.stagesurf && !job.tickBusy)
 		m_jobs.erase(it);
 
 	return result;
@@ -244,8 +244,8 @@ void ScreenshotManager::PruneStaleJobsLocked()
 			job.error = "Screenshot timed out.";
 		}
 
-		/* Still owns GPU objects: only RunTick may free those, under graphics. */
-		if (job.texrender || job.stagesurf) {
+		/* Still owns GPU objects, or RunTick is working on it: only RunTick may free those. */
+		if (job.texrender || job.stagesurf || job.tickBusy) {
 			job.abandoned = true;
 			++it;
 		} else {
@@ -269,145 +269,224 @@ void ScreenshotManager::Tick(void *param, float)
 
 void ScreenshotManager::RunTick()
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	struct StageWork {
+		uint64_t jobId;
+		uint64_t canvasId;
+		obs_video_info *canvas;
+		uint32_t width;
+		uint32_t height;
+		gs_texrender_t *texrender = nullptr;
+		gs_stagesurf_t *stagesurf = nullptr;
+		std::string error;
+	};
+	struct MapWork {
+		uint64_t jobId;
+		uint32_t width;
+		uint32_t height;
+		gs_texrender_t *texrender;
+		gs_stagesurf_t *stagesurf;
+		std::vector<uint8_t> pixels;
+		bool mapped = false;
+	};
+	struct GpuObjects {
+		gs_texrender_t *texrender;
+		gs_stagesurf_t *stagesurf;
+	};
 
-	bool hasWork = false;
-	for (auto &item : m_jobs) {
-		const Job &job = item.second;
-		if (job.abandoned || (job.state == State::Pending && job.renderStage != RenderStage::Handed)) {
-			hasWork = true;
-			break;
+	auto destroyGpuObjects = [](const std::vector<GpuObjects> &objects) {
+		if (objects.empty())
+			return;
+		obs_enter_graphics();
+		for (const GpuObjects &item : objects) {
+			if (item.stagesurf)
+				gs_stagesurface_destroy(item.stagesurf);
+			if (item.texrender)
+				gs_texrender_destroy(item.texrender);
+		}
+		obs_leave_graphics();
+	};
+
+	std::vector<StageWork> stageWork;
+	std::vector<MapWork> mapWork;
+	std::vector<GpuObjects> abandonedObjects;
+
+	/* Jobs handed to the work vectors are marked tickBusy so Query and
+	 * PruneStaleJobsLocked only flag them abandoned while the tick works on
+	 * them without m_mutex. */
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		for (auto it = m_jobs.begin(); it != m_jobs.end();) {
+			Job &job = it->second;
+
+			if (job.abandoned) {
+				if (job.texrender || job.stagesurf)
+					abandonedObjects.push_back({job.texrender, job.stagesurf});
+				it = m_jobs.erase(it);
+				continue;
+			}
+
+			if (job.state == State::Pending && job.renderStage == RenderStage::NotStarted) {
+				job.tickBusy = true;
+				stageWork.push_back({it->first, job.canvasId, job.canvas, job.width, job.height});
+			} else if (job.state == State::Pending && job.renderStage == RenderStage::Staged) {
+				job.tickBusy = true;
+				mapWork.push_back({it->first, job.width, job.height, job.texrender, job.stagesurf, {}});
+			}
+			++it;
 		}
 	}
-	if (!hasWork)
+
+	if (stageWork.empty() && mapWork.empty() && abandonedObjects.empty())
 		return;
 
 	obs_enter_graphics();
 
-	for (auto it = m_jobs.begin(); it != m_jobs.end();) {
-		Job &job = it->second;
+	for (GpuObjects &item : abandonedObjects) {
+		if (item.stagesurf)
+			gs_stagesurface_destroy(item.stagesurf);
+		if (item.texrender)
+			gs_texrender_destroy(item.texrender);
+	}
+	abandonedObjects.clear();
 
-		if (job.abandoned) {
-			if (job.stagesurf) {
-				gs_stagesurface_destroy(job.stagesurf);
-				job.stagesurf = nullptr;
-			}
-			if (job.texrender) {
-				gs_texrender_destroy(job.texrender);
-				job.texrender = nullptr;
-			}
-			it = m_jobs.erase(it);
+	for (StageWork &work : stageWork) {
+		/* Frame N: stage the render, queueing a GPU copy that lands by
+		 * next tick instead of stalling here to wait for it. */
+		obs_video_info *current = osn::Video::Manager::GetInstance().find(work.canvasId);
+		if (!current || current != work.canvas) {
+			work.error = "Canvas removed before the screenshot could be rendered.";
 			continue;
 		}
 
-		if (job.state != State::Pending || job.renderStage == RenderStage::Handed) {
-			++it;
+		gs_texrender_t *texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
+		if (!texrender) {
+			work.error = "Failed to create texture renderer.";
+			continue;
+		}
+		if (!gs_texrender_begin_with_color_space(texrender, work.width, work.height, GS_CS_SRGB)) {
+			gs_texrender_destroy(texrender);
+			work.error = "Failed to begin texture render.";
 			continue;
 		}
 
-		if (job.renderStage == RenderStage::NotStarted) {
-			/* Frame N: stage the render, queueing a GPU copy that lands by
-			 * next tick instead of stalling here to wait for it. */
-			obs_video_info *current = osn::Video::Manager::GetInstance().find(job.canvasId);
-			if (!current || current != job.canvas) {
-				job.state = State::Failed;
-				job.error = "Canvas removed before the screenshot could be rendered.";
-				++it;
-				continue;
-			}
+		vec4 black;
+		vec4_set(&black, 0.0f, 0.0f, 0.0f, 1.0f);
+		gs_clear(GS_CLEAR_COLOR, &black, 0.0f, 0);
 
-			gs_texrender_t *texrender = gs_texrender_create(GS_RGBA, GS_ZS_NONE);
-			if (!texrender) {
-				job.state = State::Failed;
-				job.error = "Failed to create texture renderer.";
-				++it;
-				continue;
-			}
-			if (!gs_texrender_begin_with_color_space(texrender, job.width, job.height, GS_CS_SRGB)) {
-				gs_texrender_destroy(texrender);
-				job.state = State::Failed;
-				job.error = "Failed to begin texture render.";
-				++it;
-				continue;
-			}
+		gs_viewport_push();
+		gs_projection_push();
+		gs_ortho(0.0f, float(work.width), 0.0f, float(work.height), -100.0f, 100.0f);
+		gs_set_viewport(0, 0, int(work.width), int(work.height));
 
-			vec4 black;
-			vec4_set(&black, 0.0f, 0.0f, 0.0f, 1.0f);
-			gs_clear(GS_CLEAR_COLOR, &black, 0.0f, 0);
+		gs_blend_state_push();
+		gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
 
-			gs_viewport_push();
-			gs_projection_push();
-			gs_ortho(0.0f, float(job.width), 0.0f, float(job.height), -100.0f, 100.0f);
-			gs_set_viewport(0, 0, int(job.width), int(job.height));
+		obs_render_texture(work.canvas, OBS_MAIN_VIDEO_RENDERING);
 
-			gs_blend_state_push();
-			gs_blend_function(GS_BLEND_ONE, GS_BLEND_ZERO);
+		gs_blend_state_pop();
+		gs_projection_pop();
+		gs_viewport_pop();
+		gs_texrender_end(texrender);
 
-			obs_render_texture(job.canvas, OBS_MAIN_VIDEO_RENDERING);
-
-			gs_blend_state_pop();
-			gs_projection_pop();
-			gs_viewport_pop();
-			gs_texrender_end(texrender);
-
-			gs_texture_t *tex = gs_texrender_get_texture(texrender);
-			gs_stagesurf_t *stagesurf = tex ? gs_stagesurface_create(job.width, job.height, GS_RGBA) : nullptr;
-			if (!stagesurf) {
-				gs_texrender_destroy(texrender);
-				job.state = State::Failed;
-				job.error = "Failed to create staging surface.";
-				++it;
-				continue;
-			}
-
-			gs_stage_texture(stagesurf, tex);
-			job.texrender = texrender;
-			job.stagesurf = stagesurf;
-			job.renderStage = RenderStage::Staged;
-			++it;
+		gs_texture_t *tex = gs_texrender_get_texture(texrender);
+		gs_stagesurf_t *stagesurf = tex ? gs_stagesurface_create(work.width, work.height, GS_RGBA) : nullptr;
+		if (!stagesurf) {
+			gs_texrender_destroy(texrender);
+			work.error = "Failed to create staging surface.";
 			continue;
 		}
 
-		/* Frame N+1: the staged copy has landed, so this map does not stall. */
+		gs_stage_texture(stagesurf, tex);
+		work.texrender = texrender;
+		work.stagesurf = stagesurf;
+	}
+
+	/* Frame N+1: the staged copy has landed, so this map does not stall. */
+	for (MapWork &work : mapWork) {
 		uint8_t *data = nullptr;
 		uint32_t linesize = 0;
-		if (gs_stagesurface_map(job.stagesurf, &data, &linesize)) {
-			const size_t rowBytes = size_t(job.width) * 4;
-			std::vector<uint8_t> pixels(rowBytes * job.height);
-			for (uint32_t y = 0; y < job.height; ++y) {
+		if (gs_stagesurface_map(work.stagesurf, &data, &linesize)) {
+			const size_t rowBytes = size_t(work.width) * 4;
+			work.pixels.resize(rowBytes * work.height);
+			for (uint32_t y = 0; y < work.height; ++y) {
 				const uint8_t *src = data + size_t(y) * linesize;
-				uint8_t *dst = pixels.data() + size_t(y) * rowBytes;
+				uint8_t *dst = work.pixels.data() + size_t(y) * rowBytes;
 				memcpy(dst, src, rowBytes);
 				/* Force alpha opaque, matching OBS's QImage::Format_RGBX8888 save path. */
 				for (size_t x = 3; x < rowBytes; x += 4)
 					dst[x] = 0xFF;
 			}
-			gs_stagesurface_unmap(job.stagesurf);
-
-			EncodeTask task;
-			task.jobId = it->first;
-			task.directory = job.directory;
-			task.formattedName = job.formattedName;
-			task.noSpace = job.noSpace;
-			task.width = job.width;
-			task.height = job.height;
-			task.pixels = std::move(pixels);
-			m_encodeQueue.push_back(std::move(task));
-			m_encoderCv.notify_one();
-		} else {
-			job.state = State::Failed;
-			job.error = "Failed to map staging surface.";
+			gs_stagesurface_unmap(work.stagesurf);
+			work.mapped = true;
 		}
 
-		gs_stagesurface_destroy(job.stagesurf);
-		job.stagesurf = nullptr;
-		gs_texrender_destroy(job.texrender);
-		job.texrender = nullptr;
-		job.renderStage = RenderStage::Handed;
-		++it;
+		gs_stagesurface_destroy(work.stagesurf);
+		gs_texrender_destroy(work.texrender);
+		work.stagesurf = nullptr;
+		work.texrender = nullptr;
 	}
 
 	obs_leave_graphics();
+
+	std::vector<GpuObjects> orphanedObjects;
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+
+		for (StageWork &work : stageWork) {
+			auto it = m_jobs.find(work.jobId);
+			if (it == m_jobs.end()) {
+				orphanedObjects.push_back({work.texrender, work.stagesurf});
+				continue;
+			}
+
+			Job &job = it->second;
+			job.tickBusy = false;
+			if (job.abandoned) {
+				orphanedObjects.push_back({work.texrender, work.stagesurf});
+				m_jobs.erase(it);
+			} else if (!work.error.empty()) {
+				job.state = State::Failed;
+				job.error = work.error;
+			} else {
+				job.texrender = work.texrender;
+				job.stagesurf = work.stagesurf;
+				job.renderStage = RenderStage::Staged;
+			}
+		}
+
+		for (MapWork &work : mapWork) {
+			auto it = m_jobs.find(work.jobId);
+			if (it == m_jobs.end())
+				continue;
+
+			Job &job = it->second;
+			job.tickBusy = false;
+			job.texrender = nullptr;
+			job.stagesurf = nullptr;
+			job.renderStage = RenderStage::Handed;
+
+			if (job.abandoned) {
+				m_jobs.erase(it);
+			} else if (!work.mapped) {
+				job.state = State::Failed;
+				job.error = "Failed to map staging surface.";
+			} else {
+				EncodeTask task;
+				task.jobId = work.jobId;
+				task.directory = job.directory;
+				task.formattedName = job.formattedName;
+				task.noSpace = job.noSpace;
+				task.width = work.width;
+				task.height = work.height;
+				task.pixels = std::move(work.pixels);
+				m_encodeQueue.push_back(std::move(task));
+				++m_encodesInFlight;
+				m_encoderCv.notify_one();
+			}
+		}
+	}
+
+	destroyGpuObjects(orphanedObjects);
 }
 
 void ScreenshotManager::EncoderThreadMain()
@@ -446,6 +525,7 @@ void ScreenshotManager::EncoderThreadMain()
 			blog(LOG_ERROR, "[SCREENSHOT] %s", error.c_str());
 
 		lock.lock();
+		--m_encodesInFlight;
 		auto it = m_jobs.find(task.jobId);
 		if (it != m_jobs.end()) {
 			it->second.state = ok ? State::Done : State::Failed;
@@ -477,16 +557,24 @@ void ScreenshotManager::Shutdown()
 		m_encoderThread.join();
 	m_encoderThread = std::thread();
 
-	std::lock_guard<std::mutex> lock(m_mutex);
-	if (!m_jobs.empty()) {
+	std::vector<std::pair<gs_texrender_t *, gs_stagesurf_t *>> leftovers;
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_encodeQueue.clear();
+		m_encodesInFlight = 0;
+		for (auto &item : m_jobs)
+			leftovers.emplace_back(item.second.texrender, item.second.stagesurf);
+		m_jobs.clear();
+	}
+
+	if (!leftovers.empty()) {
 		obs_enter_graphics();
-		for (auto &item : m_jobs) {
-			if (item.second.stagesurf)
-				gs_stagesurface_destroy(item.second.stagesurf);
-			if (item.second.texrender)
-				gs_texrender_destroy(item.second.texrender);
+		for (auto &item : leftovers) {
+			if (item.second)
+				gs_stagesurface_destroy(item.second);
+			if (item.first)
+				gs_texrender_destroy(item.first);
 		}
 		obs_leave_graphics();
-		m_jobs.clear();
 	}
 }

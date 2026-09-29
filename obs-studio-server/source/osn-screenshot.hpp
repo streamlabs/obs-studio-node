@@ -86,6 +86,7 @@ private:
 		std::string path;
 		std::string error;
 		bool abandoned = false;
+		bool tickBusy = false; // RunTick is working on this job without m_mutex; never erase it meanwhile.
 
 		gs_texrender_t *texrender = nullptr;
 		gs_stagesurf_t *stagesurf = nullptr;
@@ -114,8 +115,9 @@ private:
 	void RunTick();
 	void EncoderThreadMain();
 
-	// Protects everything below. Lock order is m_mutex -> graphics ->
-	// mixes_mutex (RunTick and Shutdown enter graphics while holding this).
+	// Protects everything below. It is never held while in graphics: RunTick
+	// and Shutdown collect work under it, release it, then enter graphics, and
+	// only the tick creates or destroys a job's GPU objects.
 	// obs_add_tick_callback/obs_remove_tick_callback must never be called
 	// while holding m_mutex: a tick runs under libobs' draw_callbacks_mutex,
 	// so doing so risks an ABBA deadlock against a tick that is itself
@@ -129,4 +131,5 @@ private:
 	std::condition_variable m_encoderCv;
 	std::deque<EncodeTask> m_encodeQueue;
 	bool m_encoderStop = false;
+	size_t m_encodesInFlight = 0; // Queued plus currently encoding; counts toward the job cap.
 };
