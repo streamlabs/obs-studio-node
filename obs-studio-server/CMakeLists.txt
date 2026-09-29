@@ -412,6 +412,10 @@ SET(osn-server_SOURCES
     ###### memory-manager ######
     "${PROJECT_SOURCE_DIR}/source/memory-manager.cpp"
     "${PROJECT_SOURCE_DIR}/source/memory-manager.h"
+
+    ###### osn-screenshot ######
+    "${PROJECT_SOURCE_DIR}/source/osn-screenshot.cpp"
+    "${PROJECT_SOURCE_DIR}/source/osn-screenshot.hpp"
 )
 
 if (APPLE)

@@ -2502,22 +2502,34 @@ interface INodeObs {
 
     /**
      * Renders the program output of `video` at its base resolution and writes
-     * it as a PNG, mirroring OBS Studio's "Screenshot Output". The file is
-     * named `Screenshot <filenameFormat>.png` with the OBS filename tokens
-     * expanded; when `noSpace` is true every space becomes `_`. If the name is
-     * taken, ` (2)`, ` (3)`, ... (or `_2`, `_3`, ...) is inserted before the
-     * extension. Synchronous: the caller blocks while the frame is rendered,
-     * read back from the GPU and encoded.
-     * @param video - Video context whose main (program) mix is captured
+     * it as a PNG, mirroring OBS Studio's "Screenshot Output". Capture happens
+     * off the graphics thread on the next couple of frames and encoding
+     * happens on a background thread, so this never blocks IPC or rendering;
+     * the returned promise resolves once the PNG has been written.
+     *
+     * The file is named `Screenshot <filenameFormat>.png` with the OBS
+     * filename tokens expanded; missing subfolders in the format are created.
+     * When `noSpace` is true every space becomes `_`. If the name is taken,
+     * ` (2)`, ` (3)`, ... (or `_2`, `_3`, ...) is inserted before the
+     * extension.
+     *
+     * Passing an array captures every canvas from the same frame in one call.
+     * Each file name then also gets its canvas' base resolution appended
+     * (e.g. `Screenshot 2026-09-29 12-00-00 1920x1080.png`) before the normal
+     * dedupe suffix. If any canvas fails, the whole call rejects naming that
+     * canvas; screenshots already written for other canvases in the batch are
+     * not removed. At most 4 screenshot jobs may be in flight at once.
+     * @param video - Video context(s) whose main (program) mix is captured
      * @param directory - Existing directory to write into
      * @param filenameFormat - OBS filename formatting pattern, e.g. `%CCYY-%MM-%DD %hh-%mm-%ss`
      * @param noSpace - Replace spaces in the generated file name with underscores
-     * @returns The path written and the image dimensions
-     * @throws {TypeError} If `video` is not an `IVideo` instance or a string argument is missing
-     * @throws {Error} If the canvas has no running video, the directory does not exist,
-     * rendering, readback or PNG encoding fails, or the IPC call fails
+     * @returns The path written and the image dimensions for each canvas
+     * @throws {TypeError} If `video` is not an `IVideo` (or a non-empty array of them) or a string argument is missing
+     * @throws {Error} If a canvas has no running video, the directory does not exist, rendering,
+     * readback or PNG encoding fails, too many screenshots are already in flight, or the IPC call fails
      */
-    OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): IScreenshotResult;
+    OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult>;
+    OBS_content_takeScreenshot(video: IVideo[], directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult[]>;
 }
 
 export const enum VCamOutputType {

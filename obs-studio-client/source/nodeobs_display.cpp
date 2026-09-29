@@ -33,6 +33,11 @@
 #include "callback-manager.hpp"
 #include "video.hpp"
 
+#include <chrono>
+#include <cstring>
+#include <memory>
+#include <thread>
+
 #ifdef WIN32
 static BOOL CALLBACK EnumChromeWindowsProc(HWND hwnd, LPARAM lParam)
 {
@@ -344,42 +349,205 @@ Napi::Value display::OBS_content_createIOSurface(const Napi::CallbackInfo &info)
 	return Napi::Number::New(info.Env(), response[1].value_union.ui32);
 }
 
+namespace {
+
+// Extracts an IPC error without throwing, since a Submit or poll failure must
+// reject the returned promise rather than throw synchronously.
+bool ExtractCallError(const std::vector<ipc::value> &response, std::string &error)
+{
+	if (response.empty()) {
+		error = "Failed to make IPC call, verify IPC status.";
+		return false;
+	}
+	if (response.size() == 1 && response[0].type == ipc::type::Null) {
+		error = response[0].value_str;
+		return false;
+	}
+	if ((ErrorCode)response[0].value_union.ui64 != ErrorCode::Ok) {
+		error = response.size() > 1 ? response[1].value_str : "Unknown screenshot error.";
+		return false;
+	}
+	return true;
+}
+
+Napi::Object ScreenshotResultToObject(Napi::Env env, const std::string &path, uint32_t width, uint32_t height)
+{
+	Napi::Object object = Napi::Object::New(env);
+	object.Set("path", Napi::String::New(env, path));
+	object.Set("width", Napi::Number::New(env, width));
+	object.Set("height", Napi::Number::New(env, height));
+	return object;
+}
+
+// Mirrors ScreenshotManager::State on the server; the wire value is just the enum ordinal.
+enum class ScreenshotJobState : uint32_t { Pending = 0, Done = 1, Failed = 2 };
+
+// Polls OBS_content_getScreenshotResult instead of blocking the IPC thread on
+// the server's own tick-driven capture. One worker waits for every job in a
+// batch, so a single canvas failure rejects the whole call.
+class ScreenshotWaitWorker : public Napi::AsyncWorker {
+public:
+	ScreenshotWaitWorker(Napi::Env env, Napi::Promise::Deferred deferred, std::vector<uint64_t> jobIds, std::vector<uint64_t> canvasIds, bool isArrayCall)
+		: Napi::AsyncWorker(env),
+		  deferred(deferred),
+		  jobIds(std::move(jobIds)),
+		  canvasIds(std::move(canvasIds)),
+		  isArrayCall(isArrayCall),
+		  results(this->jobIds.size())
+	{
+	}
+
+	void Execute() override
+	{
+		auto conn = Controller::GetInstance().GetConnection();
+		if (!conn) {
+			SetError("Lost IPC connection while waiting for a screenshot.");
+			return;
+		}
+
+		std::vector<bool> done(jobIds.size(), false);
+		size_t remaining = jobIds.size();
+
+		while (remaining > 0) {
+			for (size_t i = 0; i < jobIds.size(); ++i) {
+				if (done[i])
+					continue;
+
+				std::vector<ipc::value> response =
+					conn->call_synchronous_helper("Display", "OBS_content_getScreenshotResult", {ipc::value(jobIds[i])});
+
+				std::string error;
+				if (!ExtractCallError(response, error)) {
+					SetError("Screenshot failed for canvas " + std::to_string(canvasIds[i]) + ": " + error);
+					return;
+				}
+
+				const auto state = ScreenshotJobState(response[1].value_union.ui32);
+				if (state == ScreenshotJobState::Pending)
+					continue;
+
+				if (state == ScreenshotJobState::Failed) {
+					SetError("Screenshot failed for canvas " + std::to_string(canvasIds[i]) + ": " + response[5].value_str);
+					return;
+				}
+
+				results[i].path = response[2].value_str;
+				results[i].width = response[3].value_union.ui32;
+				results[i].height = response[4].value_union.ui32;
+				done[i] = true;
+				--remaining;
+			}
+
+			if (remaining > 0)
+				std::this_thread::sleep_for(std::chrono::milliseconds(16));
+		}
+	}
+
+	void OnOK() override
+	{
+		Napi::Env env = Env();
+		if (!isArrayCall) {
+			deferred.Resolve(ScreenshotResultToObject(env, results[0].path, results[0].width, results[0].height));
+			return;
+		}
+
+		Napi::Array array = Napi::Array::New(env, results.size());
+		for (uint32_t i = 0; i < results.size(); ++i)
+			array.Set(i, ScreenshotResultToObject(env, results[i].path, results[i].width, results[i].height));
+		deferred.Resolve(array);
+	}
+
+	void OnError(const Napi::Error &error) override { deferred.Reject(Napi::Error::New(Env(), error.Message()).Value()); }
+
+private:
+	struct Result {
+		std::string path;
+		uint32_t width = 0;
+		uint32_t height = 0;
+	};
+
+	Napi::Promise::Deferred deferred;
+	std::vector<uint64_t> jobIds;
+	std::vector<uint64_t> canvasIds;
+	bool isArrayCall;
+	std::vector<Result> results;
+};
+
+} // namespace
+
 Napi::Value display::OBS_content_takeScreenshot(const Napi::CallbackInfo &info)
 {
+	Napi::Env env = info.Env();
+
 	if (info.Length() < 3 || !info[0].IsObject() || !info[1].IsString() || !info[2].IsString()) {
-		Napi::TypeError::New(info.Env(),
-				     "OBS_content_takeScreenshot(video, directory, filenameFormat, noSpace?) expects a Video object and two strings.")
+		Napi::TypeError::New(env, "OBS_content_takeScreenshot(video, directory, filenameFormat, noSpace?) expects a Video object "
+					  "(or an array of them) and two strings.")
 			.ThrowAsJavaScriptException();
-		return info.Env().Undefined();
+		return env.Undefined();
 	}
 
-	osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[0].ToObject());
-	if (!video) {
-		Napi::TypeError::New(info.Env(), "OBS_content_takeScreenshot: first argument is not a Video object.").ThrowAsJavaScriptException();
-		return info.Env().Undefined();
+	const bool isArrayCall = info[0].IsArray();
+	std::vector<uint64_t> canvasIds;
+
+	if (isArrayCall) {
+		Napi::Array videos = info[0].As<Napi::Array>();
+		if (videos.Length() == 0) {
+			Napi::TypeError::New(env, "OBS_content_takeScreenshot: video array must not be empty.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+
+		canvasIds.reserve(videos.Length());
+		for (uint32_t i = 0; i < videos.Length(); ++i) {
+			Napi::Value item = videos.Get(i);
+			osn::Video *video = item.IsObject() ? Napi::ObjectWrap<osn::Video>::Unwrap(item.ToObject()) : nullptr;
+			if (!video) {
+				Napi::TypeError::New(env, "OBS_content_takeScreenshot: video array must only contain Video objects.")
+					.ThrowAsJavaScriptException();
+				return env.Undefined();
+			}
+			canvasIds.push_back(video->canvasId);
+		}
+	} else {
+		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[0].ToObject());
+		if (!video) {
+			Napi::TypeError::New(env, "OBS_content_takeScreenshot: first argument is not a Video object.").ThrowAsJavaScriptException();
+			return env.Undefined();
+		}
+		canvasIds.push_back(video->canvasId);
 	}
 
-	uint64_t canvasId = video->canvasId;
 	std::string directory = info[1].ToString().Utf8Value();
 	std::string filenameFormat = info[2].ToString().Utf8Value();
 	/* ipc::value has no bool constructor; a bare bool would promote to int32 and mismatch the registered UInt32. */
 	uint32_t noSpace = (info.Length() > 3 && !info[3].IsUndefined() && info[3].ToBoolean().Value()) ? 1 : 0;
 
+	std::vector<char> canvasIdBytes(canvasIds.size() * sizeof(uint64_t));
+	memcpy(canvasIdBytes.data(), canvasIds.data(), canvasIdBytes.size());
+
 	auto conn = GetConnection(info);
 	if (!conn)
-		return info.Env().Undefined();
+		return env.Undefined();
 
 	std::vector<ipc::value> response = conn->call_synchronous_helper(
-		"Display", "OBS_content_takeScreenshot", {ipc::value(canvasId), ipc::value(directory), ipc::value(filenameFormat), ipc::value(noSpace)});
+		"Display", "OBS_content_takeScreenshot", {ipc::value(canvasIdBytes), ipc::value(directory), ipc::value(filenameFormat), ipc::value(noSpace)});
 
-	if (!ValidateResponse(info, response))
-		return info.Env().Undefined();
+	auto deferred = Napi::Promise::Deferred::New(env);
 
-	Napi::Object result = Napi::Object::New(info.Env());
-	result.Set("path", Napi::String::New(info.Env(), response[1].value_str));
-	result.Set("width", Napi::Number::New(info.Env(), response[2].value_union.ui32));
-	result.Set("height", Napi::Number::New(info.Env(), response[3].value_union.ui32));
-	return result;
+	std::string submitError;
+	if (!ExtractCallError(response, submitError)) {
+		deferred.Reject(Napi::Error::New(env, submitError).Value());
+		return deferred.Promise();
+	}
+
+	const std::vector<char> &jobIdBytes = response[1].value_bin;
+	std::vector<uint64_t> jobIds(jobIdBytes.size() / sizeof(uint64_t));
+	memcpy(jobIds.data(), jobIdBytes.data(), jobIdBytes.size());
+
+	auto worker = std::make_unique<ScreenshotWaitWorker>(env, deferred, std::move(jobIds), std::move(canvasIds), isArrayCall);
+	worker->Queue();
+	worker.release();
+
+	return deferred.Promise();
 }
 
 void display::Init(Napi::Env env, Napi::Object exports)

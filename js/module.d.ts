@@ -1159,7 +1159,8 @@ interface INodeObs {
     readonly AutoOptimizer: IAutoOptimizer;
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
     OBS_settings_saveSettings(category: string, settings: any[]): void;
-    OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): IScreenshotResult;
+    OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult>;
+    OBS_content_takeScreenshot(video: IVideo[], directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult[]>;
 }
 export declare const enum VCamOutputType {
     Invalid = 0,

@@ -42,6 +42,7 @@
 #include "osn-network.hpp"
 #include "osn-audio-track.hpp"
 #include "memory-manager.h"
+#include "osn-screenshot.hpp"
 
 //to destroy cpu usage object
 #include "osn-global.hpp"
@@ -1667,6 +1668,8 @@ void OBS_API::destroyOBS_API(void)
 	}
 #endif
 	OBS_content::OBS_content_shutdownDisplays();
+
+	ScreenshotManager::GetInstance().Shutdown();
 
 	autoOptimizer::Shutdown();
 
