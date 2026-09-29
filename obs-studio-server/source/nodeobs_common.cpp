@@ -30,18 +30,9 @@
 
 #include <thread>
 
-/* Screenshot support: PNG encoding through the vendored stb_image_write.
- * STBI_WRITE_NO_STDIO removes stb's own fopen()-based writers; bytes are
- * streamed through libobs' os_fopen so UTF-8 paths work on Windows. This is
- * the single translation unit that owns the implementation. */
 #include <graphics/vec4.h>
 #include <util/platform.h>
-#include <cerrno>
 #include <cstring>
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_STATIC
-#define STBI_WRITE_NO_STDIO
-#include "third-party/stb_image_write.h"
 
 std::map<std::string, OBS::Display *> displays;
 std::recursive_mutex displaysMutex;
@@ -869,35 +860,10 @@ static bool BuildScreenshotPath(const std::string &directory, const std::string 
 	return true;
 }
 
-struct StbFileContext {
-	FILE *file = nullptr;
-	bool failed = false;
-};
-
-static void StbWriteToFile(void *context, void *data, int size)
-{
-	StbFileContext *ctx = static_cast<StbFileContext *>(context);
-	if (ctx->failed || size <= 0)
-		return;
-	if (fwrite(data, 1, size_t(size), ctx->file) != size_t(size))
-		ctx->failed = true;
-}
-
 static bool WriteScreenshotPng(const std::string &path, const ScreenshotPixels &px, std::string &error)
 {
-	StbFileContext ctx;
-	ctx.file = os_fopen(path.c_str(), "wb");
-	if (!ctx.file) {
-		error = "Failed to open '" + path + "' for writing: " + std::string(strerror(errno));
-		return false;
-	}
-
-	const int written = stbi_write_png_to_func(StbWriteToFile, &ctx, int(px.width), int(px.height), 4, px.rgba.data(), int(px.width * 4));
-	const bool closeFailed = fclose(ctx.file) != 0;
-
-	if (!written || ctx.failed || closeFailed) {
-		os_unlink(path.c_str());
-		error = "Failed to encode or write PNG '" + path + "'.";
+	if (!gs_save_png_file(path.c_str(), px.rgba.data(), GS_RGBA, px.width, px.height, px.width * 4)) {
+		error = "Failed to write PNG '" + path + "'.";
 		return false;
 	}
 	return true;
