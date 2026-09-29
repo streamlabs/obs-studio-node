@@ -35,7 +35,7 @@
 // their estimated total size within a shared memory budget.
 //
 // One worker owns cache decisions and accounting. OBS callbacks only invalidate
-// entries; media queries and settings changes run in the graphics tick callback.
+// entries; media queries and cache-enable writes run in the graphics tick callback.
 //
 // The ffmpeg_source metadata handlers execute synchronously and access its
 // current media player. OBS source updates and video ticks can destroy or
@@ -48,6 +48,8 @@
 // cannot associate a new filename with the previous player's metadata.
 // Guard entry also serializes with cache-setting writes: validation and the
 // caching patch must finish before an external writer can change the file.
+// The guard then clears the cache flag in live and incoming settings so the
+// changed player starts uncached until its metadata has been reevaluated.
 class MediaCacheManager {
 	struct SourceEntry;
 
@@ -108,6 +110,12 @@ public:
 	// property callbacks that mutate those settings. Retains the original
 	// registration so finishing this guard cannot affect a later registration
 	// of the same source.
+	// Clears the manager-owned "caching" flag in live settings before returning.
+	// Pass any separate settings object that will be applied as pendingSettings;
+	// its caching flag is also cleared so a copied enable cannot be written back.
+	// Both pointers are borrowed. Other settings are preserved. The caller must
+	// not set caching again; the worker reevaluates it after the guarded update.
+	// The existing reservation is reconciled by that evaluation, not guard entry.
 	// Nested updates are supported; queries wait until all guards for this source
 	// finish and OBS has had a source-update phase. May wait for an executing cache
 	// setting write before returning; no queue lock is held while waiting. Does not
@@ -116,7 +124,7 @@ public:
 	// No queue lock is held across the caller's OBS operations. Null/unregistered
 	// sources and calls while stopped or stopping return an inactive guard.
 	// The manager and OBS runtime must outlive the guard.
-	[[nodiscard]] SourceSettingsUpdate trackSourceSettingsUpdate(obs_source_t *source);
+	[[nodiscard]] SourceSettingsUpdate trackSourceSettingsUpdate(obs_source_t *source, obs_data_t *pendingSettings = nullptr);
 
 	// Requests reevaluation after a registered source's activity change.
 	// Use trackSourceSettingsUpdate() around settings writes instead.

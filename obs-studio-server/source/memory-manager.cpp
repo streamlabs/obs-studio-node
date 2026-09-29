@@ -173,7 +173,7 @@ void MediaCacheManager::requestCacheUpdate(obs_source_t *source)
 	m_changed.notify_all();
 }
 
-MediaCacheManager::SourceSettingsUpdate MediaCacheManager::trackSourceSettingsUpdate(obs_source_t *source)
+MediaCacheManager::SourceSettingsUpdate MediaCacheManager::trackSourceSettingsUpdate(obs_source_t *source, obs_data_t *pendingSettings)
 {
 	std::shared_ptr<SourceEntry> entry;
 	{
@@ -194,6 +194,17 @@ MediaCacheManager::SourceSettingsUpdate MediaCacheManager::trackSourceSettingsUp
 		++entry->settingsUpdatesInProgress;
 		m_notified = true;
 	}
+	// A partial update would otherwise inherit the old player's cache enable.
+	// Clear it before the caller can mutate local_file, and also sanitize any
+	// supplied settings copy. Do not call obs_source_update here: that would
+	// schedule the plugin before the caller has finished its settings changes.
+	OBSDataAutoRelease settings = obs_source_get_settings(source);
+	obs_data_set_bool(settings, "caching", false);
+	if (pendingSettings)
+		obs_data_set_bool(pendingSettings, "caching", false);
+	// Keep the old reservation until a fresh query after the guarded update.
+	// An older SetCaching completion may still be waiting for the worker, and
+	// the old player can still be alive until OBS applies the external update.
 	m_changed.notify_all();
 	return {this, std::move(entry)};
 }

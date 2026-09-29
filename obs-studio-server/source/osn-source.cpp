@@ -357,7 +357,7 @@ void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::va
 	}
 
 	{
-		auto settingsUpdate = MediaCacheManager::GetInstance().trackSourceSettingsUpdate(src);
+		auto settingsUpdate = MediaCacheManager::GetInstance().trackSourceSettingsUpdate(src, sets);
 		obs_source_update(src, sets);
 	}
 	obs_data_release(sets);

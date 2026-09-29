@@ -194,7 +194,7 @@ void setLooping(MediaCacheManager &manager, obs_source_t *source, bool looping)
 {
 	OBSDataAutoRelease settings = obs_data_create();
 	obs_data_set_bool(settings, "looping", looping);
-	auto update = manager.trackSourceSettingsUpdate(source);
+	auto update = manager.trackSourceSettingsUpdate(source, settings);
 	obs_source_update(source, settings);
 }
 
@@ -202,7 +202,7 @@ void setFile(MediaCacheManager &manager, obs_source_t *source, const char *file)
 {
 	OBSDataAutoRelease settings = obs_data_create();
 	obs_data_set_string(settings, "local_file", file);
-	auto update = manager.trackSourceSettingsUpdate(source);
+	auto update = manager.trackSourceSettingsUpdate(source, settings);
 	obs_source_update(source, settings);
 }
 
@@ -394,11 +394,10 @@ TEST_CASE("Media cache finishes a validated cache write before a settings guard 
 		guardAttempted.set_value();
 		auto update = manager->trackSourceSettingsUpdate(source);
 		overlapped = writeInProgress;
-		// Use the uncached settings captured by an external editor. A stale
-		// enable must not overwrite its false flag after it switches files.
+		// Omit caching, as callers of the public partial-update API can do.
+		// The guard must clear the old enable before these settings are merged.
 		OBSDataAutoRelease settings = obs_data_create();
 		obs_data_set_string(settings, "local_file", "large.webm");
-		obs_data_set_bool(settings, "caching", false);
 		obs_source_update(source, settings);
 		guardEntered.set_value();
 		return true;
@@ -419,6 +418,49 @@ TEST_CASE("Media cache finishes a validated cache write before a settings guard 
 	REQUIRE(MediaCacheManagerTestAccess::waitForQueuesToDrain(*manager));
 	CHECK(MediaCacheManagerTestAccess::reservedBytes(*manager) == 0);
 	CHECK_FALSE(isCachingEnabled(source));
+}
+
+TEST_CASE("Media cache reconciles reservations after partial file updates", "[media-cache][settings]")
+{
+	MediaState changing, waiting;
+	ObsCore core;
+	auto manager = MediaCacheManagerTestAccess::create(300);
+	auto source = makeCacheTestSource("small.webm", changing);
+	auto other = makeCacheTestSource("medium.webm", waiting);
+	manager->registerSource(source);
+	for (int i = 0; i < 2; ++i)
+		runFrame(*manager, {source});
+	REQUIRE(isCachingEnabled(source));
+	REQUIRE(MediaCacheManagerTestAccess::reservedBytes(*manager) == 150);
+	manager->registerSource(other);
+	runFrame(*manager, {source, other});
+	REQUIRE_FALSE(isCachingEnabled(other)); // Its 300 bytes do not fit yet.
+	{
+		auto update = manager->trackSourceSettingsUpdate(source);
+		CHECK_FALSE(isCachingEnabled(source));
+		OBSDataAutoRelease settings = obs_data_create();
+		obs_data_set_string(settings, "local_file", "large.webm");
+		obs_source_update(source, settings);
+		for (int i = 0; i < 3; ++i)
+			runFrame(*manager, {source, other});
+		CHECK(changing.appliedWidth == 100);
+		CHECK(changing.queries == 1);
+		CHECK(changing.largeFileCachedUpdates == 0);
+		CHECK_FALSE(isCachingEnabled(source));
+		CHECK_FALSE(isCachingEnabled(other));
+		CHECK(MediaCacheManagerTestAccess::reservedBytes(*manager) == 150);
+	}
+	runFrame(*manager, {source, other}); // First callback still precedes the fence.
+	CHECK(changing.queries == 1);
+	CHECK(MediaCacheManagerTestAccess::reservedBytes(*manager) == 150);
+	for (int i = 0; i < 5; ++i)
+		runFrame(*manager, {source, other});
+	REQUIRE(MediaCacheManagerTestAccess::waitForQueuesToDrain(*manager));
+	CHECK(changing.queries >= 2); // Budget rebalancing can request another query.
+	CHECK(changing.largeFileCachedUpdates == 0);
+	CHECK_FALSE(isCachingEnabled(source)); // 1500 bytes exceed the budget.
+	CHECK(isCachingEnabled(other));
+	CHECK(MediaCacheManagerTestAccess::reservedBytes(*manager) == 300);
 }
 
 TEST_CASE("Media cache cancels a queued enable when a settings guard starts first", "[media-cache][settings]")
@@ -564,6 +606,78 @@ TEST_CASE("OSN source settings entry points defer media cache queries", "[media-
 	for (int i = 0; i < 3; ++i)
 		runFrame(manager, {source});
 	CHECK(state.queries == 2);
+}
+
+TEST_CASE("OSN source edits discard the previous media cache enable", "[media-cache][settings]")
+{
+	bool useProperties = false;
+	bool useSettingsCopy = false;
+	SECTION("Partial Source Update") {}
+	SECTION("Source Update with a copied cache enable")
+	{
+		useSettingsCopy = true;
+	}
+	SECTION("Source GetProperties")
+	{
+		useProperties = true;
+	}
+
+	MediaState state;
+	ObsCore core;
+	auto source = makeCacheTestSource("small.webm", state);
+	RegisteredApiSource registration(source);
+	auto &manager = MediaCacheManager::GetInstance();
+	for (int i = 0; i < 2; ++i)
+		runFrame(manager, {source});
+	REQUIRE(isCachingEnabled(source));
+	REQUIRE(state.queries == 1);
+	REQUIRE(MediaCacheManagerTestAccess::reservedBytes(manager) == 150);
+
+	std::vector<ipc::value> response;
+	if (useProperties) {
+		bool called = false;
+		state.onProperties = [&](obs_data_t *settings) {
+			called = true;
+			CHECK_FALSE(obs_data_get_bool(settings, "caching"));
+			obs_data_set_string(settings, "local_file", "large.webm");
+			runFrame(manager, {source});
+			// Guard entry must not schedule a plugin update of its own while
+			// property callbacks are still changing the live settings.
+			CHECK(state.appliedWidth == 10);
+			CHECK(state.queries == 1);
+		};
+		osn::Source::GetProperties(nullptr, 0, {ipc::value(registration.id)}, response);
+		CHECK(called);
+		state.onProperties = {};
+	} else {
+		OBSDataAutoRelease current = obs_source_get_settings(source);
+		OBSDataAutoRelease settings = useSettingsCopy ? obs_data_create_from_json(obs_data_get_json(current)) : obs_data_create();
+		obs_data_set_string(settings, "local_file", "large.webm");
+		if (useSettingsCopy)
+			REQUIRE(obs_data_get_bool(settings, "caching"));
+		else
+			REQUIRE_FALSE(obs_data_has_user_value(settings, "caching"));
+		osn::Source::Update(nullptr, 0, {ipc::value(registration.id), ipc::value(obs_data_get_json(settings))}, response);
+	}
+	REQUIRE(!response.empty());
+	REQUIRE(static_cast<ErrorCode>(response[0].value_union.ui64) == ErrorCode::Ok);
+	CHECK_FALSE(isCachingEnabled(source));
+	CHECK(state.appliedWidth == 10);
+	CHECK(MediaCacheManagerTestAccess::reservedBytes(manager) == 150);
+	runFrame(manager, {source});
+	CHECK(state.appliedWidth == 100);
+	CHECK(state.queries == 1);
+	CHECK(state.largeFileCachedUpdates == 0);
+	CHECK_FALSE(isCachingEnabled(source));
+	CHECK(MediaCacheManagerTestAccess::reservedBytes(manager) == 150);
+	runFrame(manager, {source});
+	CHECK(state.queries == 2);
+	CHECK_FALSE(isCachingEnabled(source));
+	CHECK(MediaCacheManagerTestAccess::reservedBytes(manager) == 1500);
+	runFrame(manager, {source});
+	REQUIRE(MediaCacheManagerTestAccess::waitForQueuesToDrain(manager));
+	CHECK(isCachingEnabled(source));
+	CHECK(state.largeFileCachedUpdates == 1); // Only after the new size is admitted.
 }
 
 TEST_CASE("Media cache serializes rebalance and coalesces notifications", "[media-cache]")

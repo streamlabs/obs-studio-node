@@ -1306,8 +1306,12 @@ export interface IConfigurable {
      * Supported settings depend on the source or encoder type.
      * For video sources, OBS applies changes during video-frame processing,
      * so their effects may still be pending when this method returns.
+     * For media-file sources (`ffmpeg_source`), OSN owns the internal `caching`
+     * setting. Updates reset it to false while OSN reevaluates cache eligibility
+     * and memory use; supplying `caching: true` does not force caching.
      *
-     * @param settings JSON-serializable settings to merge; omitted keys are preserved.
+     * @param settings JSON-serializable settings to merge; omitted keys are preserved
+     * except for the OSN-managed media caching flag described above.
      * @returns Nothing. Success does not guarantee that the changes have taken effect.
      * @throws {TypeError} If settings cannot be converted to an object or JSON serialized.
      * @throws {Error} If the source or encoder no longer exists, or the request to OBS fails.
