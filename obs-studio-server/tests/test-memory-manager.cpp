@@ -205,8 +205,9 @@ void runFrame(MediaCacheManager &manager, std::initializer_list<obs_source_t *> 
 	REQUIRE(MediaCacheManagerTestAccess::waitForWorkerPass(manager));
 }
 
-// Exercise OSN's native source entry points with the controlled plugin above.
-// The real OSN bootstrap loads the FFmpeg plugin and cannot use this source ID.
+// Exercise OSN source entry points with the fake ffmpeg_source registered by
+// ObsCore. Full OSN initialization would load the real implementation under
+// the same source ID.
 class RegisteredApiSource {
 public:
 	explicit RegisteredApiSource(obs_source_t *source) : id(osn::Source::Manager::GetInstance().allocate(source))

@@ -101,7 +101,8 @@ MediaCacheManager::SourceSettingsUpdate::~SourceSettingsUpdate()
 {
 	if (m_manager)
 		m_manager->finishSourceSettingsUpdate(m_sourceEntry);
-	// m_sourceEntry releases its OBS reference after the queue mutex is unlocked.
+	// Dropping m_sourceEntry may release the last OBS source reference, so it must
+	// happen after the queue mutex is unlocked.
 }
 
 void MediaCacheManager::initialize()
@@ -278,7 +279,7 @@ void MediaCacheManager::setCaching(obs_source_t *source, bool caching)
 	// Apply only our setting; never write back an old copy of the source's
 	// unrelated settings after the user has edited them.
 	OBSDataAutoRelease patch = obs_data_create();
-	// "caching" is a custom Streamlabs setting, OBS does not use it
+	// Streamlabs setting consumed by ffmpeg_source to enable media caching.
 	obs_data_set_bool(patch, "caching", caching);
 	obs_source_update(source, patch);
 }

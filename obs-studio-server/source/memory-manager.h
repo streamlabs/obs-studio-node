@@ -103,10 +103,13 @@ public:
 
 	// Invalidates older work before external code changes a source's live settings.
 	// Keep the returned guard alive through obs_source_update(), including any
-	// property callbacks that mutate those settings. Retains the exact source entry.
-	// Nested updates are supported; queries wait until all guards finish and OBS
-	// has had a source-update phase. Does not wait for executing queries; their
-	// results are invalidated. Does not serialize the external settings writers.
+	// property callbacks that mutate those settings. Retains the original
+	// registration so finishing this guard cannot affect a later registration
+	// of the same source.
+	// Nested updates are supported; queries wait until all guards for this source
+	// finish and OBS has had a source-update phase. Does not wait for executing
+	// queries; their results are invalidated. Does not serialize external settings
+	// writers.
 	// No queue lock is held across the caller's OBS operations. Null/unregistered
 	// sources and calls while stopped or stopping return an inactive guard.
 	// The manager and OBS runtime must outlive the guard.

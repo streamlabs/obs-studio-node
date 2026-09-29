@@ -1302,15 +1302,16 @@ export interface ITransition extends ISource {
 
 export interface IConfigurable {
     /**
-     * Merge settings into this live instance. Existing references remain valid.
-     * For video sources, the plugin applies the update on a later graphics tick;
-     * media playback and cache reevaluation may still be pending when this returns.
+     * Merge the supplied values into this instance's settings.
+     * Supported settings depend on the source or encoder type.
+     * For video sources, OBS applies changes during video-frame processing,
+     * so their effects may still be pending when this method returns.
      *
      * @param settings JSON-serializable settings to merge; omitted keys are preserved.
-     * @returns Nothing. Success does not guarantee that the plugin has finished applying the settings.
+     * @returns Nothing. Success does not guarantee that the changes have taken effect.
      * @throws {TypeError} If settings cannot be converted to an object or JSON serialized.
-     * @throws {Error} If the native reference is invalid or the IPC request fails.
-     * An IPC failure does not guarantee that a dispatched update was rolled back.
+     * @throws {Error} If the source or encoder no longer exists, or the request to OBS fails.
+     * If communication fails after the update is sent, the settings may already have changed.
      */
     update(settings: ISettings): void;
 
