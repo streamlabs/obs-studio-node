@@ -366,8 +366,15 @@ describe(testName, () => {
                 input.save();
             }).to.not.throw();
 
-            // Checking if setting was added to source
-            expect(input.settings).to.eql(settings, GetErrorMessage(ETestErrorMsg.SaveSettings, inputType));
+            const expectedSettings = { ...settings };
+            if (inputType === EOBSInputTypes.FFMPEGSource) {
+                // OSN owns caching. With no media file to cache, the caller's
+                // enable request is reset while all other settings are preserved.
+                expectedSettings['caching'] = false;
+            }
+
+            // Checking if settings were saved, including the managed cache flag.
+            expect(input.settings).to.eql(expectedSettings, GetErrorMessage(ETestErrorMsg.SaveSettings, inputType));
 
             settings = {};
             input.release();
