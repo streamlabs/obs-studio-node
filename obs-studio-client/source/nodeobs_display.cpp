@@ -407,7 +407,10 @@ public:
 
 		std::vector<bool> done(jobIds.size(), false);
 		size_t remaining = jobIds.size();
+		std::string firstError;
 
+		/* Every job must be polled to a terminal state, even after one fails,
+		 * so the server can erase it instead of leaking a job slot. */
 		while (remaining > 0) {
 			for (size_t i = 0; i < jobIds.size(); ++i) {
 				if (done[i])
@@ -418,8 +421,11 @@ public:
 
 				std::string error;
 				if (!ExtractCallError(response, error)) {
-					SetError("Screenshot failed for canvas " + std::to_string(canvasIds[i]) + ": " + error);
-					return;
+					if (firstError.empty())
+						firstError = "Screenshot failed for canvas " + std::to_string(canvasIds[i]) + ": " + error;
+					done[i] = true;
+					--remaining;
+					continue;
 				}
 
 				const auto state = ScreenshotJobState(response[1].value_union.ui32);
@@ -427,8 +433,11 @@ public:
 					continue;
 
 				if (state == ScreenshotJobState::Failed) {
-					SetError("Screenshot failed for canvas " + std::to_string(canvasIds[i]) + ": " + response[5].value_str);
-					return;
+					if (firstError.empty())
+						firstError = "Screenshot failed for canvas " + std::to_string(canvasIds[i]) + ": " + response[5].value_str;
+					done[i] = true;
+					--remaining;
+					continue;
 				}
 
 				results[i].path = response[2].value_str;
@@ -441,6 +450,9 @@ public:
 			if (remaining > 0)
 				std::this_thread::sleep_for(std::chrono::milliseconds(16));
 		}
+
+		if (!firstError.empty())
+			SetError(firstError);
 	}
 
 	void OnOK() override

@@ -26,6 +26,7 @@
 namespace {
 constexpr size_t kMaxActiveJobs = 4;
 constexpr auto kJobDeadline = std::chrono::seconds(10);
+constexpr auto kJobGracePeriod = std::chrono::seconds(5);
 
 std::string JoinPath(const std::string &directory, const std::string &file)
 {
@@ -150,30 +151,48 @@ bool ScreenshotManager::Submit(const std::vector<uint64_t> &canvasIds, const std
 		prepared.push_back({canvasId, canvas, std::move(name)});
 	}
 
-	std::lock_guard<std::mutex> lock(m_mutex);
-	if (m_jobs.size() + prepared.size() > kMaxActiveJobs) {
-		error = "busy";
-		return false;
+	bool needsTickCallback = false;
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		PruneStaleJobsLocked();
+
+		size_t activeCount = 0;
+		for (auto &item : m_jobs) {
+			if (!item.second.abandoned)
+				++activeCount;
+		}
+		if (activeCount + prepared.size() > kMaxActiveJobs) {
+			error = "busy";
+			return false;
+		}
+
+		jobIds.clear();
+		jobIds.reserve(prepared.size());
+		const auto deadline = std::chrono::steady_clock::now() + kJobDeadline;
+		for (auto &p : prepared) {
+			const uint64_t jobId = m_nextJobId++;
+			Job &job = m_jobs[jobId];
+			job.canvasId = p.canvasId;
+			job.canvas = p.canvas;
+			job.width = p.canvas->base_width;
+			job.height = p.canvas->base_height;
+			job.directory = directory;
+			job.formattedName = p.name;
+			job.noSpace = noSpace;
+			job.deadline = deadline;
+			jobIds.push_back(jobId);
+		}
+
+		needsTickCallback = !m_tickRegistered;
+		m_tickRegistered = true;
+		EnsureEncoderStartedLocked();
 	}
 
-	jobIds.clear();
-	jobIds.reserve(prepared.size());
-	const auto deadline = std::chrono::steady_clock::now() + kJobDeadline;
-	for (auto &p : prepared) {
-		const uint64_t jobId = m_nextJobId++;
-		Job &job = m_jobs[jobId];
-		job.canvasId = p.canvasId;
-		job.canvas = p.canvas;
-		job.width = p.canvas->base_width;
-		job.height = p.canvas->base_height;
-		job.directory = directory;
-		job.formattedName = p.name;
-		job.noSpace = noSpace;
-		job.deadline = deadline;
-		jobIds.push_back(jobId);
-	}
+	// obs_add_tick_callback must run outside m_mutex; see the lock-order note
+	// on m_mutex in the header.
+	if (needsTickCallback)
+		obs_add_tick_callback(&ScreenshotManager::Tick, this);
 
-	EnsureStartedLocked();
 	return true;
 }
 
@@ -210,12 +229,33 @@ ScreenshotManager::Result ScreenshotManager::Query(uint64_t jobId)
 	return result;
 }
 
-void ScreenshotManager::EnsureStartedLocked()
+void ScreenshotManager::PruneStaleJobsLocked()
 {
-	if (!m_tickRegistered) {
-		obs_add_tick_callback(&ScreenshotManager::Tick, this);
-		m_tickRegistered = true;
+	const auto now = std::chrono::steady_clock::now();
+	for (auto it = m_jobs.begin(); it != m_jobs.end();) {
+		Job &job = it->second;
+		if (now < job.deadline + kJobGracePeriod) {
+			++it;
+			continue;
+		}
+
+		if (job.state == State::Pending) {
+			job.state = State::Failed;
+			job.error = "Screenshot timed out.";
+		}
+
+		/* Still owns GPU objects: only RunTick may free those, under graphics. */
+		if (job.texrender || job.stagesurf) {
+			job.abandoned = true;
+			++it;
+		} else {
+			it = m_jobs.erase(it);
+		}
 	}
+}
+
+void ScreenshotManager::EnsureEncoderStartedLocked()
+{
 	if (!m_encoderThread.joinable()) {
 		m_encoderStop = false;
 		m_encoderThread = std::thread(&ScreenshotManager::EncoderThreadMain, this);

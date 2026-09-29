@@ -105,14 +105,21 @@ private:
 	ScreenshotManager(const ScreenshotManager &) = delete;
 	ScreenshotManager &operator=(const ScreenshotManager &) = delete;
 
-	void EnsureStartedLocked();
+	// Drops jobs whose deadline is more than kJobGracePeriod behind, whether
+	// pending or terminal, so a caller that stops polling (or fails partway
+	// through a batch) can't hold job slots forever. Call under m_mutex.
+	void PruneStaleJobsLocked();
+	void EnsureEncoderStartedLocked();
 	static void Tick(void *param, float seconds);
 	void RunTick();
 	void EncoderThreadMain();
 
-	// Protects everything below. Never held across obs_enter_graphics/
-	// obs_remove_tick_callback, which must run outside the lock to avoid
-	// deadlocking with a tick that is itself waiting on this mutex.
+	// Protects everything below. Lock order is m_mutex -> graphics ->
+	// mixes_mutex (RunTick and Shutdown enter graphics while holding this).
+	// obs_add_tick_callback/obs_remove_tick_callback must never be called
+	// while holding m_mutex: a tick runs under libobs' draw_callbacks_mutex,
+	// so doing so risks an ABBA deadlock against a tick that is itself
+	// waiting on m_mutex.
 	std::mutex m_mutex;
 	std::map<uint64_t, Job> m_jobs;
 	uint64_t m_nextJobId = 1;
