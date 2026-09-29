@@ -46,6 +46,8 @@
 // Settings become visible before the plugin applies them. External writers must
 // use trackSourceSettingsUpdate() so queries wait for a source-update phase and
 // cannot associate a new filename with the previous player's metadata.
+// Guard entry also serializes with cache-setting writes: validation and the
+// caching patch must finish before an external writer can change the file.
 class MediaCacheManager {
 	struct SourceEntry;
 
@@ -107,9 +109,10 @@ public:
 	// registration so finishing this guard cannot affect a later registration
 	// of the same source.
 	// Nested updates are supported; queries wait until all guards for this source
-	// finish and OBS has had a source-update phase. Does not wait for executing
-	// queries; their results are invalidated. Does not serialize external settings
-	// writers.
+	// finish and OBS has had a source-update phase. May wait for an executing cache
+	// setting write before returning; no queue lock is held while waiting. Does not
+	// wait for queries; their results are invalidated. Does not serialize external
+	// settings writers or hold a lock for the returned guard's lifetime.
 	// No queue lock is held across the caller's OBS operations. Null/unregistered
 	// sources and calls while stopped or stopping return an inactive guard.
 	// The manager and OBS runtime must outlive the guard.
@@ -197,4 +200,6 @@ private:
 	uint64_t m_cacheBudgetBytes;
 	// Injectable clock for deterministic retry tests.
 	std::function<Clock::time_point()> m_now = Clock::now;
+	// Injectable OBS settings write for deterministic cache-write race tests.
+	std::function<void(obs_source_t *, bool)> m_setCaching = setCaching;
 };

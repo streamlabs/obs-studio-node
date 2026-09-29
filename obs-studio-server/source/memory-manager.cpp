@@ -59,6 +59,11 @@ struct MediaCacheManager::SourceEntry {
 	std::atomic<uint64_t> revision{1};
 	std::atomic<bool> removed{false};
 
+	// Serializes guard entry with cache-write validation and the OBS settings
+	// patch. Acquire only without m_mutex; graphics uses try_lock to avoid waiting.
+	// Guards release this before returning to the external settings writer.
+	std::mutex cacheWriteMutex;
+
 	// Settings guards and the graphics callback access these under the queue mutex.
 	unsigned settingsUpdatesInProgress = 0;
 	uint64_t queryAllowedFromTick = 0;
@@ -177,6 +182,14 @@ MediaCacheManager::SourceSettingsUpdate MediaCacheManager::trackSourceSettingsUp
 		if (!m_accepting || it == m_sources.end())
 			return {nullptr, {}};
 		entry = it->second;
+	}
+	// A cache write already past validation must finish before the caller can
+	// change live settings. Never wait for that write while holding m_mutex.
+	std::lock_guard cacheWriteLock(entry->cacheWriteMutex);
+	{
+		std::lock_guard lock(m_mutex);
+		if (!m_accepting || entry->removed)
+			return {nullptr, {}};
 		++entry->revision;
 		++entry->settingsUpdatesInProgress;
 		m_notified = true;
@@ -317,6 +330,14 @@ void MediaCacheManager::graphicsTick(void *param, float)
 	// its deferred settings update first.
 	for (auto &result : results) {
 		auto &job = result.job;
+		std::unique_lock<std::mutex> cacheWriteLock;
+		if (job.type == JobType::SetCaching) {
+			// Hold through revision/settings validation and the write. Otherwise a
+			// guard could change local_file after we validate the old reservation.
+			cacheWriteLock = std::unique_lock(job.source->cacheWriteMutex, std::try_to_lock);
+			if (!cacheWriteLock.owns_lock())
+				continue; // An unapplied completion schedules fresh evaluation.
+		}
 		if (job.source->removed || job.source->revision != job.revision)
 			continue;
 		result.valid = true;
@@ -325,7 +346,7 @@ void MediaCacheManager::graphicsTick(void *param, float)
 			queryMediaOnGraphicsThread(job.source->source, result.snapshot);
 		} else if (!job.targetCachingEnabled || (result.snapshot.eligible && result.snapshot.file == job.file)) {
 			if (result.snapshot.caching != job.targetCachingEnabled)
-				setCaching(job.source->source, job.targetCachingEnabled);
+				manager.m_setCaching(job.source->source, job.targetCachingEnabled);
 			result.applied = true;
 		}
 	}
