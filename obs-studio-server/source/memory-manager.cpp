@@ -59,6 +59,10 @@ struct MediaCacheManager::SourceEntry {
 	std::atomic<uint64_t> revision{1};
 	std::atomic<bool> removed{false};
 
+	// Settings guards and the graphics callback access these under the queue mutex.
+	unsigned settingsUpdatesInProgress = 0;
+	uint64_t queryAllowedFromTick = 0;
+
 	// Only the worker changes these fields, under the queue mutex.
 	uint64_t scheduledRevision = 0;
 	uint64_t reservedBytes = 0; // Includes an enable operation awaiting completion.
@@ -81,6 +85,23 @@ MediaCacheManager::MediaCacheManager(uint64_t budget) : m_cacheBudgetBytes(budge
 MediaCacheManager::~MediaCacheManager()
 {
 	shutdown();
+}
+
+MediaCacheManager::SourceSettingsUpdate::SourceSettingsUpdate(MediaCacheManager *manager, std::shared_ptr<SourceEntry> source) noexcept
+	: m_manager(manager), m_sourceEntry(std::move(source))
+{
+}
+
+MediaCacheManager::SourceSettingsUpdate::SourceSettingsUpdate(SourceSettingsUpdate &&other) noexcept
+	: m_manager(std::exchange(other.m_manager, nullptr)), m_sourceEntry(std::move(other.m_sourceEntry))
+{
+}
+
+MediaCacheManager::SourceSettingsUpdate::~SourceSettingsUpdate()
+{
+	if (m_manager)
+		m_manager->finishSourceSettingsUpdate(m_sourceEntry);
+	// m_sourceEntry releases its OBS reference after the queue mutex is unlocked.
 }
 
 void MediaCacheManager::initialize()
@@ -141,6 +162,40 @@ void MediaCacheManager::requestCacheUpdate(obs_source_t *source)
 		if (!m_accepting || it == m_sources.end())
 			return;
 		++it->second->revision;
+		m_notified = true;
+	}
+	m_changed.notify_all();
+}
+
+MediaCacheManager::SourceSettingsUpdate MediaCacheManager::trackSourceSettingsUpdate(obs_source_t *source)
+{
+	std::shared_ptr<SourceEntry> entry;
+	{
+		std::lock_guard lock(m_mutex);
+		auto it = m_sources.find(source);
+		if (!m_accepting || it == m_sources.end())
+			return {nullptr, {}};
+		entry = it->second;
+		++entry->revision;
+		++entry->settingsUpdatesInProgress;
+		m_notified = true;
+	}
+	m_changed.notify_all();
+	return {this, std::move(entry)};
+}
+
+void MediaCacheManager::finishSourceSettingsUpdate(const std::shared_ptr<SourceEntry> &source)
+{
+	{
+		std::lock_guard lock(m_mutex);
+		if (!m_accepting || source->removed)
+			return;
+		--source->settingsUpdatesInProgress;
+		++source->revision;
+		// Tick callbacks run before deferred source updates. The first callback
+		// after this write must skip querying; the following callback is after
+		// OBS has had a source-update phase, even if the write finished mid-frame.
+		source->queryAllowedFromTick = m_graphicsTick + 2;
 		m_notified = true;
 	}
 	m_changed.notify_all();
@@ -237,10 +292,20 @@ void MediaCacheManager::graphicsTick(void *param, float)
 		if (!manager.m_accepting)
 			return;
 
-		// Take one batch per tick.
-		while (!manager.m_graphicsJobs.empty() && results.size() < JOBS_PER_TICK) {
-			results.push_back({std::move(manager.m_graphicsJobs.front())});
+		++manager.m_graphicsTick;
+		// Scan one bounded batch. Keep delayed queries queued without consuming
+		// readiness retries or blocking work for another source behind them.
+		const auto count = std::min(manager.m_graphicsJobs.size(), JOBS_PER_TICK);
+		for (size_t i = 0; i < count; ++i) {
+			auto job = std::move(manager.m_graphicsJobs.front());
 			manager.m_graphicsJobs.pop_front();
+			const auto &entry = *job.source;
+			if (job.type == JobType::QuerySource && !entry.removed && entry.revision == job.revision &&
+			    (entry.settingsUpdatesInProgress || manager.m_graphicsTick < entry.queryAllowedFromTick)) {
+				manager.m_graphicsJobs.push_back(std::move(job));
+				continue;
+			}
+			results.push_back({std::move(job)});
 		}
 	}
 	if (results.empty())

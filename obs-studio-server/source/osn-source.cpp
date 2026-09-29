@@ -262,6 +262,8 @@ void osn::Source::GetProperties(void *data, const int64_t id, const std::vector<
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
+	// Property callbacks may change live settings before obs_source_update().
+	auto settingsUpdate = MediaCacheManager::GetInstance().trackSourceSettingsUpdate(src);
 	obs_properties_t *prp = obs_source_properties(src);
 	obs_data *settings = obs_source_get_settings(src);
 
@@ -354,8 +356,10 @@ void osn::Source::Update(void *data, const int64_t id, const std::vector<ipc::va
 		}
 	}
 
-	obs_source_update(src, sets);
-	MediaCacheManager::GetInstance().requestCacheUpdate(src);
+	{
+		auto settingsUpdate = MediaCacheManager::GetInstance().trackSourceSettingsUpdate(src);
+		obs_source_update(src, sets);
+	}
 	obs_data_release(sets);
 
 	obs_data_t *updatedSettings = obs_source_get_settings(src);

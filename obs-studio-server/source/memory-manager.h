@@ -43,8 +43,34 @@
 // not keep that particular player alive, and our mutex does not protect it.
 // Run those queries in the graphics tick to serialize them with replacement,
 // then return copied metadata to the worker.
+// Settings become visible before the plugin applies them. External writers must
+// use trackSourceSettingsUpdate() so queries wait for a source-update phase and
+// cannot associate a new filename with the previous player's metadata.
 class MediaCacheManager {
+	struct SourceEntry;
+
 public:
+	// Keeps cache queries pending while the caller changes a source's settings.
+	class SourceSettingsUpdate {
+	public:
+		// Transfers responsibility for finishing the update; the moved-from guard
+		// is inactive. The manager must outlive the guard.
+		SourceSettingsUpdate(SourceSettingsUpdate &&other) noexcept;
+		// Finishes tracking and schedules evaluation after OBS can apply the update.
+		// Safe after source unregistration or manager shutdown, but must run before
+		// obs_shutdown(): the guard still retains its source reference.
+		~SourceSettingsUpdate();
+		SourceSettingsUpdate(const SourceSettingsUpdate &) = delete;
+		SourceSettingsUpdate &operator=(const SourceSettingsUpdate &) = delete;
+		SourceSettingsUpdate &operator=(SourceSettingsUpdate &&) = delete;
+
+	private:
+		friend class MediaCacheManager;
+		SourceSettingsUpdate(MediaCacheManager *manager, std::shared_ptr<SourceEntry> source) noexcept;
+		MediaCacheManager *m_manager;
+		std::shared_ptr<SourceEntry> m_sourceEntry;
+	};
+
 	// Returns a non-owning reference to the process-wide singleton. Access is
 	// thread-safe, but does not initialize OBS or start the cache worker.
 	static MediaCacheManager &GetInstance();
@@ -75,7 +101,19 @@ public:
 	// obs_source_remove() or explicitly disable the source's cache setting.
 	void unregisterSource(obs_source_t *source);
 
-	// Requests reevaluation after a registered source's settings or activity change.
+	// Invalidates older work before external code changes a source's live settings.
+	// Keep the returned guard alive through obs_source_update(), including any
+	// property callbacks that mutate those settings. Retains the exact source entry.
+	// Nested updates are supported; queries wait until all guards finish and OBS
+	// has had a source-update phase. Does not wait for executing queries; their
+	// results are invalidated. Does not serialize the external settings writers.
+	// No queue lock is held across the caller's OBS operations. Null/unregistered
+	// sources and calls while stopped or stopping return an inactive guard.
+	// The manager and OBS runtime must outlive the guard.
+	[[nodiscard]] SourceSettingsUpdate trackSourceSettingsUpdate(obs_source_t *source);
+
+	// Requests reevaluation after a registered source's activity change.
+	// Use trackSourceSettingsUpdate() around settings writes instead.
 	// Safe from OBS callbacks; repeated requests are coalesced, and this call does
 	// not wait for media queries or cache-setting changes to complete.
 	// Null/unregistered sources and calls while stopped or stopping are ignored.
@@ -87,7 +125,9 @@ public:
 	void requestAllCacheUpdates();
 
 	// Stops accepting requests, removes the tick callback, cancels queued work,
-	// joins the worker and drops all retained source references.
+	// joins the worker and drops its queued and tracked source references.
+	// Outstanding SourceSettingsUpdate guards retain their own references and must
+	// finish before obs_shutdown(), while this manager is still alive.
 	// Call before obs_shutdown(), from the serialized OBS lifecycle, on neither
 	// the graphics thread nor this manager's worker. Do not overlap another
 	// shutdown() or initialize(). Waits for any executing tick callback and worker,
@@ -100,7 +140,6 @@ public:
 private:
 	friend class MediaCacheManagerTestAccess;
 	using Clock = std::chrono::steady_clock;
-	struct SourceEntry;
 	struct Snapshot {
 		std::string file;
 		bool eligible = false;
@@ -134,6 +173,7 @@ private:
 	void complete(Completion &result);
 	void queueCacheSettingUpdate(const std::shared_ptr<SourceEntry> &source, uint64_t revision, bool targetCachingEnabled);
 	void releaseBudget(SourceEntry &source);
+	void finishSourceSettingsUpdate(const std::shared_ptr<SourceEntry> &source);
 
 	// Protects only queues and bookkeeping. Never held during an OBS call,
 	// source release, wait for graphics, or thread join.
@@ -148,6 +188,8 @@ private:
 	bool m_stopping = false;
 	bool m_notified = false;
 	bool m_rebalance = false;
+	// Counts every graphics callback, including empty ticks; survives video reset.
+	uint64_t m_graphicsTick = 0;
 	uint64_t m_reservedCacheBytes = 0;
 	uint64_t m_cacheBudgetBytes;
 	// Injectable clock for deterministic retry tests.

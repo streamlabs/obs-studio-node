@@ -1302,9 +1302,15 @@ export interface ITransition extends ISource {
 
 export interface IConfigurable {
     /**
-     * Update the settings of the source instance
-     * correlating to the values held within the
-     * object passed.
+     * Merge settings into this live instance. Existing references remain valid.
+     * For video sources, the plugin applies the update on a later graphics tick;
+     * media playback and cache reevaluation may still be pending when this returns.
+     *
+     * @param settings JSON-serializable settings to merge; omitted keys are preserved.
+     * @returns Nothing. Success does not guarantee that the plugin has finished applying the settings.
+     * @throws {TypeError} If settings cannot be converted to an object or JSON serialized.
+     * @throws {Error} If the native reference is invalid or the IPC request fails.
+     * An IPC failure does not guarantee that a dispatched update was rolled back.
      */
     update(settings: ISettings): void;
 
