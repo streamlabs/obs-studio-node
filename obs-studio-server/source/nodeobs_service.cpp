@@ -569,9 +569,11 @@ int OBS_service::doResetVideoContext(obs_video_info *ovi)
 			base_canvas = obs_create_video_info();
 
 		int ret = obs_set_video_info(base_canvas, ovi);
+		osn::Video::InvalidateAppliedVideoInfo();
 
 		return ret;
 	} catch (const char *error) {
+		osn::Video::InvalidateAppliedVideoInfo();
 		blog(LOG_ERROR, "Failed to reset video: %s", error);
 		return OBS_VIDEO_FAIL;
 	}
