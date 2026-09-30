@@ -162,7 +162,7 @@ bool ScreenshotManager::Submit(const std::vector<uint64_t> &canvasIds, const std
 				++activeCount;
 		}
 		if (activeCount + prepared.size() > kMaxActiveJobs) {
-			error = "busy";
+			error = "busy: too many screenshots in flight (max " + std::to_string(kMaxActiveJobs) + ")";
 			return false;
 		}
 

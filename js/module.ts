@@ -2525,9 +2525,10 @@ interface INodeObs {
      * @param filenameFormat - OBS filename formatting pattern, e.g. `%CCYY-%MM-%DD %hh-%mm-%ss`
      * @param noSpace - Replace spaces in the generated file name with underscores
      * @returns The path written and the image dimensions for each canvas
-     * @throws {TypeError} If `video` is not an `IVideo` (or a non-empty array of them) or a string argument is missing
-     * @throws {Error} If a canvas has no running video, the directory does not exist, rendering,
-     * readback or PNG encoding fails, too many screenshots are already in flight, or the IPC call fails
+     * @throws {TypeError} Synchronously, if `video` is not an `IVideo` (or a non-empty array of them) or a string argument is missing
+     * @throws {Error} Synchronously, if there is no IPC connection to the server
+     * The promise rejects with an `Error` if a canvas has no running video, the directory does not exist,
+     * rendering, readback or PNG encoding fails, more than 4 screenshots would be in flight, or the IPC call fails
      */
     OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult>;
     OBS_content_takeScreenshot(video: IVideo[], directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult[]>;
