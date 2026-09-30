@@ -2502,10 +2502,11 @@ interface INodeObs {
 
     /**
      * Renders the program output of `video` at its base resolution and writes
-     * it as a PNG, mirroring OBS Studio's "Screenshot Output". Capture happens
-     * off the graphics thread on the next couple of frames and encoding
-     * happens on a background thread, so this never blocks IPC or rendering;
-     * the returned promise resolves once the PNG has been written.
+     * it as a PNG, mirroring OBS Studio's "Screenshot Output". The canvas is
+     * rendered and staged on one graphics tick and read back on the next;
+     * alpha fix-up and PNG encoding run on a background thread. The call
+     * returns a promise without blocking on IPC, and it resolves once the PNG
+     * has been written.
      *
      * The file is named `Screenshot <filenameFormat>.png` with the OBS
      * filename tokens expanded; missing subfolders in the format are created.

@@ -354,8 +354,20 @@ describe(testName, () => {
             }
         });
 
-        // No client-visible knob makes job completion (and therefore slot reuse) slow
-        // enough to reliably outrun 5 back-to-back submits, so the busy-cap rejection
-        // path is exercised by inspection/server logic rather than a timing-sensitive test.
+        it('Rejects a batch larger than the 4-job limit without writing any file', async () => {
+            let error: Error;
+            try {
+                await osn.NodeObs.OBS_content_takeScreenshot([context, context, context, context, context], dir, screenshotFormat, false);
+            } catch (e) {
+                error = e;
+            }
+            expect(error).to.not.equal(undefined, 'expected the promise to reject');
+            expect(error.message).to.match(/busy/);
+            expect(fs.readdirSync(dir)).to.have.lengthOf(0, 'a rejected batch must not write any screenshot');
+
+            const result = await osn.NodeObs.OBS_content_takeScreenshot(context, dir, screenshotFormat, false);
+            expect(fs.existsSync(result.path)).to.equal(true);
+            expect(fs.readdirSync(dir)).to.have.lengthOf(1);
+        });
     });
 });
