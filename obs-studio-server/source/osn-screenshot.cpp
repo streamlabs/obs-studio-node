@@ -410,11 +410,7 @@ void ScreenshotManager::RunTick()
 			work.pixels.resize(rowBytes * work.height);
 			for (uint32_t y = 0; y < work.height; ++y) {
 				const uint8_t *src = data + size_t(y) * linesize;
-				uint8_t *dst = work.pixels.data() + size_t(y) * rowBytes;
-				memcpy(dst, src, rowBytes);
-				/* Force alpha opaque, matching OBS's QImage::Format_RGBX8888 save path. */
-				for (size_t x = 3; x < rowBytes; x += 4)
-					dst[x] = 0xFF;
+				memcpy(work.pixels.data() + size_t(y) * rowBytes, src, rowBytes);
 			}
 			gs_stagesurface_unmap(work.stagesurf);
 			work.mapped = true;
@@ -512,6 +508,10 @@ void ScreenshotManager::EncoderThreadMain()
 		}
 
 		if (ok) {
+			/* Force alpha opaque, matching OBS's QImage::Format_RGBX8888 save path. */
+			for (size_t i = 3; i < task.pixels.size(); i += 4)
+				task.pixels[i] = 0xFF;
+
 			FindBestScreenshotFilename(path, task.noSpace);
 			if (!gs_save_png_file(path.c_str(), task.pixels.data(), GS_RGBA, task.width, task.height, task.width * 4)) {
 				error = "Failed to write PNG '" + path + "'.";

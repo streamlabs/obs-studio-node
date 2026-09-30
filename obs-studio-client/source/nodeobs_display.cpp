@@ -508,7 +508,9 @@ Napi::Value display::OBS_content_takeScreenshot(const Napi::CallbackInfo &info)
 		canvasIds.reserve(videos.Length());
 		for (uint32_t i = 0; i < videos.Length(); ++i) {
 			Napi::Value item = videos.Get(i);
-			osn::Video *video = item.IsObject() ? Napi::ObjectWrap<osn::Video>::Unwrap(item.ToObject()) : nullptr;
+			osn::Video *video = (item.IsObject() && item.ToObject().InstanceOf(osn::Video::constructor.Value()))
+						    ? Napi::ObjectWrap<osn::Video>::Unwrap(item.ToObject())
+						    : nullptr;
 			if (!video) {
 				Napi::TypeError::New(env, "OBS_content_takeScreenshot: video array must only contain Video objects.")
 					.ThrowAsJavaScriptException();
@@ -517,7 +519,8 @@ Napi::Value display::OBS_content_takeScreenshot(const Napi::CallbackInfo &info)
 			canvasIds.push_back(video->canvasId);
 		}
 	} else {
-		osn::Video *video = Napi::ObjectWrap<osn::Video>::Unwrap(info[0].ToObject());
+		osn::Video *video = info[0].ToObject().InstanceOf(osn::Video::constructor.Value()) ? Napi::ObjectWrap<osn::Video>::Unwrap(info[0].ToObject())
+												   : nullptr;
 		if (!video) {
 			Napi::TypeError::New(env, "OBS_content_takeScreenshot: first argument is not a Video object.").ThrowAsJavaScriptException();
 			return env.Undefined();
