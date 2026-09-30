@@ -3,8 +3,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { expect } from 'chai';
-import * as fs from 'fs';
-import * as path from 'path';
 import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler } from '../util/obs_handler';
