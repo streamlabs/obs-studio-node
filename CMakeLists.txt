@@ -27,7 +27,7 @@ if(MSVC)
 	add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>)
 endif()
 
-# The Windows CEF 6533 v4 sandbox archive is Release-only and built with /MT.
+# The supported Windows x64 CEF sandbox archive is Release-only and built with /MT.
 # Apply its ABI requirements only to the obs64 link closure.  In particular,
 # never change the addon's runtime: it is loaded into Electron and must retain
 # the dynamic CRT selected by its host.

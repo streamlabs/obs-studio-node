@@ -523,8 +523,8 @@ endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE obs-studio-server-lib)
 
 if(WIN32)
-    # The packaged CEF 6533 v4 sandbox archive is Release-only and built with
-    # /MT. Link it into obs64.exe itself, where the CEF sandbox contract
+    # The supported Windows x64 CEF sandbox archive is Release-only and built
+    # with /MT. Link it into obs64.exe itself, where the CEF sandbox contract
     # requires cef_sandbox_info_create/destroy to reside.
     target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-sandbox)
 endif()

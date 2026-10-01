@@ -6,7 +6,7 @@
 namespace osn::cef {
 namespace {
 
-// Keep this list pinned to the supported CEF 6533/6613 packages. CEF may
+// Keep this list pinned to the supported CEF package. CEF may
 // relaunch the main executable for its embedded Crashpad handler in addition
 // to Content child processes.
 constexpr std::array<std::string_view, 4> allowed_process_types = {
