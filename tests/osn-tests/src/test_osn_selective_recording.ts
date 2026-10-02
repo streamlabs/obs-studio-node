@@ -9,11 +9,11 @@ import { OBSHandler } from '../util/obs_handler';
 import { deleteConfigFiles, sleep } from '../util/general';
 import { EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { getVideoFrameRgb } from '../util/media_probe';
+import { expectRegionColor, RGB } from '../util/media_assertions';
 
 const testName = 'osn-selective-recording';
 const width = 320;
 const height = 180;
-type RGB = [number, number, number];
 const background: RGB = [0, 255, 0];
 const markers = [
     { name: 'stream-only', x: 16, y: 16, color: 0xffffffff, rgb: [255, 255, 255] as RGB, stream: true, record: false },
@@ -166,29 +166,15 @@ describe(testName, function () {
         }
     }
 
-    function expectRegion(frame: Buffer, x: number, y: number, expected: RGB, description: string) {
-        const sum: RGB = [0, 0, 0];
-        // Sample the interior of each block, away from compression and chroma edges.
-        for (let dy = 0; dy < 8; dy++) {
-            for (let dx = 0; dx < 8; dx++) {
-                const offset = ((y + dy) * width + x + dx) * 3;
-                for (let channel = 0; channel < 3; channel++) sum[channel] += frame[offset + channel];
-            }
-        }
-        const actual = sum.map(value => Math.round(value / 64));
-        expected.forEach((value, channel) => {
-            expect(actual[channel], `${description}: expected ${expected}, got ${actual}`).to.be.closeTo(value, 25);
-        });
-    }
-
     async function checkRecording(selective: boolean, quality?: osn.ERecordingQuality) {
         // Set the rendering mode before output/encoder creation. No replay or streaming is involved.
         osn.Global.multipleRendering = selective;
         const file = await record(quality);
         for (const time of [0.5, 1, 1.5]) {
-            const frame = getVideoFrameRgb(file, time, width, height);
-            expectRegion(frame, 288, 144, background, `Background control at ${time}s`);
-            markers.forEach(marker => expectRegion(frame, marker.x + 24, marker.y + 24,
+            const frame = { data: getVideoFrameRgb(file, time, width, height), width, height };
+            // Sample inside the blocks, away from compression and chroma edges.
+            expectRegionColor(frame, { x: 288, y: 144 }, background, `Background control at ${time}s`);
+            markers.forEach(marker => expectRegionColor(frame, { x: marker.x + 24, y: marker.y + 24 },
                 selective && !marker.record ? background : marker.rgb, `${marker.name} at ${time}s`));
         }
     }

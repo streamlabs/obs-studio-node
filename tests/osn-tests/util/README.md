@@ -11,6 +11,7 @@ expected results in the test.
 | `RtmpTestServer` (`rtmp-test-server.ts`) | Owns the loopback listener, connections and per-attempt media captures. Independent of OSN. |
 | `expectAudioTracks`, `expectVideoFrames` (`rtmp-assertions.ts`) | Assert received media. They neither start outputs nor wait for packets. |
 | `media_probe.ts` | Uses ffprobe/ffmpeg for recorded-file inspection. |
+| `expectRegionColor` (`media_assertions.ts`) | Asserts the mean RGB color of a region in a decoded frame. No runtime or output ownership. |
 
 ## Selective recording
 
@@ -25,6 +26,12 @@ are covered. The suite is discovered by the existing integration/CI scripts.
 missing frames or unexpected dimensions. FFmpeg lookup honors `FFMPEG_PATH`, then
 checks the OSN package root and macOS `Frameworks` directory, then PATH. Color
 checks sample inside the blocks and tolerate compression differences.
+
+`expectRegionColor()` accepts `{ data, width, height }` for an RGB24 frame and a
+region `{ x, y, width?, height? }` measured from its top-left pixel. Region size
+defaults to 8x8 and the per-channel tolerance defaults to 25; both are configurable.
+It rejects invalid frame dimensions, buffer lengths, region bounds and tolerances.
+Keep expected colors and the choice of interior regions in each test.
 
 After building and installing OSN, run the suite with:
 
