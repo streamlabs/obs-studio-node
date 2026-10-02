@@ -23,7 +23,10 @@ quality presets, disabled selective recording and an Advanced dedicated encoder
 are covered. The suite is discovered by the existing integration/CI scripts.
 
 `getVideoFrameRgb()` in `media_probe.ts` decodes one unscaled frame and rejects
-missing frames or unexpected dimensions. FFmpeg lookup honors `FFMPEG_PATH`, then
+missing frames or unexpected dimensions. FFmpeg emits binary PPM so the decoded
+width and height are checked independently, followed by the RGB payload length.
+`src/test_media_probe.ts` covers equal-pixel-count dimension mismatches, exact RGB
+bytes and missing frames without starting OBS. FFmpeg lookup honors `FFMPEG_PATH`, then
 checks the OSN package root and macOS `Frameworks` directory, then PATH. Color
 checks sample inside the blocks and tolerate compression differences.
 
@@ -33,10 +36,10 @@ defaults to 8x8 and the per-channel tolerance defaults to 25; both are configura
 It rejects invalid frame dimensions, buffer lengths, region bounds and tolerances.
 Keep expected colors and the choice of interior regions in each test.
 
-After building and installing OSN, run the suite with:
+After building and installing OSN, run both suites with:
 
 ```text
-yarn electron-mocha -t 30000 -r ts-node/register tests/osn-tests/src/test_osn_selective_recording.ts
+yarn electron-mocha -t 30000 -r ts-node/register tests/osn-tests/src/test_osn_selective_recording.ts tests/osn-tests/src/test_media_probe.ts
 ```
 
 ## Output setup and lifetime
