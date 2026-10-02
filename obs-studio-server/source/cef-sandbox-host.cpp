@@ -224,7 +224,17 @@ int ExecuteSubprocess()
 
 std::optional<int> DispatchSubprocessIfNeeded(int argc, char *argv[])
 {
-	const Invocation invocation = ClassifyInvocation(argc, argv);
+	int wide_argc = 0;
+	LPWSTR *wide_argv = CommandLineToArgvW(GetCommandLineW(), &wide_argc);
+	if (!wide_argv) {
+		ReportWindowsError("CommandLineToArgvW");
+		return dispatch_failure;
+	}
+
+	// CEF parses the native Windows command line. Classify those same arguments
+	// so narrow CRT argv conversion cannot hide a sandbox opt-out switch.
+	const Invocation invocation = ClassifyInvocation(wide_argc, wide_argv);
+	LocalFree(wide_argv);
 	if (invocation.kind == InvocationKind::Normal)
 		return std::nullopt;
 

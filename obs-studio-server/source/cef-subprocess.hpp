@@ -14,12 +14,13 @@ enum class InvocationKind {
 
 struct Invocation {
 	InvocationKind kind = InvocationKind::Normal;
-	std::string_view process_type;
+	std::string process_type;
 	std::string error;
 	bool sandbox_opt_out = false;
 };
 
 Invocation ClassifyInvocation(int argc, const char *const argv[]);
+Invocation ClassifyInvocation(int argc, const wchar_t *const argv[]);
 std::string RenderInvocationArguments(int argc, const char *const argv[]);
 bool ContainsCefProcessSwitch(int argc, const wchar_t *const argv[]);
 std::filesystem::path BrowserPluginPath(const std::filesystem::path &executable_path);
