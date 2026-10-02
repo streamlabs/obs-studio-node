@@ -52,14 +52,28 @@ export function getVideoKeyframes(mediaFile: string): {
     };
 }
 
-// Resolves an ffmpeg executable. Honours FFMPEG_PATH (point it at OBS's bundled
-// ffmpeg when ffmpeg is not on PATH), otherwise relies on `ffmpeg` from PATH.
+// Prefer an explicit override, then the packaged executable, then PATH.
 function resolveFfmpeg(): string {
-    const override = process.env.FFMPEG_PATH;
-    if (override && fs.existsSync(override)) {
-        return override;
+    const executable = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+    return [
+        process.env.FFMPEG_PATH,
+        path.join(path.normalize(osn.wd), executable),
+        path.join(path.normalize(osn.wd), 'Frameworks', executable),
+    ].find(candidate => candidate && fs.existsSync(candidate)) || executable;
+}
+
+/** Decodes one unscaled RGB24 frame. Missing frames and unexpected dimensions fail. */
+export function getVideoFrameRgb(mediaFile: string, timeSeconds: number, width: number, height: number): Buffer {
+    const expectedBytes = width * height * 3;
+    const frame = execFileSync(resolveFfmpeg(), [
+        '-hide_banner', '-loglevel', 'error', '-nostdin',
+        '-ss', String(timeSeconds), '-i', mediaFile, '-map', '0:v:0',
+        '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', 'pipe:1',
+    ], { timeout: 10000, maxBuffer: expectedBytes + 1024, windowsHide: true });
+    if (frame.length !== expectedBytes) {
+        throw new Error(`Expected a ${width}x${height} RGB frame at ${timeSeconds}s in ${mediaFile}, got ${frame.length} bytes`);
     }
-    return 'ffmpeg';
+    return frame;
 }
 
 // Returns the mean volume (dBFS) of the first audio stream of `mediaFile`, as

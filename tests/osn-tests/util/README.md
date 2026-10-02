@@ -12,6 +12,26 @@ expected results in the test.
 | `expectAudioTracks`, `expectVideoFrames` (`rtmp-assertions.ts`) | Assert received media. They neither start outputs nor wait for packets. |
 | `media_probe.ts` | Uses ffprobe/ffmpeg for recorded-file inspection. |
 
+## Selective recording
+
+`src/test_osn_selective_recording.ts` records generated color sources without a
+provider account, streaming output or replay buffer. It checks decoded RGB frames
+for stream-only, recording-only, both-visible and neither-visible scene items.
+An always-visible background also rejects empty or black recordings. Both Simple
+quality presets, disabled selective recording and an Advanced dedicated encoder
+are covered. The suite is discovered by the existing integration/CI scripts.
+
+`getVideoFrameRgb()` in `media_probe.ts` decodes one unscaled frame and rejects
+missing frames or unexpected dimensions. FFmpeg lookup honors `FFMPEG_PATH`, then
+checks the OSN package root and macOS `Frameworks` directory, then PATH. Color
+checks sample inside the blocks and tolerate compression differences.
+
+After building and installing OSN, run the suite with:
+
+```text
+yarn electron-mocha -t 30000 -r ts-node/register tests/osn-tests/src/test_osn_selective_recording.ts
+```
+
 ## Output setup and lifetime
 
 `createStreamingOutput({ mode, name, video, service, timeoutMs? })` configures
