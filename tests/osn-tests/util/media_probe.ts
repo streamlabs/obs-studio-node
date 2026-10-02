@@ -52,14 +52,41 @@ export function getVideoKeyframes(mediaFile: string): {
     };
 }
 
-// Resolves an ffmpeg executable. Honours FFMPEG_PATH (point it at OBS's bundled
-// ffmpeg when ffmpeg is not on PATH), otherwise relies on `ffmpeg` from PATH.
+// Prefer an explicit override, then the packaged executable, then PATH.
 function resolveFfmpeg(): string {
-    const override = process.env.FFMPEG_PATH;
-    if (override && fs.existsSync(override)) {
-        return override;
+    const executable = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+    return [
+        process.env.FFMPEG_PATH,
+        path.join(path.normalize(osn.wd), executable),
+        path.join(path.normalize(osn.wd), 'Frameworks', executable),
+    ].find(candidate => candidate && fs.existsSync(candidate)) || executable;
+}
+
+/** Decodes one unscaled RGB24 frame, checking its decoded width, height and payload length. */
+export function getVideoFrameRgb(mediaFile: string, timeSeconds: number, width: number, height: number): Buffer {
+    const expectedBytes = width * height * 3;
+    const frame = execFileSync(resolveFfmpeg(), [
+        '-hide_banner', '-loglevel', 'error', '-nostdin',
+        '-ss', String(timeSeconds), '-i', mediaFile, '-map', '0:v:0',
+        '-frames:v', '1', '-pix_fmt', 'rgb24', '-c:v', 'ppm', '-f', 'image2pipe', 'pipe:1',
+    ], { timeout: 10000, maxBuffer: expectedBytes + 1024, windowsHide: true });
+
+    // FFmpeg emits an 8-bit binary PPM header without comments. Consume exactly
+    // one separator after maxval: following whitespace or hash bytes are pixels.
+    const header = frame.subarray(0, 1024).toString('ascii').match(/^P6\s+(\d+)\s+(\d+)\s+255\s/);
+    if (!header) {
+        throw new Error(`Missing or invalid RGB24 PPM frame at ${timeSeconds}s in ${mediaFile}`);
     }
-    return 'ffmpeg';
+    const decodedWidth = Number(header[1]);
+    const decodedHeight = Number(header[2]);
+    if (decodedWidth !== width || decodedHeight !== height) {
+        throw new Error(`Expected a ${width}x${height} RGB frame at ${timeSeconds}s in ${mediaFile}, decoded ${decodedWidth}x${decodedHeight}`);
+    }
+    const pixels = frame.subarray(header[0].length);
+    if (pixels.length !== expectedBytes) {
+        throw new Error(`Expected a ${width}x${height} RGB frame at ${timeSeconds}s in ${mediaFile}, got ${pixels.length} bytes`);
+    }
+    return pixels;
 }
 
 // Returns the mean volume (dBFS) of the first audio stream of `mediaFile`, as
