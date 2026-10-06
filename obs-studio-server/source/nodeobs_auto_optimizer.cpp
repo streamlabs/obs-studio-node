@@ -3765,6 +3765,10 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 	}
 
 	for (size_t index = 0; index < candidates.size(); index++) {
+		if (session->cancelRequested.load()) {
+			result.cancelled = true;
+			return result;
+		}
 		const auto &candidate = candidates[index];
 		CurrentSettings eventVideo = leg.current;
 		eventVideo.width = (int)candidate.width;
@@ -3826,6 +3830,12 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 			enhancedBroadcastingPolicy::filterProbeCodecs(post.client.supported_codecs);
 			config = osn::DownloadGoLiveConfig(goLiveConfigUrl, post);
 		} catch (const std::exception &exception) {
+			// The synchronous request can finish after cancellation. Do not start
+			// another five-second request and exceed the cleanup deadline.
+			if (session->cancelRequested.load()) {
+				result.cancelled = true;
+				return result;
+			}
 			blog(LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Ladder request failed for %ux%u %u/%u FPS: %s", candidate.width,
 			     candidate.height, candidate.fpsNum, candidate.fpsDen, boundedLogValue(exception.what()).c_str());
 			result.errorCode = "enhanced_broadcasting_config_request_failed";
@@ -3839,6 +3849,10 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 					++index;
 				continue;
 			}
+			return result;
+		}
+		if (session->cancelRequested.load()) {
+			result.cancelled = true;
 			return result;
 		}
 		if (!validateEnhancedBroadcastingConfig(config, candidateCanvases, result.errorCode)) {
