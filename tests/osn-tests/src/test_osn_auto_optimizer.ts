@@ -388,42 +388,59 @@ describe(testName, function() {
         expect(response.result.outputs[0].videos.map(video => video.display)).to.deep.equal(['horizontal', 'vertical']);
     });
 
-    it('preserves a paired vertical recommendation when Enhanced Broadcasting is estimate-only', async function() {
-        const response = await run({
-            streamSetup: 'enhanced-broadcasting',
-            outputs: [output({
-                display: 'both',
-                outputKind: 'twitch-enhanced-broadcasting',
-                destinations: ['twitch'],
-                estimateReason: 'enhanced_broadcasting',
-                additionalVideo: {
-                    display: 'vertical',
-                    current: {
-                        ...output().current,
-                        width: 720,
-                        height: 1280,
-                        fpsNum: 60,
+    for (const [width, height, verticalWidth, verticalHeight] of [
+        [1280, 720, 720, 1280],
+        [2560, 1440, 1440, 2560],
+        [2560, 1440, 1080, 1920],
+    ]) {
+        it(`preserves saved Dual Format settings when estimate-only (${width}x${height} / ${verticalWidth}x${verticalHeight})`, async function() {
+            const response = await run({
+                streamSetup: 'enhanced-broadcasting',
+                outputs: [output({
+                    display: 'both',
+                    outputKind: 'twitch-enhanced-broadcasting',
+                    destinations: ['twitch'],
+                    estimateReason: 'enhanced_broadcasting',
+                    current: { ...output().current, width, height },
+                    additionalVideo: {
+                        display: 'vertical',
+                        current: {
+                            ...output().current,
+                            width: verticalWidth,
+                            height: verticalHeight,
+                            fpsNum: 60,
+                        },
+                        limits: {
+                            maxWidth: Math.max(1080, verticalWidth),
+                            maxHeight: Math.max(1920, verticalHeight),
+                            maxFpsNum: 60,
+                            maxFpsDen: 1,
+                        },
                     },
-                    limits: {
-                        maxWidth: 1080,
-                        maxHeight: 1920,
-                        maxFpsNum: 60,
-                        maxFpsDen: 1,
-                    },
-                },
-            })],
-        });
+                })],
+            });
 
-        expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
-        expect(response.result.outputs[0].videos.find(video => video.display === 'vertical')).to.deep.equal({
-            display: 'vertical',
-            width: 720,
-            height: 1280,
-            fpsNum: 60,
-            fpsDen: 1,
+            expect(response.result.status).to.equal('complete');
+            expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
+            expect(response.result.outputs[0].videos).to.deep.equal([
+                {
+                    display: 'horizontal',
+                    width,
+                    height,
+                    fpsNum: 30,
+                    fpsDen: 1,
+                },
+                {
+                    display: 'vertical',
+                    width: verticalWidth,
+                    height: verticalHeight,
+                    fpsNum: 60,
+                    fpsDen: 1,
+                },
+            ]);
+            expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
         });
-        expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
-    });
+    }
 
     it('cancels a newly started run and makes cleanup observable before returning', async function() {
         const nativeRun = autoOptimizer.run({

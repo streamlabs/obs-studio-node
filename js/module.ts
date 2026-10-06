@@ -2167,7 +2167,7 @@ interface IAutoOptimizerLimits {
      * caller remains responsible for applying a recommended Base Canvas resize
      * safely.
      * Horizontal 1440p testing is available only when every destination in the
-     * request is Twitch. Other streams are limited to 1080p. Vertical output
+     * request is Twitch. Other streams are limited to 1080p. Vertical testing
      * remains limited to 1080x1920, including Twitch Enhanced Broadcasting's
      * paired 1440p horizontal / 1080p vertical workload. Ordinary Twitch 1440p
      * requests use an experimental 8000 Kbps limit instead of the service's
@@ -2209,6 +2209,9 @@ interface IAutoOptimizerOutputRequest {
      * Broadcasting upload as `current`. Valid only with `display: 'both'`. OSN
      * validates the paired ladder only for one Twitch destination, one Enhanced
      * Broadcasting probe, and two distinct registered canvas IDs.
+     * Without a successful paired probe, an estimated result preserves this
+     * video's current resolution and frame rate; it does not validate that
+     * the saved pair can be streamed.
      */
     additionalVideo?: IAutoOptimizerAdditionalVideoRequest;
     estimateReason?: AutoOptimizerEstimateReason;

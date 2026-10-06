@@ -601,7 +601,58 @@ TEST_CASE("Auto Optimizer client requires exact proof for a 1440p horizontal and
 		fixture, {
 				 {"unproven vertical size", [](json &value) { value["legs"][0]["recommendation"]["additionalVideo"]["width"] = 720; }},
 				 {"unproven primary size", [](json &value) { value["legs"][0]["measurement"]["probes"][0]["testedWidth"] = 1920; }},
+				 {"measured pair outside Twitch policy",
+				  [](json &value) {
+					  auto &output = value["legs"][0];
+					  auto &vertical = output["recommendation"]["additionalVideo"];
+					  vertical["width"] = 1440;
+					  vertical["height"] = 2560;
+					  output["measurement"]["probes"][0]["testedAdditionalVideo"] = vertical;
+				  }},
 			 });
+}
+
+TEST_CASE("Auto Optimizer client preserves saved Dual Format estimates without measured pairing requirements")
+{
+	const bool failedProbe = GENERATE(false, true);
+	CAPTURE(failedProbe);
+	json output = enhancedBroadcastingOutput();
+	output["current"] = current(2560, 1440, 6000, 1);
+	output["additionalVideo"]["current"] = current(1440, 2560, 6000, 2);
+	output["additionalVideo"]["current"]["fpsNum"] = 30;
+	if (!failedProbe)
+		output.erase("probes");
+	const auto prepared = prepare({{"streamSetup", "enhanced-broadcasting"}, {"outputs", json::array({output})}});
+	json returned = returnedEnhancedBroadcastingOutput();
+	returned["recommendation"]["width"] = 2560;
+	returned["recommendation"]["height"] = 1440;
+	const json vertical = {{"display", "vertical"}, {"width", 1440}, {"height", 2560}, {"fpsNum", 30}, {"fpsDen", 1}};
+	returned["recommendation"]["additionalVideo"] = vertical;
+	returned["measurement"]["mode"] = "estimated";
+	returned["measurement"]["confidence"] = "medium";
+	if (failedProbe)
+		returned["measurement"]["probes"][0]["success"] = false;
+	else
+		returned["measurement"].erase("probes");
+	ResultFixture fixture{prepared, {{"schemaVersion", 1}, {"sessionId", "run"}, {"status", "complete"}, {"legs", json::array({returned})}}};
+	const auto result = contract::projectResult(fixture.result.dump(), "run", prepared.context);
+	REQUIRE(result.valid);
+	const auto projected = json::parse(result.json)["outputs"][0];
+	CHECK(projected["measurement"]["mode"] == "estimated");
+	CHECK(projected["videos"][1] == vertical);
+	CHECK_FALSE(projected.contains("encoding"));
+	checkInvalidResultMutations(
+		fixture, {{"changed saved vertical size",
+			   [](json &value) {
+				   value["legs"][0]["recommendation"]["additionalVideo"]["width"] = 1080;
+				   value["legs"][0]["recommendation"]["additionalVideo"]["height"] = 1920;
+			   }},
+			  {"changed saved vertical cadence", [](json &value) { value["legs"][0]["recommendation"]["additionalVideo"]["fpsNum"] = 60; }},
+			  {"unmeasured primary promotion", [](json &value) { value["legs"][0]["recommendation"]["fpsNum"] = 120; }}});
+	auto limited = prepared.context;
+	limited.outputs[0].additionalVideo->limits.maxWidth = 1080;
+	limited.outputs[0].additionalVideo->limits.maxHeight = 1920;
+	CHECK_FALSE(contract::projectResult(fixture.result.dump(), "run", limited).valid);
 }
 
 TEST_CASE("Auto Optimizer client preserves measured Enhanced Broadcasting fallback explanations")

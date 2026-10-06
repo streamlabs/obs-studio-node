@@ -662,13 +662,18 @@ bool parseRecommendation(const json &value, const OutputContext &output, const s
 	if (result.additionalVideo) {
 		const auto &additional = *result.additionalVideo;
 		const auto &additionalContext = *output.additionalVideo;
-		const auto paired = enhancedBroadcastingPolicy::pairedVerticalCandidate(
-			{(uint32_t)result.width, (uint32_t)result.height, (uint32_t)result.fpsNum, (uint32_t)result.fpsDen});
-		if (additional["width"] != paired.width || additional["height"] != paired.height ||
-		    (measurementMode == "active" && static_cast<int64_t>(additional["fpsNum"].get<int>()) * result.fpsDen !=
-							    static_cast<int64_t>(result.fpsNum) * additional["fpsDen"].get<int>()) ||
-		    !tupleWithinLimits(additional["width"], additional["height"], additional["fpsNum"], additional["fpsDen"], additionalContext.limits))
+		if (!tupleWithinLimits(additional["width"], additional["height"], additional["fpsNum"], additional["fpsDen"], additionalContext.limits))
 			return false;
+		// Only measured results must match Twitch's tested pair. Estimates retain
+		// the saved vertical settings, which may differ in resolution or cadence.
+		if (measurementMode == "active") {
+			const auto paired = enhancedBroadcastingPolicy::pairedVerticalCandidate(
+				{(uint32_t)result.width, (uint32_t)result.height, (uint32_t)result.fpsNum, (uint32_t)result.fpsDen});
+			if (additional["width"] != paired.width || additional["height"] != paired.height ||
+			    static_cast<int64_t>(additional["fpsNum"].get<int>()) * result.fpsDen !=
+				    static_cast<int64_t>(result.fpsNum) * additional["fpsDen"].get<int>())
+				return false;
+		}
 		if (measurementMode == "estimated" &&
 		    (additional["width"] != additionalContext.current.width || additional["height"] != additionalContext.current.height ||
 		     static_cast<int64_t>(additional["fpsNum"].get<int>()) * additionalContext.current.fpsDen !=
