@@ -606,9 +606,8 @@ TEST_CASE("Auto Optimizer client requires exact proof for a 1440p horizontal and
 
 TEST_CASE("Auto Optimizer client preserves measured Enhanced Broadcasting fallback explanations")
 {
-	for (const auto reason :
-	     {"enhanced_broadcasting_transport_fallback", "enhanced_broadcasting_workload_fallback", "enhanced_broadcasting_transport_and_workload_fallback",
-	      "enhanced_broadcasting_configuration_fallback"}) {
+	for (const auto reason : {"enhanced_broadcasting_transport_fallback", "enhanced_broadcasting_workload_fallback",
+				  "enhanced_broadcasting_transport_and_workload_fallback", "enhanced_broadcasting_configuration_fallback"}) {
 		CAPTURE(reason);
 		auto fixture = enhancedBroadcastingFixture();
 		fixture.result["legs"][0]["measurement"]["reason"] = reason;

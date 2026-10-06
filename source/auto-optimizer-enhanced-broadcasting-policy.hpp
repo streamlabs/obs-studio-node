@@ -177,7 +177,8 @@ struct CandidateFallbackEvidence {
 		transportPressure |= errorCode == "enhanced_broadcasting_transport_pressure";
 		workloadPressure |= errorCode == "enhanced_broadcasting_encoder_underload" || errorCode == "enhanced_broadcasting_render_overload" ||
 				    errorCode == "enhanced_broadcasting_companion_overload";
-		configurationLimited |= errorCode == "enhanced_broadcasting_ladder_below_candidate" || errorCode == "enhanced_broadcasting_config_request_failed";
+		configurationLimited |= errorCode == "enhanced_broadcasting_ladder_below_candidate" ||
+					errorCode == "enhanced_broadcasting_config_request_failed";
 	}
 
 	std::string_view reason() const
