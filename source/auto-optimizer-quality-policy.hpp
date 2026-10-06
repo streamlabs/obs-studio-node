@@ -24,6 +24,18 @@ inline constexpr size_t kMaximumUploadLegs = 2;
 inline constexpr size_t kMaximumEnhancedBroadcastingDualOutputLegs = 3;
 inline constexpr int kDefaultEstimatedBitrateKbps = 2500;
 inline constexpr int kMaximumRecommendedBitrateKbps = 8000;
+inline constexpr int kExperimentalTwitch1440pBitrateKbps = 8000;
+inline constexpr int kMultistreamVideoBitrateLimitKbps = 6000;
+
+inline bool isTwitchOnlyStream(const std::vector<std::string> &platforms)
+{
+	return !platforms.empty() && std::all_of(platforms.begin(), platforms.end(), [](const auto &platform) { return platform == "twitch"; });
+}
+
+inline bool isMultiplatformStream(const std::vector<std::string> &platforms)
+{
+	return !platforms.empty() && std::any_of(platforms.begin(), platforms.end(), [&](const auto &platform) { return platform != platforms.front(); });
+}
 
 /** Accept only effective frame rates from 1 through 240 FPS. */
 inline bool isValidFrameRate(int64_t numerator, int64_t denominator)
@@ -247,9 +259,11 @@ inline void applySharedMinimumCadence(VideoTuple &first, VideoTuple &second)
 inline const std::vector<HardwareTier> &hardwareTiers()
 {
 	static const std::vector<HardwareTier> tiers = {
+		{2560, 1440, false}, // 1440 high FPS (only when permitted by the request)
 		{1920, 1080, false}, // 1080 high FPS
 		{1280, 720, false},  // 720 high FPS
 		{1920, 1080, true},  // 1080 low FPS
+		{2560, 1440, true},  // 1440 low FPS
 		{960, 540, false},   // 540 high FPS
 		{1280, 720, true},   // 720 low FPS
 		{960, 540, true},    // 540 low FPS
@@ -311,7 +325,7 @@ inline bool hasSupportedTierAspectRatio(const VideoTuple &value)
 inline VideoTuple fitTier(const VideoTuple &ceiling, int longEdge, int shortEdge, bool lowerFps)
 {
 	VideoTuple result = ceiling;
-	// The optimizer supports only the 1920x1080, 1280x720, and 960x540 tiers,
+	// The optimizer supports 2560x1440, 1920x1080, 1280x720, and 960x540 tiers,
 	// and their portrait equivalents. Preserve custom-aspect geometry and frame
 	// rate instead of constructing a resolution Desktop cannot apply as a
 	// supported tier.
@@ -358,7 +372,7 @@ inline VideoTuple boundCurrentToSupportedTier(const VideoTuple &current, int max
 	if (current.width <= maxWidth && current.height <= maxHeight)
 		return current;
 
-	const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
+	const int tiers[][2] = {{2560, 1440}, {1920, 1080}, {1280, 720}, {960, 540}};
 	for (const auto &tier : tiers) {
 		VideoTuple candidate = fitTier(current, tier[0], tier[1], false);
 		if (candidate.width <= maxWidth && candidate.height <= maxHeight) {
@@ -386,7 +400,7 @@ inline VideoTuple benchmarkCeiling(const VideoTuple &current, int maxWidth, int 
 	VideoTuple result = bounded;
 	const bool landscape = current.width >= current.height;
 	if (sameVideo(bounded, current)) {
-		const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
+		const int tiers[][2] = {{2560, 1440}, {1920, 1080}, {1280, 720}, {960, 540}};
 		for (const auto &tier : tiers) {
 			const int width = landscape ? tier[0] : tier[1];
 			const int height = landscape ? tier[1] : tier[0];
@@ -446,7 +460,7 @@ inline bool isQualityPromotion(const VideoTuple &current, const VideoTuple &sele
 inline std::vector<VideoTuple> candidates(const VideoTuple &ceiling)
 {
 	std::vector<VideoTuple> result;
-	const int tiers[][2] = {{1920, 1080}, {1280, 720}, {960, 540}};
+	const int tiers[][2] = {{2560, 1440}, {1920, 1080}, {1280, 720}, {960, 540}};
 	for (const auto &tier : tiers) {
 		for (bool lowerFps : {false, true}) {
 			VideoTuple candidate = fitTier(ceiling, tier[0], tier[1], lowerFps);
@@ -475,6 +489,10 @@ inline int twitchMinimumBitrateKbps(const VideoTuple &video)
 	const int longEdge = std::max(video.width, video.height);
 	const int shortEdge = std::min(video.width, video.height);
 	const bool highFps = fpsGreaterThan(video, 30);
+	// Experimental ordinary-Twitch 1440p policy, gated by Twitch-only request
+	// limits and a successful 8 Mbps probe. Do not raise multistream bitrates.
+	if (longEdge == 2560 && shortEdge == 1440)
+		return kExperimentalTwitch1440pBitrateKbps;
 	if (longEdge == 1920 && shortEdge == 1080)
 		return highFps ? 5500 : 5000;
 	if (longEdge == 1280 && shortEdge == 720)

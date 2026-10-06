@@ -585,10 +585,30 @@ TEST_CASE("Auto Optimizer client requires the exact active Dual Output aggregate
 			  {"divergent preset", [](json &value) { value["legs"][1]["recommendation"]["preset"] = "veryfast"; }}});
 }
 
+TEST_CASE("Auto Optimizer client requires exact proof for a 1440p horizontal and 1080p vertical pair")
+{
+	json output = enhancedBroadcastingOutput();
+	output["limits"] = {{"maxWidth", 2560}, {"maxHeight", 1440}};
+	const auto prepared = prepare({{"streamSetup", "enhanced-broadcasting"}, {"outputs", json::array({output})}});
+	json returned = returnedEnhancedBroadcastingOutput();
+	returned["recommendation"]["width"] = 2560;
+	returned["recommendation"]["height"] = 1440;
+	returned["measurement"]["probes"][0]["testedWidth"] = 2560;
+	returned["measurement"]["probes"][0]["testedHeight"] = 1440;
+	ResultFixture fixture{prepared, {{"schemaVersion", 1}, {"sessionId", "run"}, {"status", "complete"}, {"legs", json::array({returned})}}};
+	REQUIRE(contract::projectResult(fixture.result.dump(), "run", prepared.context).valid);
+	checkInvalidResultMutations(
+		fixture, {
+				 {"unproven vertical size", [](json &value) { value["legs"][0]["recommendation"]["additionalVideo"]["width"] = 720; }},
+				 {"unproven primary size", [](json &value) { value["legs"][0]["measurement"]["probes"][0]["testedWidth"] = 1920; }},
+			 });
+}
+
 TEST_CASE("Auto Optimizer client preserves measured Enhanced Broadcasting fallback explanations")
 {
 	for (const auto reason :
-	     {"enhanced_broadcasting_transport_fallback", "enhanced_broadcasting_workload_fallback", "enhanced_broadcasting_transport_and_workload_fallback"}) {
+	     {"enhanced_broadcasting_transport_fallback", "enhanced_broadcasting_workload_fallback", "enhanced_broadcasting_transport_and_workload_fallback",
+	      "enhanced_broadcasting_configuration_fallback"}) {
 		CAPTURE(reason);
 		auto fixture = enhancedBroadcastingFixture();
 		fixture.result["legs"][0]["measurement"]["reason"] = reason;
@@ -602,6 +622,27 @@ TEST_CASE("Auto Optimizer client preserves measured Enhanced Broadcasting fallba
 		CHECK(output["measurement"]["evidence"][0]["success"] == true);
 		CHECK_FALSE(output.contains("encoding"));
 	}
+}
+
+TEST_CASE("Auto Optimizer projects Twitch configuration warnings separately from measurement confidence")
+{
+	auto fixture = enhancedBroadcastingFixture();
+	auto &measurement = fixture.result["legs"][0]["measurement"];
+	measurement["configurationWarning"] = true;
+	measurement["reason"] = "enhanced_broadcasting_configuration_fallback";
+	const auto result = contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context);
+	REQUIRE(result.valid);
+	const auto output = json::parse(result.json)["outputs"][0];
+	CHECK(output["warnings"] == json::array({"enhanced_broadcasting_configuration_warning"}));
+	CHECK(output["measurement"]["reason"] == measurement["reason"]);
+	CHECK(output["measurement"]["confidence"] == "high");
+	CHECK_FALSE(output["measurement"].contains("configurationWarning"));
+	measurement["configurationWarning"] = false;
+	const auto noWarning = contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context);
+	REQUIRE(noWarning.valid);
+	CHECK_FALSE(json::parse(noWarning.json)["outputs"][0].contains("warnings"));
+	measurement["configurationWarning"] = "<b>untrusted platform text</b>";
+	CHECK_FALSE(contract::projectResult(fixture.result.dump(), "run", fixture.prepared.context).valid);
 }
 
 TEST_CASE("Auto Optimizer client requires exact Enhanced Broadcasting combined workload proof")

@@ -114,12 +114,15 @@ describe(testName, function() {
         };
     }
 
-    async function startSessionAtHardwareAttempt(): Promise<AutoOptimizerRun> {
+    async function startSessionAtHardwareAttempt(request: IAutoOptimizerRequest = {
+        streamSetup: 'custom-rtmp', outputs: [output()],
+    }, observe?: (event: IAutoOptimizerEvent) => void): Promise<AutoOptimizerRun> {
         let nativeRun: AutoOptimizerRun | null = null;
         let timeout: ReturnType<typeof setTimeout>;
         const hardwareAttemptStarted = new Promise<void>((resolve, reject) => {
             timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer benchmark workload')), 15000);
             const onEvent = (event: IAutoOptimizerEvent) => {
+                if (observe) observe(event);
                 if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
                     event.code === 'hardware_testing_x264') {
                     clearTimeout(timeout);
@@ -131,10 +134,7 @@ describe(testName, function() {
             };
 
             nativeRun = autoOptimizer.run(
-                {
-                    streamSetup: 'custom-rtmp',
-                    outputs: [output()],
-                } as IAutoOptimizerRequest,
+                request,
                 onEvent,
             );
         });
@@ -188,6 +188,38 @@ describe(testName, function() {
             clearTimeout(timeout!);
         }
     }
+
+    it('caps ordinary multistream bitrate without reducing a single-platform allowance', async function() {
+        const selections: AutoOptimizerOutputRequest['destinations'][] = [['youtube', 'kick'], ['youtube']];
+        for (const destinations of selections) {
+            const { result } = await run({
+                streamSetup: destinations.length > 1 ? 'cloud-multistream' : 'direct-single',
+                outputs: [output({
+                    destinations,
+                    current: { ...output().current, bitrateKbps: 8000 },
+                    limits: { maxBitrateKbps: 8000 },
+                })],
+            });
+            expect(result.status).to.equal('complete');
+            expect(result.outputs[0].encoding!.bitrateKbps).to.equal(destinations.length > 1 ? 6000 : 8000);
+        }
+    });
+
+    it('tests 1440p only for Twitch-only requests, even when another platform shares its canvas', async function() {
+        for (const destinations of [['twitch'], ['twitch', 'kick'], ['youtube']]) {
+            const events: IAutoOptimizerEvent[] = [];
+            const nativeRun = await startSessionAtHardwareAttempt({
+                streamSetup: destinations.length > 1 ? 'cloud-multistream' : 'direct-single',
+                outputs: [output({ destinations: destinations as AutoOptimizerOutputRequest['destinations'],
+                    limits: { maxWidth: 2560, maxHeight: 1440, maxBitrateKbps: 8000 } })],
+            }, event => events.push(event));
+            await nativeRun.cancel();
+            expect((await nativeRun.result).status).to.equal('cancelled');
+            const attempted = events.filter(event => event.width && event.height);
+            expect(attempted.length).to.be.greaterThan(0);
+            expect(Math.max(...attempted.map(event => event.width!))).to.equal(destinations.length === 1 && destinations[0] === 'twitch' ? 2560 : 1920);
+        }
+    });
 
     it('exposes only the run-based Auto Optimizer API', function() {
         expect(autoOptimizer.run).to.be.a('function');

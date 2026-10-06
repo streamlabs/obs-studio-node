@@ -1131,6 +1131,7 @@ interface IAutoOptimizerOutputResult {
     videos: IAutoOptimizerVideoRecommendation[];
     encoding?: IAutoOptimizerEncodingRecommendation;
     measurement: IAutoOptimizerMeasurement;
+    warnings?: string[];
 }
 type AutoOptimizerFatalErrorCode = 'cancelled' | 'hardware_no_usable_encoder' | 'hardware_benchmark_overloaded' | 'hardware_benchmark_timeout' | 'hardware_benchmark_unavailable' | 'auto_optimizer_worker_failed' | 'auto_optimizer_worker_launch_failed';
 interface IAutoOptimizerError {

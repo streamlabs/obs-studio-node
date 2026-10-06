@@ -1836,6 +1836,13 @@ export interface IStreaming {
     network: INetwork,
     video: IVideo,
     signalHandler: (signal: EOutputSignal) => void,
+    /**
+     * Returns encoder options and mode-specific metadata, filtered by the assigned service.
+     * Works for ordinary and Enhanced Broadcasting outputs without starting a stream or
+     * requesting a Twitch configuration; this is not the active Enhanced Broadcasting ladder.
+     * The instance must remain alive. A failed query throws a JavaScript Error without
+     * changing the output or its encoders.
+     */
     getAvailableEncoders(): IEncoderOption[],
     start(): void, // throws
     stop(force?: boolean): void,
@@ -2146,16 +2153,26 @@ interface IAutoOptimizerLimits {
      * settings are managed by Desktop. A provider probe may test above this
      * value to verify stability or shared upload capacity, but the
      * recommendation never exceeds it.
+     * When multiple distinct platforms are selected across the request, OSN
+     * additionally caps each ordinary output at 6000 Kbps. Twitch Enhanced
+     * Broadcasting retains its platform-managed bitrate ladder.
      */
     maxBitrateKbps?: number;
     /**
      * Maximum resolution OSN may test for this run without changing persistent
      * video settings. Supply `maxWidth` and `maxHeight` together. OSN tests only
-     * the supported 1920x1080, 1280x720, and 960x540 tiers, or their portrait
+     * the supported 2560x1440, 1920x1080, 1280x720, and 960x540 tiers, or their portrait
      * equivalents, up to this limit. It promotes only 16:9 or 9:16 output; a
      * custom aspect ratio keeps its current resolution and frame rate. The
      * caller remains responsible for applying a recommended Base Canvas resize
      * safely.
+     * Horizontal 1440p testing is available only when every destination in the
+     * request is Twitch. Other streams are limited to 1080p. Vertical output
+     * remains limited to 1080x1920, including Twitch Enhanced Broadcasting's
+     * paired 1440p horizontal / 1080p vertical workload. Ordinary Twitch 1440p
+     * requests use an experimental 8000 Kbps limit instead of the service's
+     * 6000 Kbps default; the caller must apply that tested bitrate without
+     * reapplying the lower service bitrate limit.
      */
     maxWidth?: number;
     maxHeight?: number;
@@ -2393,6 +2410,13 @@ interface IAutoOptimizerOutputResult {
     /** Omitted for Twitch Enhanced Broadcasting because Twitch supplies its encoding ladder. */
     encoding?: IAutoOptimizerEncodingRecommendation;
     measurement: IAutoOptimizerMeasurement;
+    /**
+     * Non-fatal warning codes for the recommended settings, independent of
+     * measurement confidence. `enhanced_broadcasting_configuration_warning`
+     * means Twitch returned a warning for the selected configuration even
+     * though its probe passed. Twitch's HTML message is not exposed.
+     */
+    warnings?: string[];
 }
 
 type AutoOptimizerFatalErrorCode =

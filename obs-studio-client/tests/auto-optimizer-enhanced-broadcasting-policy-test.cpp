@@ -4,6 +4,29 @@
 
 namespace policy = autoOptimizer::enhancedBroadcastingPolicy;
 
+TEST_CASE("Enhanced Broadcasting probes preserve discovered H.264 and HEVC independently of resolution")
+{
+	std::unordered_set<std::string> codecs{"h264", "h265", "av1", "vp9"};
+	policy::filterProbeCodecs(codecs);
+	CHECK(codecs == std::unordered_set<std::string>{"h264", "h265"});
+}
+
+TEST_CASE("Enhanced Broadcasting probes do not add undiscovered codecs")
+{
+	for (const auto &available : std::vector<std::unordered_set<std::string>>{{"h264"}, {"h265"}, {}}) {
+		auto filtered = available;
+		policy::filterProbeCodecs(filtered);
+		CHECK(filtered == available);
+	}
+}
+
+TEST_CASE("Enhanced Broadcasting probes exclude AV1 even when it is the only discovered codec")
+{
+	std::unordered_set<std::string> codecs{"av1"};
+	policy::filterProbeCodecs(codecs);
+	CHECK(codecs.empty());
+}
+
 TEST_CASE("Enhanced Broadcasting candidates are ordered and capped at 1080p")
 {
 	const auto result = policy::candidates(1920, 1080, 60, 1);
@@ -144,13 +167,28 @@ TEST_CASE("Enhanced Broadcasting fallback reports retain earlier upload instabil
 	policy::CandidateFallbackEvidence evidence;
 	CHECK(evidence.reason().empty());
 	evidence.record("enhanced_broadcasting_ladder_below_candidate");
-	CHECK(evidence.reason().empty());
+	CHECK(evidence.reason() == "enhanced_broadcasting_configuration_fallback");
+	CHECK_FALSE(evidence.workloadPressure);
+	CHECK_FALSE(evidence.transportPressure);
 	evidence.record("enhanced_broadcasting_transport_pressure");
 	CHECK(evidence.reason() == "enhanced_broadcasting_transport_fallback");
 	evidence.record("enhanced_broadcasting_ladder_below_candidate");
 	evidence.record("");
 	CHECK(evidence.reason() == "enhanced_broadcasting_transport_fallback");
 	CHECK(policy::CandidateFallbackEvidence{}.reason().empty());
+}
+
+TEST_CASE("Enhanced Broadcasting configuration fallback does not imply measured overload")
+{
+	for (const auto error : {"enhanced_broadcasting_ladder_below_candidate", "enhanced_broadcasting_config_request_failed"}) {
+		policy::CandidateFallbackEvidence evidence;
+		evidence.record(error);
+		CHECK(evidence.reason() == "enhanced_broadcasting_configuration_fallback");
+		CHECK_FALSE(evidence.workloadPressure);
+		CHECK_FALSE(evidence.transportPressure);
+		evidence.record("enhanced_broadcasting_render_overload");
+		CHECK(evidence.reason() == "enhanced_broadcasting_workload_fallback");
+	}
 }
 
 TEST_CASE("Enhanced Broadcasting fallback reports distinguish workload and upload failures")
@@ -169,4 +207,16 @@ TEST_CASE("Enhanced Broadcasting fallback reports distinguish workload and uploa
 		reversed.record(error);
 		CHECK(reversed.reason() == evidence.reason());
 	}
+}
+TEST_CASE("Enhanced Broadcasting 1440p pairs with a 1080p vertical workload")
+{
+	const auto candidates = autoOptimizer::enhancedBroadcastingPolicy::candidates(2560, 1440, 60, 1);
+	REQUIRE(candidates.size() == 7);
+	CHECK(candidates.front().width == 2560);
+	CHECK(candidates.front().height == 1440);
+	const auto vertical = autoOptimizer::enhancedBroadcastingPolicy::pairedVerticalCandidate(candidates.front());
+	CHECK(vertical.width == 1080);
+	CHECK(vertical.height == 1920);
+	CHECK(vertical.fpsNum == 60);
+	CHECK(autoOptimizer::enhancedBroadcastingPolicy::candidates(1920, 1080, 60, 1).size() == 5);
 }

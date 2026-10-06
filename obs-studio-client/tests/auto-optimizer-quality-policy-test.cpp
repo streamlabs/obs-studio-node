@@ -8,6 +8,16 @@
 
 namespace policy = autoOptimizer::qualityPolicy;
 
+TEST_CASE("Multistream bitrate policy counts platforms rather than canvases")
+{
+	CHECK_FALSE(policy::isMultiplatformStream({}));
+	CHECK_FALSE(policy::isMultiplatformStream({"twitch", "twitch"}));
+	CHECK_FALSE(policy::isMultiplatformStream({"youtube", "youtube"}));
+	CHECK(policy::isMultiplatformStream({"twitch", "youtube"}));
+	CHECK(policy::isMultiplatformStream({"youtube", "kick"}));
+	CHECK(policy::kMultistreamVideoBitrateLimitKbps == 6000);
+}
+
 TEST_CASE("Auto Optimizer accepts only effective frame rates from 1 through 240 FPS")
 {
 	CHECK_FALSE(policy::isValidFrameRate(0, 1));
@@ -234,6 +244,19 @@ TEST_CASE("Auto Optimizer hardware tests high frame rates in product-priority or
 	CHECK(result[1].fpsNum == 30);
 }
 
+TEST_CASE("Auto Optimizer permits Twitch-only 1440p with an experimental measured 8 Mbps budget")
+{
+	CHECK(policy::isTwitchOnlyStream({"twitch", "twitch"}));
+	CHECK_FALSE(policy::isTwitchOnlyStream({"twitch", "youtube"}));
+	CHECK_FALSE(policy::isTwitchOnlyStream({"twitch", "custom"}));
+	CHECK_FALSE(policy::isTwitchOnlyStream({}));
+	const policy::VideoTuple ceiling{2560, 1440, 60, 1};
+	CHECK(policy::select(ceiling, 8000, "nvenc", policy::QualityProfile::Twitch).video.width == 2560);
+	CHECK(policy::select(ceiling, 7950, "nvenc", policy::QualityProfile::Twitch).video.width == 1920);
+	CHECK(policy::select(ceiling, 6000, "nvenc", policy::QualityProfile::Twitch).video.width == 1920);
+	CHECK(policy::benchmarkCeiling({1280, 720, 30, 1}, 2560, 1440, 60, 1).width == 2560);
+}
+
 TEST_CASE("Auto Optimizer hardware timeout scales with work and remains bounded")
 {
 	const int oneAttempt = policy::hardwarePhaseTimeoutMs(1, 500, 1500, 3000);
@@ -441,8 +464,8 @@ TEST_CASE("Auto Optimizer benchmark ceiling explicitly permits isolated promotio
 	CHECK(cappedNtsc.fpsDen == 1001);
 
 	const auto productBound = policy::benchmarkCeiling(current, 3840, 2160);
-	CHECK(productBound.width == 1920);
-	CHECK(productBound.height == 1080);
+	CHECK(productBound.width == 2560);
+	CHECK(productBound.height == 1440);
 
 	const auto lowerProductBound = policy::benchmarkCeiling({1920, 1080, 30, 1}, 1280, 720);
 	CHECK(lowerProductBound.width == 1280);
