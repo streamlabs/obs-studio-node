@@ -37,6 +37,15 @@ inline bool isMultiplatformStream(const std::vector<std::string> &platforms)
 	return !platforms.empty() && std::any_of(platforms.begin(), platforms.end(), [&](const auto &platform) { return platform != platforms.front(); });
 }
 
+// Limit each ordinary output, not aggregate upload probes or Twitch's managed
+// ladder. Zero means no limit was supplied; preserve any stricter limit.
+inline int applyMultistreamBitrateLimitKbps(int maximumBitrateKbps, bool multiplatform, bool standardOutput)
+{
+	if (multiplatform && standardOutput && (maximumBitrateKbps == 0 || maximumBitrateKbps > kMultistreamVideoBitrateLimitKbps))
+		return kMultistreamVideoBitrateLimitKbps;
+	return maximumBitrateKbps;
+}
+
 /** Accept only effective frame rates from 1 through 240 FPS. */
 inline bool isValidFrameRate(int64_t numerator, int64_t denominator)
 {

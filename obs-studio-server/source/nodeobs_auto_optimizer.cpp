@@ -1083,9 +1083,7 @@ static LegRequest withOfflinePlatformCaps(const LegRequest &input, bool twitchOn
 		limits.maxWidth = limits.maxWidth > 0 ? std::min(limits.maxWidth, 1080) : std::min(leg.additionalVideo->current.width, 1080);
 		limits.maxHeight = limits.maxHeight > 0 ? std::min(limits.maxHeight, 1920) : std::min(leg.additionalVideo->current.height, 1920);
 	}
-	// Cap each ordinary output, not the bandwidth probe's combined upload
-	// target or the multi-track encoding ladder selected by Twitch.
-	int strictest = multiplatform && leg.outputKind == "standard" ? qualityPolicy::kMultistreamVideoBitrateLimitKbps : 0;
+	int strictest = 0;
 	for (const auto &destination : leg.destinations) {
 		const int cap = leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : offlinePlatformCapKbps(destination.platform);
 		if (cap > 0 && (strictest == 0 || cap < strictest))
@@ -1093,6 +1091,7 @@ static LegRequest withOfflinePlatformCaps(const LegRequest &input, bool twitchOn
 	}
 	if (strictest > 0 && (leg.limits.maxBitrateKbps == 0 || strictest < leg.limits.maxBitrateKbps))
 		leg.limits.maxBitrateKbps = strictest;
+	leg.limits.maxBitrateKbps = qualityPolicy::applyMultistreamBitrateLimitKbps(leg.limits.maxBitrateKbps, multiplatform, leg.outputKind == "standard");
 	return leg;
 }
 

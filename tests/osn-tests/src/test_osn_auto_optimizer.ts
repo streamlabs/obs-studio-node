@@ -189,22 +189,6 @@ describe(testName, function() {
         }
     }
 
-    it('caps ordinary multistream bitrate without reducing a single-platform allowance', async function() {
-        const selections: AutoOptimizerOutputRequest['destinations'][] = [['youtube', 'kick'], ['youtube']];
-        for (const destinations of selections) {
-            const { result } = await run({
-                streamSetup: destinations.length > 1 ? 'cloud-multistream' : 'direct-single',
-                outputs: [output({
-                    destinations,
-                    current: { ...output().current, bitrateKbps: 8000 },
-                    limits: { maxBitrateKbps: 8000 },
-                })],
-            });
-            expect(result.status).to.equal('complete');
-            expect(result.outputs[0].encoding!.bitrateKbps).to.equal(destinations.length > 1 ? 6000 : 8000);
-        }
-    });
-
     it('tests 1440p only for Twitch-only requests, even when another platform shares its canvas', async function() {
         for (const destinations of [['twitch'], ['twitch', 'kick'], ['youtube']]) {
             const events: IAutoOptimizerEvent[] = [];

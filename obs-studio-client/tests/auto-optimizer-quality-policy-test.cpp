@@ -18,6 +18,27 @@ TEST_CASE("Multistream bitrate policy counts platforms rather than canvases")
 	CHECK(policy::kMultistreamVideoBitrateLimitKbps == 6000);
 }
 
+TEST_CASE("Multistream bitrate limits preserve single-platform allowances and Twitch-managed ladders")
+{
+	// This is a policy assertion, not a requirement that the CI machine pass a
+	// real encoder benchmark. Startup and cancellation remain integration-tested.
+	for (const auto &platforms : std::vector<std::vector<std::string>>{{"youtube", "kick"}, {"twitch", "youtube"}, {"youtube"}, {"twitch", "twitch"}}) {
+		CAPTURE(platforms);
+		const bool multiplatform = policy::isMultiplatformStream(platforms);
+		const int limit = policy::applyMultistreamBitrateLimitKbps(8000, multiplatform, true);
+		CHECK(limit == (multiplatform ? 6000 : 8000));
+		CHECK(policy::composeEstimatedBitrateKbps(8000, limit) == limit);
+		CHECK(policy::applyMultistreamBitrateLimitKbps(0, multiplatform, true) == (multiplatform ? 6000 : 0));
+		CHECK(policy::applyMultistreamBitrateLimitKbps(8000, multiplatform, false) == 8000);
+		CHECK(policy::applyMultistreamBitrateLimitKbps(0, multiplatform, false) == 0);
+		for (int stricterLimit : {2500, 4500, 6000}) {
+			CAPTURE(stricterLimit);
+			CHECK(policy::applyMultistreamBitrateLimitKbps(stricterLimit, multiplatform, true) == stricterLimit);
+			CHECK(policy::applyMultistreamBitrateLimitKbps(stricterLimit, multiplatform, false) == stricterLimit);
+		}
+	}
+}
+
 TEST_CASE("Auto Optimizer accepts only effective frame rates from 1 through 240 FPS")
 {
 	CHECK_FALSE(policy::isValidFrameRate(0, 1));
