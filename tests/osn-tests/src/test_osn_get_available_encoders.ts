@@ -93,6 +93,56 @@ function expectEncoderMetadata(encoder: any) {
         "Encoder codec should not be empty");
 }
 
+describe(`${testName} (Enhanced Broadcasting local)`, function () {
+    let obs: OBSHandler;
+
+    before(function () {
+        deleteConfigFiles();
+        obs = new OBSHandler(`${testName}-enhanced-local`);
+    });
+
+    after(function () {
+        if (obs) obs.shutdown();
+        deleteConfigFiles();
+    });
+
+    function testEnhancedEncoders<T extends osn.IStreaming>(
+        mode: string,
+        factory: { create(): T, destroy(stream: T): void },
+        preset: string,
+    ) {
+        it(`Queries ${mode} Enhanced Broadcasting encoder metadata without starting a stream`, function () {
+            const stream = factory.create();
+            let service: osn.IService;
+            try {
+                // Exercise the IPC contract both before and after assigning Twitch.
+                // No provider account, configuration request or output start is needed.
+                for (const withService of [false, true]) {
+                    if (withService) {
+                        service = osn.ServiceFactory.create('rtmp_common', 'encoder-query-local', {
+                            service: 'Twitch', server: 'rtmp://127.0.0.1/live', key: 'unused',
+                        });
+                        stream.service = service;
+                    }
+                    const encoders = stream.getAvailableEncoders();
+                    expect(encoders).to.be.an('array').and.not.be.empty;
+                    encoders.forEach(expectEncoderMetadata);
+                    const x264 = encoders.find(encoder => encoder.id === 'obs_x264');
+                    expect(x264, 'Software encoding metadata must be available').to.include({
+                        id: 'obs_x264', family: 'x264', codec: 'h264', preset, streaming: true,
+                    });
+                }
+            } finally {
+                factory.destroy(stream);
+                if (service) osn.ServiceFactory.destroy(service);
+            }
+        });
+    }
+
+    testEnhancedEncoders('Simple', osn.EnhancedBroadcastingSimpleStreamingFactory, 'Preset');
+    testEnhancedEncoders('Advanced', osn.EnhancedBroadcastingAdvancedStreamingFactory, 'preset');
+});
+
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;

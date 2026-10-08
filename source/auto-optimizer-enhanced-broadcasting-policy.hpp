@@ -3,12 +3,22 @@
 #include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "osn-common.hpp"
 
 namespace autoOptimizer::enhancedBroadcastingPolicy {
+
+inline void filterProbeCodecs(std::unordered_set<std::string> &codecs)
+{
+	// Preserve discovered HEVC support at every resolution: Twitch can select it
+	// for 1080p too, especially for Dual Format's vertical rendition. Twitch names
+	// HEVC "h265"; AV1 remains excluded from probes.
+	std::erase_if(codecs, [](const auto &codec) { return codec != "h264" && codec != "h265"; });
+}
 
 struct VideoCandidate {
 	uint32_t width;
@@ -27,6 +37,9 @@ inline bool fpsAtMost(const VideoCandidate &candidate, uint32_t maxNum, uint32_t
 
 inline VideoCandidate pairedVerticalCandidate(const VideoCandidate &primary)
 {
+	// Twitch's 2K Dual Format ladder pairs 1440p horizontal with 1080p vertical.
+	if (primary.width == 2560 && primary.height == 1440)
+		return {1080, 1920, primary.fpsNum, primary.fpsDen};
 	return {primary.height, primary.width, primary.fpsNum, primary.fpsDen};
 }
 
@@ -87,8 +100,8 @@ inline std::vector<VideoCandidate> candidates(uint32_t maxWidth, uint32_t maxHei
 	const uint32_t thirty = fractionalCadence ? 30000U : 30U;
 	const uint32_t denominator = fractionalCadence ? 1001U : 1U;
 	const VideoCandidate ordered[] = {
-		{1920, 1080, sixty, denominator}, {1920, 1080, thirty, denominator}, {1280, 720, sixty, denominator},
-		{1280, 720, thirty, denominator}, {960, 540, thirty, denominator},
+		{2560, 1440, sixty, denominator}, {2560, 1440, thirty, denominator}, {1920, 1080, sixty, denominator}, {1920, 1080, thirty, denominator},
+		{1280, 720, sixty, denominator},  {1280, 720, thirty, denominator},  {960, 540, thirty, denominator},
 	};
 
 	std::vector<VideoCandidate> result;
@@ -157,12 +170,15 @@ inline bool allowsCandidateDescent(std::string_view errorCode)
 struct CandidateFallbackEvidence {
 	bool transportPressure = false;
 	bool workloadPressure = false;
+	bool configurationLimited = false;
 
 	void record(std::string_view errorCode)
 	{
 		transportPressure |= errorCode == "enhanced_broadcasting_transport_pressure";
 		workloadPressure |= errorCode == "enhanced_broadcasting_encoder_underload" || errorCode == "enhanced_broadcasting_render_overload" ||
 				    errorCode == "enhanced_broadcasting_companion_overload";
+		configurationLimited |= errorCode == "enhanced_broadcasting_ladder_below_candidate" ||
+					errorCode == "enhanced_broadcasting_config_request_failed";
 	}
 
 	std::string_view reason() const
@@ -173,6 +189,8 @@ struct CandidateFallbackEvidence {
 			return "enhanced_broadcasting_transport_fallback";
 		if (workloadPressure)
 			return "enhanced_broadcasting_workload_fallback";
+		if (configurationLimited)
+			return "enhanced_broadcasting_configuration_fallback";
 		return {};
 	}
 };

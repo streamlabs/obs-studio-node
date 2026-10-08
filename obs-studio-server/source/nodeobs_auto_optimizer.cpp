@@ -221,6 +221,7 @@ struct LegRequest {
 	Limits limits;
 	std::optional<AdditionalVideoRequest> additionalVideo;
 	std::string estimateReason;
+	bool experimentalTwitch1440p = false;
 };
 
 struct ProbeRequest {
@@ -260,6 +261,7 @@ struct Recommendation {
 	std::string measurementMode = "estimated";
 	std::string confidence = "medium";
 	std::string reason;
+	bool configurationWarning = false;
 	CurrentSettings value;
 	std::optional<CurrentSettings> additionalVideo;
 	std::vector<MeasurementProvenance> probes;
@@ -1065,17 +1067,31 @@ static int offlinePlatformCapKbps(const std::string &platform)
 	return value > 0 && value < probeValue ? value : 0;
 }
 
-static LegRequest withOfflinePlatformCaps(const LegRequest &input)
+static LegRequest withOfflinePlatformCaps(const LegRequest &input, bool twitchOnly, bool multiplatform)
 {
 	LegRequest leg = input;
+	const bool portrait = leg.current.width < leg.current.height;
+	const int maxWidth = portrait ? 1080 : (twitchOnly ? 2560 : 1920);
+	const int maxHeight = portrait ? 1920 : (twitchOnly ? 1440 : 1080);
+	leg.experimentalTwitch1440p = twitchOnly && !portrait && leg.outputKind == "standard" && leg.limits.maxWidth >= 2560 && leg.limits.maxHeight >= 1440;
+	// Destination policy is session-wide: a Twitch canvas does not get a higher
+	// ceiling when a different platform is sent from the other canvas.
+	leg.limits.maxWidth = leg.limits.maxWidth > 0 ? std::min(leg.limits.maxWidth, maxWidth) : std::min(leg.current.width, maxWidth);
+	leg.limits.maxHeight = leg.limits.maxHeight > 0 ? std::min(leg.limits.maxHeight, maxHeight) : std::min(leg.current.height, maxHeight);
+	if (leg.additionalVideo) {
+		auto &limits = leg.additionalVideo->limits;
+		limits.maxWidth = limits.maxWidth > 0 ? std::min(limits.maxWidth, 1080) : std::min(leg.additionalVideo->current.width, 1080);
+		limits.maxHeight = limits.maxHeight > 0 ? std::min(limits.maxHeight, 1920) : std::min(leg.additionalVideo->current.height, 1920);
+	}
 	int strictest = 0;
 	for (const auto &destination : leg.destinations) {
-		const int cap = offlinePlatformCapKbps(destination.platform);
+		const int cap = leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : offlinePlatformCapKbps(destination.platform);
 		if (cap > 0 && (strictest == 0 || cap < strictest))
 			strictest = cap;
 	}
 	if (strictest > 0 && (leg.limits.maxBitrateKbps == 0 || strictest < leg.limits.maxBitrateKbps))
 		leg.limits.maxBitrateKbps = strictest;
+	leg.limits.maxBitrateKbps = qualityPolicy::applyMultistreamBitrateLimitKbps(leg.limits.maxBitrateKbps, multiplatform, leg.outputKind == "standard");
 	return leg;
 }
 
@@ -1158,6 +1174,8 @@ static CurrentSettings estimateRecommendation(const LegRequest &leg, const Hardw
 static CurrentSettings benchmarkCeiling(const LegRequest &leg)
 {
 	CurrentSettings value = baseRecommendation(leg);
+	if (leg.experimentalTwitch1440p)
+		value.bitrateKbps = leg.limits.maxBitrateKbps;
 	const auto ceiling = qualityPolicy::benchmarkCeiling({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight,
 							     leg.limits.maxFpsNum, leg.limits.maxFpsDen);
 	value.width = ceiling.width;
@@ -1270,6 +1288,8 @@ static std::string serializeResult(const Session &session, const char *status, c
 		obs_data_set_string(measurement, "confidence", recommendation.confidence.c_str());
 		if (!recommendation.reason.empty())
 			obs_data_set_string(measurement, "reason", recommendation.reason.c_str());
+		if (recommendation.configurationWarning)
+			obs_data_set_bool(measurement, "configurationWarning", true);
 		if (!recommendation.probes.empty()) {
 			obs_data_array_t *probes = obs_data_array_create();
 			for (const auto &provenance : recommendation.probes) {
@@ -1379,6 +1399,7 @@ struct ProbeResult {
 	bool pairedCadenceEvidence = false;
 	std::vector<CompanionWorkload> companionWorkloads;
 	enhancedBroadcastingPolicy::CandidateFallbackEvidence candidateFallback;
+	bool configurationWarning = false;
 };
 
 static bool silentAudioCallback(void *, uint64_t startTimestamp, uint64_t, uint64_t *outputTimestamp, uint32_t, struct audio_data_mixes_outputs *)
@@ -3128,7 +3149,8 @@ static bool validateEnhancedBroadcastingConfig(const osn::Config &config, const 
 	std::vector<bool> candidateCovered(candidates.size(), false);
 	for (const auto &video : config.encoder_configurations) {
 		const char *codec = obs_get_encoder_codec(video.type.c_str());
-		if (!enhancedBroadcastingPolicy::canvasIndexIsValid(video.canvas_index, candidates.size()) || !codec || asciiLowerCopy(codec) != "h264") {
+		if (!enhancedBroadcastingPolicy::canvasIndexIsValid(video.canvas_index, candidates.size()) || !codec ||
+		    (asciiLowerCopy(codec) != "h264" && asciiLowerCopy(codec) != "hevc")) {
 			errorCode = "enhanced_broadcasting_unsupported_video_ladder";
 			return false;
 		}
@@ -3710,8 +3732,8 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		result.errorCode = "enhanced_broadcasting_video_unavailable";
 		return result;
 	}
-	const uint32_t maxWidth = leg.limits.maxWidth > 0 ? (uint32_t)std::min(1920, leg.limits.maxWidth) : 1920U;
-	const uint32_t maxHeight = leg.limits.maxHeight > 0 ? (uint32_t)std::min(1080, leg.limits.maxHeight) : 1080U;
+	const uint32_t maxWidth = leg.limits.maxWidth > 0 ? (uint32_t)std::min(2560, leg.limits.maxWidth) : 1920U;
+	const uint32_t maxHeight = leg.limits.maxHeight > 0 ? (uint32_t)std::min(1440, leg.limits.maxHeight) : 1080U;
 	const uint32_t maxFpsNum = leg.limits.maxFpsNum > 0 ? (uint32_t)leg.limits.maxFpsNum : 0U;
 	const uint32_t maxFpsDen = leg.limits.maxFpsNum > 0 ? (uint32_t)std::max(1, leg.limits.maxFpsDen) : 0U;
 	const bool fractionalCadenceFamily =
@@ -3743,6 +3765,10 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 	}
 
 	for (size_t index = 0; index < candidates.size(); index++) {
+		if (session->cancelRequested.load()) {
+			result.cancelled = true;
+			return result;
+		}
 		const auto &candidate = candidates[index];
 		CurrentSettings eventVideo = leg.current;
 		eventVideo.width = (int)candidate.width;
@@ -3752,9 +3778,10 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		CurrentSettings eventAdditionalVideo;
 		const CurrentSettings *eventAdditionalVideoPtr = nullptr;
 		if (leg.additionalVideo) {
+			const auto vertical = enhancedBroadcastingPolicy::pairedVerticalCandidate(candidate);
 			eventAdditionalVideo = leg.additionalVideo->current;
-			eventAdditionalVideo.width = (int)candidate.height;
-			eventAdditionalVideo.height = (int)candidate.width;
+			eventAdditionalVideo.width = (int)vertical.width;
+			eventAdditionalVideo.height = (int)vertical.height;
 			eventAdditionalVideo.fpsNum = (int)candidate.fpsNum;
 			eventAdditionalVideo.fpsDen = (int)candidate.fpsDen;
 			eventAdditionalVideoPtr = &eventAdditionalVideo;
@@ -3800,19 +3827,41 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 		osn::Config config;
 		try {
 			auto post = osn::constructGoLivePost(requestCanvasPointers, normalizedKey, std::nullopt, std::nullopt, false);
-			post.client.supported_codecs.clear();
-			post.client.supported_codecs.emplace("h264");
+			enhancedBroadcastingPolicy::filterProbeCodecs(post.client.supported_codecs);
 			config = osn::DownloadGoLiveConfig(goLiveConfigUrl, post);
 		} catch (const std::exception &exception) {
+			// The synchronous request can finish after cancellation. Do not start
+			// another five-second request and exceed the cleanup deadline.
+			if (session->cancelRequested.load()) {
+				result.cancelled = true;
+				return result;
+			}
 			blog(LOG_WARNING, "[Auto Optimizer][Enhanced Broadcasting] Ladder request failed for %ux%u %u/%u FPS: %s", candidate.width,
 			     candidate.height, candidate.fpsNum, candidate.fpsDen, boundedLogValue(exception.what()).c_str());
 			result.errorCode = "enhanced_broadcasting_config_request_failed";
+			// A channel may not have a 2K ladder available. Give the existing
+			// 1080p path one chance instead of making 1440p support mandatory.
+			if (candidate.width > 1920) {
+				result.candidateFallback.record(result.errorCode);
+				pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_unavailable", probe.legId, "active",
+					  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
+				while (index + 1 < candidates.size() && candidates[index + 1].width > 1920)
+					++index;
+				continue;
+			}
+			return result;
+		}
+		if (session->cancelRequested.load()) {
+			result.cancelled = true;
 			return result;
 		}
 		if (!validateEnhancedBroadcastingConfig(config, candidateCanvases, result.errorCode)) {
 			if (!enhancedBroadcastingPolicy::allowsCandidateDescent(result.errorCode))
 				return result;
-			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_rejected", probe.legId, "active",
+			// Twitch did not supply the requested rendition. No workload has run,
+			// so do not report this as measured encoder or network overload.
+			result.candidateFallback.record(result.errorCode);
+			pushEvent(session, "progress", "bandwidth", candidateEnd, "enhanced_broadcasting_candidate_unavailable", probe.legId, "active",
 				  probe.probeId, probe.provider, 0, &eventVideo, 0, 0, eventAdditionalVideoPtr);
 			continue;
 		}
@@ -3884,6 +3933,9 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 
 		result.success = true;
 		result.errorCode.clear();
+		// Keep warnings for the selected configuration, not discarded candidates.
+		// The UI receives a localized warning code, never Twitch's HTML response.
+		result.configurationWarning = config.status && config.status->result == osn::StatusResult::Warning;
 		result.testedWidth = candidate.width;
 		result.testedHeight = candidate.height;
 		result.testedFpsNum = candidate.fpsNum;
@@ -3943,12 +3995,16 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 
 	const int maximumBitrate = probe.provider == "youtube" ? probePolicy::youtubeProbeMaximumBitrateKbps(session->standardDualOutputWorkload)
 							       : kProbeMaximumBitrateKbps;
-	const int requested = probe.provider == "youtube" ? kYoutubeProbeInitialBitrateKbps
-							  : std::clamp(std::max(leg.current.bitrateKbps, 6000), 500, maximumBitrate);
+	const int requested =
+		probe.provider == "youtube"
+			? kYoutubeProbeInitialBitrateKbps
+			: std::clamp(std::max(leg.current.bitrateKbps, leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : 6000),
+				     500, maximumBitrate);
 	obs_data_t *platformProbe = obs_data_create();
 	obs_data_set_int(platformProbe, "bitrate", maximumBitrate);
 	obs_service_apply_encoder_settings(resources.service, platformProbe, nullptr);
-	const int platformReturned = (int)obs_data_get_int(platformProbe, "bitrate");
+	const int platformReturned = leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps
+								 : (int)obs_data_get_int(platformProbe, "bitrate");
 	if (platformReturned > 0 && platformReturned < maximumBitrate)
 		result.platformCapKbps = platformReturned;
 	obs_data_release(platformProbe);
@@ -3964,6 +4020,10 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 	obs_data_set_string(encoderSettings, "preset", "veryfast");
 	obs_data_set_int(encoderSettings, "keyint_sec", 2);
 	obs_service_apply_encoder_settings(resources.service, encoderSettings, nullptr);
+	// Override only the bitrate for the opt-in Twitch-only 1440p experiment;
+	// retain the service's keyframe and other encoder constraints.
+	if (leg.experimentalTwitch1440p)
+		obs_data_set_int(encoderSettings, "bitrate", initialBitrate);
 	initialBitrate = (int)obs_data_get_int(encoderSettings, "bitrate");
 
 	const uint32_t width = probe.provider == "youtube" ? 640 : 128;
@@ -4592,9 +4652,15 @@ static void runSession(const std::shared_ptr<Session> &session)
 	}
 
 	std::vector<LegRequest> preparedLegs;
+	std::vector<std::string> platforms;
+	for (const auto &leg : session->legs)
+		for (const auto &destination : leg.destinations)
+			platforms.push_back(destination.platform);
+	const bool twitchOnly = qualityPolicy::isTwitchOnlyStream(platforms);
+	const bool multiplatform = qualityPolicy::isMultiplatformStream(platforms);
 	preparedLegs.reserve(session->legs.size());
 	for (size_t index = 0; index < session->legs.size(); index++) {
-		preparedLegs.push_back(withOfflinePlatformCaps(session->legs[index]));
+		preparedLegs.push_back(withOfflinePlatformCaps(session->legs[index], twitchOnly, multiplatform));
 	}
 	std::vector<HardwareAssessment> hardwareAssessments(preparedLegs.size());
 	std::vector<LegRequest> automaticLegs;
@@ -4925,6 +4991,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 			recommendation.measurementMode = "active";
 			recommendation.confidence = tested.pairedCadenceEvidence ? "medium" : "high";
 			recommendation.reason = tested.candidateFallback.reason();
+			recommendation.configurationWarning = tested.configurationWarning;
 			recommendation.value.width = (int)tested.testedWidth;
 			recommendation.value.height = (int)tested.testedHeight;
 			recommendation.value.fpsNum = (int)tested.testedFpsNum;

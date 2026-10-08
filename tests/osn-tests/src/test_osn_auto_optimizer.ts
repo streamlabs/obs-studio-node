@@ -114,12 +114,15 @@ describe(testName, function() {
         };
     }
 
-    async function startSessionAtHardwareAttempt(): Promise<AutoOptimizerRun> {
+    async function startSessionAtHardwareAttempt(request: IAutoOptimizerRequest = {
+        streamSetup: 'custom-rtmp', outputs: [output()],
+    }, observe?: (event: IAutoOptimizerEvent) => void): Promise<AutoOptimizerRun> {
         let nativeRun: AutoOptimizerRun | null = null;
         let timeout: ReturnType<typeof setTimeout>;
         const hardwareAttemptStarted = new Promise<void>((resolve, reject) => {
             timeout = setTimeout(() => reject(new Error('Timed out waiting for the Auto Optimizer benchmark workload')), 15000);
             const onEvent = (event: IAutoOptimizerEvent) => {
+                if (observe) observe(event);
                 if (event.code === 'hardware_testing_encoder' || event.code === 'hardware_testing_encoder_surfaces' ||
                     event.code === 'hardware_testing_x264') {
                     clearTimeout(timeout);
@@ -131,10 +134,7 @@ describe(testName, function() {
             };
 
             nativeRun = autoOptimizer.run(
-                {
-                    streamSetup: 'custom-rtmp',
-                    outputs: [output()],
-                } as IAutoOptimizerRequest,
+                request,
                 onEvent,
             );
         });
@@ -188,6 +188,22 @@ describe(testName, function() {
             clearTimeout(timeout!);
         }
     }
+
+    it('tests 1440p only for Twitch-only requests, even when another platform shares its canvas', async function() {
+        for (const destinations of [['twitch'], ['twitch', 'kick'], ['youtube']]) {
+            const events: IAutoOptimizerEvent[] = [];
+            const nativeRun = await startSessionAtHardwareAttempt({
+                streamSetup: destinations.length > 1 ? 'cloud-multistream' : 'direct-single',
+                outputs: [output({ destinations: destinations as AutoOptimizerOutputRequest['destinations'],
+                    limits: { maxWidth: 2560, maxHeight: 1440, maxBitrateKbps: 8000 } })],
+            }, event => events.push(event));
+            await nativeRun.cancel();
+            expect((await nativeRun.result).status).to.equal('cancelled');
+            const attempted = events.filter(event => event.width && event.height);
+            expect(attempted.length).to.be.greaterThan(0);
+            expect(Math.max(...attempted.map(event => event.width!))).to.equal(destinations.length === 1 && destinations[0] === 'twitch' ? 2560 : 1920);
+        }
+    });
 
     it('exposes only the run-based Auto Optimizer API', function() {
         expect(autoOptimizer.run).to.be.a('function');
@@ -372,42 +388,59 @@ describe(testName, function() {
         expect(response.result.outputs[0].videos.map(video => video.display)).to.deep.equal(['horizontal', 'vertical']);
     });
 
-    it('preserves a paired vertical recommendation when Enhanced Broadcasting is estimate-only', async function() {
-        const response = await run({
-            streamSetup: 'enhanced-broadcasting',
-            outputs: [output({
-                display: 'both',
-                outputKind: 'twitch-enhanced-broadcasting',
-                destinations: ['twitch'],
-                estimateReason: 'enhanced_broadcasting',
-                additionalVideo: {
-                    display: 'vertical',
-                    current: {
-                        ...output().current,
-                        width: 720,
-                        height: 1280,
-                        fpsNum: 60,
+    for (const [width, height, verticalWidth, verticalHeight] of [
+        [1280, 720, 720, 1280],
+        [2560, 1440, 1440, 2560],
+        [2560, 1440, 1080, 1920],
+    ]) {
+        it(`preserves saved Dual Format settings when estimate-only (${width}x${height} / ${verticalWidth}x${verticalHeight})`, async function() {
+            const response = await run({
+                streamSetup: 'enhanced-broadcasting',
+                outputs: [output({
+                    display: 'both',
+                    outputKind: 'twitch-enhanced-broadcasting',
+                    destinations: ['twitch'],
+                    estimateReason: 'enhanced_broadcasting',
+                    current: { ...output().current, width, height },
+                    additionalVideo: {
+                        display: 'vertical',
+                        current: {
+                            ...output().current,
+                            width: verticalWidth,
+                            height: verticalHeight,
+                            fpsNum: 60,
+                        },
+                        limits: {
+                            maxWidth: Math.max(1080, verticalWidth),
+                            maxHeight: Math.max(1920, verticalHeight),
+                            maxFpsNum: 60,
+                            maxFpsDen: 1,
+                        },
                     },
-                    limits: {
-                        maxWidth: 1080,
-                        maxHeight: 1920,
-                        maxFpsNum: 60,
-                        maxFpsDen: 1,
-                    },
-                },
-            })],
-        });
+                })],
+            });
 
-        expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
-        expect(response.result.outputs[0].videos.find(video => video.display === 'vertical')).to.deep.equal({
-            display: 'vertical',
-            width: 720,
-            height: 1280,
-            fpsNum: 60,
-            fpsDen: 1,
+            expect(response.result.status).to.equal('complete');
+            expect(response.result.outputs[0].measurement.mode).to.equal('estimated');
+            expect(response.result.outputs[0].videos).to.deep.equal([
+                {
+                    display: 'horizontal',
+                    width,
+                    height,
+                    fpsNum: 30,
+                    fpsDen: 1,
+                },
+                {
+                    display: 'vertical',
+                    width: verticalWidth,
+                    height: verticalHeight,
+                    fpsNum: 60,
+                    fpsDen: 1,
+                },
+            ]);
+            expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
         });
-        expect(response.events.some(event => event.code === 'recommendation_provider_managed')).to.equal(true);
-    });
+    }
 
     it('cancels a newly started run and makes cleanup observable before returning', async function() {
         const nativeRun = autoOptimizer.run({
