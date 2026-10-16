@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include "nodeobs_api.h"
 #include "osn-error.hpp"
+#include "osn-filter.hpp"
 #include "osn-input.hpp"
 #include "osn-scene.hpp"
 #include "osn-source.hpp"
@@ -47,6 +48,39 @@ obs_source_info makeTestSourceInfo()
 	info.create = testSourceCreate;
 	info.destroy = testSourceDestroy;
 	info.get_properties = testSourceGetProperties;
+	return info;
+}
+
+// A video filter can only be attached to a source that also outputs video.
+constexpr char TEST_VIDEO_SOURCE_ID[] = "filter_release_test_video_source";
+constexpr char TEST_VIDEO_FILTER_ID[] = "filter_release_test_video_filter";
+
+obs_source_info makeTestVideoSourceInfo()
+{
+	obs_source_info info = makeTestSourceInfo();
+	info.id = TEST_VIDEO_SOURCE_ID;
+	info.output_flags = OBS_SOURCE_VIDEO;
+	return info;
+}
+
+void *testFilterCreate(obs_data_t *settings, obs_source_t *source)
+{
+	obs_source_update(source, settings);
+	return source;
+}
+
+void testFilterUpdate(void *, obs_data_t *) {}
+
+obs_source_info makeTestVideoFilterInfo()
+{
+	obs_source_info info{};
+	info.id = TEST_VIDEO_FILTER_ID;
+	info.type = OBS_SOURCE_TYPE_FILTER;
+	info.output_flags = OBS_SOURCE_VIDEO;
+	info.get_name = testSourceGetName;
+	info.create = testFilterCreate;
+	info.destroy = testSourceDestroy;
+	info.update = testFilterUpdate;
 	return info;
 }
 
@@ -307,4 +341,58 @@ TEST_CASE("Source manager safely promotes references during deferred destruction
 		destroyQueue.releaseAndWait();
 		CHECK(manager.size() == sourceCount);
 	}
+}
+
+TEST_CASE("Releasing a filter after attaching it keeps the filter active")
+{
+	ObsCoreSetup setupOBS;
+	static const obs_source_info testVideoSourceInfo = makeTestVideoSourceInfo();
+	static const obs_source_info testVideoFilterInfo = makeTestVideoFilterInfo();
+	obs_register_source(&testVideoSourceInfo);
+	obs_register_source(&testVideoFilterInfo);
+	auto &manager = osn::Source::Manager::GetInstance();
+	const auto sourceCount = manager.size();
+
+	OBSSourceAutoRelease input = obs_source_create_private(TEST_VIDEO_SOURCE_ID, "filtered input", nullptr);
+	REQUIRE(input != nullptr);
+	const uint64_t inputId = manager.allocate(input);
+	osn::Source::attach_source_signals(input);
+	REQUIRE(inputId != UINT64_MAX);
+
+	// Follow the sequence used by Streamlabs Desktop when it adds a filter.
+	std::vector<ipc::value> response;
+	osn::Filter::Create(nullptr, 0, {ipc::value(TEST_VIDEO_FILTER_ID), ipc::value("released filter")}, response);
+	REQUIRE(response.size() >= 2);
+	REQUIRE((ErrorCode)response[0].value_union.ui64 == ErrorCode::Ok);
+	const uint64_t filterId = response[1].value_union.ui64;
+
+	response.clear();
+	osn::Input::AddFilter(nullptr, 0, {ipc::value(inputId), ipc::value(filterId)}, response);
+	REQUIRE(!response.empty());
+	REQUIRE((ErrorCode)response[0].value_union.ui64 == ErrorCode::Ok);
+
+	response.clear();
+	osn::Source::Release(nullptr, 0, {ipc::value(filterId)}, response);
+	REQUIRE(!response.empty());
+	CHECK((ErrorCode)response[0].value_union.ui64 == ErrorCode::Ok);
+
+	{
+		// The input now holds the only reference. The filter must not be marked
+		// removed since libobs skips removed sources when ticking.
+		OBSSourceAutoRelease filter = manager.findAndRef(filterId);
+		REQUIRE(filter != nullptr);
+		CHECK(!obs_source_removed(filter));
+	}
+
+	response.clear();
+	osn::Input::RemoveFilter(nullptr, 0, {ipc::value(inputId), ipc::value(filterId)}, response);
+	REQUIRE(!response.empty());
+	CHECK((ErrorCode)response[0].value_union.ui64 == ErrorCode::Ok);
+	obs_wait_for_destroy_queue();
+	CHECK(!manager.findAndRef(filterId));
+	CHECK(manager.size() == sourceCount + 1);
+
+	input = nullptr;
+	obs_wait_for_destroy_queue();
+	CHECK(manager.size() == sourceCount);
 }

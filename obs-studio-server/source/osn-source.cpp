@@ -207,7 +207,7 @@ void osn::Source::Release(void *data, const int64_t id, const std::vector<ipc::v
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Source reference is not valid.");
 	}
 
-	if (obs_source_get_type(src) == OBS_SOURCE_TYPE_TRANSITION) {
+	if (obs_source_get_type(src) == OBS_SOURCE_TYPE_TRANSITION || obs_source_get_type(src) == OBS_SOURCE_TYPE_FILTER) {
 		obs_source_release(src);
 	} else if (obs_source_get_type(src) == OBS_SOURCE_TYPE_SCENE) {
 		blog(LOG_INFO, "Releasing scene %s", obs_source_get_name(src));
