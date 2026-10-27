@@ -520,6 +520,8 @@ if(WIN32)
             "${PROJECT_BINARY_DIR}/version.rc"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.cpp"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.hpp"
+            "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
+            "${PROJECT_SOURCE_DIR}/source/token-label-policy.hpp"
     )
 
 endif()
@@ -691,7 +693,13 @@ if(BUILD_TESTING)
     osn_target_uses_static_msvc_runtime(obs_studio_server_unit_tests)
 
     if(WIN32)
-        target_sources(obs_studio_server_unit_tests PRIVATE "tests/test-cef-subprocess.cpp")
+        target_sources(
+            obs_studio_server_unit_tests
+            PRIVATE
+                "tests/test-cef-subprocess.cpp"
+                "tests/test-token-label-policy.cpp"
+                "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
+        )
     endif()
 
     if(APPLE)
