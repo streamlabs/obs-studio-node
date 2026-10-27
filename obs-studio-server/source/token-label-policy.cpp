@@ -32,7 +32,7 @@ std::optional<TokenLabelPolicy> CaptureTokenLabelPolicy(HANDLE token)
 	return policy;
 }
 
-bool RestoreTokenLabelPolicy(HANDLE token, const TokenLabelPolicy &policy)
+bool SetTokenLabelPolicy(HANDLE token, const TokenLabelPolicy &policy)
 {
 	if (policy.sid.empty())
 		return false;
@@ -45,7 +45,13 @@ bool RestoreTokenLabelPolicy(HANDLE token, const TokenLabelPolicy &policy)
 	if (!AddMandatoryAce(sacl, ACL_REVISION, 0, policy.mask, sid))
 		return false;
 
-	return SetSecurityInfo(token, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION, nullptr, nullptr, nullptr, sacl) == ERROR_SUCCESS;
+	// SetSecurityInfo returns the error code without setting last-error.
+	const DWORD status = SetSecurityInfo(token, SE_KERNEL_OBJECT, LABEL_SECURITY_INFORMATION, nullptr, nullptr, nullptr, sacl);
+	if (status != ERROR_SUCCESS) {
+		SetLastError(status);
+		return false;
+	}
+	return true;
 }
 
 } // namespace osn::cef

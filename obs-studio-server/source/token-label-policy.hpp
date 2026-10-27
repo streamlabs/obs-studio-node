@@ -15,7 +15,7 @@ struct TokenLabelPolicy {
 };
 
 std::optional<TokenLabelPolicy> CaptureTokenLabelPolicy(HANDLE token);
-bool RestoreTokenLabelPolicy(HANDLE token, const TokenLabelPolicy &policy);
+bool SetTokenLabelPolicy(HANDLE token, const TokenLabelPolicy &policy);
 
 } // namespace osn::cef
 

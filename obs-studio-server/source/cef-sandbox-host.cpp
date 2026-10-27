@@ -103,13 +103,17 @@ extern "C" __declspec(dllexport) void *__cdecl obs_browser_sandbox_info_create(v
 
 	if (original_policy) {
 		const auto current_policy = osn::cef::CaptureTokenLabelPolicy(token);
-		if (current_policy && current_policy->mask != original_policy->mask) {
+		if (current_policy && (current_policy->mask & SYSTEM_MANDATORY_LABEL_NO_READ_UP) &&
+		    !(original_policy->mask & SYSTEM_MANDATORY_LABEL_NO_READ_UP)) {
 			// CEF's broker hardening adds NO_READ_UP to our token label; at High integrity that denies Windows Graphics Capture.
-			if (osn::cef::RestoreTokenLabelPolicy(token, *original_policy))
-				blog(LOG_INFO, "[cef-sandbox] Restored token integrity label policy 0x%lx (was 0x%lx)", original_policy->mask,
-				     current_policy->mask);
+			osn::cef::TokenLabelPolicy updated_policy = *current_policy;
+			updated_policy.mask &= ~static_cast<DWORD>(SYSTEM_MANDATORY_LABEL_NO_READ_UP);
+			if (osn::cef::SetTokenLabelPolicy(token, updated_policy))
+				blog(LOG_INFO, "[cef-sandbox] Cleared NO_READ_UP from token integrity label policy (0x%lx -> 0x%lx)", current_policy->mask,
+				     updated_policy.mask);
 			else
-				blog(LOG_WARNING, "[cef-sandbox] Failed to restore token integrity label policy, Windows error %lu", GetLastError());
+				blog(LOG_WARNING, "[cef-sandbox] Failed to clear NO_READ_UP from token integrity label policy, Windows error %lu",
+				     GetLastError());
 		}
 	}
 
