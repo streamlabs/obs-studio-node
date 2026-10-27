@@ -3,11 +3,14 @@
 #ifdef _WIN32
 
 #include "cef-subprocess.hpp"
+#include "token-label-policy.hpp"
 
 #define OBS_BROWSER_SANDBOX_HOST_IMPLEMENTATION
 #include <obs-browser-sandbox.h>
 #undef OBS_BROWSER_SANDBOX_HOST_IMPLEMENTATION
 #include <include/cef_sandbox_win.h>
+
+#include <util/base.h>
 
 #include <ShlObj.h>
 #include <Shellapi.h>
@@ -70,9 +73,49 @@ extern "C" __declspec(dllexport) uint32_t __cdecl obs_browser_sandbox_abi_versio
 	return OBS_BROWSER_SANDBOX_ABI_VERSION;
 }
 
+namespace osn::cef {
+
+namespace {
+
+bool IsProcessElevated(HANDLE token)
+{
+	TOKEN_ELEVATION elevation = {};
+	DWORD size = 0;
+	return GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size) && elevation.TokenIsElevated;
+}
+
+} // namespace
+
+} // namespace osn::cef
+
 extern "C" __declspec(dllexport) void *__cdecl obs_browser_sandbox_info_create(void)
 {
-	return cef_sandbox_info_create();
+	HANDLE token = nullptr;
+	std::optional<osn::cef::TokenLabelPolicy> original_policy;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | READ_CONTROL | WRITE_OWNER, &token)) {
+		if (osn::cef::IsProcessElevated(token))
+			original_policy = osn::cef::CaptureTokenLabelPolicy(token);
+	} else {
+		blog(LOG_WARNING, "[cef-sandbox] OpenProcessToken failed with Windows error %lu", GetLastError());
+	}
+
+	void *sandbox_info = cef_sandbox_info_create();
+
+	if (original_policy) {
+		const auto current_policy = osn::cef::CaptureTokenLabelPolicy(token);
+		if (current_policy && current_policy->mask != original_policy->mask) {
+			// CEF's broker hardening adds NO_READ_UP to our token label; at High integrity that denies Windows Graphics Capture.
+			if (osn::cef::RestoreTokenLabelPolicy(token, *original_policy))
+				blog(LOG_INFO, "[cef-sandbox] Restored token integrity label policy 0x%lx (was 0x%lx)", original_policy->mask,
+				     current_policy->mask);
+			else
+				blog(LOG_WARNING, "[cef-sandbox] Failed to restore token integrity label policy, Windows error %lu", GetLastError());
+		}
+	}
+
+	if (token)
+		CloseHandle(token);
+	return sandbox_info;
 }
 
 extern "C" __declspec(dllexport) void __cdecl obs_browser_sandbox_info_destroy(void *sandbox_info)
@@ -126,7 +169,7 @@ bool GetExecutablePath(std::filesystem::path &result)
 
 int ExecuteSubprocess()
 {
-	void *sandbox_info = obs_browser_sandbox_info_create();
+	void *sandbox_info = cef_sandbox_info_create();
 	if (!sandbox_info) {
 		std::cerr << "cef_sandbox_info_create returned null" << std::endl;
 		return dispatch_failure;
