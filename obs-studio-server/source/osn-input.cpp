@@ -256,27 +256,29 @@ void osn::Input::GetPublicSources(void *data, const int64_t id, const std::vecto
 void osn::Input::GetCaptureStatuses(void *, const int64_t, const std::vector<ipc::value> &, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
-	obs_enum_sources([](void *data, obs_source_t *source) {
-		if (obs_source_removed(source) || strcmp(obs_source_get_id(source), "dshow_input") != 0)
-			return true;
-		const uint64_t uid = osn::Source::Manager::GetInstance().find(source);
-		if (uid == UINT64_MAX)
-			return true;
-		calldata_t cd;
-		calldata_init(&cd);
-		if (proc_handler_call(obs_source_get_proc_handler(source), "get_capture_status", &cd)) {
-			const char *json = calldata_string(&cd, "status");
-			obs_data_t *status = json ? obs_data_create_from_json(json) : nullptr;
-			if (status) {
-				obs_data_set_string(status, "sourceName", obs_source_get_name(source));
-				obs_data_set_string(status, "instanceId", std::to_string(uid).c_str());
-				static_cast<std::vector<ipc::value> *>(data)->push_back(ipc::value(obs_data_get_json(status)));
-				obs_data_release(status);
+	obs_enum_sources(
+		[](void *data, obs_source_t *source) {
+			if (obs_source_removed(source) || strcmp(obs_source_get_id(source), "dshow_input") != 0)
+				return true;
+			const uint64_t uid = osn::Source::Manager::GetInstance().find(source);
+			if (uid == UINT64_MAX)
+				return true;
+			calldata_t cd;
+			calldata_init(&cd);
+			if (proc_handler_call(obs_source_get_proc_handler(source), "get_capture_status", &cd)) {
+				const char *json = calldata_string(&cd, "status");
+				obs_data_t *status = json ? obs_data_create_from_json(json) : nullptr;
+				if (status) {
+					obs_data_set_string(status, "sourceName", obs_source_get_name(source));
+					obs_data_set_string(status, "instanceId", std::to_string(uid).c_str());
+					static_cast<std::vector<ipc::value> *>(data)->push_back(ipc::value(obs_data_get_json(status)));
+					obs_data_release(status);
+				}
 			}
-		}
-		calldata_free(&cd);
-		return true;
-	}, &rval);
+			calldata_free(&cd);
+			return true;
+		},
+		&rval);
 }
 
 void osn::Input::GetActive(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
