@@ -238,7 +238,7 @@ bool createJunction(const std::filesystem::path &link, const std::filesystem::pa
 {
 	alignas(MountPointReparseBuffer) BYTE buffer[MAXIMUM_REPARSE_DATA_BUFFER_SIZE]{};
 	auto *data = reinterpret_cast<MountPointReparseBuffer *>(buffer);
-	const std::wstring substitute = L"\??\\" + target.native();
+	const std::wstring substitute = L"\\??\\" + target.native();
 	const auto substituteBytes = static_cast<WORD>(substitute.size() * sizeof(wchar_t));
 	const auto targetBytes = static_cast<WORD>(target.native().size() * sizeof(wchar_t));
 	const DWORD headerSize = FIELD_OFFSET(MountPointReparseBuffer, substituteOffset);
@@ -301,6 +301,8 @@ TEST_CASE("CheckOutputDirectory names the folder and why it was rejected", "[fil
 		REQUIRE(std::filesystem::create_directory(target));
 		REQUIRE(createJunction(junction, target));
 		dir.links.push_back(junction);
+		// A dangling junction is rejected too, so prove this one resolves before relying on it.
+		REQUIRE(std::filesystem::equivalent(junction, target));
 
 		const std::string error = osn::IFileOutput::CheckOutputDirectory(utf8(junction));
 		REQUIRE_THAT(error, ContainsSubstring(utf8(junction)));
