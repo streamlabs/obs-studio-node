@@ -117,11 +117,9 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 
 std::string osn::IFileOutput::CheckOutputDirectory(const std::string &path)
 {
-	errno = 0;
-	if (os_is_path_safe(path.c_str()))
+	switch (os_check_path_safe(path.c_str())) {
+	case 0:
 		return "";
-
-	switch (errno) {
 	case ELOOP:
 		return "Recording folder " + path +
 		       " is or is inside a symbolic link, junction, or mounted folder, which is not allowed. Choose a regular folder.";
