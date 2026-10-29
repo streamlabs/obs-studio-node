@@ -16,19 +16,22 @@ describe(testName, function() {
 
     let obs: OBSHandler;
 
-    before(function() {
+    function startObs() {
         deleteConfigFiles();
         obs = new OBSHandler(testName, false);
         obs.createDefaultVideoContext();
-    });
+    }
 
-    after(function() {
+    function stopObs() {
         if (obs) {
             obs.shutdown();
             obs = null;
         }
         deleteConfigFiles();
-    });
+    }
+
+    before(startObs);
+    after(stopObs);
 
     type AutoOptimizerOutputRequest = IAutoOptimizerRequest['outputs'][number];
     interface AutoOptimizerRun {
@@ -257,23 +260,35 @@ describe(testName, function() {
         }
     });
 
-    it('accepts registered Enhanced Broadcasting canvas identities 0 and 1', async function() {
-        const verticalCanvas = osn.VideoFactory.create();
-        let nativeRun: AutoOptimizerRun | null = null;
-        try {
-            expect(obs.defaultVideoContext.canvasId).to.equal(0);
-            expect(verticalCanvas.canvasId).to.equal(1);
-            nativeRun = autoOptimizer.run(
-                pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId),
-                () => undefined,
-            );
-            await nativeRun.cancel();
-            expect((await nativeRun.result).status).to.equal('cancelled');
-        } finally {
-            if (nativeRun)
-                await nativeRun.cancel().catch(() => undefined);
-            verticalCanvas.destroy();
-        }
+    describe('fresh OBS canvas identities', function() {
+        beforeEach(function() {
+            // Canvas IDs advance for the lifetime of the OBS process, even after
+            // a canvas is destroyed. Each attempt, including retries, needs a
+            // fresh process to exercise the valid zero and one identities.
+            stopObs();
+            startObs();
+        });
+
+        afterEach(stopObs);
+
+        it('accepts registered Enhanced Broadcasting canvas identities 0 and 1', async function() {
+            const verticalCanvas = osn.VideoFactory.create();
+            let nativeRun: AutoOptimizerRun | null = null;
+            try {
+                expect(obs.defaultVideoContext.canvasId).to.equal(0);
+                expect(verticalCanvas.canvasId).to.equal(1);
+                nativeRun = autoOptimizer.run(
+                    pairedEnhancedBroadcastingRequest(obs.defaultVideoContext.canvasId, verticalCanvas.canvasId),
+                    () => undefined,
+                );
+                await nativeRun.cancel();
+                expect((await nativeRun.result).status).to.equal('cancelled');
+            } finally {
+                if (nativeRun)
+                    await nativeRun.cancel().catch(() => undefined);
+                verticalCanvas.destroy();
+            }
+        });
     });
 
     it('rejects Twitch-managed outputs outside Enhanced Broadcasting stream setups', function() {
