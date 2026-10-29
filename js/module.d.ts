@@ -458,7 +458,17 @@ export interface IFilterFactory extends IFactoryTypes {
 }
 export interface IFilter extends ISource {
 }
+export interface ICaptureStatus {
+    sourceName: string;
+    instanceId: string;
+    generation: number;
+    state: 'inactive' | 'starting' | 'running' | 'error';
+    reason: '' | 'insufficient_bandwidth' | 'device_not_found' | 'start_failed';
+    deviceName: string;
+    errorCode: number;
+}
 export interface IInputFactory extends IFactoryTypes {
+    getCaptureStatuses(): ICaptureStatus[];
     create(id: string, name: string, settings?: ISettings, hotkeys?: ISettings): IInput;
     createPrivate(id: string, name: string, settings?: ISettings): IInput;
     fromName(name: string): IInput;

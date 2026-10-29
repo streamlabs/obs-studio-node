@@ -790,7 +790,40 @@ export interface IFilterFactory extends IFactoryTypes {
 export interface IFilter extends ISource {
 }
 
+/** A copied startup-status snapshot; no native references are retained by this object. */
+export interface ICaptureStatus {
+    /** Current native source name (Desktop uses its source UUID here). */
+    sourceName: string;
+    /** Opaque identity of this source lifetime, distinct when a source is recreated. */
+    instanceId: string;
+    /** Increases on activation/deactivation, detected removal and automatic retry within this source lifetime. */
+    generation: number;
+    state: 'inactive' | 'starting' | 'running' | 'error';
+    /** Empty outside error state. Unknown future reasons must use a generic message. */
+    reason: '' | 'insufficient_bandwidth' | 'device_not_found' | 'start_failed';
+    /** Friendly device name only; empty when unavailable. */
+    deviceName: string;
+    /** Unsigned Windows HRESULT; zero when no native code is available. */
+    errorCode: number;
+}
+
 export interface IInputFactory extends IFactoryTypes {
+    /**
+     * Reads retained capture status for all live public DirectShow inputs in one IPC call.
+     * Sources without status support (including older plugins) are omitted.
+     * Missing physical cameras are retried automatically when their Windows device interface
+     * returns, with up to five attempts if startup temporarily fails while the driver becomes
+     * ready. Confirmed bandwidth failures stop retries. Device-not-found requires confirmed
+     * hardware absence; driver/enumeration failures with present or unknown hardware use start_failed.
+     * The failure stays visible during automatic retry and clears on success; explicit
+     * activation/deactivation replaces it immediately. Deactivated sources do not reconnect.
+     * Running means the capture graph started, not that frames are still arriving. Physical
+     * device removal is monitored; frame stalls and virtual-camera availability are not.
+     * @returns Independent value snapshots, possibly empty; no release is needed. Reading
+     * does not consume status. Removed sources are omitted on subsequent calls.
+     * @throws {Error} When disconnected from OSN or the IPC request fails.
+     */
+    getCaptureStatuses(): ICaptureStatus[];
     /**
      * Create a new instance of an ObsInput
      * @param id - The type of input source to create, possibly from {@link types}
