@@ -189,8 +189,12 @@ describe(testName, function() {
         }
     }
 
-    it('tests 1440p only for Twitch-only requests, even when another platform shares its canvas', async function() {
-        for (const destinations of [['twitch'], ['twitch', 'kick'], ['youtube']]) {
+    it('tests 1440p for Twitch and YouTube selections and caps selections containing other platforms', async function() {
+        for (const [destinations, width] of [
+            [['twitch'], 2560], [['youtube'], 2560], [['twitch', 'youtube'], 2560],
+            [['twitch', 'kick'], 1920], [['youtube', 'facebook'], 1920],
+            [['twitch', 'youtube', 'custom'], 1920],
+        ] as [AutoOptimizerOutputRequest['destinations'], number][]) {
             const events: IAutoOptimizerEvent[] = [];
             const nativeRun = await startSessionAtHardwareAttempt({
                 streamSetup: destinations.length > 1 ? 'cloud-multistream' : 'direct-single',
@@ -201,9 +205,39 @@ describe(testName, function() {
             expect((await nativeRun.result).status).to.equal('cancelled');
             const attempted = events.filter(event => event.width && event.height);
             expect(attempted.length).to.be.greaterThan(0);
-            expect(Math.max(...attempted.map(event => event.width!))).to.equal(destinations.length === 1 && destinations[0] === 'twitch' ? 2560 : 1920);
+            expect(Math.max(...attempted.map(event => event.width!))).to.equal(width);
         }
     });
+
+    for (const [horizontal, vertical, width] of [
+        [['twitch'], ['youtube'], 2560],
+        [['youtube'], ['twitch'], 2560],
+        [['youtube'], ['youtube'], 2560],
+        [['twitch'], ['youtube', 'kick'], 1920],
+        [['youtube', 'facebook'], ['twitch'], 1920],
+        [['youtube'], ['youtube', 'custom'], 1920],
+    ] as [AutoOptimizerOutputRequest['destinations'], AutoOptimizerOutputRequest['destinations'], number][]) {
+        it(`uses destinations on both canvases: horizontal ${horizontal}, vertical ${vertical}`, async function() {
+            const verticalCanvas = osn.VideoFactory.create();
+            try {
+                const events: IAutoOptimizerEvent[] = [];
+                const nativeRun = await startSessionAtHardwareAttempt({
+                    streamSetup: 'dual-output',
+                    outputs: [output({ destinations: horizontal, limits: { maxWidth: 2560, maxHeight: 1440, maxBitrateKbps: 8000 } }),
+                        output({ outputId: 'vertical', display: 'vertical', destinations: vertical,
+                            current: { ...output().current, canvasId: verticalCanvas.canvasId, width: 720, height: 1280 },
+                            limits: { maxWidth: 1440, maxHeight: 2560, maxBitrateKbps: 8000 } })],
+                }, event => events.push(event));
+                await nativeRun.cancel();
+                expect((await nativeRun.result).status).to.equal('cancelled');
+                const attempted = events.filter(event => event.width && event.height && event.outputId === 'primary');
+                expect(attempted.length).to.be.greaterThan(0);
+                expect(Math.max(...attempted.map(event => event.width!))).to.equal(width);
+            } finally {
+                verticalCanvas.destroy();
+            }
+        });
+    }
 
     it('exposes only the run-based Auto Optimizer API', function() {
         expect(autoOptimizer.run).to.be.a('function');

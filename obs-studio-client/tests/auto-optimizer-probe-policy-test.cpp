@@ -1,6 +1,7 @@
 #include "auto-optimizer-probe-policy.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <limits>
 
 namespace policy = autoOptimizer::probePolicy;
 
@@ -113,10 +114,102 @@ TEST_CASE("Active bandwidth probes do not depend on the combined workload mode")
 
 TEST_CASE("YouTube probes measure a larger shared budget without raising the single-output ceiling")
 {
-	CHECK(policy::youtubeProbeMaximumBitrateKbps(false) == 10000);
-	CHECK(policy::youtubeProbeMaximumBitrateKbps(true) == 12000);
+	for (const int perOutputLimit : {4500, 6000, 7500, 8000, std::numeric_limits<int>::max()})
+		CHECK(policy::youtubeProbeMaximumBitrateKbps(false, perOutputLimit) == 10000);
+	CHECK(policy::youtubeProbeMaximumBitrateKbps(true, 6000) == 12000);
+	CHECK(policy::youtubeProbeMaximumBitrateKbps(true, 7500) == 15000);
+	CHECK(policy::youtubeProbeMaximumBitrateKbps(true, 8000) == 16000);
+	CHECK(policy::youtubeProbeMaximumBitrateKbps(true, std::numeric_limits<int>::max()) == 16000);
 	CHECK(policy::youtubeProbeRampSampleMs(10000) == 5000);
 	CHECK(policy::youtubeProbeRampSampleMs(12000) == 10000);
+	CHECK(policy::youtubeProbeRampSampleMs(15000) == 10000);
+	CHECK(policy::youtubeProbeRampSampleMs(16000) == 10000);
+}
+
+TEST_CASE("Twitch experimental service overrides never cap YouTube upload probes")
+{
+	const auto twitch = policy::rtmpProbeServiceBitratePolicy("twitch", 6000, 7500);
+	CHECK(twitch.maximumKbps == 7500);
+	CHECK(twitch.overrideServiceBitrate);
+	CHECK_FALSE(policy::rtmpProbeServiceBitratePolicy("twitch", 6000, 0).overrideServiceBitrate);
+	CHECK(policy::rtmpProbeServiceBitratePolicy("twitch", 6000, 0).maximumKbps == 6000);
+	for (const int metadataLimit : {0, 4500, 15000, 16000}) {
+		CAPTURE(metadataLimit);
+		const auto youtube = policy::rtmpProbeServiceBitratePolicy("youtube", metadataLimit, 7500);
+		CHECK(youtube.maximumKbps == metadataLimit);
+		CHECK_FALSE(youtube.overrideServiceBitrate);
+	}
+}
+
+TEST_CASE("YouTube ramp reaches the combined budget and clips its final rung to service limits")
+{
+	for (const int ceiling : {4500, 10000, 12000, 15000, 16000}) {
+		CAPTURE(ceiling);
+		const auto targets = policy::youtubeProbeTargets(ceiling);
+		REQUIRE_FALSE(targets.empty());
+		CHECK(targets.front().second == 1000);
+		CHECK(targets.back().second == ceiling);
+		int previous = 0;
+		for (const auto &[rung, target] : targets) {
+			CHECK(target > previous);
+			CHECK(target <= ceiling);
+			CHECK(target <= rung);
+			previous = target;
+		}
+	}
+	CHECK(policy::youtubeProbeTargets(15000).back().first == 16000);
+	CHECK(policy::youtubeProbeTargets(0).empty());
+}
+
+TEST_CASE("Only shared YouTube probes above 12 Mbps receive the larger budget")
+{
+	for (const bool shared : {false, true}) {
+		for (const int ceiling : {6000, 10000, 12000, 15000, 16000}) {
+			CAPTURE(shared, ceiling);
+			const auto budget = policy::youtubeProbeBudgetLimits(shared, ceiling);
+			const bool expanded = shared && ceiling > 12000;
+			CHECK(budget.maximumBytes == (expanded ? 128ULL : 64ULL) * 1024 * 1024);
+			CHECK(budget.timeoutMs == (expanded ? 150000 : 100000));
+			CHECK(budget.reserveConfirmation == expanded);
+		}
+	}
+}
+
+TEST_CASE("YouTube ramp reserves recovery and confirmation before increasing its target")
+{
+	const auto budget = policy::youtubeProbeBudgetLimits(true, 16000);
+	const auto firstSample = policy::youtubeSampleGroupCost(12000, {16000}, {{16000, 5000}});
+	const auto confirmation = policy::youtubeConfirmationCost(1000, 12000, 16000);
+	CHECK(firstSample.durationMs == 10750);
+	CHECK(confirmation.durationMs == 31250);
+	CHECK(confirmation.bytes == 47145400);
+	const uint64_t reservedBytes = firstSample.bytes + confirmation.bytes;
+	const int64_t reservedMs = firstSample.durationMs + confirmation.durationMs;
+	const auto decide = [&](int64_t remainingMs, uint64_t bytesUsed, uint64_t validated = 12000, size_t episodes = 0) {
+		return policy::decideYoutubeRampStep(budget, remainingMs, bytesUsed, 12000, 1000, 12000, 16000, validated, episodes);
+	};
+	CHECK(decide(reservedMs + 1, budget.maximumBytes - reservedBytes) == policy::YoutubeRampStepAction::Measure);
+	CHECK(decide(reservedMs, 0) == policy::YoutubeRampStepAction::FinishValidated);
+	CHECK(decide(budget.timeoutMs, budget.maximumBytes - reservedBytes + 1) == policy::YoutubeRampStepAction::FinishValidated);
+	CHECK(decide(budget.timeoutMs, 0, 12000, 2) == policy::YoutubeRampStepAction::FinishValidated);
+	CHECK(decide(0, budget.maximumBytes, 0) == policy::YoutubeRampStepAction::Inconclusive);
+	// A partial reservation must not overflow the remaining-byte calculation.
+	CHECK_FALSE(policy::youtubeBudgetFits(budget, budget.timeoutMs, std::numeric_limits<uint64_t>::max(), firstSample));
+	CHECK_FALSE(policy::youtubeBudgetFits(budget, budget.timeoutMs, 0, policy::youtubeSampleGroupCost(1000, {0})));
+}
+
+TEST_CASE("YouTube stopping before an unbudgeted step preserves only validated evidence")
+{
+	const auto budget = policy::youtubeProbeBudgetLimits(true, 16000);
+	policy::YoutubeRampEvidence evidence;
+	evidence.observeAcceptedTarget(12128, 12000);
+	const auto action = policy::decideYoutubeRampStep(budget, 20000, 55000000, 12000, 1000, 12000, 16000, evidence.recommendedVideoKbps(), 0);
+	REQUIRE(action == policy::YoutubeRampStepAction::FinishValidated);
+	CHECK(evidence.recommendedVideoKbps() == 12000);
+	// Budget exhaustion after an attempted failure remains inconclusive. The
+	// finish decision is used only before increasing the target, never here.
+	CHECK_FALSE(policy::youtubeBudgetFits(budget, 20000, 55000000, policy::youtubeConfirmationCost(1000, 12000, 16000)));
+	CHECK(policy::decideYoutubeConfirmation(false, false) == policy::YoutubeConfirmationDecision::PathUnstable);
 }
 
 TEST_CASE("Identical ordinary bandwidth connections are tested once for all canvases")

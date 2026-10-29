@@ -175,16 +175,129 @@ inline std::vector<std::vector<size_t>> groupBandwidthProbes(const std::vector<B
 	return groups;
 }
 
-/** Two standard uploads need an aggregate measurement, not two single-upload caps. */
-inline int youtubeProbeMaximumBitrateKbps(bool sharedUpload)
+struct RtmpProbeServiceBitratePolicy {
+	int maximumKbps;
+	bool overrideServiceBitrate;
+};
+
+/** A Twitch exception must never replace a YouTube service's probe limit. */
+inline RtmpProbeServiceBitratePolicy rtmpProbeServiceBitratePolicy(std::string_view provider, int serviceMaximumKbps, int experimentalTwitchMaximumKbps)
 {
-	return sharedUpload ? 12000 : 10000;
+	const bool overrideBitrate = provider == "twitch" && experimentalTwitchMaximumKbps > 0;
+	return {overrideBitrate ? experimentalTwitchMaximumKbps : serviceMaximumKbps, overrideBitrate};
+}
+
+/** Measure enough for both outputs, while keeping probing bounded to 16 Mbps. */
+inline int youtubeProbeMaximumBitrateKbps(bool sharedUpload, int perOutputMaximumKbps)
+{
+	return sharedUpload ? std::max(10000, 2 * std::clamp(perOutputMaximumKbps, 1, 8000)) : 10000;
+}
+
+/** Preserve the ladder's clipped final target without duplicate probe steps. */
+inline std::vector<std::pair<int, int>> youtubeProbeTargets(int effectiveCeilingKbps)
+{
+	std::vector<std::pair<int, int>> targets;
+	int previous = 0;
+	for (const int rung : {1000, 2000, 4000, 6000, 8000, 10000, 12000, 16000}) {
+		const int target = std::min(rung, effectiveCeilingKbps);
+		if (target > previous) {
+			targets.emplace_back(rung, target);
+			previous = target;
+		}
+	}
+	return targets;
 }
 
 /** Give the additional aggregate-upload rung a longer sustained observation. */
 inline int youtubeProbeRampSampleMs(int targetKbps)
 {
 	return targetKbps > 10000 ? 10000 : 5000;
+}
+
+inline constexpr int kYoutubeProbeAudioBitrateKbps = 128;
+inline constexpr int kYoutubeProbeSampleMs = 5000;
+inline constexpr int kYoutubeProbeSettleMs = 500;
+inline constexpr int kYoutubeProbeSustainedSampleMs = 10000;
+inline constexpr int kYoutubeProbeRecoveryMaximumMs = 10000;
+inline constexpr int kYoutubeProbeMaximumConfirmationEpisodes = 2;
+
+struct YoutubeProbeBudgetLimits {
+	uint64_t maximumBytes = 64ULL * 1024 * 1024;
+	int timeoutMs = 100000;
+	bool reserveConfirmation = false;
+};
+
+inline YoutubeProbeBudgetLimits youtubeProbeBudgetLimits(bool sharedUpload, int effectiveCeilingKbps)
+{
+	return sharedUpload && effectiveCeilingKbps > 12000 ? YoutubeProbeBudgetLimits{128ULL * 1024 * 1024, 150000, true} : YoutubeProbeBudgetLimits{};
+}
+
+struct YoutubeProbeBudgetCost {
+	int64_t durationMs = 250; // Allow scheduling slack between samples.
+	uint64_t bytes = 0;
+	bool valid = true;
+};
+
+inline uint64_t estimatedYoutubeSampleBytes(int targetVideoKbps, int durationMs)
+{
+	if (targetVideoKbps <= 0 || durationMs <= 0)
+		return 0;
+	const uint64_t payloadBytes = ((uint64_t)targetVideoKbps + kYoutubeProbeAudioBitrateKbps) * (uint64_t)durationMs / 8;
+	return payloadBytes * 115 / 100;
+}
+
+inline YoutubeProbeBudgetCost youtubeSampleGroupCost(int activeTarget, const std::vector<int> &targets,
+						     const std::vector<std::pair<int, int>> &additionalSegments = {})
+{
+	YoutubeProbeBudgetCost cost;
+	for (const auto &[target, durationMs] : additionalSegments) {
+		if (target <= 0 || durationMs <= 0)
+			return {0, 0, false};
+		cost.durationMs += durationMs;
+		cost.bytes += estimatedYoutubeSampleBytes(target, durationMs);
+	}
+	for (const int target : targets) {
+		if (target <= 0)
+			return {0, 0, false};
+		const int durationMs = kYoutubeProbeSampleMs + (target != activeTarget ? kYoutubeProbeSettleMs : 0);
+		cost.durationMs += durationMs;
+		cost.bytes += estimatedYoutubeSampleBytes(target, durationMs);
+		activeTarget = target;
+	}
+	return cost;
+}
+
+inline YoutubeProbeBudgetCost youtubeConfirmationCost(int baselineTarget, int lastAcceptedTarget, int nextTarget)
+{
+	return youtubeSampleGroupCost(nextTarget, {lastAcceptedTarget, nextTarget},
+				      {{baselineTarget, kYoutubeProbeRecoveryMaximumMs}, {nextTarget, kYoutubeProbeSustainedSampleMs}});
+}
+
+inline bool youtubeBudgetFits(const YoutubeProbeBudgetLimits &limits, int64_t remainingMs, uint64_t bytesUsed, const YoutubeProbeBudgetCost &cost)
+{
+	return cost.valid && remainingMs > cost.durationMs && bytesUsed <= limits.maximumBytes && cost.bytes <= limits.maximumBytes - bytesUsed;
+}
+
+enum class YoutubeRampStepAction { Measure, FinishValidated, Inconclusive };
+
+// Check before increasing the target, while the previous measurement is still
+// valid. Never turn an unconfirmed failure at the higher target into success.
+inline YoutubeRampStepAction decideYoutubeRampStep(const YoutubeProbeBudgetLimits &limits, int64_t remainingMs, uint64_t bytesUsed, int activeTarget,
+						   int baselineTarget, int lastAcceptedTarget, int nextTarget, uint64_t validatedVideoKbps,
+						   size_t confirmationEpisodes)
+{
+	const int extraMs = youtubeProbeRampSampleMs(nextTarget) - kYoutubeProbeSampleMs;
+	auto cost = youtubeSampleGroupCost(activeTarget, {nextTarget},
+					   extraMs > 0 ? std::vector<std::pair<int, int>>{{nextTarget, extraMs}} : std::vector<std::pair<int, int>>{});
+	if (limits.reserveConfirmation) {
+		const auto confirmation = youtubeConfirmationCost(baselineTarget, lastAcceptedTarget, nextTarget);
+		cost.durationMs += confirmation.durationMs;
+		cost.bytes += confirmation.bytes;
+		cost.valid &= confirmation.valid && confirmationEpisodes < kYoutubeProbeMaximumConfirmationEpisodes;
+	}
+	if (youtubeBudgetFits(limits, remainingMs, bytesUsed, cost))
+		return YoutubeRampStepAction::Measure;
+	return limits.reserveConfirmation && validatedVideoKbps > 0 ? YoutubeRampStepAction::FinishValidated : YoutubeRampStepAction::Inconclusive;
 }
 
 struct YoutubeProbeSampleMetrics {

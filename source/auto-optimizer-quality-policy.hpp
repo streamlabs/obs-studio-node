@@ -37,11 +37,41 @@ inline bool isMultiplatformStream(const std::vector<std::string> &platforms)
 	return !platforms.empty() && std::any_of(platforms.begin(), platforms.end(), [&](const auto &platform) { return platform != platforms.front(); });
 }
 
-// Limit each ordinary output, not aggregate upload probes or Twitch's managed
-// ladder. Zero means no limit was supplied; preserve any stricter limit.
-inline int applyMultistreamBitrateLimitKbps(int maximumBitrateKbps, bool multiplatform, bool standardOutput)
+inline bool isTwitchOrYouTubeOnlyStream(const std::vector<std::string> &platforms)
 {
-	if (multiplatform && standardOutput && (maximumBitrateKbps == 0 || maximumBitrateKbps > kMultistreamVideoBitrateLimitKbps))
+	return !platforms.empty() &&
+	       std::all_of(platforms.begin(), platforms.end(), [](const auto &platform) { return platform == "twitch" || platform == "youtube"; });
+}
+
+inline bool allowsExperimentalTwitchBitrate(const std::vector<std::string> &platforms)
+{
+	return isTwitchOrYouTubeOnlyStream(platforms) && std::find(platforms.begin(), platforms.end(), "twitch") != platforms.end();
+}
+
+// Both ordinary canvases share one applied bitrate. A horizontal 1440p request
+// enables the Twitch allowance for its vertical companion as well.
+inline bool usesExperimentalTwitchBitrate(const std::vector<std::string> &platforms, bool horizontal1440pRequested)
+{
+	return horizontal1440pRequested && allowsExperimentalTwitchBitrate(platforms);
+}
+
+inline int commonOutputBitrateLimitKbps(const std::vector<int> &limits)
+{
+	int maximum = kMaximumRecommendedBitrateKbps;
+	for (const int limit : limits) {
+		if (limit > 0)
+			maximum = std::min(maximum, limit);
+	}
+	return maximum;
+}
+
+// Limit each ordinary output, not aggregate upload probes or Twitch's managed
+// ladder. Twitch/YouTube-only selections are exempt. Zero means no limit was
+// supplied; preserve any stricter limit.
+inline int applyMultistreamBitrateLimitKbps(int maximumBitrateKbps, const std::vector<std::string> &platforms, bool standardOutput)
+{
+	if (isMultiplatformStream(platforms) && !isTwitchOrYouTubeOnlyStream(platforms) && standardOutput &&
+	    (maximumBitrateKbps == 0 || maximumBitrateKbps > kMultistreamVideoBitrateLimitKbps))
 		return kMultistreamVideoBitrateLimitKbps;
 	return maximumBitrateKbps;
 }
@@ -498,8 +528,8 @@ inline int twitchMinimumBitrateKbps(const VideoTuple &video)
 	const int longEdge = std::max(video.width, video.height);
 	const int shortEdge = std::min(video.width, video.height);
 	const bool highFps = fpsGreaterThan(video, 30);
-	// Experimental ordinary-Twitch 1440p policy, gated by Twitch-only request
-	// limits and a successful 7.5 Mbps probe. Do not raise multistream bitrates.
+	// Experimental ordinary-Twitch 1440p policy, gated by Twitch/YouTube-only request
+	// limits and a successful 7.5 Mbps probe. Other platforms retain their caps.
 	if (longEdge == 2560 && shortEdge == 1440)
 		return kExperimentalTwitch1440pBitrateKbps;
 	if (longEdge == 1920 && shortEdge == 1080)

@@ -2156,9 +2156,16 @@ interface IAutoOptimizerLimits {
      * settings are managed by Desktop. A provider probe may test above this
      * value to verify stability or shared upload capacity, but the
      * recommendation never exceeds it.
-     * When multiple distinct platforms are selected across the request, OSN
-     * additionally caps each ordinary output at 6000 Kbps. Twitch Enhanced
-     * Broadcasting retains its platform-managed bitrate ladder.
+     * When multiple distinct platforms are selected across the request and any
+     * is neither Twitch nor YouTube, OSN additionally caps each ordinary output
+     * at 6000 Kbps. Twitch Enhanced Broadcasting retains its platform-managed
+     * bitrate ladder.
+     * YouTube probes for two standard outputs may test their combined bitrate,
+     * up to 16000 Kbps, without raising either output's recommendation limit.
+     * Shared probes above 12000 Kbps allow up to 128 MiB and 150 seconds per
+     * connection, including recovery and confirmation. Other YouTube probes
+     * retain their 64 MiB and 100-second limits. A probe may stop at a lower
+     * validated bitrate when there is insufficient budget for the next step.
      */
     maxBitrateKbps?: number;
     /**
@@ -2171,12 +2178,14 @@ interface IAutoOptimizerLimits {
      * Estimated results never increase saved dimensions or frame rate. The
      * caller remains responsible for applying any Base Canvas resize safely.
      * Horizontal 1440p testing is available only when every destination in the
-     * request is Twitch. Other streams are limited to 1080p. Vertical testing
-     * remains limited to 1080x1920, including Twitch Enhanced Broadcasting's
+     * request is Twitch or YouTube. Other streams are limited to 1080p. Vertical
+     * testing remains limited to 1080x1920, including Twitch Enhanced Broadcasting's
      * paired 1440p horizontal / 1080p vertical workload. Ordinary Twitch 1440p
-     * requests use an experimental 7500 Kbps limit instead of the service's
-     * 6000 Kbps default; the caller must apply that tested bitrate without
-     * reapplying the lower service bitrate limit.
+     * requests, including Twitch + YouTube selections, use an experimental
+     * 7500 Kbps limit instead of the service's 6000 Kbps default. In Dual Output,
+     * this also permits the vertical Twitch companion to use the shared bitrate
+     * when the horizontal output requests 1440p. The caller must apply that
+     * tested bitrate without reapplying the lower service bitrate limit.
      */
     maxWidth?: number;
     maxHeight?: number;
