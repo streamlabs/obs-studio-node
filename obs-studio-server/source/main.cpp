@@ -70,6 +70,7 @@
 
 #include "util-crashmanager.h"
 #include "shared.hpp"
+#include "shutdown-watchdog.hpp"
 
 #ifndef OSN_VERSION
 #define OSN_VERSION "DEVMODE_VERSION"
@@ -341,6 +342,7 @@ int main(int argc, char *argv[])
 	// before going further with shutdown. It needed for usecase where obs64 process stay alive and
 	// continue streaming till user confirms exit in crash-handler.
 	OBS_API::WaitCrashHandlerClose(waitBeforeClosing);
+	osn::ShutdownWatchdog::Instance().Arm("Prepare", osn::shutdown_budget::Prepare);
 #endif
 	osn::Source::finalize_global_signals();
 
@@ -349,6 +351,10 @@ int main(int argc, char *argv[])
 
 	// Then, shutdown OBS
 	OBS_API::destroyOBS_API();
+#ifdef WIN32
+	// Skips exit-time work (DLL detach, static destructors) that can hang.
+	TerminateProcess(GetCurrentProcess(), 0);
+#endif
 #ifdef __APPLE__
 	util::CrashManager::DeleteBriefCrashInfoFile();
 	if (override_std_fd) {
