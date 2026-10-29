@@ -96,6 +96,10 @@ public:
 	// reused, because two muxers on one file corrupt it whatever the overwrite setting says.
 	static void FindBestFilename(std::string &strPath, bool noSpace, FileOutput *owner, bool allowOverwrite);
 
+	// Returns an empty string if path is an existing directory that passes os_is_path_safe,
+	// otherwise a message naming path and the reason it was rejected.
+	static std::string CheckOutputDirectory(const std::string &path);
+
 	static obs_encoder_t *duplicate_encoder(obs_encoder_t *src, uint64_t trackIndex = 0);
 };
 }

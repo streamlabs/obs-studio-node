@@ -411,8 +411,9 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
 	}
 
-	if (!os_is_path_safe(recording->path.c_str())) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Unsafe recording path: symbolic links and junctions are not allowed.");
+	const std::string pathError = CheckOutputDirectory(recording->path);
+	if (!pathError.empty()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, pathError);
 	}
 
 	std::string path = recording->path;
