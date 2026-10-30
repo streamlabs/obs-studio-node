@@ -32,14 +32,22 @@ void osn::Output::InitOutput(obs_output_t *output)
 	}
 
 	signal_handler *sh = obs_output_get_signal_handler(output);
+	signal_handler_connect(sh, "stopping", osn::Output::OnStopping, this);
 	signal_handler_connect(sh, "stop", osn::Output::OnStopped, this);
 
 	ConnectSignals();
 }
 
+void osn::Output::OnStopping(void *data, calldata_t *)
+{
+	reinterpret_cast<osn::Output *>(data)->m_finalizeTracker.Begin();
+}
+
 void osn::Output::OnStopped(void *data, calldata_t *)
 {
 	osn::Output *context = reinterpret_cast<osn::Output *>(data);
+
+	context->m_finalizeTracker.End();
 
 	// Before m_mtxOutputStop: DeleteOutput() holds that lock for up to 20s waiting
 	// on m_cvStop, and nothing should queue behind it.
@@ -92,8 +100,10 @@ void osn::Output::DeleteOutput()
 	// into freed CallbackData/this would crash in signal_handler_signal.
 	DisconnectSignals();
 
+	// Release can block until the muxer finishes writing, so it still counts as finalizing.
 	obs_output_release(m_output);
 	m_output = nullptr;
+	m_finalizeTracker.End();
 }
 
 void osn::OutputSignalCallback(void *data, calldata_t *params)
@@ -136,6 +146,7 @@ void osn::Output::DisconnectSignals()
 
 	signal_handler *handler = obs_output_get_signal_handler(m_output);
 	if (handler) {
+		signal_handler_disconnect(handler, "stopping", osn::Output::OnStopping, this);
 		signal_handler_disconnect(handler, "stop", osn::Output::OnStopped, this);
 		for (auto *cd : m_signalCallbackData)
 			signal_handler_disconnect(handler, cd->signal.c_str(), osn::OutputSignalCallback, cd);

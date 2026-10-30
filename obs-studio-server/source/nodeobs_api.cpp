@@ -46,6 +46,7 @@
 
 //to destroy cpu usage object
 #include "osn-global.hpp"
+#include "shutdown-watchdog.hpp"
 
 #include <sys/types.h>
 
@@ -1098,6 +1099,10 @@ void OBS_API::OBS_API_destroyOBS_API(void *data, const int64_t id, const std::ve
 	osn::Source::finalize_global_signals();
 	/* END INJECT osn::Source::Manager */
 	destroyOBS_API();
+#ifdef _WIN32
+	// The process keeps running after this call.
+	osn::ShutdownWatchdog::Instance().Disarm();
+#endif
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }
@@ -1425,17 +1430,6 @@ BOOL ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo)
 	return fPendingIO;
 }
 
-VOID DisconnectAndReconnect(void)
-{
-	if (!DisconnectNamedPipe(Pipe.hPipeInst)) {
-		return;
-	}
-
-	Pipe.fPendingIO = ConnectToNewClient(Pipe.hPipeInst, &(Pipe.oOverlap));
-
-	Pipe.dwState = Pipe.fPendingIO ? CONNECTING_STATE : READING_STATE;
-}
-
 bool prepareTerminationPipe()
 {
 	LPCTSTR lpszPipename = TEXT("\\\\.\\pipe\\exit-slobs-crash-handler");
@@ -1479,7 +1473,6 @@ void acknowledgeTerminate()
 				// We timeout, crash handler failed to send the shutdown acknowledge,
 				// we move forward with the shutdown procedure
 				crash_handler_exit = true;
-				CloseHandle(Pipe.hPipeInst);
 				break;
 			}
 		}
@@ -1500,7 +1493,6 @@ void acknowledgeTerminate()
 				case READING_STATE: {
 					if (!fSuccess || cbRet == 0) {
 						crash_handler_exit = true;
-						DisconnectAndReconnect();
 						break;
 					}
 					Pipe.cbRead = cbRet;
@@ -1530,12 +1522,17 @@ void acknowledgeTerminate()
 					break;
 				}
 				crash_handler_exit = true;
-				DisconnectAndReconnect();
 				break;
 			}
 			}
 		}
 	}
+
+	// Single exit: the pipe name is free again for the next session.
+	CloseHandle(Pipe.hPipeInst);
+	Pipe.hPipeInst = INVALID_HANDLE_VALUE;
+	CloseHandle(hEvents);
+	hEvents = NULL;
 }
 #else __APPLE__
 void acknowledgeTerminate(void)
@@ -1667,6 +1664,11 @@ void OBS_API::destroyOBS_API(void)
 			DisableAudioDucking(false);
 	}
 #endif
+
+#ifdef _WIN32
+	osn::ShutdownWatchdog::Instance().Arm("Outputs", osn::shutdown_budget::OutputStep);
+	osn::ShutdownWatchdog::Instance().SetCap(osn::shutdown_budget::OutputCap);
+#endif
 	OBS_content::OBS_content_shutdownDisplays();
 
 	ScreenshotManager::GetInstance().Shutdown();
@@ -1768,15 +1770,27 @@ void OBS_API::destroyOBS_API(void)
 
 	// Release all streaming ouputs
 	osn::IStreaming::Manager::GetInstance().for_each([](osn::Streaming *streamingOutput) {
-		if (streamingOutput)
+		if (streamingOutput) {
+#ifdef _WIN32
+			osn::ShutdownWatchdog::Instance().Kick(osn::shutdown_budget::OutputStep);
+#endif
 			delete streamingOutput;
+		}
 	});
 
 	// Release all recording ouputs
 	osn::IFileOutput::Manager::GetInstance().for_each([](osn::FileOutput *fileOutput) {
-		if (fileOutput)
+		if (fileOutput) {
+#ifdef _WIN32
+			osn::ShutdownWatchdog::Instance().Kick(osn::shutdown_budget::OutputStep);
+#endif
 			delete fileOutput;
+		}
 	});
+
+#ifdef _WIN32
+	osn::ShutdownWatchdog::Instance().Arm("Teardown", osn::shutdown_budget::Teardown);
+#endif
 
 	// Stop the cache worker before draining destruction: it can still own the
 	// last reference to a removed source and enqueue its destruction later.
