@@ -19,6 +19,7 @@
 #pragma once
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <map>
 #include <string>
 #include "ipc.hpp"
@@ -59,7 +60,11 @@ public:
 
 private:
 	bool m_isServer = false;
+	// Worker threads (signal pollers, Auto Optimizer) copy m_connection via GetConnection() while
+	// the JS thread may reset it in disconnect(). Concurrent read/write of one std::shared_ptr is a
+	// data race, so every access to m_connection must hold m_connectionMutex.
 	std::shared_ptr<ipc::client> m_connection;
+	mutable std::mutex m_connectionMutex;
 	ipc::ProcessInfo procId;
 	// Monotonic "epoch" for the IPC connection lifecycle. Helps to detect stale wrappers
 	// after disconnect/reconnect so finalizers can safely no-op.

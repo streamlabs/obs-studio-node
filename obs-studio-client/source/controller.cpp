@@ -327,7 +327,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 #endif
 
 	m_isServer = true;
-	return m_connection;
+	return GetConnection();
 }
 
 std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
@@ -336,7 +336,7 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 	if (m_isServer)
 		return nullptr;
 
-	if (m_connection)
+	if (GetConnection())
 		return nullptr;
 
 	std::shared_ptr<ipc::client> cl;
@@ -371,12 +371,15 @@ std::shared_ptr<ipc::client> Controller::connect(const std::string &uri)
 		return nullptr;
 	}
 
-	m_connection = cl;
-	// Note: this increment in the current implementation is not strictly required for the basic
-	//       stale-after-reconnect case, but it is a useful safe guard for a possible future expansion.
-	// Bump epoch on successful connect to invalidate stale native wrappers, if any.
-	m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
-	return m_connection;
+	{
+		std::lock_guard<std::mutex> lock(m_connectionMutex);
+		m_connection = cl;
+		// Note: this increment in the current implementation is not strictly required for the basic
+		//       stale-after-reconnect case, but it is a useful safe guard for a possible future expansion.
+		// Bump epoch on successful connect to invalidate stale native wrappers, if any.
+		m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
+	}
+	return cl;
 }
 
 void Controller::disconnect()
@@ -386,12 +389,22 @@ void Controller::disconnect()
 	autoOptimizer::Shutdown();
 
 	if (m_isServer) {
-		m_connection->call_synchronous_helper("System", "Shutdown", {});
+		// Call outside the lock: the IPC call can block for a long time.
+		auto conn = GetConnection();
+		if (conn)
+			conn->call_synchronous_helper("System", "Shutdown", {});
 		m_isServer = false;
 	}
-	m_connection = nullptr;
-	// Bump epoch on disconnect so finalizers skip IPC calls for old sessions.
-	m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
+
+	std::shared_ptr<ipc::client> released;
+	{
+		std::lock_guard<std::mutex> lock(m_connectionMutex);
+		// Bump epoch before dropping the connection so finalizers skip IPC calls for old sessions.
+		m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
+		released = std::move(m_connection);
+	}
+	// `released` goes out of scope here, outside the lock. If it is the last reference,
+	// ~client_win joins the IPC worker thread, which must not happen while holding the lock.
 }
 
 DWORD Controller::GetExitCode()
@@ -401,6 +414,7 @@ DWORD Controller::GetExitCode()
 
 std::shared_ptr<ipc::client> Controller::GetConnection()
 {
+	std::lock_guard<std::mutex> lock(m_connectionMutex);
 	return m_connection;
 }
 
