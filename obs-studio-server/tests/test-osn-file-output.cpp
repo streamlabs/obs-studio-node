@@ -285,6 +285,25 @@ TEST_CASE("CheckOutputDirectory names the folder and why it was rejected", "[fil
 		REQUIRE_THAT(error, ContainsSubstring("does not exist"));
 	}
 
+	// A bare root has nothing below it to open, so libobs must check the root itself -- this is a
+	// recording drive that has been disconnected while selected at its root.
+	SECTION("missing drive root")
+	{
+		const DWORD drives = GetLogicalDrives();
+		int unused = -1;
+		for (int i = 25; i >= 3 && unused < 0; i--) {
+			if (!(drives & (1u << i)))
+				unused = i;
+		}
+		if (unused < 0)
+			SKIP("Every drive letter from D: to Z: is in use.");
+
+		const std::string root = std::string(1, char('A' + unused)) + ":\\";
+		const std::string error = osn::IFileOutput::CheckOutputDirectory(root);
+		REQUIRE_THAT(error, ContainsSubstring(root));
+		REQUIRE_THAT(error, ContainsSubstring("does not exist"));
+	}
+
 	SECTION("regular file")
 	{
 		const auto file = dir.path / "file.mp4";
