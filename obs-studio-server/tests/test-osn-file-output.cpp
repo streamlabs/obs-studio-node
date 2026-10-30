@@ -1,9 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include "osn-file-output.hpp"
 #include "osn-recording.hpp"
 #include <util/platform.h>
+#include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
+
+#ifdef WIN32
+#include <windows.h>
+#include <winioctl.h>
+#endif
 
 // FindBestFilename resolves a recording path against both the filesystem and the paths already
 // claimed by other live outputs. The second half is what stops dual output pointing two muxers at
@@ -177,3 +185,147 @@ TEST_CASE("FindBestFilename keeps its existing on-disk behaviour", "[file-output
 
 	os_unlink(wanted.c_str());
 }
+
+namespace {
+using Catch::Matchers::ContainsSubstring;
+
+std::string utf8(const std::filesystem::path &path)
+{
+	const std::u8string u8 = path.u8string();
+	return std::string(u8.begin(), u8.end());
+}
+
+// A fresh directory under the system temp folder, so CheckOutputDirectory sees a path nothing else
+// has touched. Cleanup removes links themselves and never recurses through them.
+class ScopedTempDir {
+public:
+	ScopedTempDir()
+	{
+		const auto base = std::filesystem::temp_directory_path();
+		for (int i = 0;; i++) {
+			path = base / ("osn-check-dir-" + std::to_string(os_gettime_ns()) + "-" + std::to_string(i));
+			if (std::filesystem::create_directory(path))
+				break;
+		}
+	}
+	~ScopedTempDir()
+	{
+		std::error_code ec;
+		for (const auto &link : links)
+			std::filesystem::remove(link, ec);
+		std::filesystem::remove_all(path, ec);
+	}
+
+	std::filesystem::path path;
+	std::vector<std::filesystem::path> links;
+};
+
+#ifdef WIN32
+// Same layout as REPARSE_DATA_BUFFER's MountPointReparseBuffer, which lives in the DDK headers.
+struct MountPointReparseBuffer {
+	DWORD tag;
+	WORD dataLength;
+	WORD reserved;
+	WORD substituteOffset;
+	WORD substituteLength;
+	WORD printOffset;
+	WORD printLength;
+	wchar_t path[1];
+};
+
+// Junctions need no privilege, unlike symbolic links, so this runs on any CI machine.
+bool createJunction(const std::filesystem::path &link, const std::filesystem::path &target)
+{
+	alignas(MountPointReparseBuffer) BYTE buffer[MAXIMUM_REPARSE_DATA_BUFFER_SIZE]{};
+	auto *data = reinterpret_cast<MountPointReparseBuffer *>(buffer);
+	const std::wstring substitute = L"\\??\\" + target.native();
+	const auto substituteBytes = static_cast<WORD>(substitute.size() * sizeof(wchar_t));
+	const auto targetBytes = static_cast<WORD>(target.native().size() * sizeof(wchar_t));
+	const DWORD headerSize = FIELD_OFFSET(MountPointReparseBuffer, substituteOffset);
+	data->tag = IO_REPARSE_TAG_MOUNT_POINT;
+	data->substituteLength = substituteBytes;
+	data->printOffset = substituteBytes + sizeof(wchar_t);
+	data->printLength = targetBytes;
+	memcpy(data->path, substitute.c_str(), substituteBytes + sizeof(wchar_t));
+	memcpy(reinterpret_cast<BYTE *>(data->path) + data->printOffset, target.c_str(), targetBytes + sizeof(wchar_t));
+	data->dataLength = static_cast<WORD>(FIELD_OFFSET(MountPointReparseBuffer, path) - headerSize + substituteBytes + targetBytes + 2 * sizeof(wchar_t));
+
+	if (!CreateDirectoryW(link.c_str(), nullptr))
+		return false;
+	HANDLE directory =
+		CreateFileW(link.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+	if (directory == INVALID_HANDLE_VALUE)
+		return false;
+	DWORD bytes;
+	const bool success = DeviceIoControl(directory, FSCTL_SET_REPARSE_POINT, data, data->dataLength + headerSize, nullptr, 0, &bytes, nullptr);
+	CloseHandle(directory);
+	return success;
+}
+#endif
+}
+
+TEST_CASE("CheckOutputDirectory accepts an ordinary folder", "[file-output]")
+{
+	ScopedTempDir dir;
+	REQUIRE(osn::IFileOutput::CheckOutputDirectory(utf8(dir.path)).empty());
+}
+
+#ifdef WIN32
+// os_is_path_safe is a no-op off Windows, so the rejections only exist here. These also pin the
+// reason crossing from obs.dll into this static-CRT binary, where libobs' errno is not visible.
+TEST_CASE("CheckOutputDirectory names the folder and why it was rejected", "[file-output]")
+{
+	ScopedTempDir dir;
+
+	SECTION("missing folder")
+	{
+		const std::string missing = utf8(dir.path / "missing");
+		const std::string error = osn::IFileOutput::CheckOutputDirectory(missing);
+		REQUIRE_THAT(error, ContainsSubstring(missing));
+		REQUIRE_THAT(error, ContainsSubstring("does not exist"));
+	}
+
+	// A bare root has nothing below it to open, so libobs must check the root itself -- this is a
+	// recording drive that has been disconnected while selected at its root.
+	SECTION("missing drive root")
+	{
+		const DWORD drives = GetLogicalDrives();
+		int unused = -1;
+		for (int i = 25; i >= 3 && unused < 0; i--) {
+			if (!(drives & (1u << i)))
+				unused = i;
+		}
+		if (unused < 0)
+			SKIP("Every drive letter from D: to Z: is in use.");
+
+		const std::string root = std::string(1, char('A' + unused)) + ":\\";
+		const std::string error = osn::IFileOutput::CheckOutputDirectory(root);
+		REQUIRE_THAT(error, ContainsSubstring(root));
+		REQUIRE_THAT(error, ContainsSubstring("does not exist"));
+	}
+
+	SECTION("regular file")
+	{
+		const auto file = dir.path / "file.mp4";
+		std::ofstream(file, std::ios::binary) << "x";
+		const std::string error = osn::IFileOutput::CheckOutputDirectory(utf8(file));
+		REQUIRE_THAT(error, ContainsSubstring(utf8(file)));
+		REQUIRE_THAT(error, ContainsSubstring("is not a folder"));
+	}
+
+	SECTION("junction")
+	{
+		const auto target = dir.path / "target";
+		const auto junction = dir.path / "junction";
+		REQUIRE(std::filesystem::create_directory(target));
+		REQUIRE(createJunction(junction, target));
+		dir.links.push_back(junction);
+		// A dangling junction is rejected too, so prove this one resolves before relying on it.
+		REQUIRE(std::filesystem::equivalent(junction, target));
+
+		const std::string error = osn::IFileOutput::CheckOutputDirectory(utf8(junction));
+		REQUIRE_THAT(error, ContainsSubstring(utf8(junction)));
+		REQUIRE_THAT(error, ContainsSubstring("symbolic link, junction, or mounted folder"));
+	}
+}
+#endif

@@ -207,8 +207,9 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
 	}
 
-	if (!os_is_path_safe(replayBuffer->path.c_str())) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Unsafe recording path: symbolic links and junctions are not allowed.");
+	std::string pathError = CheckOutputDirectory(replayBuffer->path);
+	if (!pathError.empty()) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, pathError);
 	}
 
 	const char *rbPrefix = replayBuffer->prefix.c_str();
