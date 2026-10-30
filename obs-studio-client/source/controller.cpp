@@ -86,9 +86,16 @@ ProcessInfo spawn(const std::string &program, const std::string &commandLine, co
 ProcessInfo open_process(uint64_t handle)
 {
 	ProcessInfo pi;
-	DWORD flags = PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE | PROCESS_VM_READ;
+	DWORD flags = PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE | PROCESS_VM_READ | SYNCHRONIZE;
 
 	pi.handle = (uint64_t)OpenProcess(flags, false, (DWORD)handle);
+	if (pi.handle == 0) {
+		DWORD error = GetLastError();
+		// ERROR_INVALID_PARAMETER means the PID is gone, which is the normal case.
+		if (error != ERROR_INVALID_PARAMETER)
+			std::cerr << "Could not open previous server process " << handle << " with error code: " << error
+				  << (error == ERROR_ACCESS_DENIED ? " (the leftover server likely runs at a different elevation)" : "") << std::endl;
+	}
 	return pi;
 }
 
@@ -226,7 +233,12 @@ static void check_pid_file(std::string &pid_path)
 	/* FIXME TODO I don't like globals */
 	if (name == serverBinaryPath) {
 		uint32_t dontcare = 0;
-		kill(pi, -1, dontcare);
+		if (kill(pi, -1, dontcare)) {
+			// TerminateProcess is async; the old server may still hold the CEF cache lock.
+			constexpr DWORD exit_timeout_ms = 5000;
+			if (WaitForSingleObject((HANDLE)pi.handle, exit_timeout_ms) != WAIT_OBJECT_0)
+				std::cerr << "Previous server process " << pid << " did not exit within " << exit_timeout_ms << " ms" << std::endl;
+		}
 	}
 
 	close_process(pi);
