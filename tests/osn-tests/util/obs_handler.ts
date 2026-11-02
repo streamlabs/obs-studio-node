@@ -136,6 +136,16 @@ export class OBSHandler {
         logInfo(this.osnTestName, 'OBS started successfully');
     }
 
+    // Hosts a new server on a fresh pipe after IPC.disconnect(), for suites that
+    // disconnect and reconnect within the same process.
+    reconnect(needDefaultVideoContext: boolean = true) {
+        this.pipeName = 'osn-tests-pipe-'.concat(uuidv4());
+        this.startup();
+        if (needDefaultVideoContext) {
+            this.createDefaultVideoContext();
+        }
+    }
+
     shutdown() {
         if(this.defaultVideoContext) {
             this.destroyDefaultVideoContext();
