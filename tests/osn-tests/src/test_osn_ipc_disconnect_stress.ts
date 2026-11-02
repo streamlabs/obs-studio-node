@@ -42,7 +42,14 @@ describe(testName, () => {
         logEmptyLine();
     });
 
+    // Pollers started by the current test. obs.shutdown() does not stop them,
+    // so afterEach stops whatever a failed test left running.
+    const activeRecordings: osn.IAdvancedRecording[] = [];
+    let globalPollerActive = false;
+
     afterEach(function() {
+        stopAllPollers();
+
         if (this.currentTest.state == 'failed') {
             hasTestFailed = true;
         }
@@ -58,6 +65,8 @@ describe(testName, () => {
         }
 
         const recording = osn.AdvancedRecordingFactory.create();
+        // Track it before any step below can throw, so afterEach can stop its worker.
+        activeRecordings.push(recording);
         recording.path = path.join(path.normalize(__dirname), '..', 'osnData');
         recording.format = osn.ERecordingFormat.MP4;
         recording.useStreamEncoders = false;
@@ -94,20 +103,41 @@ describe(testName, () => {
     // Stops a recording's worker without IPC. Setting signalHandler calls
     // stopWorker() and joins the thread; Factory.destroy() would need a live
     // connection, and the wrapper's uid means nothing to a new server.
+    // Safe whether or not the worker was ever started.
     function stopRecordingPoller(recording: osn.IAdvancedRecording | null) {
-        if (recording) {
-            recording.signalHandler = () => {};
+        if (!recording) {
+            return;
         }
+
+        const index = activeRecordings.indexOf(recording);
+        if (index >= 0) {
+            activeRecordings.splice(index, 1);
+        }
+        recording.signalHandler = () => {};
     }
 
     function startGlobalPoller() {
         osn.NodeObs.RegisterSourceCallback(() => {});
+        globalPollerActive = true;
     }
 
     // The global worker returns on its own once the connection is gone;
     // this joins it and releases its thread-safe function.
     function stopGlobalPoller() {
+        if (!globalPollerActive) {
+            return;
+        }
+
+        globalPollerActive = false;
         osn.NodeObs.RemoveSourceCallback();
+    }
+
+    // Neither stop makes an IPC call, so this works connected or disconnected.
+    function stopAllPollers() {
+        while (activeRecordings.length > 0) {
+            stopRecordingPoller(activeRecordings[activeRecordings.length - 1]);
+        }
+        stopGlobalPoller();
     }
 
     // The server is gone, so the old video context must not be destroyed over IPC.
