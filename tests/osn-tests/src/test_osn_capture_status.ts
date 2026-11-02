@@ -39,8 +39,7 @@ describe('osn-capture-status', function () {
             expect(error.errorCode).to.equal(0);
             expect(error.deviceName).to.equal('Missing');
             expect(snapshot('missing-camera')).to.deep.equal(error);
-            // Cross at least one native presence-check interval. An absent interface must
-            // retain the error without repeatedly restarting capture or clearing the warning.
+            // Cross the native two-second presence-check interval before asserting stability.
             await new Promise(resolve => setTimeout(resolve, 2300));
             expect(snapshot('missing-camera')).to.deep.equal(error);
             expect(snapshot('not-a-camera')).to.equal(undefined);
@@ -51,8 +50,7 @@ describe('osn-capture-status', function () {
             const updated = await waitFor('missing-camera', 'error', error.generation);
             expect(updated.generation).to.be.greaterThan(error.generation);
             expect(updated.deviceName).to.equal('Other');
-            // A non-PnP device with unknown presence must not be diagnosed as unplugged
-            // or enter an unbounded automatic retry loop merely because enumeration failed.
+            // The non-PnP identifier keeps presence unknown even on machines with no cameras.
             expect(updated.reason).to.equal('start_failed');
             await new Promise(resolve => setTimeout(resolve, 2300));
             expect(snapshot('missing-camera')).to.deep.equal(updated);
@@ -65,7 +63,6 @@ describe('osn-capture-status', function () {
             camera.remove();
             sources.splice(sources.indexOf(camera), 1);
             expect(snapshot('missing-camera')).to.equal(undefined);
-            // Snapshots remain independent values after the native source is removed.
             expect(error.deviceName).to.equal('Missing');
         } finally {
             for (const source of sources.reverse()) source.release();
