@@ -800,7 +800,7 @@ export interface ICaptureStatus {
     generation: number;
     state: 'inactive' | 'starting' | 'running' | 'error';
     /** Empty outside error state. Unknown future reasons must use a generic message. */
-    reason: '' | 'insufficient_bandwidth' | 'device_not_found' | 'start_failed';
+    reason: '' | 'insufficient_bandwidth' | 'access_denied' | 'invalid_configuration' | 'device_not_found' | 'start_failed';
     /** Friendly device name only; empty when unavailable. */
     deviceName: string;
     /** Unsigned Windows HRESULT; zero when no native code is available. */
@@ -813,7 +813,8 @@ export interface IInputFactory extends IFactoryTypes {
      * Sources without status support (including older plugins) are omitted.
      * Missing physical cameras are retried automatically when their Windows device interface
      * returns, with up to five attempts if startup temporarily fails while the driver becomes
-     * ready. Confirmed bandwidth failures stop retries. Device-not-found requires confirmed
+     * ready. Confirmed bandwidth, access-denied and invalid-configuration failures stop retries
+     * and require an explicit activation after correcting the cause. Device-not-found requires confirmed
      * hardware absence; driver/enumeration failures with present or unknown hardware use start_failed.
      * The failure stays visible during automatic retry and clears on success; explicit
      * activation/deactivation replaces it immediately. Deactivated sources do not reconnect.
