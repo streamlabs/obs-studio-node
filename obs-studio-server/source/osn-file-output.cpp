@@ -22,6 +22,7 @@
 #include <osn-video.hpp>
 #include <util/platform.h>
 #include <algorithm>
+#include <cerrno>
 #include <mutex>
 
 // Serialises resolve-and-claim against the release in OnOutputStopped(). Start() runs on an IPC
@@ -112,6 +113,25 @@ void osn::IFileOutput::FindBestFilename(std::string &strPath, bool noSpace, File
 	// stays on its original file. Reassigning here would unclaim the file actually being written.
 	if (owner && !obs_output_active(owner->GetOutput()))
 		owner->claimedFilePath = strPath;
+}
+
+std::string osn::IFileOutput::CheckOutputDirectory(const std::string &path)
+{
+	switch (os_check_path_safe(path.c_str())) {
+	case 0:
+		return "";
+	case ELOOP:
+		return "Recording folder " + path +
+		       " is or is inside a symbolic link, junction, or mounted folder, which is not allowed. Choose a regular folder.";
+	case ENOENT:
+		return "Recording folder does not exist: " + path;
+	case ENOTDIR:
+		return "Recording path is not a folder: " + path;
+	case EACCES:
+		return "Access denied to recording folder: " + path;
+	default:
+		return "Recording path is not a valid folder path: " + path;
+	}
 }
 
 void osn::FileOutput::OnOutputStopped()

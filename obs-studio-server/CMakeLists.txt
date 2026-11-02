@@ -520,6 +520,8 @@ if(WIN32)
             "${PROJECT_BINARY_DIR}/version.rc"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.cpp"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.hpp"
+            "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
+            "${PROJECT_SOURCE_DIR}/source/token-label-policy.hpp"
     )
 
 endif()
@@ -588,6 +590,8 @@ set(PROGRAM_PERMISSIONS_DEFAULT
 if (WIN32)
 	install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	install(TARGETS crashpad-bridge RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
+	install(FILES $<TARGET_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug COMPONENT Runtime)
+	install(FILES $<TARGET_PDB_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug OPTIONAL)
 ELSE()
 	install(TARGETS obs-studio-server RUNTIME DESTINATION "./bin" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	set(_COMMAND
@@ -691,7 +695,13 @@ if(BUILD_TESTING)
     osn_target_uses_static_msvc_runtime(obs_studio_server_unit_tests)
 
     if(WIN32)
-        target_sources(obs_studio_server_unit_tests PRIVATE "tests/test-cef-subprocess.cpp")
+        target_sources(
+            obs_studio_server_unit_tests
+            PRIVATE
+                "tests/test-cef-subprocess.cpp"
+                "tests/test-token-label-policy.cpp"
+                "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
+        )
     endif()
 
     if(APPLE)

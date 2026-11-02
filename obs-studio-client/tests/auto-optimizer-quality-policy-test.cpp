@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "auto-optimizer-quality-policy.hpp"
+#include "auto-optimizer-probe-policy.hpp"
 
 namespace policy = autoOptimizer::qualityPolicy;
 
@@ -23,19 +24,28 @@ TEST_CASE("Multistream bitrate limits preserve single-platform allowances and Tw
 {
 	// This is a policy assertion, not a requirement that the CI machine pass a
 	// real encoder benchmark. Startup and cancellation remain integration-tested.
-	for (const auto &platforms : std::vector<std::vector<std::string>>{{"youtube", "kick"}, {"twitch", "youtube"}, {"youtube"}, {"twitch", "twitch"}}) {
+	for (const auto &[platforms, limited] : std::vector<std::pair<std::vector<std::string>, bool>>{{{"youtube", "kick"}, true},
+												       {{"twitch", "youtube", "facebook"}, true},
+												       {{"twitch", "youtube", "custom"}, true},
+												       {{"twitch", "other"}, true},
+												       {{"youtube", "unknown"}, true},
+												       {{"twitch", "youtube"}, false},
+												       {{"youtube"}, false},
+												       {{"youtube", "youtube"}, false},
+												       {{"twitch", "twitch"}, false},
+												       {{"kick"}, false},
+												       {{}, false}}) {
 		CAPTURE(platforms);
-		const bool multiplatform = policy::isMultiplatformStream(platforms);
-		const int limit = policy::applyMultistreamBitrateLimitKbps(8000, multiplatform, true);
-		CHECK(limit == (multiplatform ? 6000 : 8000));
+		const int limit = policy::applyMultistreamBitrateLimitKbps(8000, platforms, true);
+		CHECK(limit == (limited ? 6000 : 8000));
 		CHECK(policy::composeEstimatedBitrateKbps(8000, limit) == limit);
-		CHECK(policy::applyMultistreamBitrateLimitKbps(0, multiplatform, true) == (multiplatform ? 6000 : 0));
-		CHECK(policy::applyMultistreamBitrateLimitKbps(8000, multiplatform, false) == 8000);
-		CHECK(policy::applyMultistreamBitrateLimitKbps(0, multiplatform, false) == 0);
+		CHECK(policy::applyMultistreamBitrateLimitKbps(0, platforms, true) == (limited ? 6000 : 0));
+		CHECK(policy::applyMultistreamBitrateLimitKbps(8000, platforms, false) == 8000);
+		CHECK(policy::applyMultistreamBitrateLimitKbps(0, platforms, false) == 0);
 		for (int stricterLimit : {2500, 4500, 6000}) {
 			CAPTURE(stricterLimit);
-			CHECK(policy::applyMultistreamBitrateLimitKbps(stricterLimit, multiplatform, true) == stricterLimit);
-			CHECK(policy::applyMultistreamBitrateLimitKbps(stricterLimit, multiplatform, false) == stricterLimit);
+			CHECK(policy::applyMultistreamBitrateLimitKbps(stricterLimit, platforms, true) == stricterLimit);
+			CHECK(policy::applyMultistreamBitrateLimitKbps(stricterLimit, platforms, false) == stricterLimit);
 		}
 	}
 }
@@ -96,6 +106,132 @@ TEST_CASE("Auto Optimizer allocates a shared uplink equally across two direct le
 		CHECK(allocation.perLegVideoKbps == expectation.expectedPerLegVideoKbps);
 		CHECK(allocation.allocatedVideoKbps == expectation.expectedPerLegVideoKbps * 2);
 	}
+}
+
+TEST_CASE("Auto Optimizer Dual Output composes provider probes into the allowed shared bitrate")
+{
+	namespace probes = autoOptimizer::probePolicy;
+	struct Scenario {
+		std::vector<std::string> platforms;
+		const char *horizontalProvider;
+		const char *verticalProvider;
+		bool horizontal1440p;
+		int requestLimit;
+		int expectedPerOutput;
+		int expectedYoutubeProbe;
+	};
+	const Scenario scenarios[] = {
+		{{"twitch", "youtube"}, "twitch", "youtube", true, 8000, 7500, 15000},
+		{{"youtube", "twitch"}, "youtube", "twitch", true, 8000, 7500, 15000},
+		{{"youtube", "youtube"}, "youtube", "youtube", true, 8000, 8000, 16000},
+		{{"twitch", "youtube", "kick"}, "twitch", "youtube", true, 8000, 6000, 12000},
+		{{"youtube", "twitch", "facebook"}, "youtube", "twitch", true, 8000, 6000, 12000},
+		{{"youtube", "youtube", "custom"}, "youtube", "youtube", true, 8000, 6000, 12000},
+		{{"youtube", "twitch"}, "youtube", "twitch", false, 8000, 6000, 12000},
+		{{"youtube", "twitch"}, "youtube", "twitch", true, 4500, 4500, 10000},
+	};
+	for (const auto &scenario : scenarios) {
+		CAPTURE(scenario.platforms, scenario.horizontalProvider, scenario.verticalProvider, scenario.horizontal1440p, scenario.requestLimit);
+		const bool experimental = policy::usesExperimentalTwitchBitrate(scenario.platforms, scenario.horizontal1440p);
+		const int experimentalMaximum = experimental ? policy::kExperimentalTwitch1440pBitrateKbps : 0;
+		std::vector<int> limits;
+		for (const std::string provider : {scenario.horizontalProvider, scenario.verticalProvider}) {
+			const auto service = probes::rtmpProbeServiceBitratePolicy(provider, provider == "twitch" ? 6000 : 0, experimentalMaximum);
+			const int platformLimit = policy::applyMultistreamBitrateLimitKbps(scenario.requestLimit, scenario.platforms, true);
+			limits.push_back(policy::composeEstimatedBitrateKbps(8000, platformLimit, service.maximumKbps));
+		}
+		const int commonLimit = policy::commonOutputBitrateLimitKbps(limits);
+		CHECK(commonLimit == scenario.expectedPerOutput);
+		const int youtubeMaximum = probes::youtubeProbeMaximumBitrateKbps(true, commonLimit);
+		CHECK(youtubeMaximum == scenario.expectedYoutubeProbe);
+		std::vector<uint64_t> safeBitrates;
+		for (const std::string provider : {scenario.horizontalProvider, scenario.verticalProvider}) {
+			const auto service = probes::rtmpProbeServiceBitratePolicy(provider, provider == "twitch" ? 6000 : youtubeMaximum, experimentalMaximum);
+			const int ceiling = probes::effectiveProbeCeilingKbps(provider == "youtube" ? youtubeMaximum : 10000, service.maximumKbps,
+									      provider == "youtube" ? 0 : commonLimit);
+			// Model successful samples at every planned target. Real transport and
+			// hardware failures are tested separately and must still block allocation.
+			if (provider == "youtube") {
+				probes::YoutubeRampEvidence evidence;
+				for (const auto &[rung, target] : probes::youtubeProbeTargets(ceiling))
+					evidence.observeAcceptedTarget(target + 128, target);
+				safeBitrates.push_back(evidence.recommendedVideoKbps());
+			} else {
+				safeBitrates.push_back(probes::decideTwitchProbe(ceiling + 128, ceiling, 0).recommendedVideoKbps);
+			}
+		}
+		const auto allocation = policy::assembleSharedTwoLegAllocation(true, true, true, safeBitrates[0], safeBitrates[1], commonLimit);
+		REQUIRE(allocation.valid);
+		CHECK(allocation.perLegVideoKbps == scenario.expectedPerOutput);
+		CHECK(allocation.allocatedVideoKbps == 2 * scenario.expectedPerOutput);
+		CHECK_FALSE(policy::assembleSharedTwoLegAllocation(true, true, false, safeBitrates[0], safeBitrates[1], commonLimit).valid);
+		CHECK_FALSE(policy::assembleSharedTwoLegAllocation(true, false, true, safeBitrates[0], safeBitrates[1], commonLimit).valid);
+	}
+}
+
+TEST_CASE("Auto Optimizer shared YouTube probes can confirm pressure at the final rung")
+{
+	namespace probes = autoOptimizer::probePolicy;
+	for (const auto &providers : std::vector<std::vector<std::string>>{{"twitch", "youtube"}, {"youtube", "twitch"}, {"youtube", "youtube"}}) {
+		for (const bool finalPressure : {false, true}) {
+			CAPTURE(providers, finalPressure);
+			const int outputLimit = policy::allowsExperimentalTwitchBitrate(providers) ? 7500 : 8000;
+			const int ceiling = probes::youtubeProbeMaximumBitrateKbps(true, outputLimit);
+			const auto budget = probes::youtubeProbeBudgetLimits(true, ceiling);
+			// Include maximum connection/ingest waits and two clean baseline samples.
+			int64_t elapsedMs = 8000 + 15000 + 10000;
+			uint64_t bytesUsed = 1128ULL * (15000 + 10000) / 8;
+			int activeTarget = 1000;
+			probes::YoutubeRampEvidence evidence;
+			evidence.observeAcceptedTarget(1128, 1000);
+			const probes::YoutubeBaselineAssessment baseline{probes::YoutubeBaselineDecision::Clean, {10000, 0, 0, 0}};
+			for (const auto &[rung, target] : probes::youtubeProbeTargets(ceiling)) {
+				if (target == 1000)
+					continue;
+				const int previousTarget = activeTarget;
+				REQUIRE(probes::decideYoutubeRampStep(budget, budget.timeoutMs - elapsedMs, bytesUsed, activeTarget, 1000, previousTarget,
+								      target, evidence.recommendedVideoKbps(), 0) == probes::YoutubeRampStepAction::Measure);
+				const bool pressure = finalPressure && target == ceiling;
+				const uint64_t measuredAggregate = pressure ? 13000 : target + 128;
+				const int duration = probes::youtubeProbeRampSampleMs(target) + probes::kYoutubeProbeSettleMs;
+				bytesUsed += measuredAggregate * duration / 8;
+				elapsedMs += duration;
+				activeTarget = target;
+				if (!pressure) {
+					evidence.observeAcceptedTarget(measuredAggregate, target);
+					continue;
+				}
+				const auto cost = probes::youtubeConfirmationCost(1000, previousTarget, target);
+				// The old64 MiB budget failed here even though12 Mbps was validated.
+				CHECK_FALSE(probes::youtubeBudgetFits(probes::youtubeProbeBudgetLimits(true, 12000), 100000, bytesUsed, cost));
+				REQUIRE(probes::youtubeBudgetFits(budget, budget.timeoutMs - elapsedMs, bytesUsed, cost));
+				const probes::YoutubeProbeSampleMetrics pressureMetrics{8000, 0, 4000, 0};
+				REQUIRE(probes::youtubeRequiresCapacityConfirmation(probes::classifyYoutubeProbeLoad(pressureMetrics, baseline)));
+				const bool lowRecovered = probes::youtubeLowControlRecovered(baseline.reference, baseline.reference, baseline);
+				const bool retryAccepted =
+					!probes::youtubeRequiresCapacityConfirmation(probes::classifyYoutubeProbeLoad(pressureMetrics, baseline));
+				REQUIRE(probes::decideYoutubeConfirmation(lowRecovered, retryAccepted) == probes::YoutubeConfirmationDecision::CapacityKnee);
+				evidence.observeConfirmedCapacity(probes::youtubeConfirmedPressureCapacityKbps(13000, 13000, target), target);
+			}
+			CHECK(evidence.recommendedVideoKbps() == (finalPressure ? 13000 : ceiling));
+			const auto safe = [&](const std::string &provider) -> uint64_t {
+				return provider == "youtube" ? evidence.recommendedVideoKbps() : outputLimit;
+			};
+			const auto allocation = policy::assembleSharedTwoLegAllocation(true, true, true, safe(providers[0]), safe(providers[1]), outputLimit);
+			REQUIRE(allocation.valid);
+			CHECK(allocation.perLegVideoKbps == (finalPressure ? 6500 : outputLimit));
+		}
+	}
+}
+
+TEST_CASE("Auto Optimizer shared probe ceilings respect the stricter output request")
+{
+	CHECK(policy::commonOutputBitrateLimitKbps({8000, 4500}) == 4500);
+	CHECK(policy::commonOutputBitrateLimitKbps({4500, 8000}) == 4500);
+	CHECK(policy::commonOutputBitrateLimitKbps({0, 7500}) == 7500);
+	CHECK(policy::commonOutputBitrateLimitKbps({0, 0}) == 8000);
+	CHECK_FALSE(policy::usesExperimentalTwitchBitrate({"youtube", "youtube"}, true));
+	CHECK_FALSE(policy::usesExperimentalTwitchBitrate({}, true));
 }
 
 TEST_CASE("Auto Optimizer reselects asymmetric canvas tiers at one shared cadence")
@@ -266,7 +402,27 @@ TEST_CASE("Auto Optimizer hardware tests high frame rates in product-priority or
 	CHECK(result[1].fpsNum == 30);
 }
 
-TEST_CASE("Auto Optimizer permits Twitch-only 1440p with an experimental measured 7.5 Mbps budget")
+TEST_CASE("Auto Optimizer permits only Twitch and YouTube destinations above 1080p")
+{
+	for (const auto &platforms :
+	     std::vector<std::vector<std::string>>{{"twitch"}, {"youtube"}, {"youtube", "youtube"}, {"twitch", "youtube"}, {"youtube", "twitch", "twitch"}}) {
+		CAPTURE(platforms);
+		CHECK(policy::isTwitchOrYouTubeOnlyStream(platforms));
+		CHECK(policy::allowsExperimentalTwitchBitrate(platforms) == (std::find(platforms.begin(), platforms.end(), "twitch") != platforms.end()));
+	}
+	for (const auto &other : {"kick", "facebook", "tiktok", "custom", "other", "unknown"}) {
+		for (const auto &platforms :
+		     std::vector<std::vector<std::string>>{{other}, {"youtube", other}, {"twitch", other}, {"twitch", "youtube", other}}) {
+			CAPTURE(platforms);
+			CHECK_FALSE(policy::isTwitchOrYouTubeOnlyStream(platforms));
+			CHECK_FALSE(policy::allowsExperimentalTwitchBitrate(platforms));
+		}
+	}
+	CHECK_FALSE(policy::isTwitchOrYouTubeOnlyStream({}));
+	CHECK_FALSE(policy::allowsExperimentalTwitchBitrate({}));
+}
+
+TEST_CASE("Auto Optimizer retains the experimental Twitch measured 7.5 Mbps quality budget")
 {
 	CHECK(policy::isTwitchOnlyStream({"twitch", "twitch"}));
 	CHECK_FALSE(policy::isTwitchOnlyStream({"twitch", "youtube"}));

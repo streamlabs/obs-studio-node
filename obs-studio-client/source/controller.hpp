@@ -19,6 +19,7 @@
 #pragma once
 #include <atomic>
 #include <memory>
+#include <mutex>
 #include <map>
 #include <string>
 #include "ipc.hpp"
@@ -60,6 +61,7 @@ public:
 private:
 	bool m_isServer = false;
 	std::shared_ptr<ipc::client> m_connection;
+	mutable std::mutex m_connectionMutex;
 	ipc::ProcessInfo procId;
 	// Monotonic "epoch" for the IPC connection lifecycle. Helps to detect stale wrappers
 	// after disconnect/reconnect so finalizers can safely no-op.

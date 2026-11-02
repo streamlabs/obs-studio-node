@@ -65,25 +65,21 @@ constexpr uint64_t kEnhancedBroadcastingMaximumTrackBitrateKbps = 100000;
 constexpr int kYoutubeIngestConfirmationTimeoutMs = 15000;
 constexpr int kCancelTimeoutMs = 8000;
 constexpr uint64_t kProbeMaxBytes = 25ULL * 1024ULL * 1024ULL;
-constexpr uint64_t kYoutubeProbeMaxBytes = 64ULL * 1024ULL * 1024ULL;
 constexpr int kProbeMaximumBitrateKbps = qualityPolicy::kMaximumRecommendedBitrateKbps;
 constexpr int kYoutubeProbeInitialBitrateKbps = 1000;
-constexpr int kYoutubeProbeSettleMs = 500;
-constexpr int kYoutubeProbeSampleMs = 5000;
-constexpr int kYoutubeProbeSustainedSampleMs = 10000;
+using probePolicy::kYoutubeProbeSettleMs;
+using probePolicy::kYoutubeProbeSampleMs;
+using probePolicy::kYoutubeProbeSustainedSampleMs;
 constexpr int kYoutubeProbeSubwindowMs = 1000;
-constexpr int kYoutubeProbeRecoveryMaximumMs = 10000;
+using probePolicy::kYoutubeProbeRecoveryMaximumMs;
 constexpr int kYoutubeProbeRecoveryPollMs = 50;
 constexpr uint32_t kYoutubeProbeRecoveryHealthySamples = 20;
-constexpr int kYoutubeProbeTotalTimeoutMs = 100000;
-constexpr int kYoutubeProbeBudgetSlackMs = 250;
-constexpr int kYoutubeProbeMaximumConfirmationEpisodes = 2;
-constexpr int kYoutubeProbeBudgetEstimatePercent = 115;
+using probePolicy::kYoutubeProbeMaximumConfirmationEpisodes;
 // All probes and recovery checks share this cutoff. Keep the sample counters
 // used by the duration-based policies, but count both from the same threshold.
 constexpr float kProbeCongestionThreshold = 0.50f;
 constexpr int kTwitchProbeAudioBitrateKbps = 32;
-constexpr int kYoutubeProbeAudioBitrateKbps = 128;
+using probePolicy::kYoutubeProbeAudioBitrateKbps;
 constexpr int kHardwareWarmupMs = 500;
 constexpr int kHardwareSampleMs = 1500;
 constexpr int kHardwareStopTimeoutMs = 1000;
@@ -221,7 +217,7 @@ struct LegRequest {
 	Limits limits;
 	std::optional<AdditionalVideoRequest> additionalVideo;
 	std::string estimateReason;
-	bool experimentalTwitch1440p = false;
+	bool experimentalTwitchBitrate = false;
 };
 
 struct ProbeRequest {
@@ -1067,15 +1063,15 @@ static int offlinePlatformCapKbps(const std::string &platform)
 	return value > 0 && value < probeValue ? value : 0;
 }
 
-static LegRequest withOfflinePlatformCaps(const LegRequest &input, bool twitchOnly, bool multiplatform)
+static LegRequest withOfflinePlatformCaps(const LegRequest &input, const std::vector<std::string> &platforms, bool experimentalTwitchBitrate)
 {
 	LegRequest leg = input;
 	const bool portrait = leg.current.width < leg.current.height;
-	const int maxWidth = portrait ? 1080 : (twitchOnly ? 2560 : 1920);
-	const int maxHeight = portrait ? 1920 : (twitchOnly ? 1440 : 1080);
-	leg.experimentalTwitch1440p = twitchOnly && !portrait && leg.outputKind == "standard" && leg.limits.maxWidth >= 2560 && leg.limits.maxHeight >= 1440;
-	// Destination policy is session-wide: a Twitch canvas does not get a higher
-	// ceiling when a different platform is sent from the other canvas.
+	const bool allow1440p = qualityPolicy::isTwitchOrYouTubeOnlyStream(platforms);
+	const int maxWidth = portrait ? 1080 : (allow1440p ? 2560 : 1920);
+	const int maxHeight = portrait ? 1920 : (allow1440p ? 1440 : 1080);
+	leg.experimentalTwitchBitrate = experimentalTwitchBitrate && leg.outputKind == "standard";
+	// Destination policy is session-wide, including platforms on other canvases.
 	leg.limits.maxWidth = leg.limits.maxWidth > 0 ? std::min(leg.limits.maxWidth, maxWidth) : std::min(leg.current.width, maxWidth);
 	leg.limits.maxHeight = leg.limits.maxHeight > 0 ? std::min(leg.limits.maxHeight, maxHeight) : std::min(leg.current.height, maxHeight);
 	if (leg.additionalVideo) {
@@ -1085,13 +1081,16 @@ static LegRequest withOfflinePlatformCaps(const LegRequest &input, bool twitchOn
 	}
 	int strictest = 0;
 	for (const auto &destination : leg.destinations) {
-		const int cap = leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : offlinePlatformCapKbps(destination.platform);
+		const int cap =
+			probePolicy::rtmpProbeServiceBitratePolicy(destination.platform, offlinePlatformCapKbps(destination.platform),
+								   leg.experimentalTwitchBitrate ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : 0)
+				.maximumKbps;
 		if (cap > 0 && (strictest == 0 || cap < strictest))
 			strictest = cap;
 	}
 	if (strictest > 0 && (leg.limits.maxBitrateKbps == 0 || strictest < leg.limits.maxBitrateKbps))
 		leg.limits.maxBitrateKbps = strictest;
-	leg.limits.maxBitrateKbps = qualityPolicy::applyMultistreamBitrateLimitKbps(leg.limits.maxBitrateKbps, multiplatform, leg.outputKind == "standard");
+	leg.limits.maxBitrateKbps = qualityPolicy::applyMultistreamBitrateLimitKbps(leg.limits.maxBitrateKbps, platforms, leg.outputKind == "standard");
 	return leg;
 }
 
@@ -1174,7 +1173,7 @@ static CurrentSettings estimateRecommendation(const LegRequest &leg, const Hardw
 static CurrentSettings benchmarkCeiling(const LegRequest &leg)
 {
 	CurrentSettings value = baseRecommendation(leg);
-	if (leg.experimentalTwitch1440p)
+	if (leg.experimentalTwitchBitrate)
 		value.bitrateKbps = leg.limits.maxBitrateKbps;
 	const auto ceiling = qualityPolicy::benchmarkCeiling({value.width, value.height, value.fpsNum, value.fpsDen}, leg.limits.maxWidth, leg.limits.maxHeight,
 							     leg.limits.maxFpsNum, leg.limits.maxFpsDen);
@@ -2794,14 +2793,12 @@ static double youtubeProbeStepProgress(double slotStart, double slotEnd, size_t 
 	return measurementStart + (slotEnd - measurementStart) * position;
 }
 
-static uint64_t estimatedYoutubeSampleBytes(int targetVideoKbps, int durationMs)
-{
-	if (targetVideoKbps <= 0 || durationMs <= 0)
-		return 0;
-	const uint64_t aggregateKbps = (uint64_t)targetVideoKbps + kYoutubeProbeAudioBitrateKbps;
-	const uint64_t payloadBytes = aggregateKbps * (uint64_t)durationMs / 8ULL;
-	return payloadBytes * kYoutubeProbeBudgetEstimatePercent / 100ULL;
-}
+struct YoutubeProbeBudget {
+	probePolicy::YoutubeProbeBudgetLimits limits;
+	std::chrono::steady_clock::time_point deadline;
+
+	int64_t remainingMs() const { return std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now()).count(); }
+};
 
 static uint64_t youtubeProbeBytesUsed(obs_output_t *output, uint64_t budgetStartBytes)
 {
@@ -2829,8 +2826,8 @@ static int applyYoutubeProbeTarget(ScratchResources &resources, int requestedTar
 }
 
 static bool waitForYoutubeRecoveryDrain(const std::shared_ptr<Session> &session, ScratchResources &resources, const ProbeRequest &probe, int recoveryTarget,
-					int &activeTarget, std::chrono::steady_clock::time_point youtubeDeadline, uint64_t budgetStartBytes,
-					uint64_t &totalProbeBytes, double progress, ProbeResult &result)
+					int &activeTarget, const YoutubeProbeBudget &youtubeBudget, uint64_t budgetStartBytes, uint64_t &totalProbeBytes,
+					double progress, ProbeResult &result)
 {
 	const int target = applyYoutubeProbeTarget(resources, recoveryTarget, activeTarget);
 	if (target <= 0) {
@@ -2841,7 +2838,7 @@ static bool waitForYoutubeRecoveryDrain(const std::shared_ptr<Session> &session,
 	pushEvent(session, "progress", "bandwidth", progress, "youtube_probe_confirming_stability", probe.legId, "active", probe.probeId, probe.provider,
 		  (uint32_t)target);
 	const auto recoveryStarted = std::chrono::steady_clock::now();
-	const auto recoveryDeadline = std::min(recoveryStarted + std::chrono::milliseconds(kYoutubeProbeRecoveryMaximumMs), youtubeDeadline);
+	const auto recoveryDeadline = std::min(recoveryStarted + std::chrono::milliseconds(kYoutubeProbeRecoveryMaximumMs), youtubeBudget.deadline);
 	if (recoveryStarted + std::chrono::milliseconds(kYoutubeProbeRecoveryPollMs * kYoutubeProbeRecoveryHealthySamples) > recoveryDeadline) {
 		result.errorCode = "youtube_probe_recovery_deadline_exhausted";
 		return false;
@@ -2867,7 +2864,7 @@ static bool waitForYoutubeRecoveryDrain(const std::shared_ptr<Session> &session,
 		const bool droppedFramesUnchanged = currentDropped == previousDropped;
 		previousDropped = currentDropped;
 		totalProbeBytes = youtubeProbeBytesUsed(resources.output, budgetStartBytes);
-		if (totalProbeBytes > kYoutubeProbeMaxBytes) {
+		if (totalProbeBytes > youtubeBudget.limits.maximumBytes) {
 			result.errorCode = "youtube_probe_byte_budget_exhausted";
 			return false;
 		}
@@ -2895,36 +2892,16 @@ static bool waitForYoutubeRecoveryDrain(const std::shared_ptr<Session> &session,
 	return recovered;
 }
 
-static bool youtubeSampleGroupFits(std::chrono::steady_clock::time_point deadline, uint64_t totalProbeBytes, int activeTarget, const std::vector<int> &targets,
+static bool youtubeSampleGroupFits(const YoutubeProbeBudget &budget, uint64_t totalProbeBytes, int activeTarget, const std::vector<int> &targets,
 				   const std::vector<std::pair<int, int>> &additionalSegments = {})
 {
-	long long requiredMs = kYoutubeProbeBudgetSlackMs;
-	uint64_t requiredBytes = 0;
-	for (const auto &[target, durationMs] : additionalSegments) {
-		if (target <= 0 || durationMs <= 0)
-			return false;
-		requiredMs += durationMs;
-		requiredBytes += estimatedYoutubeSampleBytes(target, durationMs);
-	}
-	int targetBeforeSample = activeTarget;
-	for (int target : targets) {
-		if (target <= 0)
-			return false;
-		int durationMs = kYoutubeProbeSampleMs;
-		if (target != targetBeforeSample) {
-			requiredMs += kYoutubeProbeSettleMs;
-			durationMs += kYoutubeProbeSettleMs;
-		}
-		requiredMs += kYoutubeProbeSampleMs;
-		requiredBytes += estimatedYoutubeSampleBytes(target, durationMs);
-		targetBeforeSample = target;
-	}
-	return std::chrono::steady_clock::now() + std::chrono::milliseconds(requiredMs) < deadline && totalProbeBytes + requiredBytes <= kYoutubeProbeMaxBytes;
+	return probePolicy::youtubeBudgetFits(budget.limits, budget.remainingMs(), totalProbeBytes,
+					      probePolicy::youtubeSampleGroupCost(activeTarget, targets, additionalSegments));
 }
 
 static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, ScratchResources &resources, const ProbeRequest &probe, int requestedTarget,
-				  int &activeTarget, std::chrono::steady_clock::time_point youtubeDeadline, uint64_t budgetStartBytes,
-				  uint64_t &totalProbeBytes, double progress, const char *eventCode, YoutubeProbeSample &sample, ProbeResult &result,
+				  int &activeTarget, const YoutubeProbeBudget &youtubeBudget, uint64_t budgetStartBytes, uint64_t &totalProbeBytes,
+				  double progress, const char *eventCode, YoutubeProbeSample &sample, ProbeResult &result,
 				  int sampleDurationMs = kYoutubeProbeSampleMs)
 {
 	if (sampleDurationMs <= 0) {
@@ -2932,7 +2909,7 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 		return false;
 	}
 	totalProbeBytes = youtubeProbeBytesUsed(resources.output, budgetStartBytes);
-	if (totalProbeBytes >= kYoutubeProbeMaxBytes) {
+	if (totalProbeBytes >= youtubeBudget.limits.maximumBytes) {
 		result.errorCode = "youtube_probe_byte_budget_exhausted";
 		return false;
 	}
@@ -2955,7 +2932,7 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 
 	if (targetChanged) {
 		const auto settleDeadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(kYoutubeProbeSettleMs);
-		if (settleDeadline > youtubeDeadline) {
+		if (settleDeadline > youtubeBudget.deadline) {
 			result.errorCode = "youtube_probe_sample_deadline_exhausted";
 			return false;
 		}
@@ -2966,7 +2943,7 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 		}
 	}
 	totalProbeBytes = youtubeProbeBytesUsed(resources.output, budgetStartBytes);
-	if (totalProbeBytes >= kYoutubeProbeMaxBytes) {
+	if (totalProbeBytes >= youtubeBudget.limits.maximumBytes) {
 		result.errorCode = "youtube_probe_byte_budget_exhausted";
 		return false;
 	}
@@ -2976,7 +2953,7 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 	const uint32_t startFrames = obs_output_get_total_frames(resources.output);
 	const auto sampleStart = std::chrono::steady_clock::now();
 	const auto sampleDeadline = sampleStart + std::chrono::milliseconds(sampleDurationMs);
-	if (sampleDeadline > youtubeDeadline) {
+	if (sampleDeadline > youtubeBudget.deadline) {
 		result.errorCode = "youtube_probe_sample_deadline_exhausted";
 		return false;
 	}
@@ -2996,10 +2973,10 @@ static bool runYoutubeProbeSample(const std::shared_ptr<Session> &session, Scrat
 			return false;
 		}
 		totalProbeBytes = youtubeProbeBytesUsed(resources.output, budgetStartBytes);
-		if (totalProbeBytes > kYoutubeProbeMaxBytes) {
+		if (totalProbeBytes > youtubeBudget.limits.maximumBytes) {
 			result.errorCode = "youtube_probe_byte_budget_exhausted";
 			blog(LOG_WARNING, "[Auto Optimizer][YouTube Probe] Sample %d Kbps exceeded byte budget: used=%llu, budget=%llu", target,
-			     (unsigned long long)totalProbeBytes, (unsigned long long)kYoutubeProbeMaxBytes);
+			     (unsigned long long)totalProbeBytes, (unsigned long long)youtubeBudget.limits.maximumBytes);
 			return false;
 		}
 
@@ -3976,7 +3953,7 @@ static ProbeResult runEnhancedBroadcastingProbe(const std::shared_ptr<Session> &
 }
 
 static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRequest &probe, const LegRequest &leg, double slotStartProgress,
-				double slotEndProgress)
+				double slotEndProgress, int sharedOutputBitrateLimitKbps)
 {
 	ProbeResult result;
 	result.provider = probe.provider;
@@ -4003,18 +3980,21 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		return result;
 	}
 
-	const int maximumBitrate = probe.provider == "youtube" ? probePolicy::youtubeProbeMaximumBitrateKbps(session->standardDualOutputWorkload)
-							       : kProbeMaximumBitrateKbps;
-	const int requested =
-		probe.provider == "youtube"
-			? kYoutubeProbeInitialBitrateKbps
-			: std::clamp(std::max(leg.current.bitrateKbps, leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : 6000),
-				     500, maximumBitrate);
+	const int maximumBitrate = probe.provider == "youtube"
+					   ? probePolicy::youtubeProbeMaximumBitrateKbps(session->standardDualOutputWorkload, sharedOutputBitrateLimitKbps)
+					   : kProbeMaximumBitrateKbps;
+	const int requested = probe.provider == "youtube"
+				      ? kYoutubeProbeInitialBitrateKbps
+				      : std::clamp(std::max(leg.current.bitrateKbps,
+							    leg.experimentalTwitchBitrate ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : 6000),
+						   500, maximumBitrate);
 	obs_data_t *platformProbe = obs_data_create();
 	obs_data_set_int(platformProbe, "bitrate", maximumBitrate);
 	obs_service_apply_encoder_settings(resources.service, platformProbe, nullptr);
-	const int platformReturned = leg.experimentalTwitch1440p ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps
-								 : (int)obs_data_get_int(platformProbe, "bitrate");
+	const auto serviceBitratePolicy =
+		probePolicy::rtmpProbeServiceBitratePolicy(probe.provider, (int)obs_data_get_int(platformProbe, "bitrate"),
+							   leg.experimentalTwitchBitrate ? qualityPolicy::kExperimentalTwitch1440pBitrateKbps : 0);
+	const int platformReturned = serviceBitratePolicy.maximumKbps;
 	if (platformReturned > 0 && platformReturned < maximumBitrate)
 		result.platformCapKbps = platformReturned;
 	obs_data_release(platformProbe);
@@ -4030,9 +4010,9 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 	obs_data_set_string(encoderSettings, "preset", "veryfast");
 	obs_data_set_int(encoderSettings, "keyint_sec", 2);
 	obs_service_apply_encoder_settings(resources.service, encoderSettings, nullptr);
-	// Override only the bitrate for the opt-in Twitch-only 1440p experiment;
-	// retain the service's keyframe and other encoder constraints.
-	if (leg.experimentalTwitch1440p)
+	// Override only the bitrate for the opt-in Twitch 1440p experiment, also
+	// allowed alongside YouTube. Retain the service's other encoder constraints.
+	if (serviceBitratePolicy.overrideServiceBitrate)
 		obs_data_set_int(encoderSettings, "bitrate", initialBitrate);
 	initialBitrate = (int)obs_data_get_int(encoderSettings, "bitrate");
 
@@ -4084,13 +4064,15 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		return result;
 	}
 	const auto probeStarted = std::chrono::steady_clock::now();
-	const auto youtubeDeadline = probeStarted + std::chrono::milliseconds(kYoutubeProbeTotalTimeoutMs);
+	const auto youtubeLimits = probePolicy::youtubeProbeBudgetLimits(session->standardDualOutputWorkload,
+									 probePolicy::effectiveProbeCeilingKbps(maximumBitrate, result.platformCapKbps, 0));
+	const YoutubeProbeBudget youtubeBudget{youtubeLimits, probeStarted + std::chrono::milliseconds(youtubeLimits.timeoutMs)};
 	if (!obs_output_start(resources.output)) {
 		result.errorCode = result.provider + "_probe_start_failed";
 		return result;
 	}
 
-	const auto connectDeadline = std::min(probeStarted + std::chrono::milliseconds(kProbeConnectTimeoutMs), youtubeDeadline);
+	const auto connectDeadline = std::min(probeStarted + std::chrono::milliseconds(kProbeConnectTimeoutMs), youtubeBudget.deadline);
 	while (!obs_output_active(resources.output) && std::chrono::steady_clock::now() < connectDeadline) {
 		if (session->cancelRequested.load()) {
 			result.cancelled = true;
@@ -4108,7 +4090,7 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 	if (probe.provider == "youtube") {
 		blog(LOG_INFO, "[Auto Optimizer][YouTube Probe] RTMP output is active; waiting for ingest confirmation");
 		const auto confirmationDeadline =
-			std::min(std::chrono::steady_clock::now() + std::chrono::milliseconds(kYoutubeIngestConfirmationTimeoutMs), youtubeDeadline);
+			std::min(std::chrono::steady_clock::now() + std::chrono::milliseconds(kYoutubeIngestConfirmationTimeoutMs), youtubeBudget.deadline);
 		const double confirmationProgress = std::min(slotStartProgress + 2.0, slotEndProgress);
 		if (!waitForYoutubeIngestConfirmation(session, probe, resources.output, confirmationDeadline, confirmationProgress, result)) {
 			blog(LOG_WARNING, "[Auto Optimizer][YouTube Probe] Ingest confirmation failed: reason=%s, output_active=%s",
@@ -4161,22 +4143,13 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		     extendedSampleUsed ? "true" : "false", decision.targetPassed ? "true" : "false", (unsigned long long)result.safeKbps,
 		     result.platformCapKbps, leg.limits.maxBitrateKbps);
 	} else {
-		const int ladder[] = {1000, 2000, 4000, 6000, 8000, 10000, 12000};
 		uint64_t totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
 		probePolicy::YoutubeRampEvidence rampEvidence;
 		// maxBitrateKbps caps the recommendation returned to Desktop. YouTube may
 		// measure the aggregate needed by two standard outputs without raising
 		// either output's recommendation cap. Time and byte budgets still apply.
 		const int effectiveCeilingKbps = probePolicy::effectiveProbeCeilingKbps(maximumBitrate, result.platformCapKbps, 0);
-		std::vector<std::pair<int, int>> plannedTargets;
-		int lastPlannedTarget = 0;
-		for (int ladderTarget : ladder) {
-			const int plannedTarget = std::min(ladderTarget, effectiveCeilingKbps);
-			if (plannedTarget > lastPlannedTarget) {
-				plannedTargets.emplace_back(ladderTarget, plannedTarget);
-				lastPlannedTarget = plannedTarget;
-			}
-		}
+		const auto plannedTargets = probePolicy::youtubeProbeTargets(effectiveCeilingKbps);
 		std::string terminationReason = "ladder_exhausted";
 		int activeTarget = initialBitrate;
 		size_t confirmationEpisodes = 0;
@@ -4187,14 +4160,15 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 		probePolicy::YoutubeSourceUnderfillState sourceUnderfillState;
 		const auto rampStarted = std::chrono::steady_clock::now();
 		const auto probeElapsedMs = std::chrono::duration_cast<std::chrono::milliseconds>(rampStarted - probeStarted).count();
-		const auto remainingMs = std::chrono::duration_cast<std::chrono::milliseconds>(youtubeDeadline - rampStarted).count();
+		const auto remainingMs = youtubeBudget.remainingMs();
 		blog(LOG_INFO,
 		     "[Auto Optimizer][YouTube Probe] Adaptive ladder configuration: effective_video_ceiling=%d Kbps, settle=%d ms, "
 		     "sample=%d ms, sustained_sample=%d ms, subwindow=%d ms, recovery_maximum=%d ms, recovery_healthy_window=%d ms, "
 		     "total_timeout=%d ms, probe_elapsed=%lld ms, remaining=%lld ms, byte_budget=%llu, maximum_confirmation_episodes=%d",
 		     effectiveCeilingKbps, kYoutubeProbeSettleMs, kYoutubeProbeSampleMs, kYoutubeProbeSustainedSampleMs, kYoutubeProbeSubwindowMs,
-		     kYoutubeProbeRecoveryMaximumMs, kYoutubeProbeRecoveryPollMs * kYoutubeProbeRecoveryHealthySamples, kYoutubeProbeTotalTimeoutMs,
-		     (long long)probeElapsedMs, (long long)remainingMs, (unsigned long long)kYoutubeProbeMaxBytes, kYoutubeProbeMaximumConfirmationEpisodes);
+		     kYoutubeProbeRecoveryMaximumMs, kYoutubeProbeRecoveryPollMs * kYoutubeProbeRecoveryHealthySamples, youtubeLimits.timeoutMs,
+		     (long long)probeElapsedMs, (long long)remainingMs, (unsigned long long)youtubeLimits.maximumBytes,
+		     kYoutubeProbeMaximumConfirmationEpisodes);
 
 		if (plannedTargets.empty()) {
 			terminationReason = "no_planned_targets";
@@ -4202,19 +4176,19 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 			result.observedThroughputReliable = false;
 		} else {
 			const int baselineTarget = plannedTargets.front().second;
-			if (!youtubeSampleGroupFits(youtubeDeadline, totalProbeBytes, activeTarget, {baselineTarget, baselineTarget})) {
+			if (!youtubeSampleGroupFits(youtubeBudget, totalProbeBytes, activeTarget, {baselineTarget, baselineTarget})) {
 				terminationReason = "budget_before_baseline";
 				result.errorCode = "youtube_probe_baseline_budget_exhausted";
 				result.observedThroughputReliable = false;
 			} else {
 				YoutubeProbeSample baselineFirst;
 				YoutubeProbeSample baselineSecond;
-				if (!runYoutubeProbeSample(session, resources, probe, baselineTarget, activeTarget, youtubeDeadline, probeBudgetStartBytes,
+				if (!runYoutubeProbeSample(session, resources, probe, baselineTarget, activeTarget, youtubeBudget, probeBudgetStartBytes,
 							   totalProbeBytes,
 							   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, 0, plannedTargets.size(), 0.15),
 							   "youtube_probe_baseline", baselineFirst, result))
 					return result;
-				if (!runYoutubeProbeSample(session, resources, probe, baselineTarget, activeTarget, youtubeDeadline, probeBudgetStartBytes,
+				if (!runYoutubeProbeSample(session, resources, probe, baselineTarget, activeTarget, youtubeBudget, probeBudgetStartBytes,
 							   totalProbeBytes,
 							   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, 0, plannedTargets.size(), 0.40),
 							   "youtube_probe_baseline", baselineSecond, result))
@@ -4226,13 +4200,13 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 				bool usedThirdBaselineSample = false;
 				if (baseline.decision == probePolicy::YoutubeBaselineDecision::NeedsThird) {
 					totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
-					if (!youtubeSampleGroupFits(youtubeDeadline, totalProbeBytes, activeTarget, {baselineTarget})) {
+					if (!youtubeSampleGroupFits(youtubeBudget, totalProbeBytes, activeTarget, {baselineTarget})) {
 						terminationReason = "budget_before_third_baseline_sample";
 						result.errorCode = "youtube_probe_baseline_confirmation_budget_exhausted";
 						result.observedThroughputReliable = false;
 					} else {
 						YoutubeProbeSample baselineThird;
-						if (!runYoutubeProbeSample(session, resources, probe, baselineTarget, activeTarget, youtubeDeadline,
+						if (!runYoutubeProbeSample(session, resources, probe, baselineTarget, activeTarget, youtubeBudget,
 									   probeBudgetStartBytes, totalProbeBytes,
 									   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, 0,
 												    plannedTargets.size(), 0.65),
@@ -4296,19 +4270,20 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 						for (size_t targetIndex = 1; targetIndex < plannedTargets.size() && !result.ceilingReached; targetIndex++) {
 							const auto &[ladderTarget, plannedTarget] = plannedTargets[targetIndex];
 							const int sampleMs = probePolicy::youtubeProbeRampSampleMs(plannedTarget);
-							const std::vector<std::pair<int, int>> extraSample =
-								sampleMs > kYoutubeProbeSampleMs
-									? std::vector<std::pair<int, int>>{{plannedTarget, sampleMs - kYoutubeProbeSampleMs}}
-									: std::vector<std::pair<int, int>>{};
 							totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
-							if (!youtubeSampleGroupFits(youtubeDeadline, totalProbeBytes, activeTarget, {plannedTarget},
-										    extraSample)) {
+							const auto stepAction = probePolicy::decideYoutubeRampStep(
+								youtubeLimits, youtubeBudget.remainingMs(), totalProbeBytes, activeTarget, baselineTarget,
+								lastAccepted.targetVideoKbps, plannedTarget, rampEvidence.recommendedVideoKbps(),
+								confirmationEpisodes);
+							if (stepAction != probePolicy::YoutubeRampStepAction::Measure) {
 								terminationReason = "budget_before_next_rung";
+								recommendationEvidenceUsable = stepAction ==
+											       probePolicy::YoutubeRampStepAction::FinishValidated;
 								break;
 							}
 
 							YoutubeProbeSample highFirst;
-							if (!runYoutubeProbeSample(session, resources, probe, plannedTarget, activeTarget, youtubeDeadline,
+							if (!runYoutubeProbeSample(session, resources, probe, plannedTarget, activeTarget, youtubeBudget,
 										   probeBudgetStartBytes, totalProbeBytes,
 										   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, targetIndex,
 													    plannedTargets.size(), 0.20),
@@ -4356,10 +4331,10 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 								break;
 							}
 							totalProbeBytes = youtubeProbeBytesUsed(resources.output, probeBudgetStartBytes);
-							if (!youtubeSampleGroupFits(youtubeDeadline, totalProbeBytes, activeTarget,
-										    {lastAccepted.targetVideoKbps, plannedTarget},
-										    {{baselineTarget, kYoutubeProbeRecoveryMaximumMs},
-										     {plannedTarget, kYoutubeProbeSustainedSampleMs}})) {
+							if (!probePolicy::youtubeBudgetFits(youtubeLimits, youtubeBudget.remainingMs(), totalProbeBytes,
+											    probePolicy::youtubeConfirmationCost(baselineTarget,
+																 lastAccepted.targetVideoKbps,
+																 plannedTarget))) {
 								terminationReason = "confirmation_budget_exhausted_after_unconfirmed_failure";
 								if (result.stability == ProbeStability::Stable)
 									result.stability = ProbeStability::Variable;
@@ -4368,8 +4343,8 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 
 							YoutubeProbeSample lowControl;
 							YoutubeProbeSample highRetry;
-							if (!waitForYoutubeRecoveryDrain(session, resources, probe, baselineTarget, activeTarget,
-											 youtubeDeadline, probeBudgetStartBytes, totalProbeBytes,
+							if (!waitForYoutubeRecoveryDrain(session, resources, probe, baselineTarget, activeTarget, youtubeBudget,
+											 probeBudgetStartBytes, totalProbeBytes,
 											 youtubeProbeStepProgress(slotStartProgress, slotEndProgress,
 														  targetIndex, plannedTargets.size(), 0.35),
 											 result)) {
@@ -4380,12 +4355,12 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 								return result;
 							}
 							if (!runYoutubeProbeSample(session, resources, probe, lastAccepted.targetVideoKbps, activeTarget,
-										   youtubeDeadline, probeBudgetStartBytes, totalProbeBytes,
+										   youtubeBudget, probeBudgetStartBytes, totalProbeBytes,
 										   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, targetIndex,
 													    plannedTargets.size(), 0.50),
 										   "youtube_probe_confirming_stability", lowControl, result))
 								return result;
-							if (!runYoutubeProbeSample(session, resources, probe, plannedTarget, activeTarget, youtubeDeadline,
+							if (!runYoutubeProbeSample(session, resources, probe, plannedTarget, activeTarget, youtubeBudget,
 										   probeBudgetStartBytes, totalProbeBytes,
 										   youtubeProbeStepProgress(slotStartProgress, slotEndProgress, targetIndex,
 													    plannedTargets.size(), 0.75),
@@ -4430,7 +4405,7 @@ static ProbeResult runRtmpProbe(const std::shared_ptr<Session> &session, ProbeRe
 								// burst before accepting the higher rung.
 								YoutubeProbeSample sustainedHigh;
 								if (!runYoutubeProbeSample(session, resources, probe, plannedTarget, activeTarget,
-											   youtubeDeadline, probeBudgetStartBytes, totalProbeBytes,
+											   youtubeBudget, probeBudgetStartBytes, totalProbeBytes,
 											   youtubeProbeStepProgress(slotStartProgress, slotEndProgress,
 														    targetIndex, plannedTargets.size(), 0.90),
 											   "youtube_probe_confirming_stability", sustainedHigh, result,
@@ -4666,12 +4641,17 @@ static void runSession(const std::shared_ptr<Session> &session)
 	for (const auto &leg : session->legs)
 		for (const auto &destination : leg.destinations)
 			platforms.push_back(destination.platform);
-	const bool twitchOnly = qualityPolicy::isTwitchOnlyStream(platforms);
-	const bool multiplatform = qualityPolicy::isMultiplatformStream(platforms);
+	const bool horizontal1440pRequested = std::any_of(session->legs.begin(), session->legs.end(), [](const LegRequest &leg) {
+		return leg.outputKind == "standard" && leg.current.width >= leg.current.height && leg.limits.maxWidth >= 2560 && leg.limits.maxHeight >= 1440;
+	});
+	const bool experimentalTwitchBitrate = qualityPolicy::usesExperimentalTwitchBitrate(platforms, horizontal1440pRequested);
+	std::vector<int> outputBitrateLimits;
 	preparedLegs.reserve(session->legs.size());
 	for (size_t index = 0; index < session->legs.size(); index++) {
-		preparedLegs.push_back(withOfflinePlatformCaps(session->legs[index], twitchOnly, multiplatform));
+		preparedLegs.push_back(withOfflinePlatformCaps(session->legs[index], platforms, experimentalTwitchBitrate));
+		outputBitrateLimits.push_back(preparedLegs.back().limits.maxBitrateKbps);
 	}
+	const int sharedOutputBitrateLimitKbps = qualityPolicy::commonOutputBitrateLimitKbps(outputBitrateLimits);
 	std::vector<HardwareAssessment> hardwareAssessments(preparedLegs.size());
 	std::vector<LegRequest> automaticLegs;
 	std::vector<size_t> automaticLegIndices;
@@ -4773,7 +4753,7 @@ static void runSession(const std::shared_ptr<Session> &session)
 		} else {
 			result = probe.kind == "twitch-enhanced-broadcasting"
 					 ? runEnhancedBroadcastingProbe(session, probe, *legIt, startProgress, endProgress, provisionalCompanions)
-					 : runRtmpProbe(session, probe, *legIt, startProgress, endProgress);
+					 : runRtmpProbe(session, probe, *legIt, startProgress, endProgress, sharedOutputBitrateLimitKbps);
 		}
 		const auto probeRunElapsedMs =
 			std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - probeRunStarted).count();
@@ -4843,7 +4823,6 @@ static void runSession(const std::shared_ptr<Session> &session)
 	std::optional<int> dualOutputFallbackBitrate;
 	if (session->standardDualOutputWorkload) {
 		uint64_t safeByLeg[2] = {};
-		uint64_t commonLimit = qualityPolicy::kMaximumRecommendedBitrateKbps;
 		bool completeCoverage = true;
 		for (size_t index = 0; index < preparedLegs.size(); ++index) {
 			const auto &leg = preparedLegs[index];
@@ -4864,15 +4843,14 @@ static void runSession(const std::shared_ptr<Session> &session)
 			// An unsupported destination may borrow the measured upload budget.
 			// A missing or failed supported probe must not masquerade as one.
 			completeCoverage &= measuredPlatforms.size() == probeableProviderCount(leg);
-			if (leg.limits.maxBitrateKbps > 0)
-				commonLimit = std::min(commonLimit, (uint64_t)leg.limits.maxBitrateKbps);
 		}
 		if (completeCoverage && session->concurrentHardwareValidated) {
 			const bool allHardwareWorkloadsPassed = hardwareAssessments.size() == preparedLegs.size() &&
 								std::all_of(hardwareAssessments.begin(), hardwareAssessments.end(),
 									    [](const HardwareAssessment &assessment) { return assessment.passed; });
 			const auto allocation = qualityPolicy::assembleSharedTwoLegAllocation(session->concurrentHardwareValidated, allHardwareWorkloadsPassed,
-											      completeCoverage, safeByLeg[0], safeByLeg[1], commonLimit);
+											      completeCoverage, safeByLeg[0], safeByLeg[1],
+											      sharedOutputBitrateLimitKbps);
 			if (allocation.valid) {
 				dualOutputAllocation = allocation;
 				blog(LOG_INFO,
