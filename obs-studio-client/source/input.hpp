@@ -36,6 +36,7 @@ public:
 	static Napi::Value CreatePrivate(const Napi::CallbackInfo &info);
 	static Napi::Value FromName(const Napi::CallbackInfo &info);
 	static Napi::Value GetPublicSources(const Napi::CallbackInfo &info);
+	static Napi::Value GetCaptureStatuses(const Napi::CallbackInfo &info);
 
 	Napi::Value Duplicate(const Napi::CallbackInfo &info);
 	Napi::Value AddFilter(const Napi::CallbackInfo &info);

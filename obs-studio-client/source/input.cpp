@@ -42,6 +42,7 @@ Napi::Object osn::Input::Init(Napi::Env env, Napi::Object exports)
 
 			     StaticMethod("fromName", &osn::Input::FromName),
 			     StaticMethod("getPublicSources", &osn::Input::GetPublicSources),
+			     StaticMethod("getCaptureStatuses", &osn::Input::GetCaptureStatuses),
 
 			     InstanceMethod("duplicate", &osn::Input::Duplicate),
 			     InstanceMethod("addFilter", &osn::Input::AddFilter),
@@ -113,6 +114,25 @@ osn::Input::Input(const Napi::CallbackInfo &info) : Napi::ObjectWrap<osn::Input>
 	}
 
 	this->sourceId = (uint64_t)info[0].ToNumber().Int64Value();
+}
+
+Napi::Value osn::Input::GetCaptureStatuses(const Napi::CallbackInfo &info)
+{
+	const auto env = info.Env();
+	auto conn = Controller::GetInstance().GetConnection();
+	if (!conn) {
+		Napi::Error::New(env, "Failed to obtain IPC connection.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	auto response = conn->call_synchronous_helper("Input", "GetCaptureStatuses", {});
+	if (!ValidateResponse(info, response))
+		return env.Undefined();
+	auto statuses = Napi::Array::New(env, response.size() - 1);
+	auto json = env.Global().Get("JSON").As<Napi::Object>();
+	auto parse = json.Get("parse").As<Napi::Function>();
+	for (size_t i = 1; i < response.size(); ++i)
+		statuses.Set(i - 1, parse.Call(json, {Napi::String::New(env, response[i].value_str)}));
+	return statuses;
 }
 
 Napi::Value osn::Input::Types(const Napi::CallbackInfo &info)

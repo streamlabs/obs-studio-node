@@ -790,7 +790,37 @@ export interface IFilterFactory extends IFactoryTypes {
 export interface IFilter extends ISource {
 }
 
+export interface ICaptureStatus {
+    /** Current native source name (Desktop uses its source UUID here). */
+    sourceName: string;
+    /** Opaque identity of this source lifetime, distinct when a source is recreated. */
+    instanceId: string;
+    /** Increases on activation/deactivation, detected removal and automatic retry within this source lifetime. */
+    generation: number;
+    state: 'inactive' | 'starting' | 'running' | 'error';
+    /** Empty outside error state. Unknown future reasons must use a generic message. */
+    reason: '' | 'insufficient_bandwidth' | 'access_denied' | 'invalid_configuration' | 'device_not_found' | 'start_failed';
+    deviceName: string;
+    /** Unsigned Windows HRESULT; zero when no native code is available. */
+    errorCode: number;
+}
+
 export interface IInputFactory extends IFactoryTypes {
+    /**
+     * Reads retained capture status for all live public DirectShow inputs in one IPC call.
+     * Sources without status support (including older plugins) are omitted.
+     * Automatic reconnection is limited to confirmed physical device absence/removal.
+     * Bandwidth, access-denied and invalid-configuration failures stop automatic startup retries.
+     * Unknown device presence is reported as start_failed.
+     * The failure stays visible during automatic retry and clears on success; explicit
+     * activation/deactivation replaces it immediately. Deactivated sources do not reconnect.
+     * Running means the capture graph started, not that frames are still arriving.
+     * Frame stalls and virtual-camera availability are not monitored.
+     * @returns Independent value snapshots, possibly empty; no release is needed. Reading
+     * does not consume status. Removed sources are omitted on subsequent calls.
+     * @throws {Error} When disconnected from OSN or the IPC request fails.
+     */
+    getCaptureStatuses(): ICaptureStatus[];
     /**
      * Create a new instance of an ObsInput
      * @param id - The type of input source to create, possibly from {@link types}
