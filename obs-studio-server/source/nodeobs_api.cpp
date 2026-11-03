@@ -191,7 +191,6 @@ void OBS_API::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("SetProcessPriority", std::vector<ipc::type>{ipc::type::String}, SetProcessPriority));
 	cls->register_function(std::make_shared<ipc::function>("GetProcessPriority", std::vector<ipc::type>{}, GetProcessPriority));
 	cls->register_function(std::make_shared<ipc::function>("GetProcessPriorityLegacy", std::vector<ipc::type>{}, GetProcessPriorityLegacy));
-	cls->register_function(std::make_shared<ipc::function>("OBS_API_forceCrash", std::vector<ipc::type>{}, OBS_API_forceCrash));
 	cls->register_function(std::make_shared<ipc::function>("GetSdrWhiteLevel", std::vector<ipc::type>{}, GetSdrWhiteLevel));
 	cls->register_function(std::make_shared<ipc::function>("SetSdrWhiteLevel", std::vector<ipc::type>{}, SetSdrWhiteLevel));
 	cls->register_function(std::make_shared<ipc::function>("GetSdrWhiteLevelLegacy", std::vector<ipc::type>{}, GetSdrWhiteLevelLegacy));
