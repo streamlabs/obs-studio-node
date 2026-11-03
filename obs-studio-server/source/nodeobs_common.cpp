@@ -184,8 +184,7 @@ void OBS_content::Register(ipc::server &srv)
 
 	cls->register_function(
 		std::make_shared<ipc::function>("OBS_content_destroyDisplay", std::vector<ipc::type>{ipc::type::String}, OBS_content_destroyDisplay));
-	cls->register_function(std::make_shared<ipc::function>("OBS_content_detachDisplays", std::vector<ipc::type>{},
-							       OBS_content_detachDisplaysIPC));
+	cls->register_function(std::make_shared<ipc::function>("OBS_content_detachDisplays", std::vector<ipc::type>{}, OBS_content_detachDisplaysIPC));
 
 	cls->register_function(std::make_shared<ipc::function>("OBS_content_getDisplayPreviewOffset", std::vector<ipc::type>{ipc::type::String},
 							       OBS_content_getDisplayPreviewOffset));
@@ -433,8 +432,7 @@ void OBS_content::OBS_content_detachDisplays()
 	displaysCondition.notify_all();
 }
 
-void OBS_content::OBS_content_detachDisplaysIPC(void *data, const int64_t id, const std::vector<ipc::value> &args,
-						 std::vector<ipc::value> &rval)
+void OBS_content::OBS_content_detachDisplaysIPC(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	OBS_content_detachDisplays();
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
