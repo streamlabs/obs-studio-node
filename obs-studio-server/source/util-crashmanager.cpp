@@ -751,7 +751,8 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 
 	insideCrashMethod = true;
 #ifdef WIN32
-	// The respawned handler joins our job and must outlive us to upload.
+	// Workers die now; only the handler respawned below, which joins our job, may outlive us to upload.
+	osn::job::TerminateOtherProcesses();
 	osn::job::DisableKillOnClose();
 #endif
 	// Recreate crashpad instance, this is a well defined/supported operation

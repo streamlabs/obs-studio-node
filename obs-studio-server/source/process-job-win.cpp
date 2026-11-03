@@ -1,6 +1,7 @@
 #include "process-job-win.hpp"
 
 #include <windows.h>
+#include <vector>
 #include <obs.h>
 
 namespace osn::job {
@@ -37,6 +38,36 @@ void AssignCurrentProcess()
 		job_handle = nullptr;
 		CloseHandle(job);
 	}
+}
+
+void TerminateOtherProcesses()
+{
+	if (!job_handle)
+		return;
+
+	// The list is truncated to the buffer on ERROR_MORE_DATA, so retry with the reported count.
+	std::vector<char> buffer(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + 64 * sizeof(ULONG_PTR));
+	for (int attempt = 0; attempt < 4; ++attempt) {
+		auto *list = reinterpret_cast<JOBOBJECT_BASIC_PROCESS_ID_LIST *>(buffer.data());
+		if (QueryInformationJobObject(job_handle, JobObjectBasicProcessIdList, list, (DWORD)buffer.size(), nullptr)) {
+			const DWORD self = GetCurrentProcessId();
+			for (DWORD i = 0; i < list->NumberOfProcessIdsInList; ++i) {
+				if (list->ProcessIdList[i] == self)
+					continue;
+				HANDLE process = OpenProcess(PROCESS_TERMINATE, FALSE, (DWORD)list->ProcessIdList[i]);
+				if (!process)
+					continue;
+				TerminateProcess(process, 1);
+				CloseHandle(process);
+			}
+			return;
+		}
+		if (GetLastError() != ERROR_MORE_DATA)
+			break;
+		auto *needed = reinterpret_cast<JOBOBJECT_BASIC_PROCESS_ID_LIST *>(buffer.data());
+		buffer.resize(sizeof(JOBOBJECT_BASIC_PROCESS_ID_LIST) + (needed->NumberOfAssignedProcesses + 16) * sizeof(ULONG_PTR));
+	}
+	blog(LOG_WARNING, "Child process job: listing processes failed (%lu)", GetLastError());
 }
 
 void DisableKillOnClose()
