@@ -16,6 +16,7 @@
 
 ******************************************************************************/
 
+#include <condition_variable>
 #include <iomanip>
 #include <map>
 #include "nodeobs_content.h"
@@ -27,6 +28,7 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include "osn-video.hpp"
+#include "osn-common.hpp"
 #include "osn-screenshot.hpp"
 
 #include <cstring>
@@ -34,6 +36,19 @@
 
 std::map<std::string, OBS::Display *> displays;
 std::recursive_mutex displaysMutex;
+static std::condition_variable_any displaysCondition;
+static bool videoContextRemovalInProgress = false;
+static bool displayDetachInProgress = false;
+static bool displaysShuttingDown = false;
+
+static bool RejectDisplayCallDuringShutdown(std::vector<ipc::value> &rval)
+{
+	if (!displaysShuttingDown)
+		return false;
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+	rval.push_back(ipc::value("Display is shutting down."));
+	return true;
+}
 std::string sourceSelected;
 bool firstDisplayCreation = true;
 
@@ -141,6 +156,8 @@ static void OnDeviceLost(void *data)
 static void OnDeviceRebuilt(void *device, void *data)
 {
 	std::scoped_lock lock(displaysMutex);
+	if (displaysShuttingDown)
+		return;
 
 	for (const auto &p : displays) {
 		if (auto display = p.second) {
@@ -167,6 +184,7 @@ void OBS_content::Register(ipc::server &srv)
 
 	cls->register_function(
 		std::make_shared<ipc::function>("OBS_content_destroyDisplay", std::vector<ipc::type>{ipc::type::String}, OBS_content_destroyDisplay));
+	cls->register_function(std::make_shared<ipc::function>("OBS_content_detachDisplays", std::vector<ipc::type>{}, OBS_content_detachDisplaysIPC));
 
 	cls->register_function(std::make_shared<ipc::function>("OBS_content_getDisplayPreviewOffset", std::vector<ipc::type>{ipc::type::String},
 							       OBS_content_getDisplayPreviewOffset));
@@ -231,6 +249,33 @@ void OBS_content::Register(ipc::server &srv)
 	g_srv = &srv;
 }
 
+OBS_content::VideoContextRemovalResult OBS_content::BeginVideoContextRemoval(uint64_t canvasId, obs_video_info *&canvas)
+{
+	std::unique_lock lock(displaysMutex);
+	displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress && !displayDetachInProgress; });
+
+	canvas = osn::Video::Manager::GetInstance().find(canvasId);
+	if (!canvas)
+		return VideoContextRemovalResult::InvalidCanvas;
+
+	for (const auto &entry : displays) {
+		if (entry.second->Canvas() == canvas)
+			return VideoContextRemovalResult::DisplayInUse;
+	}
+
+	videoContextRemovalInProgress = true;
+	return VideoContextRemovalResult::Ready;
+}
+
+void OBS_content::EndVideoContextRemoval()
+{
+	{
+		std::scoped_lock lock(displaysMutex);
+		videoContextRemovalInProgress = false;
+	}
+	displaysCondition.notify_all();
+}
+
 void popupAeroDisabledWindow(void)
 {
 #ifdef WIN32
@@ -254,7 +299,13 @@ void OBS_content::OBS_content_setDayTheme(void *data, const int64_t id, const st
 
 void OBS_content::OBS_content_createDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	std::scoped_lock lock(displaysMutex);
+	std::unique_lock lock(displaysMutex);
+	displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress; });
+	if (displaysShuttingDown) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Cannot create a display during shutdown."));
+		return;
+	}
 
 	uint64_t windowHandle = args[0].value_union.ui64;
 	auto found = displays.find(args[1].value_str);
@@ -281,7 +332,13 @@ void OBS_content::OBS_content_createDisplay(void *data, const int64_t id, const 
 		break;
 	}
 
-	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[4].value_union.ui64);
+	const uint64_t canvasId = args[4].value_union.ui64;
+	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(canvasId);
+	if (!canvas && canvasId != osn::common::INVALID_ID) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Invalid video context for display."));
+		return;
+	}
 	try {
 #ifdef WIN32
 		displays.insert_or_assign(args[1].value_str, new OBS::Display(windowHandle, mode, args[3].value_union.ui32, canvas));
@@ -325,6 +382,10 @@ void OBS_content::OBS_content_createDisplay(void *data, const int64_t id, const 
 void OBS_content::OBS_content_destroyDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	std::scoped_lock lock(displaysMutex);
+	if (displaysShuttingDown) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+		return;
+	}
 
 	auto found = displays.find(args[0].value_str);
 
@@ -345,21 +406,79 @@ void OBS_content::OBS_content_destroyDisplay(void *data, const int64_t id, const
 	AUTO_DEBUG;
 }
 
+void OBS_content::OBS_content_detachDisplays()
+{
+	std::vector<OBS::Display *> activeDisplays;
+	{
+		std::unique_lock lock(displaysMutex);
+		displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress && !displayDetachInProgress; });
+		if (displaysShuttingDown)
+			return;
+
+		activeDisplays.reserve(displays.size());
+		for (const auto &entry : displays)
+			activeDisplays.push_back(entry.second);
+		displaysShuttingDown = true;
+		displayDetachInProgress = true;
+	}
+
+	for (auto *display : activeDisplays)
+		display->DetachCanvas();
+
+	{
+		std::scoped_lock lock(displaysMutex);
+		displayDetachInProgress = false;
+	}
+	displaysCondition.notify_all();
+}
+
+void OBS_content::OBS_content_detachDisplaysIPC(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	OBS_content_detachDisplays();
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+}
+
 void OBS_content::OBS_content_shutdownDisplays()
 {
-	std::scoped_lock lock(displaysMutex);
-
-	blog(LOG_DEBUG, "Displays remaining till shutdown %d", displays.size());
-	while (displays.size() > 0) {
-		auto itr = displays.begin();
-		delete itr->second;
-		displays.erase(itr);
+	std::map<std::string, OBS::Display *> doomed;
+	{
+		std::unique_lock lock(displaysMutex);
+		displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress && !displayDetachInProgress; });
+		displaysShuttingDown = true;
+		displayDetachInProgress = true;
+		doomed.swap(displays);
 	}
+
+	blog(LOG_DEBUG, "Displays remaining till shutdown %d", doomed.size());
+	for (const auto &entry : doomed)
+		delete entry.second;
+
+	{
+		std::scoped_lock lock(displaysMutex);
+		displayDetachInProgress = false;
+	}
+	displaysCondition.notify_all();
+}
+
+void OBS_content::OBS_content_resetDisplayShutdownState()
+{
+	std::unique_lock lock(displaysMutex);
+	displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress && !displayDetachInProgress; });
+	// Detachment alone leaves displays in the registry; only a full teardown
+	// makes it safe to accept new displays for the next OBS instance.
+	if (displays.empty())
+		displaysShuttingDown = false;
 }
 
 void OBS_content::OBS_content_createSourcePreviewDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	std::scoped_lock lock(displaysMutex);
+	std::unique_lock lock(displaysMutex);
+	displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress; });
+	if (displaysShuttingDown) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Cannot create a display during shutdown."));
+		return;
+	}
 
 	uint64_t windowHandle = args[0].value_union.ui64;
 
@@ -373,7 +492,13 @@ void OBS_content::OBS_content_createSourcePreviewDisplay(void *data, const int64
 		return;
 	}
 
-	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[4].value_union.ui64);
+	const uint64_t canvasId = args[4].value_union.ui64;
+	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(canvasId);
+	if (!canvas && canvasId != osn::common::INVALID_ID) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Invalid video context for source preview display."));
+		return;
+	}
 	try {
 		OBS::Display *display = new OBS::Display(windowHandle, OBS_MAIN_VIDEO_RENDERING, args[1].value_str, args[3].value_union.ui32, canvas);
 		displays.insert_or_assign(args[2].value_str, display);
@@ -389,6 +514,9 @@ void OBS_content::OBS_content_createSourcePreviewDisplay(void *data, const int64
 
 void OBS_content::OBS_content_resizeDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	auto value = displays.find(args[0].value_str);
 	if (value == displays.end()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
@@ -418,6 +546,9 @@ void OBS_content::OBS_content_resizeDisplay(void *data, const int64_t id, const 
 
 void OBS_content::OBS_content_moveDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	auto value = displays.find(args[0].value_str);
 	if (value == displays.end()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
@@ -440,6 +571,9 @@ void OBS_content::OBS_content_moveDisplay(void *data, const int64_t id, const st
 
 void OBS_content::OBS_content_setPaddingSize(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	// Find Display
 	auto it = displays.find(args[0].value_str);
 	if (it == displays.end()) {
@@ -456,6 +590,9 @@ void OBS_content::OBS_content_setPaddingSize(void *data, const int64_t id, const
 
 void OBS_content::OBS_content_setPaddingColor(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	union {
 		uint32_t rgba;
 		uint8_t c[4];
@@ -487,6 +624,9 @@ void OBS_content::OBS_content_setPaddingColor(void *data, const int64_t id, cons
 
 void OBS_content::OBS_content_setBackgroundColor(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	union {
 		uint32_t rgba;
 		uint8_t c[4];
@@ -518,6 +658,9 @@ void OBS_content::OBS_content_setBackgroundColor(void *data, const int64_t id, c
 
 void OBS_content::OBS_content_setOutlineColor(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	union {
 		uint32_t rgba;
 		uint8_t c[4];
@@ -554,6 +697,9 @@ void OBS_content::OBS_content_setOutlineColor(void *data, const int64_t id, cons
 
 void OBS_content::OBS_content_setCropOutlineColor(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	union {
 		uint32_t rgba;
 		uint8_t c[4];
@@ -584,6 +730,9 @@ void OBS_content::OBS_content_setCropOutlineColor(void *data, const int64_t id, 
 
 void OBS_content::OBS_content_setShouldDrawUI(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	// Find Display
 	auto it = displays.find(args[0].value_str);
 	if (it == displays.end()) {
@@ -599,6 +748,9 @@ void OBS_content::OBS_content_setShouldDrawUI(void *data, const int64_t id, cons
 
 void OBS_content::OBS_content_getDisplayPreviewOffset(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	auto value = displays.find(args[0].value_str);
 	if (value == displays.end()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
@@ -618,6 +770,9 @@ void OBS_content::OBS_content_getDisplayPreviewOffset(void *data, const int64_t 
 
 void OBS_content::OBS_content_getDisplayPreviewSize(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	auto value = displays.find(args[0].value_str);
 	if (value == displays.end()) {
 		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
@@ -637,6 +792,9 @@ void OBS_content::OBS_content_getDisplayPreviewSize(void *data, const int64_t id
 
 void OBS_content::OBS_content_setDrawGuideLines(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	// Find Display
 	auto it = displays.find(args[0].value_str);
 	if (it == displays.end()) {
@@ -651,6 +809,9 @@ void OBS_content::OBS_content_setDrawGuideLines(void *data, const int64_t id, co
 
 void OBS_content::OBS_content_setDrawRotationHandle(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 	// Find Display
 	auto it = displays.find(args[0].value_str);
 	if (it == displays.end()) {
@@ -665,6 +826,9 @@ void OBS_content::OBS_content_setDrawRotationHandle(void *data, const int64_t id
 
 void OBS_content::OBS_content_createIOSurface(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lock(displaysMutex);
+	if (RejectDisplayCallDuringShutdown(rval))
+		return;
 #ifdef __APPLE__
 	// Find Display
 	auto it = displays.find(args[0].value_str);

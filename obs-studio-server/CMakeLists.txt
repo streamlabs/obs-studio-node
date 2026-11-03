@@ -699,6 +699,7 @@ if(BUILD_TESTING)
             obs_studio_server_unit_tests
             PRIVATE
                 "tests/test-cef-subprocess.cpp"
+                "tests/test-display-canvas-lifecycle.cpp"
                 "tests/test-token-label-policy.cpp"
                 "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
         )

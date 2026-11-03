@@ -18,6 +18,7 @@
 
 #include "nodeobs_api.h"
 #include <atomic>
+#include <mutex>
 #include "osn-source.hpp"
 #include "osn-scene.hpp"
 #include "osn-sceneitem.hpp"
@@ -64,7 +65,6 @@
 #include <ShlObj.h>
 #include <codecvt>
 #include <locale>
-#include <mutex>
 #include <string>
 #endif
 #include "nodeobs_content.h"
@@ -131,6 +131,7 @@ OBS_API::OutputStats streamingOutputStatsMain;
 OBS_API::OutputStats streamingOutputStatsSecondary;
 OBS_API::OutputStats recordingOutputStats;
 std::mutex logMutex;
+static std::mutex apiLifecycleMutex;
 std::string currentVersion;
 std::string username("unknown");
 std::chrono::high_resolution_clock::time_point start_wait_acknowledge;
@@ -887,6 +888,7 @@ static void logEncoders()
 
 void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
+	std::scoped_lock lifecycleLock(apiLifecycleMutex);
 	writeCrashHandler(registerProcess());
 
 	/* Map base DLLs as soon as possible into the current process space.
@@ -1085,6 +1087,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
 #endif
+	OBS_content::OBS_content_resetDisplayShutdownState();
 	AUTO_DEBUG;
 }
 
@@ -1652,6 +1655,7 @@ void OBS_API::CrashModuleInfo(const std::string &moduleName, const std::string &
 
 void OBS_API::destroyOBS_API(void)
 {
+	std::scoped_lock lifecycleLock(apiLifecycleMutex);
 	blog(LOG_DEBUG, "OBS_API::destroyOBS_API started, objects allocated %d", bnum_allocs());
 	debug_enum_sources(" on destroyOBS_API");
 	os_cpu_usage_info_destroy(cpuUsageInfo);

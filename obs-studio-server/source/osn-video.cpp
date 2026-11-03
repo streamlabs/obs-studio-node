@@ -30,8 +30,28 @@
 // DELETE ME WHEN REMOVING NODEOBS
 #include "nodeobs_configManager.hpp"
 #include "nodeobs_api.h"
+#include "nodeobs_content.h"
 
 namespace {
+class VideoContextRemovalScope {
+public:
+	OBS_content::VideoContextRemovalResult Begin(uint64_t canvasId, obs_video_info *&canvas)
+	{
+		auto result = OBS_content::BeginVideoContextRemoval(canvasId, canvas);
+		active = result == OBS_content::VideoContextRemovalResult::Ready;
+		return result;
+	}
+
+	~VideoContextRemovalScope()
+	{
+		if (active)
+			OBS_content::EndVideoContextRemoval();
+	}
+
+private:
+	bool active = false;
+};
+
 // Stop connecting streaming outputs before changing or removing a canvas.
 // Calling obs_set_video_info() or obs_remove_video_info() while an output is
 // connecting can race with libobs video-pointer access.
@@ -477,11 +497,13 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Invalid number of arguments to remove the video context.");
 	}
 
-	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(args[0].value_union.ui64);
-
-	if (!canvas) {
+	obs_video_info *canvas = nullptr;
+	VideoContextRemovalScope removal;
+	auto result = removal.Begin(args[0].value_union.ui64, canvas);
+	if (result == OBS_content::VideoContextRemovalResult::InvalidCanvas)
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
-	}
+	if (result == OBS_content::VideoContextRemovalResult::DisplayInUse)
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while a display is using it.");
 
 	// OBS cannot remove a video context while Auto Optimizer's temporary outputs,
 	// encoders, or video resources are active. Cancel the run and wait for cleanup
