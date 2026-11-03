@@ -235,6 +235,55 @@ struct CanvasOwner {
 	}
 };
 
+struct RemovalReservation {
+	bool active = false;
+	~RemovalReservation() { release(); }
+
+	OBS_content::VideoContextRemovalResult begin(uint64_t canvasId, obs_video_info *&canvas)
+	{
+		auto result = OBS_content::BeginVideoContextRemoval(canvasId, canvas);
+		active = result == OBS_content::VideoContextRemovalResult::Ready;
+		return result;
+	}
+
+	void release()
+	{
+		if (active) {
+			OBS_content::EndVideoContextRemoval();
+			active = false;
+		}
+	}
+};
+
+obs_video_info *addConfiguredCanvas(CanvasOwner &owner)
+{
+	const auto added = call(osn::Video::AddVideoContext, {});
+	REQUIRE(status(added) == ErrorCode::Ok);
+	REQUIRE(added.size() >= 2);
+	owner.id = added[1].value_union.ui64;
+	obs_video_info *canvas = osn::Video::Manager::GetInstance().find(*owner.id);
+	REQUIRE(canvas != nullptr);
+	const auto configured =
+		call(osn::Video::SetVideoContext,
+		     {ipc::value(30u), ipc::value(1u), ipc::value(320u), ipc::value(180u), ipc::value(320u), ipc::value(180u), ipc::value(0u), ipc::value(0u),
+		      ipc::value(0u), ipc::value(static_cast<uint32_t>(OBS_SCALE_BILINEAR)), ipc::value(0u), ipc::value(*owner.id)});
+	REQUIRE(status(configured) == ErrorCode::Ok);
+	return canvas;
+}
+
+bool displayUsesCanvas(const std::string &key, obs_video_info *canvas)
+{
+	std::scoped_lock lock(displaysMutex);
+	auto found = displays.find(key);
+	return found != displays.end() && found->second->Canvas() == canvas;
+}
+
+bool displayExists(const std::string &key)
+{
+	std::scoped_lock lock(displaysMutex);
+	return displays.find(key) != displays.end();
+}
+
 } // namespace
 
 TEST_CASE("Display detachment drains rendering before removing its canvas", "[display][canvas][shutdown]")
@@ -322,4 +371,100 @@ TEST_CASE("Display detachment drains rendering before removing its canvas", "[di
 	REQUIRE(status(call(osn::Video::RemoveVideoContext, {ipc::value(canvasId)})) == ErrorCode::Ok);
 	canvasOwner.id.reset();
 	CHECK(osn::Video::Manager::GetInstance().find(canvasId) == nullptr);
+}
+
+TEST_CASE("Creating a display waits for successful canvas removal", "[display][canvas][concurrency]")
+{
+	ParentWindow parent;
+	REQUIRE(parent.get() != nullptr);
+	osn::tests::ObsSetup setup;
+	CanvasOwner canvasOwner;
+	obs_video_info *canvas = addConfiguredCanvas(canvasOwner);
+	const uint64_t canvasId = *canvasOwner.id;
+
+	RemovalReservation reservation;
+	obs_video_info *reserved = nullptr;
+	REQUIRE(reservation.begin(canvasId, reserved) == OBS_content::VideoContextRemovalResult::Ready);
+	REQUIRE(reserved == canvas);
+
+	std::promise<void> entered;
+	auto started = entered.get_future();
+	auto creating = std::async(std::launch::async, [&entered, window = parent.get(), canvasId] {
+		entered.set_value();
+		return call(OBS_content::OBS_content_createDisplay,
+			    {ipc::value(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window))), ipc::value("removed canvas preview"),
+			     ipc::value(int32_t{0}), ipc::value(int32_t{0}), ipc::value(canvasId)});
+	});
+	started.wait();
+	const bool waitedForRemoval = creating.wait_for(150ms) == std::future_status::timeout;
+
+	const int removed = obs_remove_video_info(reserved);
+	if (removed == OBS_VIDEO_SUCCESS || removed == OBS_VIDEO_REINITIALIZATION_FAILED) {
+		osn::Video::Manager::GetInstance().free(canvasId);
+		osn::Video::InvalidateAppliedVideoInfo();
+		canvasOwner.id.reset();
+	}
+	reservation.release();
+	const auto created = creating.get();
+	CHECK(waitedForRemoval);
+	REQUIRE(removed == OBS_VIDEO_SUCCESS);
+	REQUIRE(status(created) == ErrorCode::Error);
+	REQUIRE(created.size() >= 2);
+	CHECK(created[1].value_str == "Invalid video context for display.");
+	CHECK_FALSE(displayExists("removed canvas preview"));
+}
+
+TEST_CASE("Creating a display proceeds after canvas removal fails", "[display][canvas][concurrency]")
+{
+	ParentWindow parent;
+	REQUIRE(parent.get() != nullptr);
+	osn::tests::ObsSetup setup;
+	CanvasOwner canvasOwner;
+	obs_video_info *canvas = addConfiguredCanvas(canvasOwner);
+	const uint64_t canvasId = *canvasOwner.id;
+
+	SceneOwner nestedScene;
+	nestedScene.scene = obs_scene_create_private("canvas removal nested scene");
+	REQUIRE(nestedScene.scene != nullptr);
+	SceneOwner scene;
+	scene.scene = obs_scene_create_private("canvas removal owner scene");
+	REQUIRE(scene.scene != nullptr);
+	scene.item = obs_scene_add(scene.scene, obs_scene_get_source(nestedScene.scene));
+	REQUIRE(scene.item != nullptr);
+	obs_sceneitem_set_canvas(scene.item, canvas);
+
+	RemovalReservation reservation;
+	obs_video_info *reserved = nullptr;
+	REQUIRE(reservation.begin(canvasId, reserved) == OBS_content::VideoContextRemovalResult::Ready);
+	REQUIRE(reserved == canvas);
+
+	std::promise<void> entered;
+	auto started = entered.get_future();
+	auto creating = std::async(std::launch::async, [&entered, window = parent.get(), canvasId] {
+		entered.set_value();
+		return call(OBS_content::OBS_content_createDisplay,
+			    {ipc::value(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(window))), ipc::value("retained canvas preview"),
+			     ipc::value(int32_t{0}), ipc::value(int32_t{0}), ipc::value(canvasId)});
+	});
+	started.wait();
+	const bool waitedForRemoval = creating.wait_for(150ms) == std::future_status::timeout;
+
+	const int removed = obs_remove_video_info(reserved);
+	if (removed == OBS_VIDEO_SUCCESS || removed == OBS_VIDEO_REINITIALIZATION_FAILED) {
+		osn::Video::Manager::GetInstance().free(canvasId);
+		osn::Video::InvalidateAppliedVideoInfo();
+		canvasOwner.id.reset();
+	}
+	reservation.release();
+	const auto created = creating.get();
+	CHECK(waitedForRemoval);
+	REQUIRE(removed == OBS_VIDEO_INFO_IN_USE);
+	REQUIRE(status(created) == ErrorCode::Ok);
+	REQUIRE(displayUsesCanvas("retained canvas preview", canvas));
+
+	scene.clear();
+	nestedScene.clear();
+	REQUIRE(status(call(OBS_content::OBS_content_destroyDisplay, {ipc::value("retained canvas preview")})) == ErrorCode::Ok);
+	REQUIRE(status(call(osn::Video::RemoveVideoContext, {ipc::value(canvasId)})) == ErrorCode::Ok);
+	canvasOwner.id.reset();
 }
