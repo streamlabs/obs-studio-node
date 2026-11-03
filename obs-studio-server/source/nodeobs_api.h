@@ -158,6 +158,12 @@ public:
 	static void SetCrashHandlerPipe(const std::wstring &);
 	static void CreateCrashHandlerExitPipe();
 	static void WaitCrashHandlerClose(bool waitBeforeClosing);
+
+	// Streaming, recording or replay buffer is running.
+	static bool AnyLiveOutput();
+	static void MarkOutputStateDirty();
+	// Main loop only: reports changes of AnyLiveOutput() to the crash-handler.
+	static void PublishOutputState();
 };
 
 class outdated_driver_error {

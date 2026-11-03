@@ -31,11 +31,28 @@ void osn::Output::InitOutput(obs_output_t *output)
 		m_outputStopped = false;
 	}
 
+	m_active = obs_output_active(output);
+	OBS_API::MarkOutputStateDirty();
+
 	signal_handler *sh = obs_output_get_signal_handler(output);
+	signal_handler_connect(sh, "activate", osn::Output::OnActivate, this);
+	signal_handler_connect(sh, "deactivate", osn::Output::OnDeactivate, this);
 	signal_handler_connect(sh, "stopping", osn::Output::OnStopping, this);
 	signal_handler_connect(sh, "stop", osn::Output::OnStopped, this);
 
 	ConnectSignals();
+}
+
+void osn::Output::OnActivate(void *data, calldata_t *)
+{
+	reinterpret_cast<osn::Output *>(data)->m_active = true;
+	OBS_API::MarkOutputStateDirty();
+}
+
+void osn::Output::OnDeactivate(void *data, calldata_t *)
+{
+	reinterpret_cast<osn::Output *>(data)->m_active = false;
+	OBS_API::MarkOutputStateDirty();
 }
 
 void osn::Output::OnStopping(void *data, calldata_t *)
@@ -99,6 +116,8 @@ void osn::Output::DeleteOutput()
 	// (delay buffer, reconnect, or a shared ref), and a later signal firing
 	// into freed CallbackData/this would crash in signal_handler_signal.
 	DisconnectSignals();
+	m_active = false;
+	OBS_API::MarkOutputStateDirty();
 
 	// Release can block until the muxer finishes writing, so it still counts as finalizing.
 	obs_output_release(m_output);
@@ -146,6 +165,8 @@ void osn::Output::DisconnectSignals()
 
 	signal_handler *handler = obs_output_get_signal_handler(m_output);
 	if (handler) {
+		signal_handler_disconnect(handler, "activate", osn::Output::OnActivate, this);
+		signal_handler_disconnect(handler, "deactivate", osn::Output::OnDeactivate, this);
 		signal_handler_disconnect(handler, "stopping", osn::Output::OnStopping, this);
 		signal_handler_disconnect(handler, "stop", osn::Output::OnStopped, this);
 		for (auto *cd : m_signalCallbackData)
