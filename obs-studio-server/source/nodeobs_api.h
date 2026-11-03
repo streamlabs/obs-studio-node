@@ -161,9 +161,11 @@ public:
 
 	// Streaming, recording or replay buffer is running.
 	static bool AnyLiveOutput();
-	static void MarkOutputStateDirty();
-	// Main loop only: reports changes of AnyLiveOutput() to the crash-handler.
-	static void PublishOutputState();
+	static void StartOutputStatePublishing();
+	// Returns once no poll is running; outputs are about to be destroyed.
+	static void StopOutputStatePublishing();
+	// Main loop only: reports changes of AnyLiveOutput() to the crash-handler. Returns the current state.
+	static bool PublishOutputState();
 };
 
 class outdated_driver_error {

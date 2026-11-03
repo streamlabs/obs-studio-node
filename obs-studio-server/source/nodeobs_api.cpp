@@ -952,7 +952,7 @@ static void logEncoders()
 void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	writeCrashHandler(registerProcess());
-	OBS_API::MarkOutputStateDirty();
+	OBS_API::StartOutputStatePublishing();
 
 	/* Map base DLLs as soon as possible into the current process space.
 	* In particular, we need to load obs.dll into memory before we call
@@ -1162,6 +1162,7 @@ void OBS_API::OBS_API_destroyOBS_API(void *data, const int64_t id, const std::ve
 	//  osn::Source::Manager.
 	osn::Source::finalize_global_signals();
 	/* END INJECT osn::Source::Manager */
+	OBS_API::StopOutputStatePublishing();
 	destroyOBS_API();
 #ifdef _WIN32
 	// The process keeps running after this call.
@@ -1666,12 +1667,22 @@ void OBS_API::CreateCrashHandlerExitPipe()
 	}
 }
 
-std::atomic<bool> output_state_dirty{false};
-std::atomic<bool> outputs_live{false};
+// Serializes polling of the output registries with their destruction in destroyOBS_API().
+std::mutex output_state_mutex;
+bool output_state_publishing = false;
+std::optional<bool> output_state_sent;
 
-void OBS_API::MarkOutputStateDirty()
+void OBS_API::StartOutputStatePublishing()
 {
-	output_state_dirty = true;
+	std::lock_guard<std::mutex> lock(output_state_mutex);
+	output_state_publishing = true;
+	output_state_sent.reset();
+}
+
+void OBS_API::StopOutputStatePublishing()
+{
+	std::lock_guard<std::mutex> lock(output_state_mutex);
+	output_state_publishing = false;
 }
 
 bool OBS_API::AnyLiveOutput()
@@ -1681,36 +1692,25 @@ bool OBS_API::AnyLiveOutput()
 	osn::IStreaming::Manager::GetInstance().for_each([&live](osn::Streaming *streaming) { live = live || (streaming && streaming->IsActive()); });
 	osn::IFileOutput::Manager::GetInstance().for_each([&live](osn::FileOutput *fileOutput) { live = live || (fileOutput && fileOutput->IsActive()); });
 
-	return live || OBS_service::isStreamingOutputActive(StreamServiceId::Main) || OBS_service::isStreamingOutputActive(StreamServiceId::Second) ||
-	       OBS_service::isRecordingOutputActive() || OBS_service::isReplayBufferOutputActive();
+	return live;
 }
 
 #ifdef WIN32
-void OBS_API::PublishOutputState()
+bool OBS_API::PublishOutputState()
 {
-	static bool tracking = false;
-	static bool recheck = false;
-	static std::optional<bool> sent;
+	std::lock_guard<std::mutex> lock(output_state_mutex);
+	if (!output_state_publishing)
+		return false;
 
-	const bool dirty = output_state_dirty.exchange(false);
-	if (dirty)
-		tracking = true;
-	if (!tracking)
-		return;
-
-	if (dirty || recheck) {
-		// libobs raises activate/deactivate just before it flips the active flag.
-		recheck = dirty;
-		outputs_live = AnyLiveOutput();
-	}
-
-	const bool live = outputs_live;
-	if (sent == live)
-		return;
+	const bool live = AnyLiveOutput();
+	if (output_state_sent == live)
+		return live;
 
 	// A failed write is retried on the next tick.
 	if (writeCrashHandler(outputState(live)))
-		sent = live;
+		output_state_sent = live;
+
+	return live;
 }
 
 void waitForOrphanVerdict()
@@ -1718,9 +1718,9 @@ void waitForOrphanVerdict()
 	osn::OrphanPolicy policy(osn::orphan_budget::CrashHandlerGrace);
 
 	for (;;) {
-		OBS_API::PublishOutputState();
+		const bool outputsLive = OBS_API::PublishOutputState();
 
-		const auto verdict = policy.Evaluate({crash_handler_exit, outputs_live, crashHandlerAlive()}, osn::OrphanPolicy::Clock::now());
+		const auto verdict = policy.Evaluate({crash_handler_exit, outputsLive, crashHandlerAlive()}, osn::OrphanPolicy::Clock::now());
 
 		switch (verdict) {
 		case osn::OrphanPolicy::Verdict::Acknowledged:
