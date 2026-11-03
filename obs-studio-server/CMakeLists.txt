@@ -463,6 +463,8 @@ elseif(WIN32)
         osn-server_SOURCES
         "${PROJECT_SOURCE_DIR}/source/cef-subprocess.cpp"
         "${PROJECT_SOURCE_DIR}/source/cef-subprocess.hpp"
+        "${PROJECT_SOURCE_DIR}/source/process-job-win.cpp"
+        "${PROJECT_SOURCE_DIR}/source/process-job-win.hpp"
         "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
     )
 endif ()
