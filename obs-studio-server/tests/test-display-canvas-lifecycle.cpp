@@ -14,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "nodeobs_content.h"
@@ -31,27 +32,56 @@ using namespace std::chrono_literals;
 constexpr char TEST_SOURCE_ID[] = "display_canvas_lifecycle_source";
 constexpr char TEST_SOURCE_NAME[] = "display canvas lifecycle source";
 constexpr char TEST_DISPLAY_KEY[] = "display canvas lifecycle preview";
+constexpr UINT STOP_PARENT_WINDOW_THREAD = WM_APP + 0x317;
 
 class ParentWindow {
 public:
 	ParentWindow()
 	{
-		handle = CreateWindowExW(0, L"STATIC", L"OBS display lifecycle test", WS_OVERLAPPEDWINDOW, 0, 0, 320, 180, nullptr, nullptr,
-					 GetModuleHandleW(nullptr), nullptr);
-		if (handle)
-			ShowWindow(handle, SW_SHOWNOACTIVATE);
+		std::promise<std::pair<HWND, DWORD>> ready;
+		auto created = ready.get_future();
+		worker = std::thread([ready = std::move(ready)]() mutable {
+			MSG message{};
+			// A thread message can be posted as soon as the constructor returns.
+			PeekMessageW(&message, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+			const DWORD ownerThreadId = GetCurrentThreadId();
+			HWND window = CreateWindowExW(0, L"STATIC", L"OBS display lifecycle test", WS_OVERLAPPEDWINDOW, 0, 0, 320, 180, nullptr, nullptr,
+						      GetModuleHandleW(nullptr), nullptr);
+			if (window)
+				ShowWindow(window, SW_SHOWNOACTIVATE);
+			ready.set_value(std::make_pair(window, ownerThreadId));
+			if (!window)
+				return;
+
+			while (GetMessageW(&message, nullptr, 0, 0) > 0) {
+				if (message.message == STOP_PARENT_WINDOW_THREAD)
+					break;
+				TranslateMessage(&message);
+				DispatchMessageW(&message);
+			}
+			if (IsWindow(window))
+				DestroyWindow(window);
+		});
+		auto [window, ownerThreadId] = created.get();
+		handle = window;
+		threadId = ownerThreadId;
 	}
 
 	~ParentWindow()
 	{
-		if (handle)
-			DestroyWindow(handle);
+		if (!worker.joinable())
+			return;
+		if (handle && !PostThreadMessageW(threadId, STOP_PARENT_WINDOW_THREAD, 0, 0))
+			PostMessageW(handle, STOP_PARENT_WINDOW_THREAD, 0, 0);
+		worker.join();
 	}
 
 	HWND get() const { return handle; }
 
 private:
 	HWND handle = nullptr;
+	DWORD threadId = 0;
+	std::thread worker;
 };
 
 struct RenderGate {
