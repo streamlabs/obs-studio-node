@@ -208,18 +208,60 @@ std::fstream open_file(std::string &file_path, std::fstream::openmode mode)
 	return std::fstream(from_utf8_to_utf16_wide(file_path.c_str()), mode);
 }
 
-static bool is_obs64_pid(DWORD pid)
+static std::wstring normalize_image_path(const std::wstring &path)
 {
-	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-	if (snapshot == INVALID_HANDLE_VALUE)
+	std::wstring full(32768, wchar_t());
+	DWORD len = GetFullPathNameW(path.c_str(), (DWORD)full.size(), &full[0], nullptr);
+	if (len == 0 || len >= full.size())
+		return path;
+	full.resize(len);
+	return full;
+}
+
+static bool is_server_image(DWORD pid, const std::wstring &server_path)
+{
+	HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+	if (!process)
 		return false;
 
-	bool found = false;
+	std::wstring image(32768, wchar_t());
+	DWORD len = (DWORD)image.size();
+	bool match = false;
+	if (QueryFullProcessImageNameW(process, 0, &image[0], &len)) {
+		image.resize(len);
+		match = CompareStringOrdinal(image.c_str(), -1, server_path.c_str(), -1, TRUE) == CSTR_EQUAL;
+	}
+
+	CloseHandle(process);
+	return match;
+}
+
+// A leftover server at a higher integrity level can't be opened for termination, so report it instead.
+static uint64_t find_unkillable_server()
+{
+	const std::wstring server_path = normalize_image_path(from_utf8_to_utf16_wide(serverBinaryPath.c_str()));
+	const DWORD self = GetCurrentProcessId();
+
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (snapshot == INVALID_HANDLE_VALUE)
+		return 0;
+
+	uint64_t found = 0;
 	PROCESSENTRY32W entry = {};
 	entry.dwSize = sizeof(entry);
 	for (BOOL ok = Process32FirstW(snapshot, &entry); ok; ok = Process32NextW(snapshot, &entry)) {
-		if (entry.th32ProcessID == pid) {
-			found = _wcsicmp(entry.szExeFile, L"obs64.exe") == 0;
+		if (entry.th32ProcessID == self || !is_server_image(entry.th32ProcessID, server_path))
+			continue;
+
+		DWORD open_error = 0;
+		ProcessInfo pi = open_process(entry.th32ProcessID, open_error);
+		if (pi.handle != 0) {
+			close_process(pi);
+			continue;
+		}
+		if (open_error == ERROR_ACCESS_DENIED) {
+			found = entry.th32ProcessID;
+			std::cerr << "Previous server process " << found << " cannot be terminated, it runs at a higher elevation" << std::endl;
 			break;
 		}
 	}
@@ -227,8 +269,7 @@ static bool is_obs64_pid(DWORD pid)
 	CloseHandle(snapshot);
 	return found;
 }
-
-static void check_pid_file(std::string &pid_path, uint64_t &unkillable_pid)
+static void check_pid_file(std::string &pid_path)
 {
 	std::fstream::openmode mode = std::fstream::in | std::fstream::binary;
 
@@ -247,13 +288,8 @@ static void check_pid_file(std::string &pid_path, uint64_t &unkillable_pid)
 	DWORD open_error = 0;
 	ProcessInfo pi = open_process(pid, open_error);
 
-	if (pi.handle == 0) {
-		if (open_error == ERROR_ACCESS_DENIED && is_obs64_pid((DWORD)pid)) {
-			unkillable_pid = pid;
-			std::cerr << "Previous server process " << pid << " cannot be terminated, it runs at a higher elevation" << std::endl;
-		}
+	if (pi.handle == 0)
 		return;
-	}
 
 	std::string name = get_process_name(pi);
 
@@ -313,8 +349,8 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	std::string pid_path(get_temp_directory());
 	pid_path.append("server.pid");
 
-	m_staleServerUnkillable = 0;
-	check_pid_file(pid_path, m_staleServerUnkillable);
+	check_pid_file(pid_path);
+	m_staleServerUnkillable = find_unkillable_server();
 
 	procId = spawn(serverBinaryPath, commandLine.str(), workingDirectory);
 	if (procId.id == 0) {
