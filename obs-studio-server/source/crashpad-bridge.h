@@ -27,6 +27,9 @@ OSN_CRASHPAD_BRIDGE_API bool __cdecl osn_crashpad_bridge_start(const char *repor
 OSN_CRASHPAD_BRIDGE_API bool __cdecl osn_crashpad_bridge_set_exception_callback(osn_crashpad_exception_callback callback);
 
 OSN_CRASHPAD_BRIDGE_API void __cdecl osn_crashpad_bridge_shutdown(void);
+
+// Calls abort() in the bridge's CRT, where Crashpad's SIGABRT handler lives.
+OSN_CRASHPAD_BRIDGE_API __declspec(noreturn) void __cdecl osn_crashpad_bridge_abort(void);
 }
 
 #endif

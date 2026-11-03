@@ -17,6 +17,7 @@
 #include "client/settings.h"
 
 #include <atomic>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -180,6 +181,11 @@ extern "C" void __cdecl osn_crashpad_bridge_shutdown(void)
 		crashpad_database.reset();
 	} catch (...) {
 	}
+}
+
+extern "C" __declspec(noreturn) void __cdecl osn_crashpad_bridge_abort(void)
+{
+	abort();
 }
 
 #endif
