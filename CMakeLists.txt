@@ -131,6 +131,10 @@ if(MSVC)
 	#ignore security warnings and deprecation warnings
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 	add_definitions(-D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
+	# VS 2022 17.10+ gives std::mutex a constexpr constructor that msvcp140.dll
+	# older than 14.40 cannot handle: the first lock crashes in mtx_do_lock.
+	# Users can load such an old runtime, so keep the old mutex initialization.
+	add_definitions(-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR)
 endif()
 
 if (WIN32)
