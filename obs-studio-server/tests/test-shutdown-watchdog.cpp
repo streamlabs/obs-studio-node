@@ -137,6 +137,21 @@ TEST_CASE("Finalizing does not extend a stage without a cap", "[shutdown-watchdo
 	REQUIRE(f.expiredCount == 1);
 }
 
+TEST_CASE("Finishing a finalize does not move the deadline of a stage without a cap", "[shutdown-watchdog]")
+{
+	Fixture f;
+	f.watchdog.Arm("Prepare", 15s);
+	f.watchdog.AddFinalizing(1);
+
+	f.Advance(14);
+	f.watchdog.AddFinalizing(-1);
+	f.Advance(2);
+
+	REQUIRE(f.expiredCount == 1);
+	REQUIRE(f.expiredStage == "Prepare");
+	REQUIRE(f.expiredAfter == 15s);
+}
+
 TEST_CASE("Arm clears the cap of the previous stage", "[shutdown-watchdog]")
 {
 	Fixture f;

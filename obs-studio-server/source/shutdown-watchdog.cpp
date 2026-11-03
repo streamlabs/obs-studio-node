@@ -98,7 +98,7 @@ void osn::ShutdownWatchdog::AddFinalizing(int delta)
 	std::lock_guard lock(m_mtx);
 	m_finalizing += delta;
 	// Each output gets a fresh step once it finishes finalizing.
-	if (m_finalizing == 0 && delta < 0 && m_armed)
+	if (m_finalizing == 0 && delta < 0 && m_armed && m_cap)
 		m_deadline = m_now() + m_budget;
 }
 
