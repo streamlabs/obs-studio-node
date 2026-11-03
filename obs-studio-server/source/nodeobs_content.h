@@ -42,6 +42,10 @@ struct SourceInfo {
 
 class OBS_content {
 public:
+	enum class VideoContextRemovalResult { Ready, InvalidCanvas, DisplayInUse };
+	static VideoContextRemovalResult BeginVideoContextRemoval(uint64_t canvasId, obs_video_info *&canvas);
+	static void EndVideoContextRemoval();
+
 	OBS_content();
 	~OBS_content();
 
@@ -50,6 +54,9 @@ public:
 	static void OBS_content_setDayTheme(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_content_createDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_content_destroyDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
+	static void OBS_content_detachDisplays();
+	static void OBS_content_detachDisplaysIPC(void *data, const int64_t id, const std::vector<ipc::value> &args,
+						  std::vector<ipc::value> &rval);
 	static void OBS_content_shutdownDisplays();
 	static void OBS_content_getDisplayPreviewOffset(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);
 	static void OBS_content_getDisplayPreviewSize(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval);

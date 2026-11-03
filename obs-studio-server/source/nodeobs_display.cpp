@@ -543,15 +543,7 @@ OBS::Display::~Display()
 	{
 		std::lock_guard lock(m_displayMtx);
 
-		obs_display_remove_draw_callback(m_display, DisplayCallback, this);
-
-		if (m_source) {
-			if (obs_source_get_type(m_source) == OBS_SOURCE_TYPE_SCENE) {
-				obs_deactivate_scene_on_backstage(m_source);
-			}
-			obs_source_dec_showing(m_source);
-			obs_source_release(m_source);
-		}
+		DetachCanvas();
 
 		if (m_textVertices) {
 			delete m_textVertices;
@@ -608,6 +600,21 @@ OBS::Display::~Display()
 		std::cerr << "OBS::Display::~Display: " << answer.m_errorMessage << std::endl;
 	}
 #endif
+}
+
+void OBS::Display::DetachCanvas()
+{
+	// Removal waits for an in-flight callback to finish before the canvas can
+	// be freed by RemoveVideoContext.
+	obs_display_remove_draw_callback(m_display, DisplayCallback, this);
+	m_canvas = nullptr;
+	if (m_source) {
+		if (obs_source_get_type(m_source) == OBS_SOURCE_TYPE_SCENE)
+			obs_deactivate_scene_on_backstage(m_source);
+		obs_source_dec_showing(m_source);
+		obs_source_release(m_source);
+		m_source = nullptr;
+	}
 }
 
 void OBS::Display::SetPosition(uint32_t x, uint32_t y)

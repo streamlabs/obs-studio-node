@@ -200,6 +200,10 @@ Napi::Value api::InitShutdownSequence(const Napi::CallbackInfo &info)
 	if (!conn)
 		return info.Env().Undefined();
 
+	// The video contexts are removed during shutdown. Drain display callbacks
+	// and detach their canvases before those contexts can be freed.
+	conn->call_synchronous_helper("Display", "OBS_content_detachDisplays", {});
+
 	std::vector<ipc::value> response = conn->call_synchronous_helper("API", "StopCrashHandler", {});
 
 	// This is a shutdown operation, no response validation needed

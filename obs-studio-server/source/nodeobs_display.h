@@ -60,6 +60,8 @@ public:
 		const std::string &sourceName, // Create a Source-Specific one
 		bool renderAtBottom, obs_video_info *canvas);
 	~Display();
+	obs_video_info *Canvas() const { return m_canvas; }
+	void DetachCanvas();
 
 	void SetPosition(uint32_t x, uint32_t y);
 	std::pair<uint32_t, uint32_t> GetPosition();
