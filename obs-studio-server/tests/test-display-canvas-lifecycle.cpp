@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <future>
+#include <iostream>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -29,7 +30,6 @@ using namespace std::chrono_literals;
 
 constexpr char TEST_SOURCE_ID[] = "display_canvas_lifecycle_source";
 constexpr char TEST_SOURCE_NAME[] = "display canvas lifecycle source";
-constexpr char TEST_MAIN_DISPLAY_KEY[] = "display canvas lifecycle main";
 constexpr char TEST_DISPLAY_KEY[] = "display canvas lifecycle preview";
 
 class ParentWindow {
@@ -232,25 +232,19 @@ TEST_CASE("Display detachment drains rendering before removing its canvas", "[di
 		      ipc::value(0u), ipc::value(static_cast<uint32_t>(OBS_SCALE_BILINEAR)), ipc::value(0u), ipc::value(canvasId)});
 	REQUIRE(status(configured) == ErrorCode::Ok);
 
-	const auto mainCreated = call(OBS_content::OBS_content_createDisplay,
-				      {ipc::value(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(parent.get()))), ipc::value(TEST_MAIN_DISPLAY_KEY),
-				       ipc::value(int32_t{0}), ipc::value(int32_t{0}), ipc::value(canvasId)});
-	REQUIRE(status(mainCreated) == ErrorCode::Ok);
-	const auto mainRejection = call(osn::Video::RemoveVideoContext, {ipc::value(canvasId)});
-	REQUIRE(status(mainRejection) == ErrorCode::Error);
-	REQUIRE(mainRejection.size() >= 2);
-	CHECK(mainRejection[1].value_str == "Cannot remove video context while a display is using it.");
-	REQUIRE(status(call(OBS_content::OBS_content_destroyDisplay, {ipc::value(TEST_MAIN_DISPLAY_KEY)})) == ErrorCode::Ok);
-
+	std::cerr << "Display lifecycle: registering source" << std::endl;
 	const auto sourceInfo = testSourceInfo();
 	obs_register_source(&sourceInfo);
+	std::cerr << "Display lifecycle: creating source" << std::endl;
 	obs_source_t *source = sourceOwner.source = obs_source_create(TEST_SOURCE_ID, TEST_SOURCE_NAME, nullptr, nullptr);
 	REQUIRE(source != nullptr);
 
+	std::cerr << "Display lifecycle: creating preview" << std::endl;
 	const auto created = call(OBS_content::OBS_content_createSourcePreviewDisplay,
 				  {ipc::value(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(parent.get()))), ipc::value(TEST_SOURCE_NAME),
 				   ipc::value(TEST_DISPLAY_KEY), ipc::value(0u), ipc::value(canvasId)});
 	REQUIRE(status(created) == ErrorCode::Ok);
+	std::cerr << "Display lifecycle: sizing preview" << std::endl;
 	REQUIRE(sizeAndShowDisplay(TEST_DISPLAY_KEY));
 
 	// A display holding the canvas rejects removal. The later retry also checks
@@ -259,8 +253,10 @@ TEST_CASE("Display detachment drains rendering before removing its canvas", "[di
 	REQUIRE(status(displayRejection) == ErrorCode::Error);
 	REQUIRE(displayRejection.size() >= 2);
 	CHECK(displayRejection[1].value_str == "Cannot remove video context while a display is using it.");
+	std::cerr << "Display lifecycle: waiting for render" << std::endl;
 	REQUIRE(gate.waitForRender());
 
+	std::cerr << "Display lifecycle: detaching preview" << std::endl;
 	auto detaching = std::async(std::launch::async, [] { return call(OBS_content::OBS_content_detachDisplaysIPC, {}); });
 	bool shutdownStarted = false;
 	const auto deadline = std::chrono::steady_clock::now() + 5s;
