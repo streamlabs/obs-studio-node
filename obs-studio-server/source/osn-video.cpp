@@ -497,13 +497,6 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Invalid number of arguments to remove the video context.");
 	}
 
-	// OBS cannot remove a video context while Auto Optimizer's temporary outputs,
-	// encoders, or video resources are active. Cancel the run and wait for cleanup
-	// before removing the canvas.
-	if (!autoOptimizer::CancelActiveSession()) {
-		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before removing the video context.");
-	}
-
 	obs_video_info *canvas = nullptr;
 	VideoContextRemovalScope removal;
 	auto result = removal.Begin(args[0].value_union.ui64, canvas);
@@ -511,6 +504,13 @@ void osn::Video::RemoveVideoContext(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "No video context is currently set.");
 	if (result == OBS_content::VideoContextRemovalResult::DisplayInUse)
 		PRETTY_ERROR_RETURN(ErrorCode::Error, "Cannot remove video context while a display is using it.");
+
+	// OBS cannot remove a video context while Auto Optimizer's temporary outputs,
+	// encoders, or video resources are active. Cancel the run and wait for cleanup
+	// before removing the canvas.
+	if (!autoOptimizer::CancelActiveSession()) {
+		PRETTY_ERROR_RETURN(ErrorCode::Error, "Timed out while stopping Auto Optimizer before removing the video context.");
+	}
 
 	int ret = OBS_VIDEO_FAIL;
 	try {

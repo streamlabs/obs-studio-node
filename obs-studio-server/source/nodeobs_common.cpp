@@ -460,6 +460,16 @@ void OBS_content::OBS_content_shutdownDisplays()
 	displaysCondition.notify_all();
 }
 
+void OBS_content::OBS_content_resetDisplayShutdownState()
+{
+	std::unique_lock lock(displaysMutex);
+	displaysCondition.wait(lock, [] { return !videoContextRemovalInProgress && !displayDetachInProgress; });
+	// Detachment alone leaves displays in the registry; only a full teardown
+	// makes it safe to accept new displays for the next OBS instance.
+	if (displays.empty())
+		displaysShuttingDown = false;
+}
+
 void OBS_content::OBS_content_createSourcePreviewDisplay(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	std::unique_lock lock(displaysMutex);
