@@ -20,6 +20,8 @@
 
 #include <obs.h>
 
+#include "shutdown-watchdog.hpp"
+
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -85,7 +87,10 @@ private:
 	// the CallbackData. Must run while m_output is still valid.
 	void DisconnectSignals();
 
+	static void OnStopping(void *data, calldata_t *params);
 	static void OnStopped(void *data, calldata_t *params);
+
+	osn::FinalizeTracker m_finalizeTracker{osn::ShutdownWatchdog::Instance()};
 
 	obs_video_info *m_canvas = nullptr;
 	obs_output_t *m_output = nullptr;
