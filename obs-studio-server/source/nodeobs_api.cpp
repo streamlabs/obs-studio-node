@@ -47,6 +47,8 @@
 //to destroy cpu usage object
 #include "osn-global.hpp"
 #include "shutdown-watchdog.hpp"
+#include "orphan-policy.hpp"
+#include <optional>
 
 #include <sys/types.h>
 
@@ -112,6 +114,7 @@ enum crashHandlerCommand {
 	REGISTERMEMORYDUMP = 2,
 	CRASHWITHCODE = 3,
 	CRASHED_MODULE_INFO = 4,
+	OUTPUT_STATE = 6, // 7 is SHUTDOWN_INTENT, sent by Desktop
 };
 
 struct NodeOBSLogParam final {
@@ -718,6 +721,24 @@ std::vector<char> unregisterProcess(void)
 	return buffer;
 }
 
+std::vector<char> outputState(bool active)
+{
+	std::vector<char> buffer;
+	uint8_t action = crashHandlerCommand::OUTPUT_STATE;
+	uint8_t isActive = active ? 1 : 0;
+	buffer.resize(sizeof(action) + sizeof(pid) + sizeof(isActive));
+
+	uint32_t offset = 0;
+
+	memcpy(buffer.data(), &action, sizeof(action));
+	offset++;
+	memcpy(buffer.data() + offset, &pid, sizeof(pid));
+	offset += sizeof(pid);
+	memcpy(buffer.data() + offset, &isActive, sizeof(isActive));
+
+	return buffer;
+}
+
 std::vector<char> crashedProcess(uint32_t crash_id)
 {
 	std::vector<char> buffer;
@@ -774,7 +795,41 @@ void OBS_API::SetCrashHandlerPipe(const std::wstring &new_pipe)
 	crash_handler_pipe = std::wstring(L"\\\\.\\pipe\\") + new_pipe + std::wstring(L"-crash-handler");
 }
 
-void writeCrashHandler(std::vector<char> buffer)
+std::atomic<HANDLE> crash_handler_process{nullptr};
+
+void trackCrashHandlerProcess(HANDLE hPipe)
+{
+	static std::once_flag once;
+	std::call_once(once, [hPipe] {
+		ULONG crashHandlerPid = 0;
+		if (!GetNamedPipeServerProcessId(hPipe, &crashHandlerPid)) {
+			blog(LOG_WARNING, "Failed to get crash-handler process id, error %lu", GetLastError());
+			return;
+		}
+
+		HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, crashHandlerPid);
+		if (!process) {
+			blog(LOG_WARNING, "Failed to open crash-handler process %lu, error %lu", crashHandlerPid, GetLastError());
+			return;
+		}
+
+		crash_handler_process = process;
+	});
+}
+
+bool crashHandlerAlive()
+{
+	HANDLE process = crash_handler_process;
+	return process && WaitForSingleObject(process, 0) != WAIT_OBJECT_0;
+}
+
+bool crashHandlerExited()
+{
+	HANDLE process = crash_handler_process;
+	return process && WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
+}
+
+bool writeCrashHandler(std::vector<char> buffer)
 {
 	HANDLE hPipe = CreateFile(crash_handler_pipe.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
@@ -782,15 +837,23 @@ void writeCrashHandler(std::vector<char> buffer)
 		hPipe = CreateFile(TEXT("\\\\.\\pipe\\slobs-crash-handler"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 
 	if (hPipe == INVALID_HANDLE_VALUE)
-		return;
+		return false;
+
+	trackCrashHandlerProcess(hPipe);
 
 	DWORD bytesWritten;
 
-	WriteFile(hPipe, buffer.data(), (DWORD)buffer.size(), &bytesWritten, NULL);
+	const bool written = WriteFile(hPipe, buffer.data(), (DWORD)buffer.size(), &bytesWritten, NULL);
 
 	CloseHandle(hPipe);
+	return written;
 }
 #else
+bool crashHandlerExited()
+{
+	return false;
+}
+
 std::string crash_handler_pipe;
 
 void OBS_API::SetCrashHandlerPipe(const std::wstring &new_pipe)
@@ -889,6 +952,7 @@ static void logEncoders()
 void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	writeCrashHandler(registerProcess());
+	OBS_API::StartOutputStatePublishing();
 
 	/* Map base DLLs as soon as possible into the current process space.
 	* In particular, we need to load obs.dll into memory before we call
@@ -1098,6 +1162,7 @@ void OBS_API::OBS_API_destroyOBS_API(void *data, const int64_t id, const std::ve
 	//  osn::Source::Manager.
 	osn::Source::finalize_global_signals();
 	/* END INJECT osn::Source::Manager */
+	OBS_API::StopOutputStatePublishing();
 	destroyOBS_API();
 #ifdef _WIN32
 	// The process keeps running after this call.
@@ -1389,7 +1454,7 @@ void OBS_API::setAudioDeviceMonitoring(void)
 
 std::shared_ptr<std::thread> crash_handler_responce_thread;
 bool crash_handler_timeout_activated = false;
-bool crash_handler_exit = false;
+std::atomic<bool> crash_handler_exit{false};
 
 #ifdef WIN32
 typedef struct {
@@ -1403,8 +1468,9 @@ typedef struct {
 	BOOL fPendingIO;
 } PIPEINST, *LPPIPEINST;
 
-PIPEINST Pipe = {0};
-HANDLE hEvents = {0};
+// [0] is this session's pipe, [1] the legacy global one that older crash-handlers write to.
+PIPEINST Pipes[2] = {};
+size_t pipeCount = 0;
 
 BOOL ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo)
 {
@@ -1430,39 +1496,112 @@ BOOL ConnectToNewClient(HANDLE hPipe, LPOVERLAPPED lpo)
 	return fPendingIO;
 }
 
-bool prepareTerminationPipe()
+bool createExitPipe(PIPEINST &pipe, const std::wstring &name, DWORD extraOpenFlags)
 {
-	LPCTSTR lpszPipename = TEXT("\\\\.\\pipe\\exit-slobs-crash-handler");
+	HANDLE hEvent = CreateEvent(NULL, TRUE, TRUE, NULL);
 
-	hEvents = CreateEvent(NULL, TRUE, TRUE, NULL);
-
-	if (hEvents == NULL) {
+	if (hEvent == NULL) {
 		return false;
 	}
 
-	Pipe.oOverlap.hEvent = hEvents;
+	pipe.oOverlap.hEvent = hEvent;
 
-	Pipe.hPipeInst = CreateNamedPipe(lpszPipename, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED, PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 1,
-					 BUFFSIZE * sizeof(TCHAR), BUFFSIZE * sizeof(TCHAR), 5000, NULL);
+	pipe.hPipeInst = CreateNamedPipe(name.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | extraOpenFlags,
+					 PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT, 1, BUFFSIZE * sizeof(TCHAR), BUFFSIZE * sizeof(TCHAR), 5000,
+					 NULL);
 
-	if (Pipe.hPipeInst == INVALID_HANDLE_VALUE) {
-		CloseHandle(hEvents);
-		hEvents = NULL;
-		Pipe.oOverlap.hEvent = NULL;
+	if (pipe.hPipeInst == INVALID_HANDLE_VALUE) {
+		const DWORD error = GetLastError();
+		CloseHandle(hEvent);
+		pipe.oOverlap.hEvent = NULL;
+		blog(LOG_WARNING, "Failed to create crash-handler exit pipe %ls, error %lu", name.c_str(), error);
 		return false;
 	}
 
-	Pipe.fPendingIO = ConnectToNewClient(Pipe.hPipeInst, &(Pipe.oOverlap));
+	pipe.fPendingIO = ConnectToNewClient(pipe.hPipeInst, &(pipe.oOverlap));
 
-	Pipe.dwState = Pipe.fPendingIO ? CONNECTING_STATE : READING_STATE;
+	pipe.dwState = pipe.fPendingIO ? CONNECTING_STATE : READING_STATE;
 
 	return true;
 }
 
-void acknowledgeTerminate()
+bool prepareTerminationPipe()
+{
+	// Same name base as the crash-handler pipe, which is unique per session.
+	const std::wstring pipePrefix = L"\\\\.\\pipe\\";
+	const std::wstring sessionPipe = pipePrefix + L"exit-" + crash_handler_pipe.substr(pipePrefix.size());
+
+	if (!createExitPipe(Pipes[0], sessionPipe, FILE_FLAG_FIRST_PIPE_INSTANCE))
+		return false;
+	pipeCount = 1;
+
+	if (createExitPipe(Pipes[1], pipePrefix + L"exit-slobs-crash-handler", 0))
+		pipeCount = 2;
+
+	return true;
+}
+
+// Advances one pipe instance's connect/read state machine. Sets crash_handler_exit once a message arrived or the client left.
+void servicePipe(PIPEINST &pipe)
 {
 	BOOL fSuccess;
-	DWORD dwWait, cbRet, dwErr;
+	DWORD cbRet, dwErr;
+
+	if (pipe.fPendingIO) {
+		fSuccess = GetOverlappedResult(pipe.hPipeInst, &(pipe.oOverlap), &cbRet, FALSE);
+
+		switch (pipe.dwState) {
+		case CONNECTING_STATE: {
+			if (!fSuccess) {
+				break;
+			}
+			pipe.dwState = READING_STATE;
+			break;
+		}
+		case READING_STATE: {
+			if (!fSuccess || cbRet == 0) {
+				crash_handler_exit = true;
+				break;
+			}
+			pipe.cbRead = cbRet;
+			pipe.dwState = READING_STATE;
+			break;
+		}
+		default: {
+			break;
+		}
+		}
+	}
+
+	switch (pipe.dwState) {
+	case READING_STATE: {
+		pipe.chRequest.resize(BUFFSIZE);
+		fSuccess = ReadFile(pipe.hPipeInst, pipe.chRequest.data(), BUFFSIZE * sizeof(TCHAR), &pipe.cbRead, &pipe.oOverlap);
+
+		GetOverlappedResult(pipe.hPipeInst, &pipe.oOverlap, &pipe.cbRead, false);
+
+		// The read operation completed successfully.
+		if (pipe.cbRead > 0) {
+			pipe.fPendingIO = FALSE;
+		}
+		dwErr = GetLastError();
+		if (!fSuccess && (dwErr == ERROR_IO_PENDING)) {
+			pipe.fPendingIO = TRUE;
+			break;
+		}
+		crash_handler_exit = true;
+		break;
+	}
+	}
+}
+
+void acknowledgeTerminate()
+{
+	DWORD dwWait;
+	HANDLE events[2];
+
+	for (size_t i = 0; i < pipeCount; i++)
+		events[i] = Pipes[i].oOverlap.hEvent;
 
 	while (!crash_handler_exit) {
 		if (crash_handler_timeout_activated) {
@@ -1476,63 +1615,24 @@ void acknowledgeTerminate()
 				break;
 			}
 		}
-		dwWait = WaitForSingleObject(hEvents, 500);
+		dwWait = WaitForMultipleObjects((DWORD)pipeCount, events, FALSE, 500);
 
-		if (dwWait == WAIT_OBJECT_0) {
-			if (Pipe.fPendingIO) {
-				fSuccess = GetOverlappedResult(Pipe.hPipeInst, &(Pipe.oOverlap), &cbRet, FALSE);
+		if (dwWait >= WAIT_OBJECT_0 + pipeCount)
+			continue;
 
-				switch (Pipe.dwState) {
-				case CONNECTING_STATE: {
-					if (!fSuccess) {
-						break;
-					}
-					Pipe.dwState = READING_STATE;
-					break;
-				}
-				case READING_STATE: {
-					if (!fSuccess || cbRet == 0) {
-						crash_handler_exit = true;
-						break;
-					}
-					Pipe.cbRead = cbRet;
-					Pipe.dwState = READING_STATE;
-					break;
-				}
-				default: {
-					break;
-				}
-				}
-			}
-
-			switch (Pipe.dwState) {
-			case READING_STATE: {
-				Pipe.chRequest.resize(BUFFSIZE);
-				fSuccess = ReadFile(Pipe.hPipeInst, Pipe.chRequest.data(), BUFFSIZE * sizeof(TCHAR), &Pipe.cbRead, &Pipe.oOverlap);
-
-				GetOverlappedResult(Pipe.hPipeInst, &Pipe.oOverlap, &Pipe.cbRead, false);
-
-				// The read operation completed successfully.
-				if (Pipe.cbRead > 0) {
-					Pipe.fPendingIO = FALSE;
-				}
-				dwErr = GetLastError();
-				if (!fSuccess && (dwErr == ERROR_IO_PENDING)) {
-					Pipe.fPendingIO = TRUE;
-					break;
-				}
-				crash_handler_exit = true;
-				break;
-			}
-			}
+		for (size_t i = 0; i < pipeCount && !crash_handler_exit; i++) {
+			if (WaitForSingleObject(events[i], 0) == WAIT_OBJECT_0)
+				servicePipe(Pipes[i]);
 		}
 	}
 
-	// Single exit: the pipe name is free again for the next session.
-	CloseHandle(Pipe.hPipeInst);
-	Pipe.hPipeInst = INVALID_HANDLE_VALUE;
-	CloseHandle(hEvents);
-	hEvents = NULL;
+	// Single exit: the pipe names are free again for the next session.
+	for (size_t i = 0; i < pipeCount; i++) {
+		CloseHandle(Pipes[i].hPipeInst);
+		Pipes[i].hPipeInst = INVALID_HANDLE_VALUE;
+		CloseHandle(events[i]);
+		Pipes[i].oOverlap.hEvent = NULL;
+	}
 }
 #else __APPLE__
 void acknowledgeTerminate(void)
@@ -1567,11 +1667,92 @@ void OBS_API::CreateCrashHandlerExitPipe()
 	}
 }
 
+// Serializes polling of the output registries with their destruction in destroyOBS_API().
+std::mutex output_state_mutex;
+bool output_state_publishing = false;
+std::optional<bool> output_state_sent;
+
+void OBS_API::StartOutputStatePublishing()
+{
+	std::lock_guard<std::mutex> lock(output_state_mutex);
+	output_state_publishing = true;
+	output_state_sent.reset();
+}
+
+void OBS_API::StopOutputStatePublishing()
+{
+	std::lock_guard<std::mutex> lock(output_state_mutex);
+	output_state_publishing = false;
+}
+
+bool OBS_API::AnyLiveOutput()
+{
+	bool live = false;
+
+	osn::IStreaming::Manager::GetInstance().for_each([&live](osn::Streaming *streaming) { live = live || (streaming && streaming->IsActive()); });
+	osn::IFileOutput::Manager::GetInstance().for_each([&live](osn::FileOutput *fileOutput) { live = live || (fileOutput && fileOutput->IsActive()); });
+
+	return live;
+}
+
+#ifdef WIN32
+bool OBS_API::PublishOutputState()
+{
+	std::lock_guard<std::mutex> lock(output_state_mutex);
+	if (!output_state_publishing)
+		return false;
+
+	const bool live = AnyLiveOutput();
+	if (output_state_sent == live)
+		return live;
+
+	// A failed write is retried on the next tick.
+	if (writeCrashHandler(outputState(live)))
+		output_state_sent = live;
+
+	return live;
+}
+
+void waitForOrphanVerdict()
+{
+	osn::OrphanPolicy policy(osn::orphan_budget::CrashHandlerGrace);
+
+	for (;;) {
+		const bool outputsLive = OBS_API::PublishOutputState();
+
+		const auto verdict = policy.Evaluate({crash_handler_exit, outputsLive, crashHandlerAlive()}, osn::OrphanPolicy::Clock::now());
+
+		switch (verdict) {
+		case osn::OrphanPolicy::Verdict::Acknowledged:
+			blog(LOG_INFO, "Orphaned: crash-handler acknowledged exit");
+			return;
+		case osn::OrphanPolicy::Verdict::NoLiveOutputs:
+			blog(LOG_INFO, "Orphaned: no live outputs, not waiting for crash-handler");
+			return;
+		case osn::OrphanPolicy::Verdict::CrashHandlerGone:
+			blog(LOG_WARNING, "Orphaned: crash-handler gone for %d s with live outputs, shutting down",
+			     (int)osn::orphan_budget::CrashHandlerGrace.count());
+			return;
+		case osn::OrphanPolicy::Verdict::Wait:
+			break;
+		}
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+}
+#endif
+
 void OBS_API::WaitCrashHandlerClose(bool waitBeforeClosing)
 {
 	if (crash_handler_responce_thread) {
+#ifdef WIN32
+		if (waitBeforeClosing)
+			waitForOrphanVerdict();
+		crash_handler_exit = true;
+#else
 		if (!waitBeforeClosing)
 			crash_handler_exit = true;
+#endif
 
 		if (crash_handler_responce_thread->joinable())
 			crash_handler_responce_thread->join();
@@ -1599,6 +1780,9 @@ void OBS_API::StopCrashHandler(void *data, const int64_t id, const std::vector<i
 
 		start_wait_acknowledge = std::chrono::high_resolution_clock::now();
 		crash_handler_timeout_activated = true;
+
+		if (crashHandlerExited())
+			crash_handler_exit = true;
 
 		if (crash_handler_responce_thread->joinable())
 			crash_handler_responce_thread->join();

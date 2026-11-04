@@ -327,6 +327,7 @@ int main(int argc, char *argv[])
 #ifdef WIN32
 	bool waitBeforeClosing = false;
 	while (!doShutdown) {
+		OBS_API::PublishOutputState();
 		if (sd.count_connected == 0) {
 			auto tp = std::chrono::high_resolution_clock::now();
 			auto delta = tp - sd.last_disconnect;
@@ -340,7 +341,8 @@ int main(int argc, char *argv[])
 	// Wait for crash handler listening thread to finish.
 	// flag waitBeforeClosing: server process expect to receive the exit message from the crash-handler
 	// before going further with shutdown. It needed for usecase where obs64 process stay alive and
-	// continue streaming till user confirms exit in crash-handler.
+	// continue streaming till user confirms exit in crash-handler. Without live outputs, or once the
+	// crash-handler is gone, it does not wait.
 	OBS_API::WaitCrashHandlerClose(waitBeforeClosing);
 	osn::ShutdownWatchdog::Instance().Arm("Prepare", osn::shutdown_budget::Prepare);
 #endif

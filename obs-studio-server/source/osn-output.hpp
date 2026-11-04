@@ -22,6 +22,7 @@
 
 #include "shutdown-watchdog.hpp"
 
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <queue>
@@ -63,6 +64,9 @@ public:
 	obs_output_t *GetOutput();
 	const obs_output_t *GetOutput() const;
 
+	// Mirrors obs_output_active() from libobs signals, so other threads never touch the obs_output_t.
+	bool IsActive() const { return m_active; }
+
 protected:
 	// Runs once per stop, from the libobs "stop" signal and from the StartOutput()
 	// failure path. Called on libobs' capture thread, so keep it short.
@@ -87,9 +91,12 @@ private:
 	// the CallbackData. Must run while m_output is still valid.
 	void DisconnectSignals();
 
+	static void OnActivate(void *data, calldata_t *params);
+	static void OnDeactivate(void *data, calldata_t *params);
 	static void OnStopping(void *data, calldata_t *params);
 	static void OnStopped(void *data, calldata_t *params);
 
+	std::atomic<bool> m_active{false};
 	osn::FinalizeTracker m_finalizeTracker{osn::ShutdownWatchdog::Instance()};
 
 	obs_video_info *m_canvas = nullptr;
