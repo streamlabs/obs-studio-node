@@ -68,6 +68,7 @@
 
 #if defined(_WIN32)
 #include "crashpad-bridge.h"
+#include "process-job-win.hpp"
 #elif defined(ENABLE_CRASHREPORT)
 #include "client/crash_report_database.h"
 #include "client/crashpad_client.h"
@@ -759,6 +760,11 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	}
 
 	insideCrashMethod = true;
+#ifdef WIN32
+	// Workers die now; only the handler respawned below, which joins our job, may outlive us to upload.
+	osn::job::TerminateOtherProcesses();
+	osn::job::DisableKillOnClose();
+#endif
 	// Recreate crashpad instance, this is a well defined/supported operation
 	SetupCrashpad();
 

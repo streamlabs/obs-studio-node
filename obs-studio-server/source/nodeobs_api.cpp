@@ -62,6 +62,7 @@
 
 #define _WIN32_WINNT 0x0502
 
+#include "process-job-win.hpp"
 #include <ShlObj.h>
 #include <codecvt>
 #include <locale>
@@ -962,6 +963,8 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 #endif
 
 #ifdef WIN32
+	osn::job::AssignCurrentProcess();
+
 	// Connect the metrics provider with our crash handler process, sending our current version tag
 	// and enabling metrics
 	util::CrashManager::GetMetricsProvider()->Initialize("\\\\.\\pipe\\metrics_pipe", currentVersion, false);
