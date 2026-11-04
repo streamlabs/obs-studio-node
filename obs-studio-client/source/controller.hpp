@@ -50,6 +50,9 @@ public:
 
 	DWORD GetExitCode();
 
+	// PID of a previous server that could not be terminated, or 0.
+	uint64_t GetUnkillableStaleServer() const;
+
 	void disconnect();
 
 	std::shared_ptr<ipc::client> GetConnection();
@@ -61,6 +64,7 @@ private:
 	bool m_isServer = false;
 	std::shared_ptr<ipc::client> m_connection;
 	ipc::ProcessInfo procId;
+	uint64_t m_staleServerUnkillable = 0;
 	// Monotonic "epoch" for the IPC connection lifecycle. Helps to detect stale wrappers
 	// after disconnect/reconnect so finalizers can safely no-op.
 	std::atomic<uint64_t> m_connectionEpoch{0};

@@ -47,6 +47,7 @@ std::wstring utfWorkingDir = L"";
 #ifdef _WIN32
 #include <direct.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <wchar.h>
 #include <windows.h>
 #else
@@ -83,14 +84,14 @@ ProcessInfo spawn(const std::string &program, const std::string &commandLine, co
 	return ProcessInfo(reinterpret_cast<uint64_t>(m_win32_processInformation.hProcess), static_cast<uint64_t>(m_win32_processInformation.dwProcessId));
 }
 
-ProcessInfo open_process(uint64_t handle)
+ProcessInfo open_process(uint64_t handle, DWORD &error)
 {
 	ProcessInfo pi;
 	DWORD flags = PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE | PROCESS_VM_READ | SYNCHRONIZE;
 
 	pi.handle = (uint64_t)OpenProcess(flags, false, (DWORD)handle);
 	if (pi.handle == 0) {
-		DWORD error = GetLastError();
+		error = GetLastError();
 		// ERROR_INVALID_PARAMETER means the PID is gone, which is the normal case.
 		if (error != ERROR_INVALID_PARAMETER)
 			std::cerr << "Could not open previous server process " << handle << " with error code: " << error
@@ -207,6 +208,67 @@ std::fstream open_file(std::string &file_path, std::fstream::openmode mode)
 	return std::fstream(from_utf8_to_utf16_wide(file_path.c_str()), mode);
 }
 
+static std::wstring normalize_image_path(const std::wstring &path)
+{
+	std::wstring full(32768, wchar_t());
+	DWORD len = GetFullPathNameW(path.c_str(), (DWORD)full.size(), &full[0], nullptr);
+	if (len == 0 || len >= full.size())
+		return path;
+	full.resize(len);
+	return full;
+}
+
+static bool is_server_image(DWORD pid, const std::wstring &server_path)
+{
+	HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+	if (!process)
+		return false;
+
+	std::wstring image(32768, wchar_t());
+	DWORD len = (DWORD)image.size();
+	bool match = false;
+	if (QueryFullProcessImageNameW(process, 0, &image[0], &len)) {
+		image.resize(len);
+		match = CompareStringOrdinal(image.c_str(), -1, server_path.c_str(), -1, TRUE) == CSTR_EQUAL;
+	}
+
+	CloseHandle(process);
+	return match;
+}
+
+// A leftover server at a higher integrity level can't be opened for termination, so report it instead.
+static uint64_t find_unkillable_server()
+{
+	const std::wstring server_path = normalize_image_path(from_utf8_to_utf16_wide(serverBinaryPath.c_str()));
+	const DWORD self = GetCurrentProcessId();
+
+	HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (snapshot == INVALID_HANDLE_VALUE)
+		return 0;
+
+	uint64_t found = 0;
+	PROCESSENTRY32W entry = {};
+	entry.dwSize = sizeof(entry);
+	for (BOOL ok = Process32FirstW(snapshot, &entry); ok; ok = Process32NextW(snapshot, &entry)) {
+		if (entry.th32ProcessID == self || !is_server_image(entry.th32ProcessID, server_path))
+			continue;
+
+		DWORD open_error = 0;
+		ProcessInfo pi = open_process(entry.th32ProcessID, open_error);
+		if (pi.handle != 0) {
+			close_process(pi);
+			continue;
+		}
+		if (open_error == ERROR_ACCESS_DENIED) {
+			found = entry.th32ProcessID;
+			std::cerr << "Previous server process " << found << " cannot be terminated, it runs at a higher elevation" << std::endl;
+			break;
+		}
+	}
+
+	CloseHandle(snapshot);
+	return found;
+}
 static void check_pid_file(std::string &pid_path)
 {
 	std::fstream::openmode mode = std::fstream::in | std::fstream::binary;
@@ -223,7 +285,8 @@ static void check_pid_file(std::string &pid_path)
 
 	pid_file.read(&pid_char[0], 8);
 
-	ProcessInfo pi = open_process(pid);
+	DWORD open_error = 0;
+	ProcessInfo pi = open_process(pid, open_error);
 
 	if (pi.handle == 0)
 		return;
@@ -287,6 +350,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	pid_path.append("server.pid");
 
 	check_pid_file(pid_path);
+	m_staleServerUnkillable = find_unkillable_server();
 
 	procId = spawn(serverBinaryPath, commandLine.str(), workingDirectory);
 	if (procId.id == 0) {
@@ -406,6 +470,11 @@ void Controller::disconnect()
 	m_connectionEpoch.fetch_add(1, std::memory_order_relaxed);
 }
 
+uint64_t Controller::GetUnkillableStaleServer() const
+{
+	return m_staleServerUnkillable;
+}
+
 DWORD Controller::GetExitCode()
 {
 	return procId.exit_code;
@@ -510,6 +579,11 @@ Napi::Value js_host(const Napi::CallbackInfo &info)
 	return Napi::Number::New(info.Env(), exit_code);
 }
 
+Napi::Value js_getUnkillableStaleServer(const Napi::CallbackInfo &info)
+{
+	return Napi::Number::New(info.Env(), (double)Controller::GetInstance().GetUnkillableStaleServer());
+}
+
 Napi::Value js_disconnect(const Napi::CallbackInfo &info)
 {
 	Controller::GetInstance().disconnect();
@@ -523,5 +597,6 @@ void Controller::Init(Napi::Env env, Napi::Object exports)
 	obj.Set(Napi::String::New(env, "connect"), Napi::Function::New(env, js_connect));
 	obj.Set(Napi::String::New(env, "host"), Napi::Function::New(env, js_host));
 	obj.Set(Napi::String::New(env, "disconnect"), Napi::Function::New(env, js_disconnect));
+	obj.Set(Napi::String::New(env, "getUnkillableStaleServer"), Napi::Function::New(env, js_getUnkillableStaleServer));
 	exports.Set("IPC", obj);
 }

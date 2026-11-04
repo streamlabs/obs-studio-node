@@ -357,6 +357,7 @@ export interface IIPC {
     connect(uri: string): void;
     host(uri: string): EIPCError;
     disconnect(): void;
+    getUnkillableStaleServer(): number;
 }
 export interface IGlobal {
     getOutputFlagsFromId(id: string): number;
