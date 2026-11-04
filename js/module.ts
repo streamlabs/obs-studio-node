@@ -508,6 +508,11 @@ export interface IIPC {
      * Disconnect from a server.
      */
 	disconnect(): void;
+
+    /**
+     * @returns - PID of a previous server that is still running and could not be terminated (for example, it runs elevated), or 0 if none.
+     */
+	getUnkillableStaleServer(): number;
 }
 
 export interface IGlobal {
