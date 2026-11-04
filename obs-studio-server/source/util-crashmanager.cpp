@@ -20,6 +20,7 @@
 #include "util-metricsprovider.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <codecvt>
 #include <filesystem>
@@ -49,6 +50,7 @@
 #pragma comment(lib, "pdh.lib")
 #include <fcntl.h>
 #include <io.h>
+#include <signal.h>
 #include <windows.h>
 #include "TCHAR.h"
 #include "pdh.h"
@@ -534,6 +536,14 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 	std::set_terminate([]() { HandleCrash("Direct call to std::terminate"); });
 
 #ifdef WIN32
+	// obs64's static CRT has no SIGABRT handler; forward to the bridge's CRT where Crashpad's is registered.
+	signal(SIGABRT, [](int) {
+		static std::atomic_flag forwarding = ATOMIC_FLAG_INIT;
+		if (!forwarding.test_and_set())
+			osn_crashpad_bridge_abort();
+		_exit(3);
+	});
+
 	memoryDumpFolder = std::filesystem::u8path(appdata + "\\CrashMemoryDump");
 
 	// There's a static local wstring inside this function, now it's cached for thread safe read access
