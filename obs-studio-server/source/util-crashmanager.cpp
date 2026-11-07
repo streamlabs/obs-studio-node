@@ -1017,7 +1017,10 @@ void RewindCallStack()
 	private:
 		bool m_moduleInfoSent = false;
 
-		std::unordered_set<std::string> m_excludeModules = {"kernelbase", "ntdll", "kernel32.dll"};
+		// Modules that are on the stack because they handle the exception, not because they
+		// caused it. StackWalker gives module names without an extension. The crashpad bridge
+		// runs the unhandled exception filter, so it is the first frame of every crash stack.
+		std::unordered_set<std::string> m_excludeModules = {"kernelbase", "ntdll", "kernel32", "osn-crashpad-bridge"};
 	};
 
 	MyStackWalker sw;
