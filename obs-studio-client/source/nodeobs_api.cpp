@@ -620,6 +620,23 @@ Napi::Value api::GetForceGPURenderingLegacy(const Napi::CallbackInfo &info)
 	return Napi::Boolean::New(info.Env(), response[1].value_union.ui32);
 }
 
+Napi::Value api::GetVCRuntimeInfo(const Napi::CallbackInfo &info)
+{
+	auto conn = GetConnection(info);
+	if (!conn)
+		return info.Env().Undefined();
+
+	std::vector<ipc::value> response = conn->call_synchronous_helper("API", "GetVCRuntimeInfo", {});
+
+	if (!ValidateResponse(info, response) || response.size() < 3)
+		return info.Env().Undefined();
+
+	Napi::Object result = Napi::Object::New(info.Env());
+	result.Set("outdated", Napi::Boolean::New(info.Env(), response[1].value_union.ui32));
+	result.Set("version", Napi::String::New(info.Env(), response[2].value_str));
+	return result;
+}
+
 void api::Init(Napi::Env env, Napi::Object exports)
 {
 	exports.Set(Napi::String::New(env, "OBS_API_initAPI"), Napi::Function::New(env, api::OBS_API_initAPI));
@@ -655,4 +672,5 @@ void api::Init(Napi::Env env, Napi::Object exports)
 	exports.Set(Napi::String::New(env, "GetForceGPURendering"), Napi::Function::New(env, api::GetForceGPURendering));
 	exports.Set(Napi::String::New(env, "SetForceGPURendering"), Napi::Function::New(env, api::SetForceGPURendering));
 	exports.Set(Napi::String::New(env, "GetForceGPURenderingLegacy"), Napi::Function::New(env, api::GetForceGPURenderingLegacy));
+	exports.Set(Napi::String::New(env, "GetVCRuntimeInfo"), Napi::Function::New(env, api::GetVCRuntimeInfo));
 }

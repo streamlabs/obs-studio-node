@@ -87,6 +87,7 @@
 #include <util/windows/ComPtr.hpp>
 #include <util/windows/HRError.hpp>
 #include <util/windows/WinHandle.hpp>
+#include <util/windows/win-version.h>
 #endif
 
 #ifdef __APPLE__
@@ -207,6 +208,7 @@ void OBS_API::Register(ipc::server &srv)
 	cls->register_function(std::make_shared<ipc::function>("GetForceGPURendering", std::vector<ipc::type>{}, GetForceGPURendering));
 	cls->register_function(std::make_shared<ipc::function>("SetForceGPURendering", std::vector<ipc::type>{}, SetForceGPURendering));
 	cls->register_function(std::make_shared<ipc::function>("GetForceGPURenderingLegacy", std::vector<ipc::type>{}, GetForceGPURenderingLegacy));
+	cls->register_function(std::make_shared<ipc::function>("GetVCRuntimeInfo", std::vector<ipc::type>{}, GetVCRuntimeInfo));
 
 	srv.register_collection(cls);
 	g_server = &srv;
@@ -2345,5 +2347,27 @@ void OBS_API::GetForceGPURenderingLegacy(void *data, const int64_t id, const std
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value((uint32_t)config_get_bool(ConfigManager::getInstance().getBasic(), "Video", "ForceGPUAsRenderDevice")));
+	AUTO_DEBUG;
+}
+
+void OBS_API::GetVCRuntimeInfo(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	bool isOutdated = false;
+	std::string version;
+#if defined(_WIN32)
+	win_version_info ver = {};
+	if (get_dll_ver(L"msvcp140.dll", &ver)) {
+		isOutdated = ver.minor < 40;
+		version = std::to_string(ver.major) + "." + std::to_string(ver.minor) + "." + std::to_string(ver.build) + "." +
+			  std::to_string(ver.revis);
+	} else {
+		isOutdated = true;
+		version = "not found";
+	}
+#endif
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value((uint32_t)isOutdated));
+	rval.push_back(ipc::value(version));
 	AUTO_DEBUG;
 }
