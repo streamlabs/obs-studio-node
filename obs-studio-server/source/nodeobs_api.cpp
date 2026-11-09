@@ -2358,8 +2358,7 @@ void OBS_API::GetVCRuntimeInfo(void *data, const int64_t id, const std::vector<i
 	win_version_info ver = {};
 	if (get_dll_ver(L"msvcp140.dll", &ver)) {
 		isOutdated = ver.minor < 40;
-		version = std::to_string(ver.major) + "." + std::to_string(ver.minor) + "." + std::to_string(ver.build) + "." +
-			  std::to_string(ver.revis);
+		version = std::to_string(ver.major) + "." + std::to_string(ver.minor) + "." + std::to_string(ver.build) + "." + std::to_string(ver.revis);
 	} else {
 		isOutdated = true;
 		version = "not found";
