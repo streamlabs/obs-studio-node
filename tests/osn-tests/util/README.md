@@ -153,3 +153,26 @@ not contact Twitch or check media delivery. After building OSN, run them with:
 ```text
 ctest --test-dir build -C RelWithDebInfo -R "NodeObs.*Enhanced Broadcasting" --output-on-failure --no-tests=error
 ```
+
+## Canvas audio routing
+
+`src/test_osn_canvas_audio_routing.ts` keeps two loopback streams active while
+changing shared-source visibility. Simple and Advanced outputs run with selective
+rendering enabled and disabled. Decoded AAC windows check independent canvas
+silence, visibility restoration, source mixer changes, global audio roots,
+duplicate-path gain, nested visibility and canvas restrictions, and unassigned
+scene-item canvases. Monitoring stays disabled throughout.
+
+Each measurement waits for encoded packet timestamps to pass a one-second
+settling interval, then decodes a bounded half-second window with its original
+AAC configuration. An audible generated-tone baseline rejects broken capture
+setup, and duplicate paths must retain that baseline's gain. Output fixtures own
+their encoders; scene items are removed before their canvases are destroyed.
+The suite logs its unique directory under `osnData/osn-canvas-audio-routing-*`
+and retains the input, AAC windows, decoded WAV windows and `measurements.json` there.
+
+After building and installing OSN, run the focused suite with:
+
+```text
+yarn electron-mocha -t 60000 -r ts-node/register tests/osn-tests/src/test_osn_canvas_audio_routing.ts
+```
