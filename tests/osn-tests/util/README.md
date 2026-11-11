@@ -1,155 +1,60 @@
-# Shared streaming test utilities
+# Shared OSN test utilities
 
-Use these utilities before adding setup, lifecycle or media-assertion helpers to a
-new suite. Keep provider-specific settings, deliberate invalid configurations and
-expected results in the test.
+Use this catalog to find reusable test helpers. Keep individual scenarios,
+expected results, and suite commands with the tests that use them.
 
-| Utility | Responsibility and ownership |
+## Runtime and outputs
+
+| Module | What it provides |
 | --- | --- |
-| `OBSHandler` | Initializes and shuts down the OSN runtime. |
-| `createStreamingOutput` (`streaming_output.ts`) | Owns one standard Simple/Advanced output, its software encoders and its signal callback. Borrows the supplied service and canvas. |
-| `RtmpTestServer` (`rtmp-test-server.ts`) | Owns the loopback listener, connections and per-attempt media captures. Independent of OSN. |
-| `expectAudioTracks`, `expectVideoFrames` (`rtmp-assertions.ts`) | Assert received media. They neither start outputs nor wait for packets. |
-| `media_probe.ts` | Uses ffprobe/ffmpeg for recorded-file inspection. |
-| `expectRegionColor` (`media_assertions.ts`) | Asserts the mean RGB color of a region in a decoded frame. No runtime or output ownership. |
+| [obs_handler.ts](obs_handler.ts) | `OBSHandler` manages the OSN runtime and optional default canvas, with helpers for OBS settings and legacy output signals. |
+| [streaming_output.ts](streaming_output.ts) | `createStreamingOutput` creates a Simple or Advanced output with software x264 and, in Simple mode, AAC. It owns the output, encoders it creates, and signal callback. The caller owns the service, canvas, and any Advanced audio encoders it supplies. |
+| [rtmp-test-server.ts](rtmp-test-server.ts) | `RtmpTestServer` owns a loopback TCP listener and bounded per-connection media captures. `RtmpTestSession` exposes packet snapshots, waits for encoded media, and can disconnect its publisher. |
 
-## Selective recording
+Use the output fixture's `start()`, `stop()`, and `destroy()` methods and leave
+its signal callback attached. Start waits for Starting, Activate, and Start;
+stop waits for Stop and inactive capture in either order. Each attempt has its
+own signals and a configurable deadline (10 seconds by default). Destroy the
+output before releasing borrowed resources or shutting down OSN. A stop timeout
+leaves the output and its encoders intact so active capture is not freed early.
 
-`src/test_osn_selective_recording.ts` records generated color sources without a
-provider account, streaming output or replay buffer. It checks decoded RGB frames
-for stream-only, recording-only, both-visible and neither-visible scene items.
-An always-visible background also rejects empty or black recordings. Both Simple
-quality presets, disabled selective recording and an Advanced dedicated encoder
-are covered. The suite is discovered by the existing integration/CI scripts.
+Each RTMP connection has a distinct `attempt`. Use `waitForPublish` with
+`afterAttempt` when reusing a stream key. `waitForMedia` counts encoded packets;
+sequence headers do not count. Close the receiver to release connections and
+settle pending waits. The receiver runs independently of OSN and does not require
+a provider account or an external ingest endpoint.
 
-`getVideoFrameRgb()` in `media_probe.ts` decodes one unscaled frame and rejects
-missing frames or unexpected dimensions. FFmpeg emits binary PPM so the decoded
-width and height are checked independently, followed by the RGB payload length.
-`src/test_media_probe.ts` covers equal-pixel-count dimension mismatches, exact RGB
-bytes and missing frames without starting OBS. FFmpeg lookup honors `FFMPEG_PATH`, then
-checks the OSN package root and macOS `Frameworks` directory, then PATH. Color
-checks sample inside the blocks and tolerate compression differences.
+## Media and protocol
 
-`expectRegionColor()` accepts `{ data, width, height }` for an RGB24 frame and a
-region `{ x, y, width?, height? }` measured from its top-left pixel. Region size
-defaults to 8x8 and the per-channel tolerance defaults to 25; both are configurable.
-It rejects invalid frame dimensions, buffer lengths, region bounds and tolerances.
-Keep expected colors and the choice of interior regions in each test.
+| Module | What it provides |
+| --- | --- |
+| [rtmp-protocol.ts](rtmp-protocol.ts) | RTMP chunk decoding, message encoding, AMF0 encoding and decoding, and media packet parsing. |
+| [rtmp-assertions.ts](rtmp-assertions.ts) | `expectAudioTracks` checks the exact track set and requires headers and frames for each track. `expectVideoFrames` requires encoded frames. `getAacAudioTrack` returns one AAC-LC track with ADTS framing. These helpers inspect captured packets without waiting for more media. |
+| [media_probe.ts](media_probe.ts) | Reads audio stream titles and bitrates, video keyframes, and mean audio volume. `getVideoFrameRgb` decodes one unscaled RGB24 frame and validates its dimensions and payload length. |
+| [media_assertions.ts](media_assertions.ts) | `expectRegionColor` checks the mean RGB color in a region of a decoded frame. It defaults to an 8×8 region and a tolerance of 25 per channel, and validates frame size and region bounds. |
 
-After building and installing OSN, run both suites with:
+Media probes look for `FFMPEG_PATH` or `FFPROBE_PATH`, then the packaged executable
+(including macOS `Frameworks`), then `PATH`. The ffprobe lookup also checks the
+local libobs build before falling back to `PATH`.
 
-```text
-yarn electron-mocha -t 30000 -r ts-node/register tests/osn-tests/src/test_osn_selective_recording.ts tests/osn-tests/src/test_media_probe.ts
-```
+## Settings and common helpers
 
-## Output setup and lifetime
+| Module | What it provides |
+| --- | --- |
+| [obs_enums.ts](obs_enums.ts) | Shared OBS output types and signals, input/filter/transition type names, and settings categories. |
+| [input_settings.ts](input_settings.ts) | Sample settings for OBS inputs. |
+| [filter_settings.ts](filter_settings.ts) | Sample settings for OBS filters. |
+| [transition_settings.ts](transition_settings.ts) | Sample settings for OBS transitions. |
+| [general.ts](general.ts) | Shared source and hotkey lists, timing helpers, file waits, test config cleanup, and error formatting. |
 
-`createStreamingOutput({ mode, name, video, service, timeoutMs? })` configures
-x264 at 500 Kbps with a two-second keyframe interval and the ultrafast preset.
-Simple mode gets a 160 Kbps AAC encoder. Advanced mode uses caller-registered
-audio tracks (native defaults: main track 1, VOD track 2). Service bitrate
-enforcement, delay and reconnect are disabled. VOD keeps its native disabled
-default; enable it explicitly when the scenario requires it.
+## Environment and reporting
 
-Simple VOD reads source audio track 2 and preserves source mixer flags. Advanced
-VOD reads the caller-selected `twitchTrack`. `getAacAudioTrack()` in
-`rtmp-assertions.ts` returns received AAC-LC with ADTS framing; write it to a
-test-owned file and use `getMeanVolumeDb()` to check audible audio and exclusions.
-
-Configure the exposed `stream` while stopped, including replacing its borrowed
-service. Use the fixture's `start()`, `stop()` and `destroy()` methods and retain
-its signal callback. `start()` waits for Starting, Activate and Start;
-`stop()` force-stops and waits for Stop and inactive capture in either signal
-order. Signals belong to one output and one explicit start attempt. This permits
-simultaneous outputs and retained starts without consuming another output's
-events from `OBSHandler`'s legacy shared signal queue.
-
-Waits default to ten seconds. Failures include the output name and native error
-or signal history. Stop and destroy are safe to repeat. A terminal native error
-is reported after stop has settled; destroy releases the output and its encoders
-even in that case. A stop timeout leaves ownership intact rather than releasing
-an output whose capture may still be active. Destroy outputs before releasing
-their borrowed services/canvases or calling `OBSHandler.shutdown()`.
-
-## Receiving and asserting media
-
-`RtmpTestServer` in `rtmp-test-server.ts` receives real encoded output on an
-automatically assigned `127.0.0.1` port. It uses Node's TCP support and does not
-require a provider account, stream key, external endpoint, or extra server process.
-Use the existing `OBSHandler` to initialize OSN separately.
-
-The suite owns the service, canvas and fixture lifetime. With an initialized
-`obs: OBSHandler`, a complete Simple output test can use:
-
-```ts
-const receiver = await RtmpTestServer.start();
-let service: osn.IService;
-let output: ITestStreamingOutput;
-try {
-    service = osn.ServiceFactory.create('rtmp_custom', 'example', {
-        server: receiver.url, key: 'example',
-    });
-    output = createStreamingOutput({
-        mode: 'Simple', name: 'example', video: obs.defaultVideoContext, service,
-    });
-    await output.start();
-    const publication = await receiver.waitForPublish('example');
-    await publication.waitForMedia({ audioPackets: 25, videoPackets: 15 });
-    await output.stop();
-    expectAudioTracks(publication, [0]);
-    expectVideoFrames(publication);
-    receiver.assertHealthy();
-} finally {
-    try {
-        if (output) await output.destroy();
-        if (service) osn.ServiceFactory.destroy(service);
-    } finally {
-        await receiver.close();
-    }
-}
-```
-
-Each TCP connection has a distinct `attempt`. Use
-`waitForPublish(key, { afterAttempt: previous.attempt })` after restarting the same
-output or calling `publication.disconnect()` to trigger a reconnect. Captures are
-separate for simultaneous publishers and subsequent attempts with the same key.
-`waitForMedia` counts encoded frames; sequence headers alone cannot satisfy it.
-Snapshots expose media kind, codec FourCC, track ID, packet type, timestamp, and
-size. `expectAudioTracks` requires the exact track set, plus a sequence header and
-encoded frames for each expected track. Expected track order is irrelevant.
-`expectVideoFrames` requires encoded video; sequence headers and end-of-sequence
-messages alone fail. Choose capture lengths in the test and stop the publisher
-before asserting the absence of unwanted tracks.
-
-The receiver supports the RTMP handshake, publisher commands, chunk compression,
-extended timestamps, control messages, AMF0 metadata, legacy H.264/AAC, and enhanced
-one-track-per-message headers. Unsupported media formats and protocol errors fail
-explicitly. Captures and message sizes are bounded; waits have deadlines, and
-closing the receiver settles pending waits. This fixture does not model provider
-API behavior or remote ingest acceptance.
-
-`src/test_rtmp_test_server.ts` exercises protocol parsing, receiver lifetime and
-media assertions without OBS. `src/test_osn_streaming_vod.ts` and the local
-`Start streaming` case in `src/test_osn_simple_streaming.ts` share the output
-fixture and assertions with the real OSN client/server. All are discovered by
-`test:integration`. For a focused run after building and installing OSN, this
-filter excludes the Simple suite's remaining provider-account tests:
-
-```text
-yarn electron-mocha -t 30000 -r ts-node/register tests/osn-tests/src/test_rtmp_test_server.ts tests/osn-tests/src/test_osn_streaming_vod.ts tests/osn-tests/src/test_osn_simple_streaming.ts --grep "RTMP test receiver|osn-streaming-vod|osn-simple-streaming \(local\)"
-```
-
-`src/test_nodeobs_simple_vod_settings.ts` separately verifies Simple VOD settings
-visibility, persistence, and independence from Advanced track selections without
-using a provider account.
-
-The native `test-nodeobs-enhanced-broadcasting-vod.cpp` tests call the older
-NodeObs start handler with a local Enhanced Broadcasting configuration file and
-inspect its live/VOD audio encoders. They cover conflicting Simple/Advanced VOD
-preferences, Simple's fixed track 2 and advanced encoder settings requirement,
-and Advanced's selected track 6. The ingest endpoint is loopback; these tests do
-not contact Twitch or check media delivery. After building OSN, run them with:
-
-```text
-ctest --test-dir build -C RelWithDebInfo -R "NodeObs.*Enhanced Broadcasting" --output-on-failure --no-tests=error
-```
+| Module | What it provides |
+| --- | --- |
+| [env.ts](env.ts) | `loadTestEnv` loads the first available `.env` from the working directory or repository root, once per process, without overriding existing variables. |
+| [user_pool_handler.ts](user_pool_handler.ts) | `UserPoolHandler` reserves and releases Twitch test accounts, returns their stream keys, and can exclude unhealthy accounts. |
+| [cache-uploader.ts](cache-uploader.ts) | `CacheUploader` archives test cache files and uploads them to the test S3 bucket using configured upload credentials. |
+| [error_messages.ts](error_messages.ts) | Common test error messages and placeholder formatting. |
+| [logger.ts](logger.ts) | Test logging helpers for informational and warning messages. |
+| [retry_context.ts](retry_context.ts) | Stores and clears Mocha retry errors by test identity so retry preparation can inspect the previous failure. |
+| [list-reporter.js](list-reporter.js) | Mocha reporter that prints test outcomes and retry information and writes flaky test summaries for CI. |
