@@ -157,6 +157,8 @@ describe(testName, function () {
 
     async function measure(label: string): Promise<number[]> {
         const index = ++captureIndex;
+        // Drain queued RTMP data before using the latest packet timestamp as the phase anchor.
+        await new Promise<void>(resolve => setTimeout(resolve, settlingMs));
         const values = await Promise.all(sessions.map(async session => {
             const audioFrames = () => session.snapshot().filter(packet => packet.kind === 'audio' && packet.packetType === 1);
             const initial = audioFrames();
