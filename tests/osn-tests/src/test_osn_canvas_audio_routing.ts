@@ -1,7 +1,8 @@
 import 'mocha';
 import { expect } from 'chai';
 import { randomUUID } from 'crypto';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as osn from '../osn';
@@ -10,13 +11,13 @@ import { deleteConfigFiles } from '../util/general';
 import { logInfo } from '../util/logger';
 import { RtmpTestServer, RtmpTestSession } from '../util/rtmp-test-server';
 import { expectAudioTracks, expectVideoFrames, getAacAudioTrack } from '../util/rtmp-assertions';
-import { getMeanVolumeDb } from '../util/media_probe';
 import { createStreamingOutput, ITestStreamingOutput, TStreamingMode } from '../util/streaming_output';
 
 const testName = 'osn-canvas-audio-routing';
 const settlingMs = 1000;
 const windowMs = 500;
 const toneDb = 20 * Math.log10(12000 / 32768 / Math.sqrt(2));
+const execFileAsync = promisify(execFile);
 
 describe(testName, function () {
     this.timeout(60000);
@@ -31,7 +32,6 @@ describe(testName, function () {
     let outputs: ITestStreamingOutput[];
     let services: osn.IService[];
     let scenes: osn.IScene[];
-    let sceneSources: osn.IInput[];
     let items: osn.ISceneItem[];
     let source: osn.IInput;
     let sessions: RtmpTestSession[];
@@ -73,7 +73,7 @@ describe(testName, function () {
     beforeEach(async function () {
         expect(unsafeCleanup, 'A preceding output did not stop safely').to.equal(false);
         caseName = this.currentTest.title;
-        outputs = []; services = []; scenes = []; sceneSources = []; items = []; sessions = [];
+        outputs = []; services = []; scenes = []; items = []; sessions = [];
         source = undefined;
         receiver = undefined;
         receiver = await RtmpTestServer.start();
@@ -98,7 +98,6 @@ describe(testName, function () {
                 osn.Global.setOutputSource(0, null);
                 osn.Global.setOutputSource(1, null);
                 items.slice().reverse().forEach(item => item.remove());
-                sceneSources.forEach(input => input.release());
                 scenes.slice().reverse().forEach(scene => scene.release());
                 if (source) source.release();
                 osn.Global.multipleRendering = previousMultipleRendering;
@@ -132,7 +131,6 @@ describe(testName, function () {
 
     function add(parent: osn.IScene, child: osn.IInput | osn.IScene, canvas?: osn.IVideo): osn.ISceneItem {
         const input = 'source' in child ? child.source : child;
-        if ('source' in child) sceneSources.push(input);
         const item = parent.add(input);
         items.push(item);
         if (canvas) item.video = canvas;
@@ -182,9 +180,12 @@ describe(testName, function () {
             const file = path.join(directory, `${index}-${label}-${session.streamKey}.aac`);
             fs.writeFileSync(file, getAacAudioTrack(window, 0));
             const decoded = file.replace(/\.aac$/, '.wav');
-            execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', file, '-c:a', 'pcm_s16le', decoded],
-                { timeout: 10000, windowsHide: true });
-            const db = getMeanVolumeDb(decoded);
+            const result = await execFileAsync(ffmpeg,
+                ['-hide_banner', '-nostats', '-nostdin', '-i', file, '-af', 'volumedetect', '-c:a', 'pcm_s16le', decoded],
+                { timeout: 10000, windowsHide: true, encoding: 'utf8' });
+            const volume = /mean_volume:\s*(-inf|-?\d+(?:\.\d+)?) dB/.exec(result.stderr);
+            if (!volume) throw new Error(`Missing mean_volume for ${label} ${session.streamKey}: ${result.stderr}`);
+            const db = volume[1] === '-inf' ? -Infinity : parseFloat(volume[1]);
             measurements.push({ case: caseName, label, output: session.streamKey, begin, end, db, file, decoded });
             return db;
         }));
