@@ -215,11 +215,16 @@ set(
     CACHE STRING "Additional CMake prefixes required by the libobs package"
 )
 
-download_project(
-    PROJ libobs
-    URL ${OSN_LIBOBS_URL}
-    UPDATE_DISCONNECTED 1
-)
+set(OSN_LIBOBS_ROOT "" CACHE PATH "Use an installed libobs SDK instead of downloading an archive")
+if(OSN_LIBOBS_ROOT)
+    get_filename_component(libobs_SOURCE_DIR "${OSN_LIBOBS_ROOT}" ABSOLUTE)
+else()
+    download_project(
+        PROJ libobs
+        URL ${OSN_LIBOBS_URL}
+        UPDATE_DISCONNECTED 1
+    )
+endif()
 
 list(APPEND CMAKE_PREFIX_PATH "${libobs_SOURCE_DIR}" "${libobs_SOURCE_DIR}/cmake")
 if(OSN_LIBOBS_DEPENDENCY_PREFIX_PATH)
@@ -646,8 +651,8 @@ endif ()
 
 if (WIN32)
 install(
-    DIRECTORY "${libobs_SOURCE_DIR}/obs-plugins/"
-    DESTINATION "./obs-plugins"
+    DIRECTORY "${libobs_SOURCE_DIR}/core/"
+    DESTINATION "./core"
 )
 else ()
 install(

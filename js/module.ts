@@ -2566,6 +2566,24 @@ interface INodeObs {
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
 
     /**
+     * Returns a copy of the failures from the most recent runtime initialization,
+     * including both shipped core modules and separately installed plugins.
+     * Requires a live IPC connection, as with other legacy API calls.
+     * @returns Module names and their diagnostic codes and messages; an empty array if none failed
+     * @throws {Error} If the server rejects the request or returns a malformed response
+     */
+    OBS_API_getModuleLoadFailures(): IObsModuleLoadFailure[];
+
+    /**
+     * Requests a save of the legacy replay buffer. OBS 33 dispatches this through
+     * the output's save procedure; no registered OBS hotkey is required.
+     * A missing, inactive, or paused replay buffer is left unchanged.
+     * Requires a live IPC connection; the legacy call terminates the process if disconnected.
+     * @returns No value; completion is reported by the replay buffer's wrote signal
+     */
+    OBS_service_processReplayBufferHotkey(): void;
+
+    /**
      * Saves a complete legacy settings category, including native field metadata.
      * Converting a common RTMP service to custom restores the exact native URL
      * when the submitted server matches the previous form value. Inherited automatic

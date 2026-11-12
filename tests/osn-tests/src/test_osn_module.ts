@@ -6,24 +6,37 @@ import * as fs from 'fs';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { OBSHandler } from '../util/obs_handler';
 import { deleteConfigFiles } from '../util/general';
-import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 
 const testName = 'osn-module';
 
 describe(testName, () => {
     let obs: OBSHandler;
     let hasTestFailed: boolean = false;
+    const invalidPlugins: string[] = [];
 
     // Initialize OBS process
     before(function() {
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
+        if (process.platform === 'win32') {
+            const roots = [osn.wd, path.join(__dirname, '..', 'osnData', 'slobs-plugins')];
+            roots.forEach((root, index) => {
+                const file = path.join(root, 'obs-plugins', '64bit', `osn-test-invalid-${index}.dll`);
+                fs.mkdirSync(path.dirname(file), { recursive: true });
+                fs.copyFileSync(path.join(osn.wd, 'libobs-d3d11.dll'), file, fs.constants.COPYFILE_EXCL);
+                invalidPlugins.push(file);
+            });
+        }
         obs = new OBSHandler(testName);
     });
 
     // Shutdown OBS process
     after(async function() {
-        obs.shutdown();
+        try {
+            if (obs) obs.shutdown();
+        } finally {
+            invalidPlugins.forEach(file => fs.unlinkSync(file));
+        }
 
         if (hasTestFailed === true) {
             logInfo(testName, 'One or more test cases failed. Uploading cache');
@@ -42,54 +55,56 @@ describe(testName, () => {
         }
     });
 
-    it('Open all module types and initialize them', () => {
-        let moduleTypes: string[] = [];
-        let modulePath: string;
-        const nonModuleLibraries = new Set([
-            'chrome_elf.dll',
-            'd3dcompiler_47.dll',
-            'dxcompiler.dll',
-            'dxil.dll',
-            'libcef.dll',
-            'libEGL.dll',
-            'libGLESv2.dll',
-            'Spout.dll',
-            'SpoutDX.dll',
-            'SpoutLibrary.dll',
-            'vk_swiftshader.dll',
-            'vulkan-1.dll',
-            'mediasoup-connector.dll', // Doesn't build in debug mode
-        ]);
-
-        if (obs.os == 'win32') {
-            modulePath = path.join(path.normalize(osn.DefaultPluginPath), '64bit');
-        } else if (obs.os == 'darwin') {
-            modulePath = path.normalize(osn.DefaultPluginPathMac);
-        }
-
-        fs.readdirSync(modulePath).forEach(file => {
-            if (file.endsWith('.dll') && !nonModuleLibraries.has(file)) {
-                // Opening module
-                console.log('Opening module: ' + file);
-                const moduleType = osn.ModuleFactory.open(path.join(modulePath, '/' + file), path.normalize(osn.DefaultDataPath));
-                console.log('Opened module: ' + file + ' successfully ' + moduleType);
-                // Checking if module was opened properly
-                expect(moduleType).to.not.equal(undefined, GetErrorMessage(ETestErrorMsg.OpenModule, file));
-
-                // Initializing module
-                expect(function () {
-                    moduleType.initialize();
-                }).to.not.throw();
-
-                // Adding to moduleArrays to use in check later
-                moduleTypes.push(path.join(modulePath, '/' + file));
-            }
-        });
-
-        // Getting all modules
+    it('Loads packaged core modules during startup', () => {
+        const requiredModules = ['image-source', 'obs-filters', 'obs-transitions',
+            'obs-ffmpeg', 'obs-outputs', 'obs-x264', 'rtmp-services', 'obs-browser'];
         const modules = osn.ModuleFactory.modules();
+        const moduleNames = modules.map(file => path.basename(String(file)));
+        const failures = osn.NodeObs.OBS_API_getModuleLoadFailures();
+        for (const name of requiredModules) {
+            const binary = process.platform === 'win32'
+                ? path.join(osn.wd, 'core', name, `${name}.dll`)
+                : path.join(osn.wd, 'PlugIns', `${name}.plugin`, 'Contents', 'MacOS', name);
+            expect(fs.existsSync(binary), binary).to.equal(true);
+            expect(moduleNames, `Loaded modules: ${name}`).to.include(path.basename(binary));
+            expect(failures.filter(failure => failure.module === name), name).to.deep.equal([]);
+        }
+        const corePath = path.join(osn.wd, process.platform === 'win32' ? 'core' : 'PlugIns');
+        const packagedModules = fs.readdirSync(corePath, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && (process.platform === 'win32' || entry.name.endsWith('.plugin')))
+            .map(entry => entry.name.replace(/\.plugin$/, ''));
+        for (const name of packagedModules) {
+            const fileName = process.platform === 'win32' ? `${name}.dll` : name;
+            expect(moduleNames.includes(fileName) || failures.some(failure => failure.module === name),
+                `Packaged module ${name} must load or report a diagnostic`).to.equal(true);
+        }
+        expect(obs.inputTypes).to.include.members(['image_source', 'ffmpeg_source', 'browser_source']);
+        expect(osn.VideoEncoderFactory.types()).to.include('obs_x264');
+    });
 
-        // Checking if returned modules are the ones opened
-        expect(modules).to.include.members(moduleTypes, GetErrorMessage(ETestErrorMsg.Modules));
+    it('Keeps the explicit module API usable with the core layout', () => {
+        const name = 'image-source';
+        const binary = process.platform === 'win32'
+            ? path.join(osn.wd, 'core', name, `${name}.dll`)
+            : path.join(osn.wd, 'PlugIns', `${name}.plugin`, 'Contents', 'MacOS', name);
+        const data = process.platform === 'win32'
+            ? path.join(osn.wd, 'core', name, 'data')
+            : path.join(osn.wd, 'PlugIns', `${name}.plugin`, 'Contents', 'Resources');
+        const module = osn.ModuleFactory.open(binary, data);
+        expect(() => module.initialize()).not.to.throw();
+        expect(path.normalize(module.binaryPath)).to.equal(path.normalize(binary));
+        expect(path.normalize(module.dataPath)).to.equal(path.normalize(data));
+    });
+
+    it('Retains diagnostics from both legacy plugin directories', function () {
+        if (process.platform !== 'win32') this.skip();
+        const failures = osn.NodeObs.OBS_API_getModuleLoadFailures();
+        for (let index = 0; index < 2; index++) {
+            expect(failures).to.deep.include({
+                module: `osn-test-invalid-${index}`,
+                code: 'MODULE_NOT_OBS_PLUGIN',
+                message: 'Module is not an OBS plugin',
+            });
+        }
     });
 });

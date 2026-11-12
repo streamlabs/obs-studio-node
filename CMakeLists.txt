@@ -70,15 +70,15 @@ ENDIF()
 
 # Comfigure macos architecture and min version
 iF(APPLE)
-	set(CMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET[arch=arm64] "12.0")
-	set(CMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET[arch=x86_64] "12.0")
+	set(CMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET[arch=arm64] "13.0")
+	set(CMAKE_XCODE_ATTRIBUTE_MACOSX_DEPLOYMENT_TARGET[arch=x86_64] "13.0")
 	if (NOT CMAKE_OSX_ARCHITECTURES)
 		set(CMAKE_OSX_ARCHITECTURES "${CMAKE_HOST_SYSTEM_PROCESSOR}")
 	endif()
 	if ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-		set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
+		set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
 	else()
-		set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
+		set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0")
 	endif()
 	# See CMake issue # 21854
 	# https://gitlab.kitware.com/cmake/cmake/-/issues/21854
@@ -127,7 +127,7 @@ include(CTest)
 
 if(MSVC)
 	add_definitions(/MP)
-	add_link_options(/debug:fastlink)
+	add_link_options(/debug:full)
 	#ignore security warnings and deprecation warnings
 	add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 	add_definitions(-D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)

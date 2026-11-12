@@ -378,14 +378,11 @@ describe(testName, () => {
         expect(input.id).to.equal(inputType, GetErrorMessage(ETestErrorMsg.InputId, inputType));
         expect(input.name).to.equal('input', GetErrorMessage(ETestErrorMsg.InputName, inputType));
 
-        // Setting monitoring type value
-        input.monitoringType = osn.EMonitoringType.MonitoringAndOutput;
-
-        // Getting monitoring type value
-        returnedMonitoringType = input.monitoringType;
-
-        // Checking if monitoring type value was returned correctly
-        expect(returnedMonitoringType).to.equal(osn.EMonitoringType.MonitoringAndOutput, GetErrorMessage(ETestErrorMsg.MonitoringType, inputType));
+        for (const mode of [osn.EMonitoringType.MonitoringOnly, osn.EMonitoringType.MonitoringAndOutput, osn.EMonitoringType.None]) {
+            input.monitoringType = mode;
+            returnedMonitoringType = input.monitoringType;
+            expect(returnedMonitoringType).to.equal(mode, GetErrorMessage(ETestErrorMsg.MonitoringType, inputType));
+        }
         input.release();
     });
 

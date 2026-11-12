@@ -22,10 +22,10 @@ env:
   RuntimeURL: https://artifacts.electronjs.org/headers/dist
   RuntimeName: iojs
   ElectronVersion: 43.7.6
-  SLGenerator: Visual Studio 17 2022
+  SLGenerator: Visual Studio 18 2026
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 32.1.1sl28
+  LibOBSVersion: 33.0.1sl1
   PACKAGE_NAME: osn
 
 jobs:
@@ -267,7 +267,7 @@ jobs:
 
   build-win64:
     name: 'Build Windows 64-bit'
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
@@ -314,7 +314,7 @@ jobs:
   run-tests-win64:
     name: 'Run Windows Tests'
     needs: build-win64
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
@@ -378,7 +378,7 @@ jobs:
     name: 'Package and Deploy Windows'
     needs: run-tests-win64
     if: ${{ needs.run-tests-win64.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
@@ -415,7 +415,7 @@ jobs:
     name: 'Upload Symbols to Symbol Server Windows'
     needs: run-tests-win64
     if: ${{ needs.run-tests-win64.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
