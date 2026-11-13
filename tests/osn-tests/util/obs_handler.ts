@@ -59,6 +59,9 @@ export type TOBSHotkey = {
     HotkeyId: number;
 };
 
+// Unreachable on purpose so test crashes never reach the production Sentry project.
+export const TEST_CRASH_SERVER_URL = 'http://127.0.0.1:9/api/1/minidump/?sentry_key=osn-tests';
+
 // OBSHandler class
 export class OBSHandler {
     private path = require('path');
@@ -69,7 +72,7 @@ export class OBSHandler {
     private obsPath: string = this.path.join(this.path.normalize(__dirname), '..', 'osnData/slobs-client');
     private pipeName: string = 'osn-tests-pipe-'.concat(uuidv4());
     private version: string = '0.00.00-preview.0';
-    private crashServer: string = '';
+    private crashServer: string = TEST_CRASH_SERVER_URL;
 
     // Other variables/objects
     private userPoolHandler: UserPoolHandler;
@@ -107,6 +110,10 @@ export class OBSHandler {
     }
 
     startup() {
+        if (!this.crashServer) {
+            throw Error('crashServer must not be empty: osn would fall back to the production crash server.');
+        }
+
         let initResult: number;
         logInfo(this.osnTestName, 'Initializing OBS');
 
