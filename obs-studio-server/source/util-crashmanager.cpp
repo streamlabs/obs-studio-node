@@ -142,6 +142,18 @@ static std::string NormalizeCrashReason(std::string_view raw, std::string &hresu
 static std::string DescribeTerminateReason() noexcept;
 void RewindCallStack();
 
+// Set by the SIGABRT forwarder so HandleCrash tags the report as a worker-thread terminate
+static std::atomic_bool crashFromThreadTerminate{false};
+
+[[noreturn]] static void AbortToCrashpad()
+{
+#ifdef WIN32
+	osn_crashpad_bridge_abort();
+#else
+	abort();
+#endif
+}
+
 typedef long long LongLong;
 
 // Transform a byte value into a string + sufix
@@ -543,10 +555,19 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 
 #ifdef WIN32
 	// obs64's static CRT has no SIGABRT handler; forward to the bridge's CRT where Crashpad's is registered.
+	// Also the catch-all for aborts and std::terminate on threads without our terminate handler.
 	signal(SIGABRT, [](int) {
 		static std::atomic_flag forwarding = ATOMIC_FLAG_INIT;
-		if (!forwarding.test_and_set())
-			osn_crashpad_bridge_abort();
+		if (!forwarding.test_and_set()) {
+			const std::string reason = std::current_exception() ? DescribeTerminateReason() : "abort()";
+			if (reportsEnabled) {
+				crashFromThreadTerminate = true;
+				HandleCrash(reason);
+			} else {
+				blog(LOG_ERROR, "Crash reason: %s", reason.c_str());
+				RewindCallStack();
+			}
+		}
 		_exit(3);
 	});
 
@@ -687,7 +708,27 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	static bool insideCrashMethod = false;
 	static bool insideRewindCallstack = false; //if this is true then we already crashed inside StackWalker and try to skip it this time.
 	if (insideCrashMethod && !insideRewindCallstack)
-		abort();
+		AbortToCrashpad();
+
+	blog(LOG_ERROR, "Crash reason: %s", _crashInfo.c_str());
+
+	// It is crucial to rewind call stack before calling 'SignalMemoryDump' because we gather info about crashed module,
+	// and before the log is captured below so the stack is part of the report
+	insideCrashMethod = true;
+	try {
+		if (!insideRewindCallstack) {
+			insideRewindCallstack = true;
+			RewindCallStack();
+			insideRewindCallstack = false;
+		} else {
+			blog(LOG_INFO, "Recrashed in RewindCallStack");
+		}
+	} catch (...) {
+		//ignore exceptions to not loose current crash info
+	}
+	insideCrashMethod = false;
+
+	// A user-facing crash message would go here, once the crash is logged and before the dump work starts.
 
 	SaveToAppStateFile();
 
@@ -745,7 +786,7 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 		annotations.insert({{"Crash reason", _crashInfo}});
 		std::string crashHresult;
 		annotations.insert({{"sentry[tags][crash_reason]", NormalizeCrashReason(_crashInfo, crashHresult)}});
-		annotations.insert({{"sentry[tags][crash_kind]", callAbort ? "abort" : "deferred"}});
+		annotations.insert({{"sentry[tags][crash_kind]", !callAbort ? "deferred" : crashFromThreadTerminate ? "thread_terminate" : "abort"}});
 		if (!crashHresult.empty())
 			annotations.insert({{"sentry[tags][crash_hresult]", crashHresult}});
 	} catch (...) {
@@ -770,21 +811,6 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	annotations.insert({{"sentry[environment]", getAppState()}});
 
 	SaveBriefCrashInfoToFile();
-
-	// It is crucial to rewind call stack before calling 'SignalMemoryDump' because we gather info about crashed module
-	insideCrashMethod = true;
-	try {
-		if (!insideRewindCallstack) {
-			insideRewindCallstack = true;
-			RewindCallStack();
-			insideRewindCallstack = false;
-		} else {
-			blog(LOG_INFO, "Recrashed in RewindCallStack");
-		}
-	} catch (...) {
-		//ignore exceptions to not loose current crash info
-	}
-	insideCrashMethod = false;
 
 	// if saved memory dump
 	const bool uploadedFullDump = SignalMemoryDump();
@@ -817,7 +843,7 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 
 	// This value is true by default and only false if we're planning to let crashpad handle cleanup
 	if (callAbort)
-		abort();
+		AbortToCrashpad();
 	else
 		blog(LOG_INFO, "Server finished 'HandleCrash', crashpad will now make a sentry report");
 
