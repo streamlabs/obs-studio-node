@@ -15,6 +15,7 @@
 #include "client/crash_report_database.h"
 #include "client/crashpad_client.h"
 #include "client/settings.h"
+#include "util/win/command_line.h"
 
 #include <atomic>
 #include <cstdlib>
@@ -24,7 +25,14 @@
 #include <string>
 #include <vector>
 
+#include <base/strings/utf_string_conversions.h>
+
 namespace {
+
+constexpr uint32_t MaxCommandLineLength = 32767;
+// Room for the --initial-client-data argument Crashpad appends itself.
+constexpr size_t InitialClientDataReserve = 160;
+constexpr size_t NullTerminator = 1;
 
 std::mutex crashpad_mutex;
 std::unique_ptr<crashpad::CrashpadClient> crashpad_client;
@@ -68,6 +76,37 @@ bool BuildCrashpadArguments(const char *const *annotation_keys, const char *cons
 	return true;
 }
 
+bool GetDatabasePath(std::wstring &database_path)
+{
+	PWSTR roaming_app_data = nullptr;
+	const HRESULT result = SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming_app_data);
+	if (FAILED(result) || !roaming_app_data)
+		return false;
+
+	database_path.assign(roaming_app_data);
+	CoTaskMemFree(roaming_app_data);
+	database_path.append(L"\\obs-studio-node-server");
+	return true;
+}
+
+// Mirrors the command line CrashpadClient::StartHandler builds, which CreateProcess limits in UTF-16 units.
+size_t CrashpadCommandLineLength(const base::FilePath &handler_path, const base::FilePath &database_path, const std::string &report_server_url,
+				 const std::map<std::string, std::string> &annotations, const std::vector<std::string> &handler_arguments)
+{
+	std::wstring command_line;
+	crashpad::AppendCommandLineArgument(handler_path.value(), &command_line);
+	for (const std::string &argument : handler_arguments)
+		crashpad::AppendCommandLineArgument(base::UTF8ToWide(argument), &command_line);
+	crashpad::AppendCommandLineArgument(L"--database=" + database_path.value(), &command_line);
+	crashpad::AppendCommandLineArgument(L"--metrics-dir=" + database_path.value(), &command_line);
+	if (!report_server_url.empty())
+		crashpad::AppendCommandLineArgument(L"--url=" + base::UTF8ToWide(report_server_url), &command_line);
+	for (const auto &[key, value] : annotations)
+		crashpad::AppendCommandLineArgument(L"--annotation=" + base::UTF8ToWide(key + '=' + value), &command_line);
+
+	return command_line.size() + InitialClientDataReserve + NullTerminator;
+}
+
 LONG WINAPI BridgeExceptionFilter(EXCEPTION_POINTERS *exception_pointers) noexcept
 {
 	if (!bridge_active.load(std::memory_order_acquire))
@@ -105,17 +144,17 @@ extern "C" bool __cdecl osn_crashpad_bridge_start(const char *report_server_url,
 		if (!BuildCrashpadArguments(annotation_keys, annotation_values, annotation_count, arguments, argument_count, annotations, handler_arguments))
 			return false;
 
-		PWSTR roaming_app_data = nullptr;
-		const HRESULT result = SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0, nullptr, &roaming_app_data);
-		if (FAILED(result) || !roaming_app_data)
+		std::wstring database_path;
+		if (!GetDatabasePath(database_path))
 			return false;
-
-		std::wstring database_path(roaming_app_data);
-		CoTaskMemFree(roaming_app_data);
-		database_path.append(L"\\obs-studio-node-server");
 
 		const base::FilePath database_file_path(database_path);
 		const base::FilePath handler_path(L"crashpad_handler.exe");
+
+		// A handler that fails to start replaces the working one and the crash leaves no report;
+		// refuse early so the handler armed at startup stays in place.
+		if (CrashpadCommandLineLength(handler_path, database_file_path, report_server_url, annotations, handler_arguments) > MaxCommandLineLength)
+			return false;
 
 		// An exception may arrive while Crashpad is starting. Its filter must
 		// never wait on a mutex owned by the faulting thread; the already-installed
@@ -146,6 +185,28 @@ extern "C" bool __cdecl osn_crashpad_bridge_start(const char *report_server_url,
 		return true;
 	} catch (...) {
 		return false;
+	}
+}
+
+extern "C" uint32_t __cdecl osn_crashpad_bridge_command_line_length(const char *report_server_url, const char *const *annotation_keys,
+								    const char *const *annotation_values, uint32_t annotation_count,
+								    const char *const *arguments, uint32_t argument_count)
+{
+	try {
+		std::map<std::string, std::string> annotations;
+		std::vector<std::string> handler_arguments;
+		if (!BuildCrashpadArguments(annotation_keys, annotation_values, annotation_count, arguments, argument_count, annotations, handler_arguments))
+			return UINT32_MAX;
+
+		std::wstring database_path;
+		if (!GetDatabasePath(database_path))
+			return UINT32_MAX;
+
+		const size_t length = CrashpadCommandLineLength(base::FilePath(L"crashpad_handler.exe"), base::FilePath(database_path),
+								report_server_url ? report_server_url : "", annotations, handler_arguments);
+		return length >= UINT32_MAX ? UINT32_MAX : static_cast<uint32_t>(length);
+	} catch (...) {
+		return UINT32_MAX;
 	}
 }
 
