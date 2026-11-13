@@ -3,7 +3,7 @@ import { expect } from 'chai';
 import * as osn from '../osn';
 import { logInfo, logEmptyLine } from '../util/logger';
 import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
-import { OBSHandler, IPerformanceState, TOBSHotkey } from '../util/obs_handler';
+import { OBSHandler, IPerformanceState, TOBSHotkey, TEST_CRASH_SERVER_URL } from '../util/obs_handler';
 import { showHideInputHotkeys, slideshowHotkeys, ffmpeg_sourceHotkeys,
     game_captureHotkeys, dshow_wasapitHotkeys,coreaudioHotkeys,  deleteConfigFiles } from '../util/general';
 
@@ -13,7 +13,7 @@ const validInitializationOptions: osn.IOBSAPIInitializationOptions = {
     language: 'en-US',
     appDataPath: 'test-app-data',
     version: '0.00.00-preview.0',
-    crashServerUrl: '',
+    crashServerUrl: TEST_CRASH_SERVER_URL,
 };
 
 function callInitialize(...args: unknown[]): unknown {
