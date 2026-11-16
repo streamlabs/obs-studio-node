@@ -19,7 +19,7 @@ describe('Legacy replay save without an OBS hotkey', function () {
         obs = new OBSHandler('legacy-replay-save');
         obs.connectOutputSignals();
         obs.setSetting(EOBSSettingsCategories.Output, 'Mode', 'Simple');
-        obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', 'x264');
+        obs.setSetting(EOBSSettingsCategories.Output, 'StreamEncoder', obs.os === 'win32' ? 'x264' : 'obs_x264');
         obs.setSetting(EOBSSettingsCategories.Output, 'FilePath', directory);
     });
 
@@ -34,8 +34,10 @@ describe('Legacy replay save without an OBS hotkey', function () {
         osn.NodeObs.OBS_service_processReplayBufferHotkey();
         expect(osn.NodeObs.OBS_service_getLastReplay()).to.equal('');
         osn.NodeObs.OBS_service_startReplayBuffer();
+        let isStarted = false;
         try {
             const started = await obs.getNextSignalInfo(EOBSOutputType.ReplayBuffer, EOBSOutputSignal.Start);
+            isStarted = started.code === osn.EOutputCode.Success;
             expect(started.code).to.equal(osn.EOutputCode.Success);
             await sleep(1500);
             osn.NodeObs.OBS_service_processReplayBufferHotkey();
@@ -50,9 +52,11 @@ describe('Legacy replay save without an OBS hotkey', function () {
             expect(getVideoFrameRgb(file, 0, video.outputWidth, video.outputHeight).length)
                 .to.equal(video.outputWidth * video.outputHeight * 3);
         } finally {
-            osn.NodeObs.OBS_service_stopReplayBuffer(false);
-            const stopped = await obs.getNextSignalInfo(EOBSOutputType.ReplayBuffer, EOBSOutputSignal.Stop);
-            expect(stopped.code).to.equal(osn.EOutputCode.Success);
+            if (isStarted) {
+                osn.NodeObs.OBS_service_stopReplayBuffer(false);
+                const stopped = await obs.getNextSignalInfo(EOBSOutputType.ReplayBuffer, EOBSOutputSignal.Stop);
+                expect(stopped.code).to.equal(osn.EOutputCode.Success);
+            }
         }
     });
 });
