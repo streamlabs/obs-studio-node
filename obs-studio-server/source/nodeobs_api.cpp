@@ -1699,6 +1699,10 @@ bool OBS_API::AnyLiveOutput()
 	osn::IStreaming::Manager::GetInstance().for_each([&live](osn::Streaming *streaming) { live = live || (streaming && streaming->IsActive()); });
 	osn::IFileOutput::Manager::GetInstance().for_each([&live](osn::FileOutput *fileOutput) { live = live || (fileOutput && fileOutput->IsActive()); });
 
+	// Raw outputs owned by the legacy OBS_service API.
+	live = live || OBS_service::isStreamingOutputActive(StreamServiceId::Main) || OBS_service::isStreamingOutputActive(StreamServiceId::Second) ||
+	       OBS_service::isRecordingOutputActive();
+
 	return live;
 }
 
@@ -1979,6 +1983,10 @@ void OBS_API::destroyOBS_API(void)
 			delete fileOutput;
 		}
 	});
+
+	// The process can be re-initialized; publication must not see the deleted wrappers.
+	osn::IStreaming::Manager::GetInstance().clear();
+	osn::IFileOutput::Manager::GetInstance().clear();
 
 #ifdef _WIN32
 	osn::ShutdownWatchdog::Instance().Arm("Teardown", osn::shutdown_budget::Teardown);
