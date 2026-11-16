@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <codecvt>
 #include <filesystem>
@@ -28,6 +29,7 @@
 #include <iostream>
 #include <locale>
 #include <deque>
+#include <exception>
 #include <map>
 #include <obs.h>
 #include <queue>
@@ -61,6 +63,7 @@
 #include <unistd.h>
 #endif
 
+#include "crash-annotation-budget.hpp"
 #include "nodeobs_api.h"
 #include "nodeobs_service.h"
 #include "osn-error.hpp"
@@ -134,7 +137,9 @@ std::map<std::string, std::string> annotations;
 // FORWARD //
 /////////////
 
-std::string FormatVAString(const char *const format, va_list args);
+std::string FormatVAString(const char *const format, va_list args) noexcept;
+static std::string NormalizeCrashReason(std::string_view raw, std::string &hresult);
+static std::string DescribeTerminateReason() noexcept;
 void RewindCallStack();
 
 typedef long long LongLong;
@@ -534,7 +539,7 @@ bool util::CrashManager::Initialize(char *path, const std::string &appdata)
 		nullptr);
 
 	// Redirect all the calls from std::terminate
-	std::set_terminate([]() { HandleCrash("Direct call to std::terminate"); });
+	std::set_terminate([]() { HandleCrash(DescribeTerminateReason()); });
 
 #ifdef WIN32
 	// obs64's static CRT has no SIGABRT handler; forward to the bridge's CRT where Crashpad's is registered.
@@ -583,6 +588,24 @@ void util::CrashManager::Configure()
 #endif
 }
 
+#if defined(_WIN32) && defined(ENABLE_CRASHREPORT)
+static const char *const crashpadHandlerArguments[] = {"--no-rate-limit"};
+
+static size_t MeasureCrashpadCommandLine(const std::map<std::string, std::string> &candidate)
+{
+	std::vector<const char *> annotation_keys;
+	std::vector<const char *> annotation_values;
+	for (const auto &[key, value] : candidate) {
+		annotation_keys.push_back(key.c_str());
+		annotation_values.push_back(value.c_str());
+	}
+
+	return osn_crashpad_bridge_command_line_length(reportServerUrl.c_str(), annotation_keys.data(), annotation_values.data(),
+						       static_cast<uint32_t>(annotation_keys.size()), crashpadHandlerArguments,
+						       static_cast<uint32_t>(std::size(crashpadHandlerArguments)));
+}
+#endif
+
 bool util::CrashManager::SetupCrashpad()
 {
 	if (!reportsEnabled || reportServerUrl.size() == 0) {
@@ -601,9 +624,9 @@ bool util::CrashManager::SetupCrashpad()
 		annotation_values.push_back(value.c_str());
 	}
 
-	const char *const arguments[] = {"--no-rate-limit"};
 	const bool started = osn_crashpad_bridge_start(reportServerUrl.c_str(), annotation_keys.data(), annotation_values.data(),
-						       static_cast<uint32_t>(annotation_keys.size()), arguments, 1);
+						       static_cast<uint32_t>(annotation_keys.size()), crashpadHandlerArguments,
+						       static_cast<uint32_t>(std::size(crashpadHandlerArguments)));
 	if (!started) {
 		blog(LOG_WARNING, "Unable to start crash handler");
 		return false;
@@ -705,12 +728,12 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 		{"OBS64 RAM", PrettyBytes(physMemUsedByMe) + " - percentage: " + std::to_string(double(physMemUsedByMe * 100) / double(totalPhysMem)) + "%"});
 	systemResources.push_back({"Commit charge", PrettyBytes(commitMemTotal) + " of " + PrettyBytes(commitMemLimit)});
 	systemResources.push_back({"CPU usage", std::to_string(int(totalCPUUsed)) + "%"});
-	annotations.insert({{"System Resources", systemResources.dump(4)}});
+	annotations.insert({{"System Resources", systemResources.dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
 
 	annotations.insert({{"Time elapsed: ", std::to_string(timeElapsed.count()) + "s"}});
 	annotations.insert({{"Status", obs_initialized() ? "initialized" : "shutdown"}});
 	try {
-		annotations.insert({{"Process List", RequestProcessList().dump(4)}});
+		annotations.insert({{"Process List", RequestProcessList().dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
 	} catch (...) {
 	}
 
@@ -719,11 +742,25 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	//   "Last actions"    — recent IPC calls received by the server (capped at MaximumActionsRegistered)
 	//   "Server warnings" — server-detected anomalies recorded via AddServerWarning (capped at MaximumServerWarnings)
 	try {
-		annotations.insert({{"OBS log general", RequestOBSLog().dump(4)}});
 		annotations.insert({{"Crash reason", _crashInfo}});
+		std::string crashHresult;
+		annotations.insert({{"sentry[tags][crash_reason]", NormalizeCrashReason(_crashInfo, crashHresult)}});
+		annotations.insert({{"sentry[tags][crash_kind]", callAbort ? "abort" : "deferred"}});
+		if (!crashHresult.empty())
+			annotations.insert({{"sentry[tags][crash_hresult]", crashHresult}});
+	} catch (...) {
+	}
+
+	std::vector<std::string> obsLogLines;
+	try {
+		for (const auto &line : RequestOBSLog())
+			obsLogLines.push_back(line.get<std::string>());
+#if !defined(_WIN32)
+		annotations.insert({{util::crash_budget::LogAnnotation, util::crash_budget::BuildLogAnnotation(obsLogLines, obsLogLines.size())}});
+#endif
 		annotations.insert({{"Computer name", computerName}});
-		annotations.insert({{"Last actions", ComputeActions().dump(4)}});
-		annotations.insert({{"Server warnings", ComputeServerWarnings().dump(4)}});
+		annotations.insert({{"Last actions", ComputeActions().dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
+		annotations.insert({{"Server warnings", ComputeServerWarnings().dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
 	} catch (...) {
 	}
 
@@ -764,6 +801,16 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	// Workers die now; only the handler respawned below, which joins our job, may outlive us to upload.
 	osn::job::TerminateOtherProcesses();
 	osn::job::DisableKillOnClose();
+
+	// The handler is started with every annotation on its command line, which Windows caps in length.
+	try {
+		const util::crash_budget::TrimReport trimReport =
+			util::crash_budget::FitAnnotations(annotations, std::move(obsLogLines), MeasureCrashpadCommandLine);
+		if (trimReport.Trimmed())
+			blog(LOG_WARNING, "Trimmed crash annotations to fit the crash handler command line: %s",
+			     annotations[util::crash_budget::TrimmedDetailAnnotation].c_str());
+	} catch (...) {
+	}
 #endif
 	// Recreate crashpad instance, this is a well defined/supported operation
 	SetupCrashpad();
@@ -935,25 +982,134 @@ bool util::CrashManager::TryHandleCrash(const std::string &_format, const std::s
 	return false;
 }
 
-// Format a var arg string into a c++ std::string type
-std::string FormatVAString(const char *const format, va_list args)
+// Format a var arg string into a c++ std::string type, truncating to the buffer size
+std::string FormatVAString(const char *const format, va_list args) noexcept
 {
-	static const int MaximumVAStringSize = 63;
-	auto temp = std::vector<char>{};
-	auto length = std::size_t{MaximumVAStringSize};
-	while (temp.size() <= length) {
-		temp.resize(length + 1);
-		const auto status = std::vsnprintf(temp.data(), temp.size(), format, args);
-		if (status < 0)
-			throw std::runtime_error{"string formatting error"};
-		length = static_cast<std::size_t>(status);
+	char temp[1024];
+	const int status = std::vsnprintf(temp, sizeof(temp), format, args);
+	if (status < 0)
+		return format;
+
+	return std::string{temp, std::min(static_cast<std::size_t>(status), sizeof(temp) - 1)};
+}
+
+static bool IsHexDigit(char c)
+{
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static bool IsDigit(char c)
+{
+	return c >= '0' && c <= '9';
+}
+
+static bool IsAlnum(char c)
+{
+	return IsDigit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+}
+
+// Reduce a crash reason to a low-cardinality string suitable for a Sentry tag value
+static std::string NormalizeCrashReason(std::string_view raw, std::string &hresult)
+{
+	static const std::size_t MaximumTagSize = 200;
+
+	// Control characters become spaces, runs of spaces collapse
+	std::string clean;
+	clean.reserve(raw.size());
+	for (const char c : raw) {
+		const bool space = static_cast<unsigned char>(c) < 0x20 || c == 0x7f || c == ' ';
+		if (space && (clean.empty() || clean.back() == ' '))
+			continue;
+		clean.push_back(space ? ' ' : c);
+	}
+	if (!clean.empty() && clean.back() == ' ')
+		clean.pop_back();
+
+	// Pull out " (XXXXXXXX)" suffixes, the first one is kept as the HRESULT
+	std::string noHresult;
+	noHresult.reserve(clean.size());
+	for (std::size_t i = 0; i < clean.size();) {
+		bool isHresult = i + 11 <= clean.size() && clean[i] == ' ' && clean[i + 1] == '(' && clean[i + 10] == ')';
+		for (std::size_t k = 2; isHresult && k < 10; ++k)
+			isHresult = IsHexDigit(clean[i + k]);
+		if (isHresult) {
+			if (hresult.empty()) {
+				hresult = clean.substr(i + 2, 8);
+				std::transform(hresult.begin(), hresult.end(), hresult.begin(), [](char c) { return (char)std::toupper((unsigned char)c); });
+			}
+			i += 11;
+			continue;
+		}
+		noHresult.push_back(clean[i++]);
 	}
 
-	if (length > MaximumVAStringSize) {
-		return "unknown error string";
+	// Replace hex values and long numbers, these are addresses and sizes that differ on every crash
+	std::string result;
+	result.reserve(noHresult.size());
+	for (std::size_t i = 0; i < noHresult.size();) {
+		if (!IsAlnum(noHresult[i])) {
+			result.push_back(noHresult[i++]);
+			continue;
+		}
+
+		if (noHresult[i] == '0' && i + 2 < noHresult.size() && (noHresult[i + 1] == 'x' || noHresult[i + 1] == 'X') && IsHexDigit(noHresult[i + 2])) {
+			i += 2;
+			while (i < noHresult.size() && IsHexDigit(noHresult[i]))
+				++i;
+			result += "<hex>";
+			continue;
+		}
+
+		std::size_t end = i;
+		bool allHex = true, allDigits = true, hasDigit = false;
+		while (end < noHresult.size() && IsAlnum(noHresult[end])) {
+			allHex = allHex && IsHexDigit(noHresult[end]);
+			allDigits = allDigits && IsDigit(noHresult[end]);
+			hasDigit = hasDigit || IsDigit(noHresult[end]);
+			++end;
+		}
+		const std::size_t length = end - i;
+		if (length >= 8 && allHex && hasDigit)
+			result += "<hex>";
+		else if (length >= 4 && allDigits)
+			result += "<n>";
+		else
+			result.append(noHresult, i, length);
+		i = end;
 	}
 
-	return std::string{temp.data(), length};
+	if (result.size() > MaximumTagSize) {
+		std::size_t cut = MaximumTagSize;
+		while (cut > 0 && (static_cast<unsigned char>(result[cut]) & 0xC0) == 0x80)
+			--cut;
+		result.resize(cut);
+	}
+
+	if (result.empty())
+		return "unknown";
+
+	return result;
+}
+
+// Direct std::terminate calls carry the in-flight exception text, when there is one
+static std::string DescribeTerminateReason() noexcept
+{
+	std::string reason = "Direct call to std::terminate";
+	try {
+		if (const std::exception_ptr exception = std::current_exception())
+			std::rethrow_exception(exception);
+	} catch (const std::exception &e) {
+		try {
+			// Same bound as FormatVAString; every annotation shares one crashpad_handler command line
+			static const std::size_t MaximumWhatSize = 1023;
+			const std::string_view what = e.what();
+			reason += ": ";
+			reason.append(what.substr(0, MaximumWhatSize));
+		} catch (...) {
+		}
+	} catch (...) {
+	}
+	return reason;
 }
 
 void RewindCallStack()
