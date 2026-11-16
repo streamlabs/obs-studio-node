@@ -99,6 +99,7 @@ jobs:
     needs: build-macos
     runs-on: ${{ matrix.image }}
     strategy:
+      fail-fast: false
       matrix:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:

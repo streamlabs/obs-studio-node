@@ -848,13 +848,13 @@ static bool checkIfDebugLogsEnabled(const std::string &appdata)
 #endif
 }
 
-static void loadLegacyPlugins(const std::string &binaryPath, const std::string &dataPath)
+static void loadPlugins(const std::string &binaryPath, const std::string &dataPath, obs_runtime_module_type type)
 {
 	obs_add_module_path(binaryPath.c_str(), dataPath.c_str());
 	obs_runtime_module_info info = {};
 	info.path_info.binary = binaryPath.c_str();
 	info.path_info.data = dataPath.c_str();
-	info.type = OBS_MODULE_TYPE_LEGACY_PLUGIN;
+	info.type = type;
 	obs_module_failure_info failures = {};
 	obs_load_plugins(&info, &failures);
 	appendModuleLoadFailures(failures);
@@ -864,21 +864,18 @@ static void loadLegacyPlugins(const std::string &binaryPath, const std::string &
 static void loadModules()
 {
 	moduleLoadFailures.clear();
-	obs_module_failure_info failures = {};
 #if defined(_WIN32)
+	obs_module_failure_info failures = {};
 	obs_load_core_modules_from_paths((g_moduleDirectory + "/core/%module%/%module%").c_str(), (g_moduleDirectory + "/core/%module%/data").c_str(),
 					 &failures);
-#elif defined(__APPLE__)
-	obs_load_core_modules_from_paths((g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/%module%").c_str(),
-					 (g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources").c_str(), &failures);
-#endif
 	appendModuleLoadFailures(failures);
 	obs_module_failure_info_free(&failures);
-#if defined(_WIN32)
-	loadLegacyPlugins(g_moduleDirectory + "/obs-plugins/64bit", g_moduleDirectory + "/data/obs-plugins/%module%");
-	loadLegacyPlugins(slobs_plugin + "/obs-plugins/64bit", slobs_plugin + "/data/obs-plugins/%module%");
+	loadPlugins(g_moduleDirectory + "/obs-plugins/64bit", g_moduleDirectory + "/data/obs-plugins/%module%", OBS_MODULE_TYPE_LEGACY_PLUGIN);
+	loadPlugins(slobs_plugin + "/obs-plugins/64bit", slobs_plugin + "/data/obs-plugins/%module%", OBS_MODULE_TYPE_LEGACY_PLUGIN);
 #elif defined(__APPLE__)
-	loadLegacyPlugins(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/", g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources/");
+	// The compiled OBS list includes frontend-tools, which OSN omits. Its loader stops at the first missing bundle.
+	loadPlugins(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/", g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources/",
+		    OBS_MODULE_TYPE_CORE);
 #endif
 }
 

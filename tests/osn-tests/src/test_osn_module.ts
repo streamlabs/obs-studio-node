@@ -61,6 +61,10 @@ describe(testName, () => {
         const modules = osn.ModuleFactory.modules();
         const moduleNames = modules.map(file => path.basename(String(file)));
         const failures = osn.NodeObs.OBS_API_getModuleLoadFailures();
+        if (process.platform === 'darwin') {
+            expect(fs.existsSync(path.join(osn.wd, 'PlugIns', 'frontend-tools.plugin'))).to.equal(false);
+            expect(failures.filter(failure => failure.module === 'frontend-tools')).to.deep.equal([]);
+        }
         for (const name of requiredModules) {
             const binary = process.platform === 'win32'
                 ? path.join(osn.wd, 'core', name, `${name}.dll`)
