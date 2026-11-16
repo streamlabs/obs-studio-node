@@ -1699,10 +1699,7 @@ bool OBS_API::AnyLiveOutput()
 	osn::IStreaming::Manager::GetInstance().for_each([&live](osn::Streaming *streaming) { live = live || (streaming && streaming->IsActive()); });
 	osn::IFileOutput::Manager::GetInstance().for_each([&live](osn::FileOutput *fileOutput) { live = live || (fileOutput && fileOutput->IsActive()); });
 
-	// Raw outputs owned by the legacy OBS_service API.
-	live = live || OBS_service::isStreamingOutputActive(StreamServiceId::Main) || OBS_service::isStreamingOutputActive(StreamServiceId::Second) ||
-	       OBS_service::isRecordingOutputActive();
-
+	// Legacy OBS_service outputs are left out: their pointers are released on a worker thread without a shared lock.
 	return live;
 }
 
