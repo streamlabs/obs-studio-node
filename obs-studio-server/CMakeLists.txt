@@ -666,6 +666,7 @@ if(BUILD_TESTING)
 
     add_executable(
         obs_studio_server_unit_tests
+        "tests/test-crash-annotation-budget.cpp"
         "tests/test-media-cache-settings.cpp"
         "tests/test-memory-manager.cpp"
         "tests/test-osn-source.cpp"

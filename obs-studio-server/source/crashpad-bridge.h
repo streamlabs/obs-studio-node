@@ -22,6 +22,13 @@ OSN_CRASHPAD_BRIDGE_API bool __cdecl osn_crashpad_bridge_start(const char *repor
 							       const char *const *annotation_values, uint32_t annotation_count, const char *const *arguments,
 							       uint32_t argument_count);
 
+// Length, in UTF-16 units, of the handler command line osn_crashpad_bridge_start would build for the same
+// inputs, with room for the arguments Crashpad adds itself. UINT32_MAX on error. Start refuses anything
+// over the 32,767 limit CreateProcess enforces.
+OSN_CRASHPAD_BRIDGE_API uint32_t __cdecl osn_crashpad_bridge_command_line_length(const char *report_server_url, const char *const *annotation_keys,
+										 const char *const *annotation_values, uint32_t annotation_count,
+										 const char *const *arguments, uint32_t argument_count);
+
 // Registers the server's crash bookkeeping callback. The bridge installs the
 // Windows exception filter and forwards to Crashpad's previous filter itself.
 OSN_CRASHPAD_BRIDGE_API bool __cdecl osn_crashpad_bridge_set_exception_callback(osn_crashpad_exception_callback callback);

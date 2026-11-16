@@ -63,6 +63,7 @@
 #include <unistd.h>
 #endif
 
+#include "crash-annotation-budget.hpp"
 #include "nodeobs_api.h"
 #include "nodeobs_service.h"
 #include "osn-error.hpp"
@@ -587,6 +588,24 @@ void util::CrashManager::Configure()
 #endif
 }
 
+#if defined(_WIN32) && defined(ENABLE_CRASHREPORT)
+static const char *const crashpadHandlerArguments[] = {"--no-rate-limit"};
+
+static size_t MeasureCrashpadCommandLine(const std::map<std::string, std::string> &candidate)
+{
+	std::vector<const char *> annotation_keys;
+	std::vector<const char *> annotation_values;
+	for (const auto &[key, value] : candidate) {
+		annotation_keys.push_back(key.c_str());
+		annotation_values.push_back(value.c_str());
+	}
+
+	return osn_crashpad_bridge_command_line_length(reportServerUrl.c_str(), annotation_keys.data(), annotation_values.data(),
+						       static_cast<uint32_t>(annotation_keys.size()), crashpadHandlerArguments,
+						       static_cast<uint32_t>(std::size(crashpadHandlerArguments)));
+}
+#endif
+
 bool util::CrashManager::SetupCrashpad()
 {
 	if (!reportsEnabled || reportServerUrl.size() == 0) {
@@ -605,9 +624,9 @@ bool util::CrashManager::SetupCrashpad()
 		annotation_values.push_back(value.c_str());
 	}
 
-	const char *const arguments[] = {"--no-rate-limit"};
 	const bool started = osn_crashpad_bridge_start(reportServerUrl.c_str(), annotation_keys.data(), annotation_values.data(),
-						       static_cast<uint32_t>(annotation_keys.size()), arguments, 1);
+						       static_cast<uint32_t>(annotation_keys.size()), crashpadHandlerArguments,
+						       static_cast<uint32_t>(std::size(crashpadHandlerArguments)));
 	if (!started) {
 		blog(LOG_WARNING, "Unable to start crash handler");
 		return false;
@@ -732,8 +751,13 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	} catch (...) {
 	}
 
+	std::vector<std::string> obsLogLines;
 	try {
-		annotations.insert({{"OBS log general", RequestOBSLog().dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
+		for (const auto &line : RequestOBSLog())
+			obsLogLines.push_back(line.get<std::string>());
+#if !defined(_WIN32)
+		annotations.insert({{util::crash_budget::LogAnnotation, util::crash_budget::BuildLogAnnotation(obsLogLines, obsLogLines.size())}});
+#endif
 		annotations.insert({{"Computer name", computerName}});
 		annotations.insert({{"Last actions", ComputeActions().dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
 		annotations.insert({{"Server warnings", ComputeServerWarnings().dump(4, ' ', false, nlohmann::json::error_handler_t::replace)}});
@@ -777,6 +801,16 @@ void util::CrashManager::HandleCrash(const std::string &_crashInfo, bool callAbo
 	// Workers die now; only the handler respawned below, which joins our job, may outlive us to upload.
 	osn::job::TerminateOtherProcesses();
 	osn::job::DisableKillOnClose();
+
+	// The handler is started with every annotation on its command line, which Windows caps in length.
+	try {
+		const util::crash_budget::TrimReport trimReport =
+			util::crash_budget::FitAnnotations(annotations, std::move(obsLogLines), MeasureCrashpadCommandLine);
+		if (trimReport.Trimmed())
+			blog(LOG_WARNING, "Trimmed crash annotations to fit the crash handler command line: %s",
+			     annotations[util::crash_budget::TrimmedDetailAnnotation].c_str());
+	} catch (...) {
+	}
 #endif
 	// Recreate crashpad instance, this is a well defined/supported operation
 	SetupCrashpad();
