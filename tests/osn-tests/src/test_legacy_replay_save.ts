@@ -23,11 +23,30 @@ describe('Legacy replay save without an OBS hotkey', function () {
         obs.setSetting(EOBSSettingsCategories.Output, 'FilePath', directory);
     });
 
-    afterEach(function () {
-        if (obs) obs.shutdown();
-        obs = null;
-        deleteConfigFiles();
-        if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    afterEach(async function () {
+        try {
+            const deadline = Date.now() + 30000;
+            while (obs) {
+                try {
+                    obs.shutdown();
+                    obs = null;
+                } catch (error) {
+                    // OBS emits stop before its capture thread has released the video encoders.
+                    if (error.message !== 'Cannot remove video context while video is active.' || Date.now() >= deadline) {
+                        throw error;
+                    }
+                    await sleep(50);
+                }
+            }
+        } finally {
+            if (obs) {
+                osn.NodeObs.OBS_service_removeCallback();
+                osn.NodeObs.IPC.disconnect();
+                obs = null;
+            }
+            deleteConfigFiles();
+            if (directory) fs.rmSync(directory, { recursive: true, force: true });
+        }
     });
 
     it('Saves decodable video and audio through the existing JavaScript method', async function () {
