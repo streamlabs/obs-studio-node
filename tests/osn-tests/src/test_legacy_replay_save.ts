@@ -13,7 +13,7 @@ describe('Legacy replay save without an OBS hotkey', function () {
     let obs: OBSHandler;
     let directory: string;
 
-    before(function () {
+    beforeEach(function () {
         deleteConfigFiles();
         directory = fs.mkdtempSync(path.join(os.tmpdir(), 'osn-replay-save-'));
         obs = new OBSHandler('legacy-replay-save');
@@ -23,8 +23,9 @@ describe('Legacy replay save without an OBS hotkey', function () {
         obs.setSetting(EOBSSettingsCategories.Output, 'FilePath', directory);
     });
 
-    after(function () {
+    afterEach(function () {
         if (obs) obs.shutdown();
+        obs = null;
         deleteConfigFiles();
         if (directory) fs.rmSync(directory, { recursive: true, force: true });
     });
@@ -39,7 +40,13 @@ describe('Legacy replay save without an OBS hotkey', function () {
             const started = await obs.getNextSignalInfo(EOBSOutputType.ReplayBuffer, EOBSOutputSignal.Start);
             isStarted = started.code === osn.EOutputCode.Success;
             expect(started.code).to.equal(osn.EOutputCode.Success);
-            await sleep(1500);
+            const initialFrames = obs.defaultVideoContext.encodedFrames;
+            const deadline = Date.now() + 30000;
+            while (obs.defaultVideoContext.encodedFrames - initialFrames < 60 && Date.now() < deadline) {
+                await sleep(50);
+            }
+            expect(obs.defaultVideoContext.encodedFrames - initialFrames, 'Replay video did not become ready')
+                .to.be.at.least(60);
             osn.NodeObs.OBS_service_processReplayBufferHotkey();
             const saved = await obs.getNextSignalInfo(EOBSOutputType.ReplayBuffer, EOBSOutputSignal.Wrote);
             expect(saved.code).to.equal(osn.EOutputCode.Success);
@@ -53,7 +60,7 @@ describe('Legacy replay save without an OBS hotkey', function () {
                 .to.equal(video.outputWidth * video.outputHeight * 3);
         } finally {
             if (isStarted) {
-                osn.NodeObs.OBS_service_stopReplayBuffer(false);
+                osn.NodeObs.OBS_service_stopReplayBuffer(true);
                 const stopped = await obs.getNextSignalInfo(EOBSOutputType.ReplayBuffer, EOBSOutputSignal.Stop);
                 expect(stopped.code).to.equal(osn.EOutputCode.Success);
             }
