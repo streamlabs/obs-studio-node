@@ -201,7 +201,7 @@ int ExecuteSubprocess()
 	}
 
 	const std::filesystem::path install_root = executable_path.parent_path();
-	std::filesystem::path plugin_directory = install_root / "obs-plugins" / "64bit";
+	std::filesystem::path plugin_directory = BrowserPluginPath(executable_path).parent_path();
 	plugin_directory = std::filesystem::canonical(plugin_directory, error);
 	if (error) {
 		std::cerr << "Could not resolve the packaged obs-browser directory: " << error.message() << std::endl;

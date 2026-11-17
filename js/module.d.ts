@@ -1170,6 +1170,8 @@ interface INodeObs {
     [key: string]: any;
     readonly AutoOptimizer: IAutoOptimizer;
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+    OBS_API_getModuleLoadFailures(): IObsModuleLoadFailure[];
+    OBS_service_processReplayBufferHotkey(): void;
     OBS_settings_saveSettings(category: string, settings: any[]): void;
     OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult>;
     OBS_content_takeScreenshot(video: IVideo[], directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult[]>;

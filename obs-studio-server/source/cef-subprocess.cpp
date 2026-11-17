@@ -276,7 +276,7 @@ bool ContainsCefProcessSwitch(int argc, const wchar_t *const argv[])
 
 std::filesystem::path BrowserPluginPath(const std::filesystem::path &executable_path)
 {
-	return (executable_path.parent_path() / "obs-plugins" / "64bit" / "obs-browser.dll").lexically_normal();
+	return (executable_path.parent_path() / "core" / "obs-browser" / "obs-browser.dll").lexically_normal();
 }
 
 bool IsInstallOwnedPath(const std::filesystem::path &install_root, const std::filesystem::path &candidate)

@@ -179,15 +179,15 @@ TEST_CASE("Pre-main initialization recognizes CEF process switches", "[cef-sandb
 TEST_CASE("Browser plugin path is fixed relative to obs64.exe", "[cef-sandbox]")
 {
 	const auto path = osn::cef::BrowserPluginPath(R"(C:\Program Files\Streamlabs\obs64.exe)");
-	CHECK(path == R"(C:\Program Files\Streamlabs\obs-plugins\64bit\obs-browser.dll)");
+	CHECK(path == R"(C:\Program Files\Streamlabs\core\obs-browser\obs-browser.dll)");
 }
 
 TEST_CASE("Install-owned path validation is component-aware", "[cef-sandbox]")
 {
 	const std::filesystem::path root = R"(C:\Program Files\Streamlabs)";
 
-	CHECK(osn::cef::IsInstallOwnedPath(root, root / "obs-plugins" / "64bit"));
-	CHECK(osn::cef::IsInstallOwnedPath(root, root / "obs-plugins" / "64bit" / "obs-browser.dll"));
+	CHECK(osn::cef::IsInstallOwnedPath(root, root / "core" / "obs-browser"));
+	CHECK(osn::cef::IsInstallOwnedPath(root, root / "core" / "obs-browser" / "obs-browser.dll"));
 	CHECK_FALSE(osn::cef::IsInstallOwnedPath(root, root));
 	CHECK_FALSE(osn::cef::IsInstallOwnedPath(root, R"(C:\Program Files\Streamlabs-evil\obs-browser.dll)"));
 	CHECK_FALSE(osn::cef::IsInstallOwnedPath(root, R"(C:\Program Files\Streamlabs\obs-plugins\..\..\outside\obs-browser.dll)"));

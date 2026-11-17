@@ -3006,18 +3006,11 @@ struct HotkeyInfo {
 
 void OBS_service::OBS_service_processReplayBufferHotkey(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
-	obs_enum_hotkeys(
-		[](void *data, obs_hotkey_id id, obs_hotkey_t *key) {
-			if (obs_hotkey_get_registerer_type(key) == OBS_HOTKEY_REGISTERER_OUTPUT) {
-				std::string key_name = obs_hotkey_get_name(key);
-				if (key_name.compare("ReplayBuffer.Save") == 0) {
-					obs_hotkey_enable_callback_rerouting(true);
-					obs_hotkey_trigger_routed_callback(id, true);
-				}
-			}
-			return true;
-		},
-		nullptr);
+	if (replayBufferOutput) {
+		calldata_t cd = {};
+		proc_handler_call(obs_output_get_proc_handler(replayBufferOutput), "save", &cd);
+		calldata_free(&cd);
+	}
 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
