@@ -341,6 +341,7 @@ SET(osn-server_SOURCES
     "${PROJECT_SOURCE_DIR}/source/osn-output.hpp"
     "${PROJECT_SOURCE_DIR}/source/shutdown-watchdog.cpp"
     "${PROJECT_SOURCE_DIR}/source/shutdown-watchdog.hpp"
+    "${PROJECT_SOURCE_DIR}/source/orphan-policy.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-properties.cpp"
     "${PROJECT_SOURCE_DIR}/source/osn-properties.hpp"
     "${PROJECT_SOURCE_DIR}/source/osn-scene.cpp"
@@ -671,6 +672,7 @@ if(BUILD_TESTING)
 
     add_executable(
         obs_studio_server_unit_tests
+        "tests/test-crash-annotation-budget.cpp"
         "tests/test-media-cache-settings.cpp"
         "tests/test-memory-manager.cpp"
         "tests/test-osn-source.cpp"
@@ -681,6 +683,7 @@ if(BUILD_TESTING)
         "tests/test-osn-scene-relative-coordinates.cpp"
         "tests/test-osn-video-mix-lifecycle.cpp"
         "tests/test-shutdown-watchdog.cpp"
+        "tests/test-orphan-policy.cpp"
         "tests/obs-setup.cpp"
         "tests/obs-setup.hpp"
         "tests/scoped-helpers.hpp"
