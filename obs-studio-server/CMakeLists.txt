@@ -522,6 +522,8 @@ if(WIN32)
             "${PROJECT_BINARY_DIR}/version.rc"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.cpp"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.hpp"
+            "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
+            "${PROJECT_SOURCE_DIR}/source/token-label-policy.hpp"
     )
 
 endif()

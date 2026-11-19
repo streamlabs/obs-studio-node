@@ -3,11 +3,14 @@
 #ifdef _WIN32
 
 #include "cef-subprocess.hpp"
+#include "token-label-policy.hpp"
 
 #define OBS_BROWSER_SANDBOX_HOST_IMPLEMENTATION
 #include <obs-browser-sandbox.h>
 #undef OBS_BROWSER_SANDBOX_HOST_IMPLEMENTATION
 #include <include/cef_sandbox_win.h>
+
+#include <util/base.h>
 
 #include <ShlObj.h>
 #include <Shellapi.h>
@@ -74,6 +77,45 @@ extern "C" __declspec(dllexport) uint32_t __cdecl obs_browser_sandbox_abi_versio
 
 namespace osn::cef {
 
+namespace {
+
+bool IsProcessElevated(HANDLE token)
+{
+	TOKEN_ELEVATION elevation = {};
+	DWORD size = 0;
+	return GetTokenInformation(token, TokenElevation, &elevation, sizeof(elevation), &size) && elevation.TokenIsElevated;
+}
+
+// Bootstrap has already initialized the broker sandbox before entering the
+// host DLL. At High integrity its NO_READ_UP token label blocks Windows
+// Graphics Capture, so retain the existing narrow workaround here.
+void RestoreElevatedCaptureTokenAccess()
+{
+	HANDLE token = nullptr;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | READ_CONTROL | WRITE_OWNER, &token)) {
+		blog(LOG_WARNING, "[cef-sandbox] OpenProcessToken failed with Windows error %lu", GetLastError());
+		return;
+	}
+
+	if (IsProcessElevated(token)) {
+		const auto policy = CaptureTokenLabelPolicy(token);
+		if (policy && (policy->mask & SYSTEM_MANDATORY_LABEL_NO_READ_UP)) {
+			TokenLabelPolicy updated_policy = *policy;
+			updated_policy.mask &= ~static_cast<DWORD>(SYSTEM_MANDATORY_LABEL_NO_READ_UP);
+			if (SetTokenLabelPolicy(token, updated_policy))
+				blog(LOG_INFO, "[cef-sandbox] Cleared NO_READ_UP from token integrity label policy (0x%lx -> 0x%lx)", policy->mask,
+				     updated_policy.mask);
+			else
+				blog(LOG_WARNING, "[cef-sandbox] Failed to clear NO_READ_UP from token integrity label policy, Windows error %lu",
+				     GetLastError());
+		}
+	}
+
+	CloseHandle(token);
+}
+
+} // namespace
+
 void SetBootstrapSandboxInfo(void *sandbox_info)
 {
 	bootstrap_sandbox_info = sandbox_info;
@@ -85,6 +127,8 @@ extern "C" __declspec(dllexport) void *__cdecl obs_browser_sandbox_info_create(v
 {
 	// The CEF bootstrap owns this object for the process lifetime. The plugin
 	// retains its existing ABI but receives a borrowed pointer.
+	if (bootstrap_sandbox_info)
+		osn::cef::RestoreElevatedCaptureTokenAccess();
 	return bootstrap_sandbox_info;
 }
 
