@@ -503,20 +503,17 @@ endif()
 
 target_link_libraries(obs-studio-server-lib PUBLIC libcurl)
 
-add_executable(
-    ${PROJECT_NAME}
-    "${PROJECT_SOURCE_DIR}/source/main.cpp"
-)
+if(WIN32)
+    add_library(${PROJECT_NAME} SHARED "${PROJECT_SOURCE_DIR}/source/main.cpp")
+else()
+    add_executable(${PROJECT_NAME} "${PROJECT_SOURCE_DIR}/source/main.cpp")
+endif()
 osn_target_uses_static_msvc_runtime(${PROJECT_NAME})
 osn_verify_msvc_runtime(${PROJECT_NAME} "MultiThreaded")
 
 if(WIN32)
-    # fix CEF sandboxing issues on Windows by using a custom entry point
-    set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
-    target_link_options(${PROJECT_NAME} PRIVATE /ENTRY:mainCRTStartup)
-
-    if(NOT TARGET OBS::cef-sandbox)
-        message(FATAL_ERROR "The libobs development package does not provide required target OBS::cef-sandbox")
+    if(NOT TARGET OBS::cef-bootstrap OR NOT TARGET OBS::cef-bootstrapc OR NOT OBS_CEF_CHROME_ELF)
+        message(FATAL_ERROR "The libobs development package must provide the CEF bootstrap launcher, headers, and chrome_elf.dll")
     endif()
 
     target_sources(
@@ -525,8 +522,6 @@ if(WIN32)
             "${PROJECT_BINARY_DIR}/version.rc"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.cpp"
             "${PROJECT_SOURCE_DIR}/source/cef-sandbox-host.hpp"
-            "${PROJECT_SOURCE_DIR}/source/token-label-policy.cpp"
-            "${PROJECT_SOURCE_DIR}/source/token-label-policy.hpp"
     )
 
 endif()
@@ -534,10 +529,9 @@ endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE obs-studio-server-lib)
 
 if(WIN32)
-    # The supported Windows x64 CEF sandbox archive is Release-only and built
-    # with /MT. Link it into obs64.exe itself, where the CEF sandbox contract
-    # requires cef_sandbox_info_create/destroy to reside.
-    target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-sandbox)
+    # CEF M138+ creates the sandbox in its bootstrap executable and calls the
+    # RunConsoleMain export in obs64.dll with the resulting sandbox information.
+    target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-bootstrap)
 endif()
 
 if(MSVC)
@@ -583,6 +577,11 @@ ENDIF()
 # Compare current linked libs with prev
 if(WIN32)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:OBS::cef-bootstrapc>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/obs64.exe"
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${OBS_CEF_CHROME_ELF}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/chrome_elf.dll"
+		COMMENT "Stage the CEF bootstrap launcher beside obs64.dll"
+	)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:obs-studio-server> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
 	)
 endif()
@@ -593,7 +592,6 @@ set(PROGRAM_PERMISSIONS_DEFAULT
     WORLD_READ WORLD_EXECUTE)
 
 if (WIN32)
-	install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	install(TARGETS crashpad-bridge RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	install(FILES $<TARGET_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug COMPONENT Runtime)
 	install(FILES $<TARGET_PDB_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug OPTIONAL)
@@ -627,6 +625,11 @@ if (WIN32)
         DIRECTORY "${libobs_SOURCE_DIR}/bin/64bit/"
         DESTINATION "./" PATTERN "*.lib" EXCLUDE
     )
+    # Install last so another OBS executable or DLL cannot replace the
+    # sandbox bootstrap's launcher and matching chrome_elf.dll.
+    install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
+    install(FILES "$<TARGET_FILE:OBS::cef-bootstrapc>" DESTINATION "./" RENAME "obs64.exe" COMPONENT Runtime)
+    install(FILES "${OBS_CEF_CHROME_ELF}" DESTINATION "./" COMPONENT Runtime)
 else ()
 	install(
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
