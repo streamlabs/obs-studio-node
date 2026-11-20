@@ -215,7 +215,7 @@ set(
     CACHE STRING "Additional CMake prefixes required by the libobs package"
 )
 
-set(OSN_LIBOBS_ROOT "" CACHE PATH "Use an installed libobs SDK instead of downloading an archive")
+set(OSN_LIBOBS_ROOT "$ENV{OSN_LIBOBS_ROOT}" CACHE PATH "Use an installed libobs SDK instead of downloading an archive")
 if(OSN_LIBOBS_ROOT)
     get_filename_component(libobs_SOURCE_DIR "${OSN_LIBOBS_ROOT}" ABSOLUTE)
 else()

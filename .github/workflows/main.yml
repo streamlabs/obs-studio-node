@@ -266,8 +266,39 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{secrets.SENTRY_AUTH_TOKEN}}
           BUILDCONFIG: ${{matrix.BuildConfig}}
 
+  build-cef-pr-sdk:
+    name: 'Build OBS 33 Windows SDK for CEF integration'
+    if: github.event_name == 'pull_request' && github.base_ref == 'obs_merge_33' && github.head_ref == 'cef7871-bootstrap'
+    runs-on: windows-2025-vs2026
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: streamlabs/obs-studio
+          ref: cbe4ad812f103ca3101338332af26b2f251da901
+          submodules: recursive
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: microsoft/setup-msbuild@v1
+      - uses: ./.github/actions/build-obs
+        with:
+          target: x64
+          config: RelWithDebInfo
+      - name: Archive the installed SDK
+        working-directory: build_x64/install
+        run: 7z a -mx1 "$env:RUNNER_TEMP/obs-windows-sdk.7z" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obs-windows-sdk
+          path: ${{ runner.temp }}/obs-windows-sdk.7z
+          compression-level: 0
+          retention-days: 1
+
   build-win64:
     name: 'Build Windows 64-bit'
+    needs: build-cef-pr-sdk
+    if: ${{ !cancelled() && (needs.build-cef-pr-sdk.result == 'success' || needs.build-cef-pr-sdk.result == 'skipped') }}
     runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
@@ -292,6 +323,19 @@ jobs:
           corepack prepare yarn@4.14.1 --activate
           yarn install
           yarn add electron@${{env.ElectronVersion}} -D
+      - name: Download the OBS SDK for this PR
+        if: needs.build-cef-pr-sdk.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: obs-windows-sdk
+          path: ${{ runner.temp }}
+      - name: Extract the OBS SDK for this PR
+        if: needs.build-cef-pr-sdk.result == 'success'
+        run: |
+          $sdk = Join-Path $env:GITHUB_WORKSPACE "$env:SLBUILDDIRECTORY/libobs-src"
+          7z x "$env:RUNNER_TEMP/obs-windows-sdk.7z" "-o$sdk" -y
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "OSN_LIBOBS_ROOT=$sdk" >> $env:GITHUB_ENV
       - name: Configure obs-studio-node
         run: ./ci/configure-osn.cmd
         env:
