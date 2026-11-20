@@ -651,10 +651,12 @@ else ()
 endif ()
 
 if (WIN32)
-install(
-    DIRECTORY "${libobs_SOURCE_DIR}/obs-plugins/"
-    DESTINATION "./obs-plugins"
-)
+    if(EXISTS "${libobs_SOURCE_DIR}/core")
+        install(DIRECTORY "${libobs_SOURCE_DIR}/core/" DESTINATION "./core")
+    endif()
+    if(EXISTS "${libobs_SOURCE_DIR}/obs-plugins")
+        install(DIRECTORY "${libobs_SOURCE_DIR}/obs-plugins/" DESTINATION "./obs-plugins")
+    endif()
 else ()
 install(
 	DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/PlugIns"
