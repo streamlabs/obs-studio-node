@@ -196,8 +196,6 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	osn::cef::SetBootstrapSandboxInfo(sandbox_info);
-	if (const auto cef_exit_code = osn::cef::DispatchSubprocessIfNeeded(argc, argv))
-		return *cef_exit_code;
 #endif
 #ifdef __APPLE__
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");

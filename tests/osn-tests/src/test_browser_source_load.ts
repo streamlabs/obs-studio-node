@@ -19,7 +19,7 @@ interface IRequestRecord {
 }
 
 const pageHtml = '<!DOCTYPE html><html><body><script src="/app.js"></script></body></html>';
-const appJs = "fetch('/report?ok=1');";
+const appJs = "window.obsstudio.getControlLevel(level => fetch('/report?level=' + level));";
 
 describe(testName, () => {
     let obs: OBSHandler;
@@ -95,6 +95,7 @@ describe(testName, () => {
         if (!(await waitFor(() => count('/report') >= documentCount, loadTimeoutMs))) {
             failWithStage('/report', 'app.js');
         }
+        expect(requests.filter(r => r.path === '/report?level=1')).to.have.length.at.least(documentCount);
     }
 
     before(async function () {
@@ -170,6 +171,7 @@ describe(testName, () => {
                 url: pageUrl,
                 width: 640,
                 height: 360,
+                webpage_control_level: 1,
             });
             expect(source).to.not.equal(undefined, 'Failed to create browser_source');
             scene.add(source);

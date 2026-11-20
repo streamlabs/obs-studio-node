@@ -13,7 +13,7 @@ on:
   pull_request:
     paths-ignore:
       - '**.md'
-    branches: [ "staging" ]
+    branches: [ "staging", "obs_merge_33" ]
 
 env:
   InstallPath: "obs-studio-node"

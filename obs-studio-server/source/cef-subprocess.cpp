@@ -274,9 +274,9 @@ bool ContainsCefProcessSwitch(int argc, const wchar_t *const argv[])
 	return false;
 }
 
-std::filesystem::path BrowserPluginPath(const std::filesystem::path &executable_path)
+std::filesystem::path BrowserChildPath(const std::filesystem::path &executable_path)
 {
-	return (executable_path.parent_path() / "core" / "obs-browser" / "obs-browser.dll").lexically_normal();
+	return executable_path.parent_path() / L"core" / L"obs-browser" / L"obs-browser-child.dll";
 }
 
 bool IsInstallOwnedPath(const std::filesystem::path &install_root, const std::filesystem::path &candidate)

@@ -5,23 +5,15 @@
 #include "cef-subprocess.hpp"
 #include "token-label-policy.hpp"
 
-#define OBS_BROWSER_SANDBOX_HOST_IMPLEMENTATION
-#include <obs-browser-sandbox.h>
-#undef OBS_BROWSER_SANDBOX_HOST_IMPLEMENTATION
-#include <include/cef_sandbox_win.h>
-
 #include <util/base.h>
 
 #include <ShlObj.h>
 #include <Shellapi.h>
 #include <Windows.h>
 
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <string>
-#include <vector>
 
 namespace {
 
@@ -69,11 +61,6 @@ DWORD InitialNvOptimusPreference()
 // this value from the executable, which is now CEF's bootstrap launcher;
 // packaged GPU preference behavior still needs validation.
 extern "C" __declspec(dllexport) DWORD NvOptimusEnablement = InitialNvOptimusPreference();
-
-extern "C" __declspec(dllexport) uint32_t __cdecl obs_browser_sandbox_abi_version(void)
-{
-	return OBS_BROWSER_SANDBOX_ABI_VERSION;
-}
 
 namespace osn::cef {
 
@@ -123,7 +110,7 @@ void SetBootstrapSandboxInfo(void *sandbox_info)
 
 } // namespace osn::cef
 
-extern "C" __declspec(dllexport) void *__cdecl obs_browser_sandbox_info_create(void)
+extern "C" __declspec(dllexport) void *__cdecl OsnGetBrowserSandboxInfo()
 {
 	// The CEF bootstrap owns this object for the process lifetime. The plugin
 	// retains its existing ABI but receives a borrowed pointer.
@@ -131,163 +118,5 @@ extern "C" __declspec(dllexport) void *__cdecl obs_browser_sandbox_info_create(v
 		osn::cef::RestoreElevatedCaptureTokenAccess();
 	return bootstrap_sandbox_info;
 }
-
-extern "C" __declspec(dllexport) void __cdecl obs_browser_sandbox_info_destroy(void *sandbox_info)
-{
-	(void)sandbox_info;
-}
-
-namespace osn::cef {
-namespace {
-
-constexpr int dispatch_failure = EXIT_FAILURE;
-
-void ReportWindowsError(const char *operation)
-{
-	const DWORD error = GetLastError();
-	std::cerr << operation << " failed with Windows error " << error << std::endl;
-}
-
-bool PathsEqual(const std::filesystem::path &left, const std::filesystem::path &right)
-{
-	const std::wstring left_path = left.native();
-	const std::wstring right_path = right.native();
-	return _wcsicmp(left_path.c_str(), right_path.c_str()) == 0;
-}
-
-bool GetExecutablePath(std::filesystem::path &result)
-{
-	std::vector<wchar_t> buffer(512);
-	for (;;) {
-		SetLastError(ERROR_SUCCESS);
-		const DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-		if (length == 0) {
-			ReportWindowsError("GetModuleFileNameW");
-			return false;
-		}
-
-		if (length < buffer.size() - 1) {
-			result = std::wstring(buffer.data(), length);
-			return true;
-		}
-
-		if (buffer.size() >= 32768) {
-			SetLastError(ERROR_INSUFFICIENT_BUFFER);
-			ReportWindowsError("GetModuleFileNameW");
-			return false;
-		}
-
-		buffer.resize(buffer.size() * 2);
-	}
-}
-
-int ExecuteSubprocess()
-{
-	void *sandbox_info = bootstrap_sandbox_info;
-	if (!sandbox_info) {
-		std::cerr << "CEF bootstrap did not provide sandbox information" << std::endl;
-		return dispatch_failure;
-	}
-
-	std::filesystem::path executable_path;
-	if (!GetExecutablePath(executable_path)) {
-		return dispatch_failure;
-	}
-
-	std::error_code error;
-	executable_path = std::filesystem::canonical(executable_path, error);
-	if (error) {
-		std::cerr << "Could not canonicalize obs64.exe path: " << error.message() << std::endl;
-		return dispatch_failure;
-	}
-
-	const std::filesystem::path install_root = executable_path.parent_path();
-	std::filesystem::path plugin_directory = BrowserPluginPath(executable_path).parent_path();
-	plugin_directory = std::filesystem::canonical(plugin_directory, error);
-	if (error) {
-		std::cerr << "Could not resolve the packaged obs-browser directory: " << error.message() << std::endl;
-		return dispatch_failure;
-	}
-	if (!IsInstallOwnedPath(install_root, plugin_directory)) {
-		std::cerr << "Packaged obs-browser directory resolved outside the installation directory" << std::endl;
-		return dispatch_failure;
-	}
-
-	const std::filesystem::path requested_plugin_path = BrowserPluginPath(executable_path);
-	const std::filesystem::path plugin_path = std::filesystem::canonical(requested_plugin_path, error);
-	if (error) {
-		std::cerr << "Could not resolve packaged obs-browser.dll: " << error.message() << std::endl;
-		return dispatch_failure;
-	}
-
-	if (!IsInstallOwnedPath(install_root, plugin_path) || !PathsEqual(plugin_path.parent_path(), plugin_directory)) {
-		std::cerr << "Packaged obs-browser.dll resolved outside the installation directory" << std::endl;
-		return dispatch_failure;
-	}
-
-	if (!SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)) {
-		ReportWindowsError("SetDefaultDllDirectories");
-		return dispatch_failure;
-	}
-
-	DLL_DIRECTORY_COOKIE plugin_cookie = AddDllDirectory(plugin_directory.c_str());
-	if (!plugin_cookie) {
-		ReportWindowsError("AddDllDirectory");
-		return dispatch_failure;
-	}
-
-	HMODULE browser_module = LoadLibraryExW(plugin_path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
-	if (!browser_module) {
-		ReportWindowsError("LoadLibraryExW(obs-browser.dll)");
-		RemoveDllDirectory(plugin_cookie);
-		return dispatch_failure;
-	}
-
-	const auto execute_subprocess = reinterpret_cast<obs_browser_execute_subprocess_proc>(GetProcAddress(browser_module, "obs_browser_execute_subprocess"));
-	if (!execute_subprocess) {
-		ReportWindowsError("GetProcAddress(obs_browser_execute_subprocess)");
-		FreeLibrary(browser_module);
-		RemoveDllDirectory(plugin_cookie);
-		return dispatch_failure;
-	}
-
-	const int exit_code = execute_subprocess(sandbox_info);
-	if (exit_code < 0) {
-		std::cerr << "CEF child dispatcher returned an invalid negative exit code: " << exit_code << std::endl;
-		return dispatch_failure;
-	}
-	return exit_code;
-}
-
-} // namespace
-
-std::optional<int> DispatchSubprocessIfNeeded(int argc, char *argv[])
-{
-	int wide_argc = 0;
-	LPWSTR *wide_argv = CommandLineToArgvW(GetCommandLineW(), &wide_argc);
-	if (!wide_argv) {
-		ReportWindowsError("CommandLineToArgvW");
-		return dispatch_failure;
-	}
-
-	// CEF parses the native Windows command line. Classify those same arguments
-	// so narrow CRT argv conversion cannot hide a sandbox opt-out switch.
-	const Invocation invocation = ClassifyInvocation(wide_argc, wide_argv);
-	LocalFree(wide_argv);
-	if (invocation.kind == InvocationKind::Normal)
-		return std::nullopt;
-
-	if (invocation.kind == InvocationKind::Invalid) {
-		std::cerr << "Rejected CEF child process invocation: " << invocation.error;
-		if (invocation.sandbox_opt_out)
-			std::cerr << "; argv=" << RenderInvocationArguments(argc, argv);
-		std::cerr << std::endl;
-		return dispatch_failure;
-	}
-
-	return ExecuteSubprocess();
-}
-
-} // namespace osn::cef
 
 #endif

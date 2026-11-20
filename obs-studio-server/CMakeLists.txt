@@ -520,6 +520,16 @@ if(WIN32)
     if(NOT TARGET OBS::cef-bootstrap OR NOT TARGET OBS::cef-bootstrapc OR NOT OBS_CEF_CHROME_ELF)
         message(FATAL_ERROR "The libobs development package must provide the CEF bootstrap launcher, headers, and chrome_elf.dll")
     endif()
+    if(NOT EXISTS "${libobs_SOURCE_DIR}/core/obs-browser/obs-browser-child.dll")
+        message(FATAL_ERROR "The OBS runtime is missing core/obs-browser/obs-browser-child.dll")
+    endif()
+
+    add_library(osn-cef-bootstrap SHARED source/cef-bootstrap.cpp source/cef-subprocess.cpp "${PROJECT_BINARY_DIR}/version.rc")
+    target_link_libraries(osn-cef-bootstrap PRIVATE OBS::cef-bootstrap)
+    target_compile_definitions(osn-cef-bootstrap PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+    osn_target_uses_static_msvc_runtime(osn-cef-bootstrap)
+    set_target_properties(osn-cef-bootstrap PROPERTIES OUTPUT_NAME "obs${BITS}")
+    add_dependencies(${PROJECT_NAME} osn-cef-bootstrap)
 
     target_sources(
         ${PROJECT_NAME}
@@ -547,12 +557,11 @@ endif()
 
 #Define the OSN_VERSION
 add_compile_definitions(OSN_VERSION=\"$ENV{tagartifact}\")
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "obs${BITS}")
-
 if(WIN32)
     set_target_properties(
         ${PROJECT_NAME}
         PROPERTIES
+        OUTPUT_NAME osncore
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION}
     )
@@ -565,6 +574,7 @@ else()
     set_target_properties(
         ${PROJECT_NAME}
         PROPERTIES
+        OUTPUT_NAME "obs${BITS}"
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION}
     )
@@ -591,6 +601,9 @@ if(WIN32)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:obs-studio-server> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
 	)
+	add_custom_command(TARGET osn-cef-bootstrap POST_BUILD
+		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:osn-cef-bootstrap> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
+	)
 endif()
 
 set(PROGRAM_PERMISSIONS_DEFAULT
@@ -614,6 +627,7 @@ ENDIF()
 
 IF(WIN32 AND NOT CLANG_ANALYZE_CONFIG)
     install(FILES $<TARGET_PDB_FILE:obs-studio-server> DESTINATION "./" OPTIONAL)
+    install(FILES $<TARGET_PDB_FILE:osn-cef-bootstrap> DESTINATION "./" OPTIONAL)
     if(MSVC)
         install(FILES $<TARGET_PDB_FILE:crashpad-bridge> DESTINATION "./" OPTIONAL)
     endif()
@@ -634,7 +648,7 @@ if (WIN32)
     )
     # Install last so another OBS executable or DLL cannot replace the
     # sandbox bootstrap's launcher and matching chrome_elf.dll.
-    install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
+    install(TARGETS obs-studio-server osn-cef-bootstrap RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
     install(FILES "$<TARGET_FILE:OBS::cef-bootstrapc>" DESTINATION "./" RENAME "obs64.exe" COMPONENT Runtime)
     install(FILES "${OBS_CEF_CHROME_ELF}" DESTINATION "./" COMPONENT Runtime)
 else ()
