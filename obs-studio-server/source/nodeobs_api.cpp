@@ -160,10 +160,8 @@ static bool lowLatencyAudioBuffering = false;
 static bool forceGPURendering = true;
 static std::string processPriority = "Normal";
 
-static void copyModuleLoadFailures(const obs_module_failure_info &mfi)
+static void appendModuleLoadFailures(const obs_module_failure_info &mfi)
 {
-	moduleLoadFailures.clear();
-
 	if (mfi.failures) {
 		for (size_t i = 0; i < mfi.count; i++) {
 			const obs_module_load_failure &failure = mfi.failures[i];
@@ -913,17 +911,34 @@ static bool checkIfDebugLogsEnabled(const std::string &appdata)
 #endif
 }
 
-void addModulePaths()
+static void loadPlugins(const std::string &binaryPath, const std::string &dataPath, obs_runtime_module_type type)
 {
-#if defined(_WIN32)
-	obs_add_module_path(std::string(g_moduleDirectory + "/obs-plugins/64bit").c_str(),
-			    std::string(g_moduleDirectory + "/data/obs-plugins/%module%").c_str());
-	obs_add_module_path(std::string(slobs_plugin + "/obs-plugins/64bit").c_str(), std::string(slobs_plugin + "/data/obs-plugins/%module%").c_str());
-#elif defined(__APPLE__)
-	obs_add_module_path(std::string(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/").c_str(),
-			    std::string(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources/").c_str());
-#else
+	obs_add_module_path(binaryPath.c_str(), dataPath.c_str());
+	obs_runtime_module_info info = {};
+	info.path_info.binary = binaryPath.c_str();
+	info.path_info.data = dataPath.c_str();
+	info.type = type;
+	obs_module_failure_info failures = {};
+	obs_load_plugins(&info, &failures);
+	appendModuleLoadFailures(failures);
+	obs_module_failure_info_free(&failures);
+}
 
+static void loadModules()
+{
+	moduleLoadFailures.clear();
+#if defined(_WIN32)
+	obs_module_failure_info failures = {};
+	obs_load_core_modules_from_paths((g_moduleDirectory + "/core/%module%/%module%").c_str(), (g_moduleDirectory + "/core/%module%/data").c_str(),
+					 &failures);
+	appendModuleLoadFailures(failures);
+	obs_module_failure_info_free(&failures);
+	loadPlugins(g_moduleDirectory + "/obs-plugins/64bit", g_moduleDirectory + "/data/obs-plugins/%module%", OBS_MODULE_TYPE_LEGACY_PLUGIN);
+	loadPlugins(slobs_plugin + "/obs-plugins/64bit", slobs_plugin + "/data/obs-plugins/%module%", OBS_MODULE_TYPE_LEGACY_PLUGIN);
+#elif defined(__APPLE__)
+	// The compiled OBS list includes frontend-tools, which OSN omits. Its loader stops at the first missing bundle.
+	loadPlugins(g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/MacOS/", g_moduleDirectory + "/PlugIns/%module%.plugin/Contents/Resources/",
+		    OBS_MODULE_TYPE_CORE);
 #endif
 }
 
@@ -1092,10 +1107,7 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	obs_apply_private_data(private_settings);
 	obs_data_release(private_settings);
 
-	addModulePaths();
-	struct obs_module_failure_info mfi = {};
-	obs_load_all_modules2(&mfi);
-	copyModuleLoadFailures(mfi);
+	loadModules();
 	obs_log_loaded_modules();
 	obs_post_load_modules();
 	autoOptimizer::RegisterOutputTypes();
@@ -1109,7 +1121,6 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 			}
 		}
 	}
-	obs_module_failure_info_free(&mfi);
 
 	OBS_service::createService(StreamServiceId::Main);
 	OBS_service::createService(StreamServiceId::Second);

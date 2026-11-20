@@ -432,7 +432,7 @@ Napi::Value service::OBS_service_installVirtualCamPlugin(const Napi::CallbackInf
 	ShExecInfo.hInstApp = NULL;
 
 	std::wstring pathToRegFile64 = L"/s /n /i:\"1\" \"" + utfWorkingDir;
-	pathToRegFile64 += L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module64.dll\"";
+	pathToRegFile64 += L"\\core\\win-dshow\\data\\obs-virtualcam-module64.dll\"";
 	ShExecInfo.lpParameters = pathToRegFile64.c_str();
 	ShellExecuteEx(&ShExecInfo);
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
@@ -459,14 +459,14 @@ Napi::Value service::OBS_service_uninstallVirtualCamPlugin(const Napi::CallbackI
 	ShExecInfo.hInstApp = NULL;
 
 	std::wstring pathToRegFile64 = L"/u \"" + utfWorkingDir;
-	pathToRegFile64 += L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module64.dll\"";
+	pathToRegFile64 += L"\\core\\win-dshow\\data\\obs-virtualcam-module64.dll\"";
 	ShExecInfo.lpParameters = pathToRegFile64.c_str();
 	ShellExecuteEx(&ShExecInfo);
 	WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
 	CloseHandle(ShExecInfo.hProcess);
 
 	// Check if the 32-bit module exists and uninstall it if it does. This way user does not see an error message from regsvr32
-	std::wstring pathToDLL(L"\\data\\obs-plugins\\win-dshow\\obs-virtualcam-module32.dll");
+	std::wstring pathToDLL(L"\\core\\win-dshow\\data\\obs-virtualcam-module32.dll");
 	std::wstring module32path(utfWorkingDir);
 	module32path += pathToDLL;
 	if (std::filesystem::exists(module32path)) {
@@ -496,7 +496,7 @@ Napi::Value service::OBS_service_isVirtualCamPluginInstalled(const Napi::Callbac
 	size_t endPos = 0;
 
 	//open install file and search for the correct GUID
-	std::wstring batPath = utfWorkingDir + L"\\data\\obs-plugins\\win-dshow\\virtualcam-install.bat";
+	std::wstring batPath = utfWorkingDir + L"\\core\\win-dshow\\data\\virtualcam-install.bat";
 	std::ifstream batFile(batPath.c_str());
 	if (batFile.is_open()) {
 		while (std::getline(batFile, line)) {

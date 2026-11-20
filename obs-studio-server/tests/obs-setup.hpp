@@ -6,5 +6,8 @@ class ObsSetup {
 public:
 	ObsSetup();
 	~ObsSetup();
+
+private:
+	void *dllDirectory = nullptr;
 };
 } // namespace osn::tests
