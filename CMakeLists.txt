@@ -152,6 +152,36 @@ if (WIN32)
 		osn_target_uses_static_msvc_runtime(StackWalker)
 		osn_verify_msvc_runtime(StackWalker "MultiThreaded")
 	endif()
+
+	# Microsoft Detours, used by the DLL blocklist in obs-studio-server.
+	# Detours only ships an nmake Makefile, so build its sources directly
+	# (same file list as src/Makefile; uimports.cpp is #included by creatwth.cpp).
+	FetchContent_Declare(
+	detours
+	GIT_REPOSITORY https://github.com/microsoft/Detours
+	GIT_TAG 1dbd4ea281d73d478aa8d09a8b83fbd265f715f7
+	)
+
+	FetchContent_GetProperties(detours)
+	if(NOT detours_POPULATED)
+	FetchContent_Populate(detours)
+	endif()
+	add_library(detours STATIC
+		"${detours_SOURCE_DIR}/src/detours.cpp"
+		"${detours_SOURCE_DIR}/src/modules.cpp"
+		"${detours_SOURCE_DIR}/src/disasm.cpp"
+		"${detours_SOURCE_DIR}/src/image.cpp"
+		"${detours_SOURCE_DIR}/src/creatwth.cpp"
+		"${detours_SOURCE_DIR}/src/disolx86.cpp"
+		"${detours_SOURCE_DIR}/src/disolx64.cpp"
+		"${detours_SOURCE_DIR}/src/disolia64.cpp"
+		"${detours_SOURCE_DIR}/src/disolarm.cpp"
+		"${detours_SOURCE_DIR}/src/disolarm64.cpp"
+	)
+	target_include_directories(detours PUBLIC "${detours_SOURCE_DIR}/src")
+	target_compile_definitions(detours PRIVATE WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x501 DETOUR_DEBUG=0)
+	osn_target_uses_static_msvc_runtime(detours)
+	osn_verify_msvc_runtime(detours "MultiThreaded")
 endif()
 
 # Nlohmann JSON (modern JSON for C++)

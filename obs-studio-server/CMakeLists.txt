@@ -468,6 +468,8 @@ elseif(WIN32)
         "${PROJECT_SOURCE_DIR}/source/cef-subprocess.hpp"
         "${PROJECT_SOURCE_DIR}/source/process-job-win.cpp"
         "${PROJECT_SOURCE_DIR}/source/process-job-win.hpp"
+        "${PROJECT_SOURCE_DIR}/source/dll-blocklist-win.cpp"
+        "${PROJECT_SOURCE_DIR}/source/dll-blocklist-win.h"
         "${PROJECT_SOURCE_DIR}/source/osn-multitrack-video-system-info.cpp"
     )
 endif ()
@@ -496,7 +498,7 @@ ENDIF()
 target_include_directories(obs-studio-server-lib PUBLIC ${PROJECT_INCLUDE_PATHS})
 
 if(WIN32)
-    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad-bridge strmiids StackWalker)
+    target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad-bridge strmiids StackWalker detours)
 else()
     target_link_libraries(obs-studio-server-lib PUBLIC ${PROJECT_LIBRARIES} crashpad ${COREFOUNDATION} ${COCOA} ${IOSURF} ${GLKIT} ${AVFOUNDATION} ${IOKit} ${SECURITY_LIBRARY} ${BSM_LIBRARY})
 endif()
