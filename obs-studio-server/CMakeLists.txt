@@ -215,7 +215,7 @@ set(
     CACHE STRING "Additional CMake prefixes required by the libobs package"
 )
 
-set(OSN_LIBOBS_ROOT "" CACHE PATH "Use an installed libobs SDK instead of downloading an archive")
+set(OSN_LIBOBS_ROOT "$ENV{OSN_LIBOBS_ROOT}" CACHE PATH "Use an installed libobs SDK instead of downloading an archive")
 if(OSN_LIBOBS_ROOT)
     get_filename_component(libobs_SOURCE_DIR "${OSN_LIBOBS_ROOT}" ABSOLUTE)
 else()
@@ -508,21 +508,28 @@ endif()
 
 target_link_libraries(obs-studio-server-lib PUBLIC libcurl)
 
-add_executable(
-    ${PROJECT_NAME}
-    "${PROJECT_SOURCE_DIR}/source/main.cpp"
-)
+if(WIN32)
+    add_library(${PROJECT_NAME} SHARED "${PROJECT_SOURCE_DIR}/source/main.cpp")
+else()
+    add_executable(${PROJECT_NAME} "${PROJECT_SOURCE_DIR}/source/main.cpp")
+endif()
 osn_target_uses_static_msvc_runtime(${PROJECT_NAME})
 osn_verify_msvc_runtime(${PROJECT_NAME} "MultiThreaded")
 
 if(WIN32)
-    # fix CEF sandboxing issues on Windows by using a custom entry point
-    set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE TRUE)
-    target_link_options(${PROJECT_NAME} PRIVATE /ENTRY:mainCRTStartup)
-
-    if(NOT TARGET OBS::cef-sandbox)
-        message(FATAL_ERROR "The libobs development package does not provide required target OBS::cef-sandbox")
+    if(NOT TARGET OBS::cef-bootstrap OR NOT TARGET OBS::cef-bootstrapc OR NOT OBS_CEF_CHROME_ELF)
+        message(FATAL_ERROR "The libobs development package must provide the CEF bootstrap launcher, headers, and chrome_elf.dll")
     endif()
+    if(NOT EXISTS "${libobs_SOURCE_DIR}/core/obs-browser/obs-browser-child.dll")
+        message(FATAL_ERROR "The OBS runtime is missing core/obs-browser/obs-browser-child.dll")
+    endif()
+
+    add_library(osn-cef-bootstrap SHARED source/cef-bootstrap.cpp source/cef-subprocess.cpp "${PROJECT_BINARY_DIR}/version.rc")
+    target_link_libraries(osn-cef-bootstrap PRIVATE OBS::cef-bootstrap)
+    target_compile_definitions(osn-cef-bootstrap PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX UNICODE _UNICODE)
+    osn_target_uses_static_msvc_runtime(osn-cef-bootstrap)
+    set_target_properties(osn-cef-bootstrap PROPERTIES OUTPUT_NAME "obs${BITS}")
+    add_dependencies(${PROJECT_NAME} osn-cef-bootstrap)
 
     target_sources(
         ${PROJECT_NAME}
@@ -539,10 +546,9 @@ endif()
 target_link_libraries(${PROJECT_NAME} PRIVATE obs-studio-server-lib)
 
 if(WIN32)
-    # The supported Windows x64 CEF sandbox archive is Release-only and built
-    # with /MT. Link it into obs64.exe itself, where the CEF sandbox contract
-    # requires cef_sandbox_info_create/destroy to reside.
-    target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-sandbox)
+    # CEF M138+ creates the sandbox in its bootstrap executable and calls the
+    # RunConsoleMain export in obs64.dll with the resulting sandbox information.
+    target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-bootstrap)
 endif()
 
 if(MSVC)
@@ -551,12 +557,11 @@ endif()
 
 #Define the OSN_VERSION
 add_compile_definitions(OSN_VERSION=\"$ENV{tagartifact}\")
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "obs${BITS}")
-
 if(WIN32)
     set_target_properties(
         ${PROJECT_NAME}
         PROPERTIES
+        OUTPUT_NAME osncore
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION}
     )
@@ -569,6 +574,7 @@ else()
     set_target_properties(
         ${PROJECT_NAME}
         PROPERTIES
+        OUTPUT_NAME "obs${BITS}"
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION}
     )
@@ -588,7 +594,15 @@ ENDIF()
 # Compare current linked libs with prev
 if(WIN32)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:OBS::cef-bootstrapc>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/obs64.exe"
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${OBS_CEF_CHROME_ELF}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/chrome_elf.dll"
+		COMMENT "Stage the CEF bootstrap launcher beside obs64.dll"
+	)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
 		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:obs-studio-server> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
+	)
+	add_custom_command(TARGET osn-cef-bootstrap POST_BUILD
+		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:osn-cef-bootstrap> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
 	)
 endif()
 
@@ -598,7 +612,6 @@ set(PROGRAM_PERMISSIONS_DEFAULT
     WORLD_READ WORLD_EXECUTE)
 
 if (WIN32)
-	install(TARGETS obs-studio-server RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	install(TARGETS crashpad-bridge RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
 	install(FILES $<TARGET_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug COMPONENT Runtime)
 	install(FILES $<TARGET_PDB_FILE:libcurl> DESTINATION "./" CONFIGURATIONS Debug OPTIONAL)
@@ -614,6 +627,7 @@ ENDIF()
 
 IF(WIN32 AND NOT CLANG_ANALYZE_CONFIG)
     install(FILES $<TARGET_PDB_FILE:obs-studio-server> DESTINATION "./" OPTIONAL)
+    install(FILES $<TARGET_PDB_FILE:osn-cef-bootstrap> DESTINATION "./" OPTIONAL)
     if(MSVC)
         install(FILES $<TARGET_PDB_FILE:crashpad-bridge> DESTINATION "./" OPTIONAL)
     endif()
@@ -632,6 +646,11 @@ if (WIN32)
         DIRECTORY "${libobs_SOURCE_DIR}/bin/64bit/"
         DESTINATION "./" PATTERN "*.lib" EXCLUDE
     )
+    # Install last so another OBS executable or DLL cannot replace the
+    # sandbox bootstrap's launcher and matching chrome_elf.dll.
+    install(TARGETS obs-studio-server osn-cef-bootstrap RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
+    install(FILES "$<TARGET_FILE:OBS::cef-bootstrapc>" DESTINATION "./" RENAME "obs64.exe" COMPONENT Runtime)
+    install(FILES "${OBS_CEF_CHROME_ELF}" DESTINATION "./" COMPONENT Runtime)
 else ()
 	install(
 		DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/Frameworks"
@@ -651,10 +670,10 @@ else ()
 endif ()
 
 if (WIN32)
-install(
-    DIRECTORY "${libobs_SOURCE_DIR}/core/"
-    DESTINATION "./core"
-)
+    install(DIRECTORY "${libobs_SOURCE_DIR}/core/" DESTINATION "./core")
+    if(EXISTS "${libobs_SOURCE_DIR}/obs-plugins")
+        install(DIRECTORY "${libobs_SOURCE_DIR}/obs-plugins/" DESTINATION "./obs-plugins")
+    endif()
 else ()
 install(
 	DIRECTORY "${libobs_SOURCE_DIR}/OBS.app/Contents/PlugIns"

@@ -2,11 +2,9 @@
 
 #ifdef _WIN32
 
-#include <optional>
-
 namespace osn::cef {
 
-std::optional<int> DispatchSubprocessIfNeeded(int argc, char *argv[]);
+void SetBootstrapSandboxInfo(void *sandbox_info);
 
 } // namespace osn::cef
 
