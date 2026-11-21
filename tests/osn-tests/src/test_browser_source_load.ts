@@ -161,11 +161,15 @@ describe(testName, () => {
         }
     });
 
-    it('Browser source loads its page and runs its script', async function () {
+    it('Browser source loads its page after the first source is released during startup', async function () {
         this.timeout(120000);
 
         // Mocha retries rerun this test without rerunning before(), so create only once.
         if (!source) {
+            const firstSource = osn.InputFactory.create('browser_source', 'browser-startup-source', { url: 'about:blank' });
+            expect(firstSource).to.exist;
+            firstSource.release();
+
             scene = osn.SceneFactory.create('browser-load-scene');
             source = osn.InputFactory.create('browser_source', 'browser-load-source', {
                 url: pageUrl,
