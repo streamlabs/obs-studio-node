@@ -652,11 +652,21 @@ describe(testName, () => {
         sceneItem1.visible = true;
 
         await sleep(1500);
+        let marker: string | undefined;
+        if (process.platform === 'win32' && process.env.OSN_PROBE_STOP) {
+            const fs = require('fs');
+            marker = path.join(require('os').tmpdir(), randomUUID());
+            fs.writeFileSync(marker, '');
+            require('child_process').spawn('pwsh.exe', ['-NoProfile', '-File', 'ci/probe-browser-recording.ps1', String(process.pid), marker], { stdio: 'inherit' });
+            console.log('Frames at stop', osn.Global.totalFrames, osn.Global.laggedFrames,
+                obs.defaultVideoContext.encodedFrames, obs.defaultVideoContext.skippedFrames);
+        }
         recording.stop();
         sig = await obs.getNextSignalInfo(EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
         expect(sig.signal).to.equal(EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
         sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Stop,);
+        if (marker) require('fs').unlinkSync(marker);
 
         if (sig.code !== 0) {
             throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
