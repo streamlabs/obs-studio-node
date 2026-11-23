@@ -161,6 +161,16 @@ describe(testName, () => {
         }
     });
 
+    it('Uses a Windows GUI executable for the server and browser helpers', function () {
+        if (process.platform !== 'win32') this.skip();
+
+        const image = fs.readFileSync(path.join(osn.wd, 'obs64.exe'));
+        const peOffset = image.readUInt32LE(0x3c);
+        const optionalHeader = peOffset + 4 + 20; // PE signature and COFF file header
+        const subsystem = image.readUInt16LE(optionalHeader + 68);
+        expect(subsystem, 'obs64.exe PE subsystem').to.equal(2); // IMAGE_SUBSYSTEM_WINDOWS_GUI
+    });
+
     it('Browser source loads its page after the first source is released during startup', async function () {
         this.timeout(120000);
 

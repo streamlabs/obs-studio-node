@@ -517,7 +517,7 @@ osn_target_uses_static_msvc_runtime(${PROJECT_NAME})
 osn_verify_msvc_runtime(${PROJECT_NAME} "MultiThreaded")
 
 if(WIN32)
-    if(NOT TARGET OBS::cef-bootstrap OR NOT TARGET OBS::cef-bootstrapc OR NOT OBS_CEF_CHROME_ELF)
+    if(NOT TARGET OBS::cef-bootstrap OR NOT TARGET OBS::cef-bootstrap-win OR NOT OBS_CEF_CHROME_ELF)
         message(FATAL_ERROR "The libobs development package must provide the CEF bootstrap launcher, headers, and chrome_elf.dll")
     endif()
     if(NOT EXISTS "${libobs_SOURCE_DIR}/core/obs-browser/obs-browser-child.dll")
@@ -547,7 +547,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE obs-studio-server-lib)
 
 if(WIN32)
     # CEF M138+ creates the sandbox in its bootstrap executable and calls the
-    # RunConsoleMain export in obs64.dll with the resulting sandbox information.
+    # RunWinMain export in obs64.dll with the resulting sandbox information.
     target_link_libraries(${PROJECT_NAME} PRIVATE crashpad-bridge OBS::cef-bootstrap)
 endif()
 
@@ -594,7 +594,7 @@ ENDIF()
 # Compare current linked libs with prev
 if(WIN32)
 	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:OBS::cef-bootstrapc>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/obs64.exe"
+		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:OBS::cef-bootstrap-win>" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/obs64.exe"
 		COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${OBS_CEF_CHROME_ELF}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>/chrome_elf.dll"
 		COMMENT "Stage the CEF bootstrap launcher beside obs64.dll"
 	)
@@ -649,7 +649,7 @@ if (WIN32)
     # Install last so another OBS executable or DLL cannot replace the
     # sandbox bootstrap's launcher and matching chrome_elf.dll.
     install(TARGETS obs-studio-server osn-cef-bootstrap RUNTIME DESTINATION "./" PERMISSIONS ${PROGRAM_PERMISSIONS_DEFAULT} COMPONENT Runtime)
-    install(FILES "$<TARGET_FILE:OBS::cef-bootstrapc>" DESTINATION "./" RENAME "obs64.exe" COMPONENT Runtime)
+    install(FILES "$<TARGET_FILE:OBS::cef-bootstrap-win>" DESTINATION "./" RENAME "obs64.exe" COMPONENT Runtime)
     install(FILES "${OBS_CEF_CHROME_ELF}" DESTINATION "./" COMPONENT Runtime)
 else ()
 	install(

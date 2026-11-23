@@ -109,3 +109,10 @@ extern "C" int RunConsoleMain(int argc, char *argv[], void *sandbox_info, cef_ve
 	}
 	return run(argc, argv, sandbox_info, version_info);
 }
+
+extern "C" int RunWinMain(HINSTANCE, LPTSTR, int, void *sandbox_info, cef_version_info_t *version_info)
+{
+	if (_configure_narrow_argv(_crt_argv_unexpanded_arguments) || !__argv)
+		return EXIT_FAILURE;
+	return RunConsoleMain(__argc, __argv, sandbox_info, version_info);
+}
