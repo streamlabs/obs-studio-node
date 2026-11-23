@@ -45,6 +45,7 @@ std::wstring utfWorkingDir = L"";
 	}()
 
 #ifdef _WIN32
+#include "osn-common.hpp"
 #include <direct.h>
 #include <psapi.h>
 #include <tlhelp32.h>
@@ -338,6 +339,7 @@ std::shared_ptr<ipc::client> Controller::host(const std::string &uri)
 	std::string workingDirectory;
 
 #ifdef WIN32
+	commandLine << ' ' << osn::common::DISABLE_CEF_TEST_TRIALS;
 	if (serverWorkingPath.empty())
 		workingDirectory = get_working_directory();
 	else

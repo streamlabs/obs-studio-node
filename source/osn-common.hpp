@@ -28,5 +28,11 @@ namespace common {
 // never use this value.
 inline constexpr uint64_t INVALID_ID = std::numeric_limits<uint64_t>::max();
 
+#ifdef _WIN32
+// Official CEF builds omit Chromium's test trials. In our symbol-enabled build
+// one of those trials blocks shader compilation by the host's WARP driver.
+inline constexpr char DISABLE_CEF_TEST_TRIALS[] = "--disable-field-trial-config";
+#endif
+
 } // namespace common
 } // namespace osn

@@ -6,6 +6,7 @@ import { ETestErrorMsg, GetErrorMessage } from '../util/error_messages';
 import { OBSHandler } from '../util/obs_handler'
 import { IInput, ISettings, ITimeSpec } from '../osn';
 import { deleteConfigFiles, sleep } from '../util/general';
+import { getVideoFrameRgb, getVideoKeyframes } from '../util/media_probe';
 import { EOBSInputTypes, EOBSOutputSignal, EOBSOutputType } from '../util/obs_enums';
 import { ERecordingFormat, ERecordingQuality } from '../osn';
 import { randomUUID } from 'crypto';
@@ -652,21 +653,11 @@ describe(testName, () => {
         sceneItem1.visible = true;
 
         await sleep(1500);
-        let marker: string | undefined;
-        if (process.platform === 'win32' && process.env.OSN_PROBE_STOP) {
-            const fs = require('fs');
-            marker = path.join(require('os').tmpdir(), randomUUID());
-            fs.writeFileSync(marker, '');
-            require('child_process').spawn('pwsh.exe', ['-NoProfile', '-File', 'ci/probe-browser-recording.ps1', String(process.pid), marker], { stdio: 'inherit' });
-            console.log('Frames at stop', osn.Global.totalFrames, osn.Global.laggedFrames,
-                obs.defaultVideoContext.encodedFrames, obs.defaultVideoContext.skippedFrames);
-        }
         recording.stop();
         sig = await obs.getNextSignalInfo(EOBSOutputType.Recording, EOBSOutputSignal.Stopping);
         expect(sig.signal).to.equal(EOBSOutputSignal.Stopping, GetErrorMessage(ETestErrorMsg.RecordingOutput));
 
         sig = await obs.getNextSignalInfo(EOBSOutputType.Recording,EOBSOutputSignal.Stop,);
-        if (marker) require('fs').unlinkSync(marker);
 
         if (sig.code !== 0) {
             throw Error(GetErrorMessage(ETestErrorMsg.RecordOutputStoppedWithError,sig.code.toString(),sig.error,),);
@@ -679,6 +670,7 @@ describe(testName, () => {
         }
         expect(sig.signal).to.equal(EOBSOutputSignal.Wrote,GetErrorMessage(ETestErrorMsg.RecordingOutput),);
 
+        const recordedFile = recording.lastFile();
         const videoEncoder = recording.videoEncoder;
         const audioEncoder = recording.audioEncoder;
         osn.SimpleRecordingFactory.destroy(recording);
@@ -690,6 +682,10 @@ describe(testName, () => {
         sceneItem1.remove();
 
         scene.release();
+
+        const { duration } = getVideoKeyframes(recordedFile);
+        const visibleFrame = getVideoFrameRgb(recordedFile, Math.max(0, duration - 0.25), browserSettings.width, browserSettings.height);
+        expect(visibleFrame.some(channel => channel > 64), 'The recorded browser page should show its light text').to.be.true;
     });
 
 

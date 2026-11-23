@@ -312,48 +312,17 @@ jobs:
             ${{env.SLBUILDDIRECTORY}}/
             tests/osn-tests/osn/index.ts
 
-  probe-win-recording:
-    name: Diagnose Windows browser recording
-    runs-on: windows-2025-vs2026
-    permissions:
-      actions: read
-      contents: read
-    env:
-      OSN_PROBE_STOP: '1'
-      FFMPEG_PATH: ${{ github.workspace }}\streamlabs-build.app\distribute\obs-studio-node\ffmpeg.exe
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts-windows
-          path: .
-          github-token: ${{ github.token }}
-          run-id: 45249719626
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.x'
-      - run: |
-          corepack enable
-          corepack prepare yarn@4.14.1 --activate
-          yarn install
-          yarn add electron@${{env.ElectronVersion}} -D
-      - run: ./ci/build-stack-probe.ps1
-      - run: yarn electron-mocha -t 80000 --js-flags="--expose-gc" -r ts-node/register -r ./ci/probe-file-recording.cjs --grep "Stop crash handler|Create a browser source and test messages" tests/osn-tests/src/test_nodeobs_api.ts tests/osn-tests/src/test_osn_simple_recording.ts
-        timeout-minutes: 4
-
   run-tests-win64:
     name: 'Run Windows Tests'
     needs: build-win64
     runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
-      OSN_PROBE_STOP: '1'
     steps:
       - name: 'Checkout'
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
-      - run: ./ci/build-stack-probe.ps1
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:

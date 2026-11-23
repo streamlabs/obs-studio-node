@@ -66,6 +66,7 @@
 
 #ifdef _WIN32
 #include "cef-sandbox-host.hpp"
+#include "osn-common.hpp"
 #include <include/cef_sandbox_win.h>
 #endif
 
@@ -221,6 +222,8 @@ int main(int argc, char *argv[])
 #ifdef __APPLE__
 	socketPath = "/tmp/";
 	if (argc != 4) {
+#elif defined(_WIN32)
+	if (argc != 3 && !(argc == 4 && std::string_view(argv[3]) == osn::common::DISABLE_CEF_TEST_TRIALS)) {
 #else
 	if (argc != 3) {
 #endif
