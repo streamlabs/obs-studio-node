@@ -13,7 +13,7 @@ on:
   pull_request:
     paths-ignore:
       - '**.md'
-    branches: [ "staging" ]
+    branches: [ "staging", "obs_merge_33" ]
 
 env:
   InstallPath: "obs-studio-node"
@@ -25,7 +25,7 @@ env:
   SLGenerator: Visual Studio 18 2026
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 33.0.1test5
+  LibOBSVersion: 33.0.1test6
   PACKAGE_NAME: osn
 
 jobs:
@@ -360,6 +360,26 @@ jobs:
           # ffmpeg is not on the runner, but libobs ships one and CMake installs all of
           # bin/64bit next to the osn binaries, so point the audio probe at that copy
           FFMPEG_PATH: ${{github.workspace}}\${{env.SLFullDistributePath}}\${{env.InstallPath}}\ffmpeg.exe
+      - name: Report Windows server failures
+        if: failure() && steps.run_tests.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $events = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000; StartTime = (Get-Date).AddHours(-1) } -ErrorAction SilentlyContinue
+          foreach ($event in $events) {
+            $fields = $event.Properties
+            if ($fields[0].Value -eq 'obs64.exe') {
+              Write-Host "obs64.exe faulted in $($fields[3].Value), exception $($fields[6].Value), offset $($fields[7].Value)"
+            }
+          }
+          $profile = 'tests/osn-tests/osnData/slobs-client'
+          Get-ChildItem $profile -Filter debug.log -Recurse -File | ForEach-Object {
+            Select-String -LiteralPath $_.FullName -Pattern '\bFATAL[:\]]' | Select-Object -Last 5 | ForEach-Object { Write-Host $_.Line }
+          }
+          $last = Get-ChildItem "$profile/node-obs/logs" -Filter '*.txt' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($last) {
+            Select-String -LiteralPath $last.FullName -Pattern 'Creating input source|Browser Source, INIT|CEF failed|UnhandledExceptionFilter|Server finished.*HandleCrash' |
+              Select-Object -Last 16 | ForEach-Object { Write-Host $_.Line }
+          }
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
         if: ${{ always() }}

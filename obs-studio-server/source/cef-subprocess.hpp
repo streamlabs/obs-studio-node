@@ -23,7 +23,7 @@ Invocation ClassifyInvocation(int argc, const char *const argv[]);
 Invocation ClassifyInvocation(int argc, const wchar_t *const argv[]);
 std::string RenderInvocationArguments(int argc, const char *const argv[]);
 bool ContainsCefProcessSwitch(int argc, const wchar_t *const argv[]);
-std::filesystem::path BrowserPluginPath(const std::filesystem::path &executable_path);
+std::filesystem::path BrowserChildPath(const std::filesystem::path &executable_path);
 bool IsInstallOwnedPath(const std::filesystem::path &install_root, const std::filesystem::path &candidate);
 
 } // namespace osn::cef

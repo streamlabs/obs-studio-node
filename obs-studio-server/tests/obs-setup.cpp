@@ -21,7 +21,7 @@ void setWorkingFolder(const std::string &wd)
 	OBS_API::SetWorkingDirectory(nullptr, 0, args, response);
 	REQUIRE(response.size() >= 2);
 	ErrorCode error = (ErrorCode)response[0].value_union.ui64;
-	CHECK(error == ErrorCode::Ok);
+	REQUIRE(error == ErrorCode::Ok);
 }
 
 void setupApi()
@@ -44,7 +44,7 @@ void setupApi()
 	OBS_API::OBS_API_initAPI(nullptr, 0, args, response);
 	REQUIRE(response.size() >= 2);
 	ErrorCode error = (ErrorCode)response[0].value_union.ui64;
-	CHECK(error == ErrorCode::Ok);
+	REQUIRE(error == ErrorCode::Ok);
 }
 
 ObsSetup::ObsSetup()

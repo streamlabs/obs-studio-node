@@ -66,6 +66,8 @@
 
 #ifdef _WIN32
 #include "cef-sandbox-host.hpp"
+#include "osn-common.hpp"
+#include <include/cef_sandbox_win.h>
 #endif
 
 #include "util-crashmanager.h"
@@ -182,11 +184,19 @@ static void SetCefMainBundlePath(const char *argv0)
 }
 #endif
 
+#ifdef _WIN32
+extern "C" __declspec(dllexport) int RunConsoleMain(int argc, char *argv[], void *sandbox_info, cef_version_info_t *version_info)
+#else
 int main(int argc, char *argv[])
+#endif
 {
 #ifdef _WIN32
-	if (const auto cef_exit_code = osn::cef::DispatchSubprocessIfNeeded(argc, argv))
-		return *cef_exit_code;
+	(void)version_info;
+	if (!sandbox_info) {
+		std::cerr << "CEF bootstrap did not provide sandbox information" << std::endl;
+		return EXIT_FAILURE;
+	}
+	osn::cef::SetBootstrapSandboxInfo(sandbox_info);
 #endif
 #ifdef __APPLE__
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");
@@ -212,6 +222,8 @@ int main(int argc, char *argv[])
 #ifdef __APPLE__
 	socketPath = "/tmp/";
 	if (argc != 4) {
+#elif defined(_WIN32)
+	if (argc != 3 && !(argc == 4 && std::string_view(argv[3]) == osn::common::DISABLE_CEF_TEST_TRIALS)) {
 #else
 	if (argc != 3) {
 #endif

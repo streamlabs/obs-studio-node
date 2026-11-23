@@ -176,10 +176,10 @@ TEST_CASE("Pre-main initialization recognizes CEF process switches", "[cef-sandb
 	CHECK_FALSE(osn::cef::ContainsCefProcessSwitch(4, after_terminator));
 }
 
-TEST_CASE("Browser plugin path is fixed relative to obs64.exe", "[cef-sandbox]")
+TEST_CASE("Browser child DLL path is fixed relative to obs64.exe", "[cef-sandbox]")
 {
-	const auto path = osn::cef::BrowserPluginPath(R"(C:\Program Files\Streamlabs\obs64.exe)");
-	CHECK(path == R"(C:\Program Files\Streamlabs\core\obs-browser\obs-browser.dll)");
+	const auto path = osn::cef::BrowserChildPath(R"(C:\Program Files\Streamlabs\obs64.exe)");
+	CHECK(path == R"(C:\Program Files\Streamlabs\core\obs-browser\obs-browser-child.dll)");
 }
 
 TEST_CASE("Install-owned path validation is component-aware", "[cef-sandbox]")
