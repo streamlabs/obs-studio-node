@@ -18,7 +18,7 @@
 
 #include "nodeobs_api.h"
 #ifdef _WIN32
-#include "dll-blocklist-win.h"
+#include <util/windows/dll-blocklist.h>
 #endif
 #include <atomic>
 #include <mutex>
@@ -1100,9 +1100,6 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	obs_load_all_modules2(&mfi);
 	copyModuleLoadFailures(mfi);
 	obs_log_loaded_modules();
-#ifdef _WIN32
-	log_blocked_dlls();
-#endif
 	obs_post_load_modules();
 	autoOptimizer::RegisterOutputTypes();
 
@@ -1849,6 +1846,9 @@ void OBS_API::destroyOBS_API(void)
 {
 	std::scoped_lock lifecycleLock(apiLifecycleMutex);
 	blog(LOG_DEBUG, "OBS_API::destroyOBS_API started, objects allocated %d", bnum_allocs());
+#ifdef _WIN32
+	log_blocked_dlls();
+#endif
 	debug_enum_sources(" on destroyOBS_API");
 	os_cpu_usage_info_destroy(cpuUsageInfo);
 

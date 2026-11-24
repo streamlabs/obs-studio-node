@@ -66,7 +66,7 @@
 
 #ifdef _WIN32
 #include "cef-sandbox-host.hpp"
-#include "dll-blocklist-win.h"
+#include <util/windows/dll-blocklist.h>
 #endif
 
 #include "util-crashmanager.h"
