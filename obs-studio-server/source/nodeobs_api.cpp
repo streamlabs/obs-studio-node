@@ -17,6 +17,9 @@
 ******************************************************************************/
 
 #include "nodeobs_api.h"
+#ifdef _WIN32
+#include <util/windows/dll-blocklist.h>
+#endif
 #include <atomic>
 #include <mutex>
 #include "osn-source.hpp"
@@ -1843,6 +1846,9 @@ void OBS_API::destroyOBS_API(void)
 {
 	std::scoped_lock lifecycleLock(apiLifecycleMutex);
 	blog(LOG_DEBUG, "OBS_API::destroyOBS_API started, objects allocated %d", bnum_allocs());
+#ifdef _WIN32
+	log_blocked_dlls();
+#endif
 	debug_enum_sources(" on destroyOBS_API");
 	os_cpu_usage_info_destroy(cpuUsageInfo);
 

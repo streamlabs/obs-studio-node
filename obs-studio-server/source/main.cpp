@@ -66,6 +66,7 @@
 
 #ifdef _WIN32
 #include "cef-sandbox-host.hpp"
+#include <util/windows/dll-blocklist.h>
 #endif
 
 #include "util-crashmanager.h"
@@ -187,6 +188,10 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
 	if (const auto cef_exit_code = osn::cef::DispatchSubprocessIfNeeded(argc, argv))
 		return *cef_exit_code;
+
+	// Refuse to load known-bad third-party DLLs (same list as OBS Studio),
+	// before any plugin or DirectShow filter can be loaded.
+	install_dll_blocklist_hook();
 #endif
 #ifdef __APPLE__
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");
