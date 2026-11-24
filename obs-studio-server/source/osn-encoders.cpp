@@ -23,8 +23,10 @@
 #include <util/dstr.h>
 #include "utility.hpp"
 #include "osn-streaming-helpers.hpp"
+#include "osn-file-output.hpp"
 
 static bool codecListContains(const char **codecs, const char *codec);
+static bool codecListContains(const char *codecList, const char *codec);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
 static std::string makePublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
@@ -123,11 +125,7 @@ bool osn::EncoderUtils::isCodecAvailableForService(const char *encoder, obs_serv
 	if (!outputSupportedCodecs)
 		return false;
 
-	auto splitOutputSupportedCodecs = strlist_split(outputSupportedCodecs, ';', false);
-	bool supported = codecListContains((const char **)splitOutputSupportedCodecs, encoderCodec);
-	strlist_free(splitOutputSupportedCodecs);
-
-	return supported;
+	return codecListContains(outputSupportedCodecs, encoderCodec);
 }
 
 static bool codecListContains(const char **codecs, const char *codec)
@@ -142,6 +140,34 @@ static bool codecListContains(const char **codecs, const char *codec)
 	}
 
 	return false;
+}
+
+static bool codecListContains(const char *codecList, const char *codec)
+{
+	if (!codecList || !codec)
+		return false;
+	auto codecs = strlist_split(codecList, ';', false);
+	bool supported = codecListContains((const char **)codecs, codec);
+	strlist_free(codecs);
+	return supported;
+}
+
+bool osn::EncoderUtils::recordingSupportsAttachedCodecs(obs_output_t *output)
+{
+	const char *videoCodecs = obs_output_get_supported_video_codecs(output);
+	obs_encoder_t *video = obs_output_get_video_encoder(output);
+	if (videoCodecs && video && !codecListContains(videoCodecs, obs_encoder_get_codec(video)))
+		return false;
+
+	const char *audioCodecs = obs_output_get_supported_audio_codecs(output);
+	if (audioCodecs) {
+		for (size_t i = 0; i < MAX_OUTPUT_AUDIO_ENCODERS; i++) {
+			obs_encoder_t *audio = obs_output_get_audio_encoder(output, i);
+			if (audio && !codecListContains(audioCodecs, obs_encoder_get_codec(audio)))
+				return false;
+		}
+	}
+	return true;
 }
 
 bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service_t *service, bool simpleMode, bool recording, const std::string &container,
@@ -543,6 +569,8 @@ static bool isNvencAvailableForSimpleMode()
 
 static bool containerSupportsCodec(const std::string &container, const std::string &codec)
 {
+	if (container == "hybrid_mp4" || container == "hybrid_mov")
+		return codecListContains(obs_get_output_supported_video_codecs(osn::RecordingOutputId(container)), codec.c_str());
 	auto iter = osn::EncoderUtils::codecsForContainers.find(container);
 	if (iter == osn::EncoderUtils::codecsForContainers.end())
 		return false;

@@ -185,7 +185,7 @@ public:
 	// Outputs
 	static std::string createStreamingOutputName(StreamServiceId serviceId);
 	static bool createStreamingOutput(StreamServiceId serviceId);
-	static bool createRecordingOutput(void);
+	static bool createRecordingOutput(const char *outputId = "ffmpeg_muxer");
 	static void createReplayBufferOutput(void);
 	static obs_output_t *getStreamingOutput(StreamServiceId serviceId);
 	static void setStreamingOutput(obs_output_t *output, StreamServiceId serviceId);

@@ -1793,6 +1793,8 @@ export const enum ERecordingFormat {
     MP4 = 'mp4',
     FLV = 'flv',
     MOV = 'mov',
+    HybridMP4 = 'hybrid_mp4',
+    HybridMOV = 'hybrid_mov',
     MKV = 'mkv',
     MPEGTS = 'ts',
     HLS = 'm3u8'
@@ -1979,6 +1981,11 @@ export interface IEnhancedBroadcastingSimpleStreamingFactory {
 
 export interface IFileOutput {
     path: string,
+    /**
+     * Container for the next recording or replay. HybridMP4 and HybridMOV select the native
+     * Hybrid writer for recordings and the regular MP4 or MOV writer for saved replays.
+     * Both use the standard .mp4 or .mov filename extension. Simple Lossless always records AVI.
+     */
     format: ERecordingFormat,
     fileFormat: string,
     overwrite: boolean,
@@ -2005,6 +2012,12 @@ export interface IRecording extends IFileOutput {
     fileResetTimestamps: boolean,
     signalHandler: (signal: EOutputSignal) => void,
     getAvailableEncoders(): IEncoderOption[],
+    /**
+     * Starts recording with the configured container and encoders. Receives output events
+     * through signalHandler, including a stop event for native startup failures.
+     * @throws {Error} If the recording is already active, its configuration is invalid, or
+     * the installed OBS build or selected codecs do not support the requested Hybrid writer.
+     */
     start(): void,
     stop(force?: boolean): void,
     splitFile(): void

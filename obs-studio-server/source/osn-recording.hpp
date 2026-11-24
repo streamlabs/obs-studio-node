@@ -57,7 +57,8 @@ public:
 	// fileFormat with prefix/suffix applied, space-separated. Extension is added later.
 	std::string DecoratedFileFormat() const;
 
-	void ConfigureRecFileSplitting();
+	const char *PrepareOutput(const char *type);
+	void ConfigureRecFileSplitting(obs_data_t *settings) const;
 };
 
 class IRecording : public IFileOutput {

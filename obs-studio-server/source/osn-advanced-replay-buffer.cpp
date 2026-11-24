@@ -233,7 +233,7 @@ void osn::IAdvancedReplayBuffer::Start(void *data, const int64_t id, const std::
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, "directory", replayBuffer->path.c_str());
 	obs_data_set_string(settings, "format", f.c_str());
-	obs_data_set_string(settings, "extension", replayBuffer->format.c_str());
+	obs_data_set_string(settings, "extension", RecordingExtension(replayBuffer->format).c_str());
 	obs_data_set_bool(settings, "allow_spaces", !replayBuffer->noSpace);
 	obs_data_set_int(settings, "max_time_sec", replayBuffer->duration);
 	obs_data_set_int(settings, "max_size_mb", rbSize);

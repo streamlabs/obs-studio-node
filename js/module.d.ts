@@ -780,6 +780,8 @@ export declare const enum ERecordingFormat {
     MP4 = "mp4",
     FLV = "flv",
     MOV = "mov",
+    HybridMP4 = "hybrid_mp4",
+    HybridMOV = "hybrid_mov",
     MKV = "mkv",
     MPEGTS = "ts",
     HLS = "m3u8"

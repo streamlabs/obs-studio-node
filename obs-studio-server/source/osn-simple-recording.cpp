@@ -359,22 +359,13 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
 	}
 
-	const char *ffmpegMuxer = "ffmpeg_muxer";
-	if (!recording->GetOutput() || strcmp(obs_output_get_id(recording->GetOutput()), ffmpegMuxer) == 0)
-		recording->CreateOutput("ffmpeg_muxer", "recording");
-
-	if (!recording->GetOutput()) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the recording output.");
+	const bool lossless = recording->quality == RecQuality::Lossless;
+	if (const char *error = recording->PrepareOutput(lossless ? "ffmpeg_output" : RecordingOutputId(recording->format))) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, error);
 	}
 
-	std::string format = recording->format;
-	std::string pathProperty = "path";
-
-	if (recording->quality == RecQuality::Lossless) {
-		recording->CreateOutput("ffmpeg_output", "recording");
+	if (lossless) {
 		LoadLosslessPreset(recording);
-		format = "avi";
-		pathProperty = "url";
 	} else {
 		recording->UpdateEncoders();
 
@@ -407,6 +398,10 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 		obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 	}
 
+	if (!EncoderUtils::recordingSupportsAttachedCodecs(recording->GetOutput())) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The selected audio or video codec is not supported by the recording format.");
+	}
+
 	if (!recording->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
 	}
@@ -422,18 +417,17 @@ void osn::ISimpleRecording::Start(void *data, const int64_t id, const std::vecto
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(format, recording->noSpace, recording->DecoratedFileFormat(), recording->GetCanvas());
+	path += GenerateSpecifiedFilename(lossless ? "avi" : RecordingExtension(recording->format), recording->noSpace, recording->DecoratedFileFormat(),
+					  recording->GetCanvas());
 
 	FindBestFilename(path, recording->noSpace, recording, recording->overwrite);
 
 	obs_data_t *settings = obs_data_create();
-	obs_data_set_string(settings, pathProperty.c_str(), path.c_str());
+	obs_data_set_string(settings, lossless ? "url" : "path", path.c_str());
 	obs_data_set_string(settings, "muxer_settings", recording->muxerSettings.c_str());
+	recording->ConfigureRecFileSplitting(settings);
 	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
-
-	if (recording->enableFileSplit)
-		recording->ConfigureRecFileSplitting();
 
 	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 

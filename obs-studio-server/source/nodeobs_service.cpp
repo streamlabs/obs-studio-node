@@ -24,6 +24,7 @@
 #include <filesystem>
 #endif
 #include "osn-error.hpp"
+#include "osn-file-output.hpp"
 #include "shared.hpp"
 #include "utility.hpp"
 #include <osn-video.hpp>
@@ -45,8 +46,6 @@
 #include <optional>
 
 extern bool isConfiguredStreamingEncoderValid(StreamServiceId serviceId);
-
-std::string GetFormatExt(const std::string container);
 
 std::vector<obs_output_t *> streamingOutput = {nullptr, nullptr};
 
@@ -1178,9 +1177,9 @@ bool OBS_service::createStreamingOutput(StreamServiceId serviceId)
 	return true;
 }
 
-bool OBS_service::createRecordingOutput(void)
+bool OBS_service::createRecordingOutput(const char *outputId)
 {
-	recordingOutput = obs_output_create("ffmpeg_muxer", "recording_file_output", nullptr, nullptr);
+	recordingOutput = obs_output_create(outputId, "recording_file_output", nullptr, nullptr);
 	if (recordingOutput == nullptr) {
 		return false;
 	}
@@ -1740,11 +1739,6 @@ bool OBS_service::startRecording(void)
 		return false;
 	}
 
-	if (recordingOutput)
-		obs_output_release(recordingOutput);
-
-	createRecordingOutput();
-
 	std::string currentOutputMode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
 	bool isSimpleMode = currentOutputMode.compare("Simple") == 0;
 	std::string simpleQuality = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecQuality");
@@ -1756,6 +1750,17 @@ bool OBS_service::startRecording(void)
 		LoadRecordingPreset_Lossless();
 		ffmpegOutput = true;
 	} else {
+		const char *section = isSimpleMode ? "SimpleOutput" : "AdvOut";
+		const auto format = utility::GetSafeString(config_get_string(ConfigManager::getInstance().getBasic(), section, "RecFormat"));
+		const char *outputId = osn::RecordingOutputId(format);
+		if (!osn::RecordingOutputAvailable(outputId)) {
+			blog(LOG_ERROR, "Recording output '%s' is unavailable or lacks file completion support", outputId);
+			return false;
+		}
+		obs_output_release(recordingOutput);
+		if (!createRecordingOutput(outputId))
+			return false;
+
 		if (!(obs_get_multiple_rendering() && obs_get_replay_buffer_rendering_mode() == OBS_RECORDING_REPLAY_BUFFER_RENDERING &&
 		      isReplayBufferActive)) {
 			useStreamEncoder = updateRecordingEncoders(isSimpleMode, StreamServiceId::Main);
@@ -1781,7 +1786,12 @@ bool OBS_service::startRecording(void)
 	     useStreamEncoder ? obs_encoder_get_id(videoStreamingEncoder[0]) : obs_encoder_get_id(videoRecordingEncoder));
 
 	outdated_driver_error::instance()->set_active(true);
-	isRecording = obs_output_start(recordingOutput);
+	if (osn::EncoderUtils::recordingSupportsAttachedCodecs(recordingOutput)) {
+		isRecording = obs_output_start(recordingOutput);
+	} else {
+		obs_output_set_last_error(recordingOutput, "The selected recording format does not support the configured audio or video codec.");
+		isRecording = false;
+	}
 	{
 		const char *error = obs_output_get_last_error(recordingOutput);
 		if (error) {
@@ -1891,7 +1901,7 @@ void OBS_service::updateReplayBufferOutput(bool isSimpleMode, bool useStreamEnco
 		rbTime = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecRBTime");
 		rbSize = config_get_int(ConfigManager::getInstance().getBasic(), "AdvOut", "RecRBSize");
 	}
-	format = GetFormatExt(format);
+	format = osn::RecordingExtension(format);
 	std::string f;
 	if (rbPrefix && *rbPrefix) {
 		f += rbPrefix;
@@ -2305,7 +2315,7 @@ void OBS_service::updateFfmpegOutput(bool isSimpleMode, obs_output_t *output)
 		overwriteIfExists = config_get_bool(ConfigManager::getInstance().getBasic(), "Output", "OverwriteIfExists");
 		noSpace = config_get_bool(ConfigManager::getInstance().getBasic(), "AdvOut", "RecFileNameWithoutSpace");
 	}
-	format = GetFormatExt(format);
+	format = osn::RecordingExtension(format);
 	std::string initialPath;
 	if (path != nullptr) {
 		initialPath = path;
@@ -3659,18 +3669,4 @@ void OBS_service::setupVodTrack(bool isSimpleMode)
 			obs_encoder_set_video_mix(streamArchiveEncVod, obs_video_mix_get(videoInfo[0], OBS_STREAMING_VIDEO_RENDERING));
 		}
 	}
-}
-std::string GetFormatExt(const std::string container)
-{
-	std::string ext = container;
-	if (ext == "fragmented_mp4")
-		ext = "mp4";
-	else if (ext == "fragmented_mov")
-		ext = "mov";
-	else if (ext == "hls")
-		ext = "m3u8";
-	else if (ext == "mpegts")
-		ext = "ts";
-
-	return ext;
 }
