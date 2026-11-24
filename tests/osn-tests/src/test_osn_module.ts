@@ -14,13 +14,14 @@ describe(testName, () => {
     let hasTestFailed: boolean = false;
     const pluginFixtures: string[] = [];
     const blockedName = 'unitycapturefilter64bit';
+    const userPlugins = path.join(__dirname, '..', 'osnData', 'slobs-plugins');
+    const blockedPlugin = path.join(userPlugins, 'obs-plugins', '64bit', blockedName + '.dll');
 
     // Initialize OBS process
     before(function() {
         logInfo(testName, 'Starting ' + testName + ' tests');
         deleteConfigFiles();
         if (process.platform === 'win32') {
-            const userPlugins = path.join(__dirname, '..', 'osnData', 'slobs-plugins');
             const roots = [osn.wd, userPlugins];
             roots.forEach((root, index) => {
                 const file = path.join(root, 'obs-plugins', '64bit', `osn-test-invalid-${index}.dll`);
@@ -28,9 +29,9 @@ describe(testName, () => {
                 fs.copyFileSync(path.join(osn.wd, 'libobs-d3d11.dll'), file, fs.constants.COPYFILE_EXCL);
                 pluginFixtures.push(file);
             });
-            const blocked = path.join(userPlugins, 'obs-plugins', '64bit', blockedName + '.dll');
-            fs.copyFileSync(path.join(osn.wd, 'core', 'image-source', 'image-source.dll'), blocked, fs.constants.COPYFILE_EXCL);
-            pluginFixtures.push(blocked);
+            const imageSource = path.join(osn.wd, 'core', 'image-source', 'image-source.dll');
+            fs.copyFileSync(imageSource, blockedPlugin, fs.constants.COPYFILE_EXCL);
+            pluginFixtures.push(blockedPlugin);
         }
         obs = new OBSHandler(testName);
     });
@@ -105,10 +106,12 @@ describe(testName, () => {
         expect(path.normalize(module.dataPath)).to.equal(path.normalize(data));
     });
 
-    it('Blocks a valid plugin with a blocklisted DLL name during Windows startup', function () {
+    it('Blocks a valid plugin with a blocklisted DLL name during and after Windows startup', function () {
         if (process.platform !== 'win32') this.skip();
         const failure = osn.NodeObs.OBS_API_getModuleLoadFailures().find(entry => entry.module === blockedName);
         expect(failure).to.have.property('code', 'MODULE_FAILED_TO_OPEN');
+        const data = path.join(osn.wd, 'core', 'image-source', 'data');
+        expect(() => osn.ModuleFactory.open(blockedPlugin, data)).to.throw('Failed to create module');
     });
 
     it('Retains diagnostics from both legacy plugin directories', function () {

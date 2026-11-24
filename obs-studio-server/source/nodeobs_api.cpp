@@ -1111,9 +1111,6 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	loadModules();
 	obs_log_loaded_modules();
 	obs_post_load_modules();
-#ifdef _WIN32
-	log_blocked_dlls();
-#endif
 	autoOptimizer::RegisterOutputTypes();
 
 	if (!moduleLoadFailures.empty()) {
@@ -1858,6 +1855,9 @@ void OBS_API::destroyOBS_API(void)
 {
 	std::scoped_lock lifecycleLock(apiLifecycleMutex);
 	blog(LOG_DEBUG, "OBS_API::destroyOBS_API started, objects allocated %d", bnum_allocs());
+#ifdef _WIN32
+	log_blocked_dlls();
+#endif
 	debug_enum_sources(" on destroyOBS_API");
 	os_cpu_usage_info_destroy(cpuUsageInfo);
 
