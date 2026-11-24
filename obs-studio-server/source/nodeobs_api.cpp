@@ -89,6 +89,7 @@
 #include <util/windows/ComPtr.hpp>
 #include <util/windows/HRError.hpp>
 #include <util/windows/WinHandle.hpp>
+#include <util/windows/dll-blocklist.h>
 #include <util/windows/win-version.h>
 #endif
 
@@ -1110,6 +1111,9 @@ void OBS_API::OBS_API_initAPI(void *data, const int64_t id, const std::vector<ip
 	loadModules();
 	obs_log_loaded_modules();
 	obs_post_load_modules();
+#ifdef _WIN32
+	log_blocked_dlls();
+#endif
 	autoOptimizer::RegisterOutputTypes();
 
 	if (!moduleLoadFailures.empty()) {

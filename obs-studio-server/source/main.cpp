@@ -68,6 +68,7 @@
 #include "cef-sandbox-host.hpp"
 #include "osn-common.hpp"
 #include <include/cef_sandbox_win.h>
+#include <util/windows/dll-blocklist.h>
 #endif
 
 #include "util-crashmanager.h"
@@ -197,6 +198,7 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 	osn::cef::SetBootstrapSandboxInfo(sandbox_info);
+	install_dll_blocklist_hook();
 #endif
 #ifdef __APPLE__
 	std::string_view slobsStdOutPath("/tmp/slobs-stdout");
