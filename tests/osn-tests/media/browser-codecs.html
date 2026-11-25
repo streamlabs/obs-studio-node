@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<video muted playsinline></video>
+<script>
+  async function playVideo(bytes) {
+    const video = document.querySelector('video');
+    video.src = URL.createObjectURL(new Blob([bytes], { type: 'video/mp4' }));
+    const frame = new Promise((resolve, reject) => {
+      video.addEventListener('error', () => reject(new Error(video.error.message)), { once: true });
+      video.requestVideoFrameCallback((_, metadata) => resolve(metadata.width + 'x' + metadata.height));
+    });
+    const [, dimensions] = await Promise.all([video.play(), frame]);
+    return dimensions;
+  }
+
+  async function decodeAudio(bytes) {
+    const audio = new OfflineAudioContext(1, 1, 48000);
+    const decoded = await audio.decodeAudioData(bytes);
+    return decoded.getChannelData(0).some(sample => Math.abs(sample) > 0.001) ? 'audible' : 'silent';
+  }
+
+  async function report() {
+    const result = new URLSearchParams({ browser: navigator.userAgent });
+    try {
+      const response = await fetch('/sample.mp4');
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const bytes = await response.arrayBuffer();
+      const [video, audio] = await Promise.allSettled([playVideo(bytes), decodeAudio(bytes.slice(0))]);
+      result.set('video', video.status === 'fulfilled' ? video.value : String(video.reason));
+      result.set('audio', audio.status === 'fulfilled' ? audio.value : String(audio.reason));
+    } catch (error) {
+      result.set('error', String(error));
+    }
+    await fetch('/codec-result/' + new URLSearchParams(location.search).get('attempt') + '?' + result);
+  }
+  report();
+</script>

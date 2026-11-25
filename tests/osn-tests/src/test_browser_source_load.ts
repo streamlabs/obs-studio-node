@@ -111,6 +111,10 @@ describe(testName, () => {
             } else if (pathname === '/app.js') {
                 res.writeHead(200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' });
                 res.end(appJs);
+            } else if (pathname === '/codecs.html' || pathname === '/sample.mp4') {
+                const video = pathname === '/sample.mp4';
+                res.writeHead(200, { 'Content-Type': video ? 'video/mp4' : 'text/html', 'Cache-Control': 'no-store' });
+                res.end(fs.readFileSync(path.join(__dirname, '..', 'media', video ? 'bigbuckbunny.mp4' : 'browser-codecs.html')));
             } else {
                 res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
                 res.end('ok');
@@ -212,6 +216,32 @@ describe(testName, () => {
         if (!(await waitFor(() => count('/') > documentsBefore, loadTimeoutMs))) {
             runDiagnostics();
             throw new Error(`Browser source did not request the document again after refresh. Requests: ${describeRequests()}`);
+        }
+    });
+
+    it('Browser source decodes H.264 video and AAC audio from an MP4', async function () {
+        this.timeout(60000);
+        const attempt = Date.now();
+        const reportPath = '/codec-result/' + attempt;
+        const media = osn.InputFactory.create('browser_source', 'browser-codecs', {
+            url: pageUrl + 'codecs.html?attempt=' + attempt,
+            width: 640,
+            height: 360,
+        });
+        expect(media).to.exist;
+        try {
+            osn.Global.setOutputSource(0, media);
+            if (!(await waitFor(() => count(reportPath) > 0, loadTimeoutMs))) {
+                runDiagnostics();
+                throw new Error('No browser media result. Requests: ' + describeRequests());
+            }
+            const report = new URL(requests.find(r => r.path.startsWith(reportPath + '?'))!.path, pageUrl);
+            logInfo(testName, 'Browser media result: ' + report.searchParams.toString());
+            expect(report.searchParams.get('video'), report.search).to.equal('1280x720');
+            expect(report.searchParams.get('audio'), report.search).to.equal('audible');
+        } finally {
+            osn.Global.setOutputSource(0, scene || null);
+            media.release();
         }
     });
 });
