@@ -50,16 +50,16 @@ export {slideshowHotkeys};
 let captureSourceHotkeys: string[] = [];
 export {captureSourceHotkeys};
 
-let ffmpeg_sourceHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK', 'RESTART', 'PLAY', 'PAUSE', 'STOP'];
+let ffmpeg_sourceHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK', 'MONITOR_ON', 'MONITOR_OFF', 'RESTART', 'PLAY', 'PAUSE', 'STOP'];
 export {ffmpeg_sourceHotkeys};
 
-let game_captureHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK', 'HOTKEY_START', 'HOTKEY_STOP'];
+let game_captureHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK', 'MONITOR_ON', 'MONITOR_OFF', 'HOTKEY_START', 'HOTKEY_STOP'];
 export {game_captureHotkeys};
 
-let dshow_wasapitHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK'];
+let dshow_wasapitHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK', 'MONITOR_ON', 'MONITOR_OFF'];
 export {dshow_wasapitHotkeys};
 
-let coreaudioHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK'];
+let coreaudioHotkeys: string[] = ['MUTE', 'UNMUTE', 'PUSH_TO_MUTE', 'PUSH_TO_TALK', 'MONITOR_ON', 'MONITOR_OFF'];
 export {coreaudioHotkeys};
 
 // Helper functions

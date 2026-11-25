@@ -780,6 +780,8 @@ export declare const enum ERecordingFormat {
     MP4 = "mp4",
     FLV = "flv",
     MOV = "mov",
+    HybridMP4 = "hybrid_mp4",
+    HybridMOV = "hybrid_mov",
     MKV = "mkv",
     MPEGTS = "ts",
     HLS = "m3u8"
@@ -817,6 +819,10 @@ export interface IAudioEncoderFactory {
     create(id: string, name: string): IAudioEncoder;
 }
 export interface IVideoEncoderFactory {
+    getMissingEncoderInfo(id: string): {
+        name: string;
+        reason: 'outdated_driver' | 'unsupported_av1' | 'unknown';
+    };
     types(): string[];
     types(filter: EVideoEncoderType): string[];
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;
@@ -1170,6 +1176,8 @@ interface INodeObs {
     [key: string]: any;
     readonly AutoOptimizer: IAutoOptimizer;
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+    OBS_API_getModuleLoadFailures(): IObsModuleLoadFailure[];
+    OBS_service_processReplayBufferHotkey(): void;
     OBS_settings_saveSettings(category: string, settings: any[]): void;
     OBS_content_takeScreenshot(video: IVideo, directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult>;
     OBS_content_takeScreenshot(video: IVideo[], directory: string, filenameFormat: string, noSpace?: boolean): Promise<IScreenshotResult[]>;

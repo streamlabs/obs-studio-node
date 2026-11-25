@@ -19,7 +19,7 @@ interface IRequestRecord {
 }
 
 const pageHtml = '<!DOCTYPE html><html><body><script src="/app.js"></script></body></html>';
-const appJs = "fetch('/report?ok=1');";
+const appJs = "window.obsstudio.getControlLevel(level => fetch('/report?level=' + level));";
 
 describe(testName, () => {
     let obs: OBSHandler;
@@ -95,6 +95,7 @@ describe(testName, () => {
         if (!(await waitFor(() => count('/report') >= documentCount, loadTimeoutMs))) {
             failWithStage('/report', 'app.js');
         }
+        expect(requests.filter(r => r.path === '/report?level=1')).to.have.length.at.least(documentCount);
     }
 
     before(async function () {
@@ -110,6 +111,10 @@ describe(testName, () => {
             } else if (pathname === '/app.js') {
                 res.writeHead(200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-store' });
                 res.end(appJs);
+            } else if (pathname === '/codecs.html' || pathname === '/sample.mp4') {
+                const video = pathname === '/sample.mp4';
+                res.writeHead(200, { 'Content-Type': video ? 'video/mp4' : 'text/html', 'Cache-Control': 'no-store' });
+                res.end(fs.readFileSync(path.join(__dirname, '..', 'media', video ? 'bigbuckbunny.mp4' : 'browser-codecs.html')));
             } else {
                 res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
                 res.end('ok');
@@ -160,16 +165,31 @@ describe(testName, () => {
         }
     });
 
-    it('Browser source loads its page and runs its script', async function () {
+    it('Uses a Windows GUI executable for the server and browser helpers', function () {
+        if (process.platform !== 'win32') this.skip();
+
+        const image = fs.readFileSync(path.join(osn.wd, 'obs64.exe'));
+        const peOffset = image.readUInt32LE(0x3c);
+        const optionalHeader = peOffset + 4 + 20; // PE signature and COFF file header
+        const subsystem = image.readUInt16LE(optionalHeader + 68);
+        expect(subsystem, 'obs64.exe PE subsystem').to.equal(2); // IMAGE_SUBSYSTEM_WINDOWS_GUI
+    });
+
+    it('Browser source loads its page after the first source is released during startup', async function () {
         this.timeout(120000);
 
         // Mocha retries rerun this test without rerunning before(), so create only once.
         if (!source) {
+            const firstSource = osn.InputFactory.create('browser_source', 'browser-startup-source', { url: 'about:blank' });
+            expect(firstSource).to.exist;
+            firstSource.release();
+
             scene = osn.SceneFactory.create('browser-load-scene');
             source = osn.InputFactory.create('browser_source', 'browser-load-source', {
                 url: pageUrl,
                 width: 640,
                 height: 360,
+                webpage_control_level: 1,
             });
             expect(source).to.not.equal(undefined, 'Failed to create browser_source');
             scene.add(source);
@@ -196,6 +216,32 @@ describe(testName, () => {
         if (!(await waitFor(() => count('/') > documentsBefore, loadTimeoutMs))) {
             runDiagnostics();
             throw new Error(`Browser source did not request the document again after refresh. Requests: ${describeRequests()}`);
+        }
+    });
+
+    it('Browser source decodes H.264 video and AAC audio from an MP4', async function () {
+        this.timeout(60000);
+        const attempt = Date.now();
+        const reportPath = '/codec-result/' + attempt;
+        const media = osn.InputFactory.create('browser_source', 'browser-codecs', {
+            url: pageUrl + 'codecs.html?attempt=' + attempt,
+            width: 640,
+            height: 360,
+        });
+        expect(media).to.exist;
+        try {
+            osn.Global.setOutputSource(0, media);
+            if (!(await waitFor(() => count(reportPath) > 0, loadTimeoutMs))) {
+                runDiagnostics();
+                throw new Error('No browser media result. Requests: ' + describeRequests());
+            }
+            const report = new URL(requests.find(r => r.path.startsWith(reportPath + '?'))!.path, pageUrl);
+            logInfo(testName, 'Browser media result: ' + report.searchParams.toString());
+            expect(report.searchParams.get('video'), report.search).to.equal('1280x720');
+            expect(report.searchParams.get('audio'), report.search).to.equal('audible');
+        } finally {
+            osn.Global.setOutputSource(0, scene || null);
+            media.release();
         }
     });
 });

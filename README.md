@@ -15,8 +15,8 @@ You will need to have the following installed:
 ### Windows
 Building on windows requires additional software:
 
-* [Visual Studio 2019 or 2022](https://visualstudio.microsoft.com/)
-* [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk) (may be installed by Visual Studio 2022 Installer)
+* [Visual Studio 2026](https://visualstudio.microsoft.com/)
+* [Windows SDK](https://developer.microsoft.com/en-us/windows/downloads/windows-10-sdk) (may be installed by Visual Studio 2026 Installer)
 
 ### Example Build
 We use a flexible cmake script to be as broad and generic as possible in order to prevent the need to constantly manage the cmake script for custom uses, while also providing sane defaults. It follows a pretty standard cmake layout and you may execute it however you want.
@@ -27,7 +27,7 @@ yarn install
 git submodule update --init --recursive
 mkdir build
 cd build
-cmake .. -G"Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%CD%/libobs-src/cmake/
+cmake .. -G"Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=%CD%/libobs-src/cmake/
 cmake --build . --target install --config RelWithDebInfo
 ```
 
@@ -36,11 +36,11 @@ This will will download any required dependencies, build the module, and then pl
 If you are testing a local libobs development package that was built before it bundled its public development dependencies, pass those dependency package prefixes with `OSN_LIBOBS_DEPENDENCY_PREFIX_PATH`. For example:
 
 ```
-cmake .. -G"Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH=%CD%/libobs-src/cmake/ -DOSN_LIBOBS_DEPENDENCY_PREFIX_PATH=D:/path/to/obs/.deps/obs-deps-2025-08-23sl2-x64
+cmake .. -G"Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH=%CD%/libobs-src/cmake/ -DOSN_LIBOBS_DEPENDENCY_PREFIX_PATH=D:/path/to/obs/.deps/obs-deps-2025-08-23sl2-x64
 ```
 
 ### Mac
-Building on Mac requires Xcode.
+Building on Mac requires Xcode. OBS 33 packages require macOS 13 or later.
 
 Example (this assumes desktop repo is also installed in same parent folder and attempts to build a test developer app bundle so you can see browser sources, etc):
 ```
@@ -52,6 +52,20 @@ cmake .. -DCMAKE_INSTALL_PREFIX=/Users/<you>/streamlabs/desktop/node_modules/obs
 cmake --build . --target install --config RelWithDebInfo
 ```
 Note, the only gotcha is that if you later run `yarn package:mac-arm64` command in the desktop folder instead, then you should remove *OSN.app* from the `CMAKE_INSTALL_PREFIX` path. This is because the electron-builder scripts will throw an error this is not a fully formed app bundle during codesign.
+
+### Local OBS 33 SDK
+
+To validate OSN before publishing a libobs archive, point `OSN_LIBOBS_ROOT` at an installed Streamlabs OBS SDK. Install both the default OBS components and the `Development` component into that directory. The SDK must include the host-path core-module loader API used by OSN.
+
+Use a separate build directory when switching from Visual Studio 2022 to 2026, and an isolated install prefix to avoid replacing Desktop's current OSN package:
+
+```powershell
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 "-DOSN_LIBOBS_ROOT=D:/path/to/obs-sdk" "-DCMAKE_INSTALL_PREFIX=D:/path/to/osn/build/install" -DNODEJS_NAME=iojs -DNODEJS_URL=https://artifacts.electronjs.org/headers/dist "-DNODEJS_VERSION=v43.7.6"
+yarn build:javascript
+cmake --build build --config RelWithDebInfo --target install
+```
+
+Without `OSN_LIBOBS_ROOT`, OSN downloads the version selected by `LibOBSVersion` in the CI workflow. That release must be published before the hosted build can use it.
 
 ### Custom OBS Build
 By default, we download a pre-built version of libobs if none is specified. However, this pre-built version may not be what you want to use or maybe you're testing a new obs feature.
@@ -125,7 +139,7 @@ In obs-studio-node root folder:
 1. `yarn install`
 2. `git submodule update --init --recursive --force`
 3. `mkdir build`
-4. `cmake -Bbuild -H. -G"Visual Studio 16 2019" -A x64 -DCMAKE_INSTALL_PREFIX="path_of_your_choosing"`
+4. `cmake -Bbuild -H. -G"Visual Studio 18 2026" -A x64 -DCMAKE_INSTALL_PREFIX="path_of_your_choosing"`
 5. `cmake --build build --target install`
 
 #### Terminal using package.json scripts

@@ -21,6 +21,11 @@
 #include "shared.hpp"
 #include "osn-encoders.hpp"
 #include <obs.hpp>
+#ifdef _WIN32
+#include <util/pipe.h>
+#include <util/platform.h>
+#include <util/util.hpp>
+#endif
 
 void osn::VideoEncoder::Register(ipc::server &srv)
 {
@@ -28,6 +33,7 @@ void osn::VideoEncoder::Register(ipc::server &srv)
 	cls->register_function(
 		std::make_shared<ipc::function>("Create", std::vector<ipc::type>{ipc::type::String, ipc::type::String, ipc::type::String}, Create));
 	cls->register_function(std::make_shared<ipc::function>("GetTypes", std::vector<ipc::type>{}, GetTypes));
+	cls->register_function(std::make_shared<ipc::function>("GetMissingEncoderInfo", std::vector<ipc::type>{ipc::type::String}, GetMissingEncoderInfo));
 	cls->register_function(std::make_shared<ipc::function>("GetName", std::vector<ipc::type>{ipc::type::UInt64}, GetName));
 	cls->register_function(std::make_shared<ipc::function>("SetName", std::vector<ipc::type>{ipc::type::UInt64, ipc::type::String}, SetName));
 	cls->register_function(std::make_shared<ipc::function>("GetType", std::vector<ipc::type>{ipc::type::UInt64}, GetType));
@@ -76,6 +82,58 @@ void osn::VideoEncoder::Create(void *data, const int64_t id, const std::vector<i
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	rval.push_back(ipc::value(uid));
 	AUTO_DEBUG;
+}
+
+static const char *nvencCatalogId(const std::string &id)
+{
+	if (id == ENCODER_NVENC_AV1_TEX || id == SIMPLE_ENCODER_NVENC_AV1 || id == ENCODER_JIM_AV1_NVENC || id == "obs_nvenc_av1_soft" ||
+	    id == "obs_nvenc_av1_cuda")
+		return ENCODER_NVENC_AV1_TEX;
+	if (id == ENCODER_NVENC_HEVC_TEX || id == SIMPLE_ENCODER_NVENC_HEVC || id == ADVANCED_ENCODER_NVENC_HEVC || id == ENCODER_JIM_HEVC_NVENC ||
+	    id == "obs_nvenc_hevc_soft" || id == "obs_nvenc_hevc_cuda")
+		return ENCODER_NVENC_HEVC_TEX;
+	if (id == ENCODER_NVENC_H264_TEX || id == SIMPLE_ENCODER_NVENC || id == ADVANCED_ENCODER_NVENC || id == ENCODER_JIM_NVENC ||
+	    id == "obs_nvenc_h264_soft" || id == "obs_nvenc_h264_cuda")
+		return ENCODER_NVENC_H264_TEX;
+	return nullptr;
+}
+
+#ifdef _WIN32
+static const char *probeMissingNvenc(bool av1)
+{
+	BPtr<char> path = os_get_executable_path_ptr("obs-nvenc-test.exe");
+	if (!path || !os_file_exists(path))
+		return "unknown";
+	auto *args = os_process_args_create(path);
+	auto *pipe = os_process_pipe_create2(args, "r");
+	os_process_args_destroy(args);
+	if (!pipe)
+		return "unknown";
+
+	std::string output;
+	uint8_t bytes[4096];
+	while (size_t count = os_process_pipe_read(pipe, bytes, sizeof(bytes)))
+		output.append(reinterpret_cast<const char *>(bytes), count);
+	int exitCode = os_process_pipe_destroy(pipe);
+	return osn::EncoderUtils::getNvencFailureReason(exitCode, output.c_str(), av1);
+}
+#endif
+
+void osn::VideoEncoder::GetMissingEncoderInfo(void *, const int64_t, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
+{
+	const auto &id = args[0].value_str;
+	auto title = EncoderUtils::getPublicEncoderTitle(id.c_str());
+	const char *nvenc = nvencCatalogId(id);
+	if (title.empty() && nvenc)
+		title = EncoderUtils::getPublicEncoderTitle(nvenc);
+	const char *reason = "unknown";
+#ifdef _WIN32
+	if (nvenc && obs_initialized() && !EncoderUtils::isEncoderRegistered(id) && !EncoderUtils::isEncoderRegistered(nvenc))
+		reason = probeMissingNvenc(strcmp(nvenc, ENCODER_NVENC_AV1_TEX) == 0);
+#endif
+	rval.emplace_back(uint64_t(ErrorCode::Ok));
+	rval.emplace_back(title.empty() ? id : title);
+	rval.emplace_back(reason);
 }
 
 void osn::VideoEncoder::GetTypes(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)

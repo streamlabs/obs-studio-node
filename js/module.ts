@@ -1793,6 +1793,8 @@ export const enum ERecordingFormat {
     MP4 = 'mp4',
     FLV = 'flv',
     MOV = 'mov',
+    HybridMP4 = 'hybrid_mp4',
+    HybridMOV = 'hybrid_mov',
     MKV = 'mkv',
     MPEGTS = 'ts',
     HLS = 'm3u8'
@@ -1849,6 +1851,17 @@ export interface IAudioEncoderFactory {
 }
 
 export interface IVideoEncoderFactory {
+    /**
+     * Describes a saved video encoder after a device-level availability check finds it missing.
+     * @param id - Saved OBS encoder ID or Simple output alias.
+     * @returns A plain snapshot with the catalog name (or the original ID) and the confirmed cause.
+     * Windows can diagnose an outdated NVIDIA driver or unsupported NVENC AV1. Other platforms,
+     * registered encoders, an uninitialized OBS runtime and inconclusive probes return an unknown cause.
+     * No encoder is created.
+     * @throws {TypeError} If id is not a non-empty string.
+     * @throws {Error} If the server is disconnected or the IPC request fails.
+     */
+    getMissingEncoderInfo(id: string): { name: string; reason: 'outdated_driver' | 'unsupported_av1' | 'unknown' },
     types(): string[],
     types(filter: EVideoEncoderType): string[],
     create(id: string, name: string, settings?: ISettings): IVideoEncoder,
@@ -1979,6 +1992,11 @@ export interface IEnhancedBroadcastingSimpleStreamingFactory {
 
 export interface IFileOutput {
     path: string,
+    /**
+     * Container for the next recording or replay. HybridMP4 and HybridMOV select the native
+     * Hybrid writer for recordings and the regular MP4 or MOV writer for saved replays.
+     * Both use the standard .mp4 or .mov filename extension. Simple Lossless always records AVI.
+     */
     format: ERecordingFormat,
     fileFormat: string,
     overwrite: boolean,
@@ -2005,6 +2023,12 @@ export interface IRecording extends IFileOutput {
     fileResetTimestamps: boolean,
     signalHandler: (signal: EOutputSignal) => void,
     getAvailableEncoders(): IEncoderOption[],
+    /**
+     * Starts recording with the configured container and encoders. Receives output events
+     * through signalHandler, including a stop event for native startup failures.
+     * @throws {Error} If the recording is already active, its configuration is invalid, or
+     * the installed OBS build or selected codecs do not support the requested Hybrid writer.
+     */
     start(): void,
     stop(force?: boolean): void,
     splitFile(): void
@@ -2569,6 +2593,24 @@ interface INodeObs {
      * @throws {Error} If the IPC call fails or OSN returns an error response without an initialization result
      */
     OBS_API_initAPI(options: IOBSAPIInitializationOptions): EVideoCodes;
+
+    /**
+     * Returns a copy of the failures from the most recent runtime initialization,
+     * including both shipped core modules and separately installed plugins.
+     * Requires a live IPC connection, as with other legacy API calls.
+     * @returns Module names and their diagnostic codes and messages; an empty array if none failed
+     * @throws {Error} If the server rejects the request or returns a malformed response
+     */
+    OBS_API_getModuleLoadFailures(): IObsModuleLoadFailure[];
+
+    /**
+     * Requests a save of the legacy replay buffer. OBS 33 dispatches this through
+     * the output's save procedure; no registered OBS hotkey is required.
+     * A missing, inactive, or paused replay buffer is left unchanged.
+     * Requires a live IPC connection; the legacy call terminates the process if disconnected.
+     * @returns No value; completion is reported by the replay buffer's wrote signal
+     */
+    OBS_service_processReplayBufferHotkey(): void;
 
     /**
      * Saves a complete legacy settings category, including native field metadata.

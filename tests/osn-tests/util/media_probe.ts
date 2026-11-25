@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as osn from '../osn';
 
-function probeMedia(mediaFile: string, args: string[]): any {
+export function probeMedia(mediaFile: string, args: string[]): any {
     const executable = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
     const ffprobe = [
         process.env.FFPROBE_PATH,

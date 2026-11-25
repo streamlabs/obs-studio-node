@@ -7,6 +7,11 @@
 #include "obs-setup.hpp"
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <filesystem>
+#endif
+
 namespace osn::tests {
 
 void setWorkingFolder(const std::string &wd)
@@ -16,7 +21,7 @@ void setWorkingFolder(const std::string &wd)
 	OBS_API::SetWorkingDirectory(nullptr, 0, args, response);
 	REQUIRE(response.size() >= 2);
 	ErrorCode error = (ErrorCode)response[0].value_union.ui64;
-	CHECK(error == ErrorCode::Ok);
+	REQUIRE(error == ErrorCode::Ok);
 }
 
 void setupApi()
@@ -39,11 +44,16 @@ void setupApi()
 	OBS_API::OBS_API_initAPI(nullptr, 0, args, response);
 	REQUIRE(response.size() >= 2);
 	ErrorCode error = (ErrorCode)response[0].value_union.ui64;
-	CHECK(error == ErrorCode::Ok);
+	REQUIRE(error == ErrorCode::Ok);
 }
 
 ObsSetup::ObsSetup()
 {
+#ifdef _WIN32
+	// OBS 33's LoadLibraryEx search excludes PATH; the test executable lives outside the installed package.
+	dllDirectory = AddDllDirectory(std::filesystem::path(OSN_TEST_WD).c_str());
+	REQUIRE(dllDirectory != nullptr);
+#endif
 	setWorkingFolder(OSN_TEST_WD);
 	setupApi();
 }
@@ -62,6 +72,9 @@ ObsSetup::~ObsSetup()
 #if defined(__APPLE__)
 	delete g_util_osx;
 	g_util_osx = nullptr;
+#endif
+#ifdef _WIN32
+	RemoveDllDirectory(dllDirectory);
 #endif
 }
 

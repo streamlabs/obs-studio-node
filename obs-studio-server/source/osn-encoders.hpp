@@ -115,6 +115,7 @@ std::string getEncoderPreset(const char *encoder);
 // backend-only family constants such as FAMILY_QSV.
 std::string getPublicEncoderFamily(const char *encoder);
 std::string getPublicEncoderTitle(const char *encoder);
+const char *getNvencFailureReason(int exitCode, const char *output, bool av1);
 obs_data_t *getSimpleStreamingEncoderSettings(const char *encoder);
 bool isOldJimNvencEncoder(const std::string &encoderId);
 void convertOldJimNvencEncoder(config_t *config, const std::string &configSection, const std::string &streamEncoderSetting,
@@ -122,6 +123,7 @@ void convertOldJimNvencEncoder(config_t *config, const std::string &configSectio
 bool isEncoderCompatible(std::string encoderName, obs_service_t *service, bool simpleMode, bool recording, const std::string &container, int checkIndex);
 bool isEncoderCompatibleStreaming(obs_service_t *service, const char *encoderToFind, bool simpleMode);
 bool isEncoderCompatibleRecording(const char *encoderToFind, const std::string &container, bool simpleMode);
+bool recordingSupportsAttachedCodecs(obs_output_t *output);
 bool updateNvencPresets(obs_data_t *data, const char *encoderId);
 void getAvailableEncoders(std::vector<ipc::value> &rval, obs_service_t *service, bool simpleMode, bool recording, const std::string &container);
 const char *convertNvencSimplePreset(const char *old_preset);

@@ -7,13 +7,13 @@ on:
   push:
     paths-ignore:
       - '**.md'
-    branches: [ "staging" ]
+    branches: [ "staging", "obs_merge_33" ]
     tags:
       - '*'
   pull_request:
     paths-ignore:
       - '**.md'
-    branches: [ "staging" ]
+    branches: [ "staging", "obs_merge_33" ]
 
 env:
   InstallPath: "obs-studio-node"
@@ -22,10 +22,10 @@ env:
   RuntimeURL: https://artifacts.electronjs.org/headers/dist
   RuntimeName: iojs
   ElectronVersion: 43.7.6
-  SLGenerator: Visual Studio 17 2022
+  SLGenerator: Visual Studio 18 2026
   SLDistributeDirectory: distribute
   SLFullDistributePath: "streamlabs-build.app/distribute" # The .app extension is required to run macOS tests correctly.
-  LibOBSVersion: 32.1.1sl33
+  LibOBSVersion: 33.0.1test11
   PACKAGE_NAME: osn
 
 jobs:
@@ -55,7 +55,7 @@ jobs:
           submodules: 'recursive'
       - name: Get the version
         id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+        run: echo "VERSION=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_OUTPUT
         shell: bash
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -99,6 +99,7 @@ jobs:
     needs: build-macos
     runs-on: ${{ matrix.image }}
     strategy:
+      fail-fast: false
       matrix:
         BuildReleases: [Release-x86_64, Release-arm64]
         include:
@@ -267,7 +268,7 @@ jobs:
 
   build-win64:
     name: 'Build Windows 64-bit'
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
@@ -279,7 +280,7 @@ jobs:
         id: get_version
         run: |
           $version = $env:GITHUB_REF -replace 'refs/tags/', ''
-          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: pwsh
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -314,7 +315,7 @@ jobs:
   run-tests-win64:
     name: 'Run Windows Tests'
     needs: build-win64
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
@@ -359,6 +360,26 @@ jobs:
           # ffmpeg is not on the runner, but libobs ships one and CMake installs all of
           # bin/64bit next to the osn binaries, so point the audio probe at that copy
           FFMPEG_PATH: ${{github.workspace}}\${{env.SLFullDistributePath}}\${{env.InstallPath}}\ffmpeg.exe
+      - name: Report Windows server failures
+        if: failure() && steps.run_tests.outcome == 'failure'
+        shell: pwsh
+        run: |
+          $events = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000; StartTime = (Get-Date).AddHours(-1) } -ErrorAction SilentlyContinue
+          foreach ($event in $events) {
+            $fields = $event.Properties
+            if ($fields[0].Value -eq 'obs64.exe') {
+              Write-Host "obs64.exe faulted in $($fields[3].Value), exception $($fields[6].Value), offset $($fields[7].Value)"
+            }
+          }
+          $profile = 'tests/osn-tests/osnData/slobs-client'
+          Get-ChildItem $profile -Filter debug.log -Recurse -File | ForEach-Object {
+            Select-String -LiteralPath $_.FullName -Pattern '\bFATAL[:\]]' | Select-Object -Last 5 | ForEach-Object { Write-Host $_.Line }
+          }
+          $last = Get-ChildItem "$profile/node-obs/logs" -Filter '*.txt' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if ($last) {
+            Select-String -LiteralPath $last.FullName -Pattern 'Creating input source|Browser Source, INIT|CEF failed|UnhandledExceptionFilter|Server finished.*HandleCrash' |
+              Select-Object -Last 16 | ForEach-Object { Write-Host $_.Line }
+          }
       # Run even after test failures so the PR still gets the flaky summary.
       - name: Publish flaky test check
         if: ${{ always() }}
@@ -378,7 +399,7 @@ jobs:
     name: 'Package and Deploy Windows'
     needs: run-tests-win64
     if: ${{ needs.run-tests-win64.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:
@@ -415,7 +436,7 @@ jobs:
     name: 'Upload Symbols to Symbol Server Windows'
     needs: run-tests-win64
     if: ${{ needs.run-tests-win64.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
-    runs-on: windows-2022
+    runs-on: windows-2025-vs2026
     env:
       OS_TAG: "win64"
     steps:

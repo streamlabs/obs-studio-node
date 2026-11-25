@@ -46,6 +46,21 @@ describe(testName, () => {
         expect(videoEncoders).to.contain('obs_x264', 'x264 video encoder not present');
     });
 
+    it('Looks up missing encoder names independently of the installed hardware', () => {
+        expect(osn.VideoEncoderFactory.getMissingEncoderInfo('obs_x264')).to.deep.equal({
+            name: 'Software (x264)', reason: 'unknown',
+        });
+        expect(osn.VideoEncoderFactory.getMissingEncoderInfo('removed_plugin')).to.deep.equal({
+            name: 'removed_plugin', reason: 'unknown',
+        });
+        const av1 = osn.VideoEncoderFactory.getMissingEncoderInfo('obs_nvenc_av1_tex');
+        expect(av1.name).to.equal('NVIDIA NVENC AV1');
+        const mayBeMissing = process.platform === 'win32' && !osn.VideoEncoderFactory.types().includes('obs_nvenc_av1_tex');
+        expect(av1.reason).to.be.oneOf(mayBeMissing ? ['unknown', 'outdated_driver', 'unsupported_av1'] : ['unknown']);
+        expect(() => osn.VideoEncoderFactory.getMissingEncoderInfo('')).to.throw(TypeError);
+        expect(() => osn.VideoEncoderFactory.getMissingEncoderInfo(null)).to.throw(TypeError);
+    });
+
     it('Create a video encoder', () => {
         const encoder = osn.VideoEncoderFactory.create('obs_x264', "video-encoder-test-1", {});
         expect(encoder).to.not.equal(undefined, 'Invalid x264 video encoder creation');

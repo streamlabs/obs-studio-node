@@ -367,24 +367,30 @@ void osn::IRecording::SetFileResetTimestamps(void *data, const int64_t id, const
 	AUTO_DEBUG;
 }
 
-void osn::Recording::ConfigureRecFileSplitting()
+const char *osn::Recording::PrepareOutput(const char *type)
 {
-	obs_data_t *settings = obs_data_create();
+	if (GetOutput() && obs_output_active(GetOutput()))
+		return "Recording is already active.";
+	if (!RecordingOutputAvailable(type))
+		return "The installed OBS build does not support Hybrid recording in Streamlabs.";
+	if (!GetOutput() || strcmp(obs_output_get_id(GetOutput()), type) != 0)
+		CreateOutput(type, "recording");
+	return GetOutput() ? nullptr : "Error while creating the recording output.";
+}
 
-	if (splitType == SplitFileType::TIME)
-		obs_data_set_int(settings, "max_time_sec", splitTime); // * 60);
-	else if (splitType == SplitFileType::SIZE)
-		obs_data_set_int(settings, "max_size_mb", splitSize);
+void osn::Recording::ConfigureRecFileSplitting(obs_data_t *settings) const
+{
+	obs_data_set_bool(settings, "split_file", enableFileSplit);
+	if (!enableFileSplit)
+		return;
+
+	obs_data_set_int(settings, "max_time_sec", splitType == SplitFileType::TIME ? splitTime : 0);
+	obs_data_set_int(settings, "max_size_mb", splitType == SplitFileType::SIZE ? splitSize : 0);
 
 	obs_data_set_string(settings, "directory", path.c_str());
-	obs_data_set_string(settings, "format", fileFormat.c_str());
-	obs_data_set_string(settings, "extension", format.c_str());
+	obs_data_set_string(settings, "format", DecoratedFileFormat().c_str());
+	obs_data_set_string(settings, "extension", RecordingExtension(format).c_str());
 	obs_data_set_bool(settings, "allow_spaces", !noSpace);
 	obs_data_set_bool(settings, "allow_overwrite", overwrite);
-	obs_data_set_bool(settings, "split_file", true);
-
 	obs_data_set_bool(settings, "reset_timestamps", fileResetTimestamps);
-
-	obs_output_update(this->GetOutput(), settings);
-	obs_data_release(settings);
 }

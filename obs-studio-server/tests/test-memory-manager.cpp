@@ -877,7 +877,7 @@ TEST_CASE("Media cache uses graphics across video reset and permits callback ree
 
 	obs_video_info info{};
 #ifdef _WIN32
-	info.graphics_module = "libobs-d3d11.dll";
+	info.graphics_module = OSN_TEST_WD "/libobs-d3d11.dll";
 #elif defined(__APPLE__)
 	info.graphics_module = "libobs-opengl.dylib";
 #else

@@ -22,6 +22,10 @@
 #include "osn-output.hpp"
 
 namespace osn {
+const char *RecordingOutputId(const std::string &format);
+bool RecordingOutputAvailable(const char *type);
+std::string RecordingExtension(const std::string &format);
+
 class FileOutput : public Output {
 public:
 	FileOutput(const std::vector<std::string> &signals) : Output(signals)

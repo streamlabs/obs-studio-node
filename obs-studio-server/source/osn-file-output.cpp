@@ -20,10 +20,59 @@
 #include "osn-error.hpp"
 #include "shared.hpp"
 #include <osn-video.hpp>
+#include <obs.hpp>
 #include <util/platform.h>
 #include <algorithm>
 #include <cerrno>
 #include <mutex>
+
+const char *osn::RecordingOutputId(const std::string &format)
+{
+	if (format == "hybrid_mp4")
+		return "mp4_output";
+	if (format == "hybrid_mov")
+		return "mov_output";
+	return "ffmpeg_muxer";
+}
+
+static bool supportsCompletedRecordingFile(const char *type)
+{
+	OBSOutputAutoRelease probe = obs_output_create(type, "hybrid-recording-capability", nullptr, nullptr);
+	calldata_t data = {};
+	const bool supported = probe && proc_handler_call(obs_output_get_proc_handler(probe), "get_last_file", &data);
+	calldata_free(&data);
+	return supported;
+}
+
+bool osn::RecordingOutputAvailable(const char *type)
+{
+	const bool mp4 = strcmp(type, "mp4_output") == 0;
+	if (!mp4 && strcmp(type, "mov_output") != 0)
+		return true;
+	if (!obs_initialized() || !obs_get_output_flags(type))
+		return false;
+
+	// Older obs-outputs registers both IDs but lacks the completed-file path and wrote signal.
+	if (mp4) {
+		static const bool supported = supportsCompletedRecordingFile("mp4_output");
+		return supported;
+	}
+	static const bool supported = supportsCompletedRecordingFile("mov_output");
+	return supported;
+}
+
+std::string osn::RecordingExtension(const std::string &format)
+{
+	if (format == "hybrid_mp4" || format == "fragmented_mp4")
+		return "mp4";
+	if (format == "hybrid_mov" || format == "fragmented_mov")
+		return "mov";
+	if (format == "hls")
+		return "m3u8";
+	if (format == "mpegts")
+		return "ts";
+	return format;
+}
 
 // Serialises resolve-and-claim against the release in OnOutputStopped(). Start() runs on an IPC
 // worker thread and the release on libobs' capture thread, and the check-then-set has to be atomic

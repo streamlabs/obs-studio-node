@@ -21,10 +21,13 @@
 #include <iostream>
 #include <ipc-server.hpp>
 #include <util/dstr.h>
+#include <util/util.hpp>
 #include "utility.hpp"
 #include "osn-streaming-helpers.hpp"
+#include "osn-file-output.hpp"
 
 static bool codecListContains(const char **codecs, const char *codec);
+static bool codecListContains(const char *codecList, const char *codec);
 static bool isNvencAvailableForSimpleMode();
 static bool containerSupportsCodec(const std::string &container, const std::string &codec);
 static std::string makePublicEncoderFamily(const osn::EncoderUtils::EncoderSettings &opt, const std::string &name, const std::string &encoderName);
@@ -34,10 +37,10 @@ static void convert_nvenc_hevc_presets(obs_data_t *data);
 
 const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEncoderOptions = {
 	// Software x264
-	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, "", true, true, false, false, true, false,
+	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, "", true, true, true, false, true, false,
 	 DEFAULT_PRESET, FAMILY_OBS},
 	// Software x264 low CPU (only for recording)
-	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, "", true, false, false, false,
+	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, "", true, false, true, false,
 	 true, false, DEFAULT_PRESET, FAMILY_OBS},
 	// QuickSync H.264 (v1, deprecated)
 	// This line left here for reference
@@ -123,11 +126,7 @@ bool osn::EncoderUtils::isCodecAvailableForService(const char *encoder, obs_serv
 	if (!outputSupportedCodecs)
 		return false;
 
-	auto splitOutputSupportedCodecs = strlist_split(outputSupportedCodecs, ';', false);
-	bool supported = codecListContains((const char **)splitOutputSupportedCodecs, encoderCodec);
-	strlist_free(splitOutputSupportedCodecs);
-
-	return supported;
+	return codecListContains(outputSupportedCodecs, encoderCodec);
 }
 
 static bool codecListContains(const char **codecs, const char *codec)
@@ -142,6 +141,34 @@ static bool codecListContains(const char **codecs, const char *codec)
 	}
 
 	return false;
+}
+
+static bool codecListContains(const char *codecList, const char *codec)
+{
+	if (!codecList || !codec)
+		return false;
+	auto codecs = strlist_split(codecList, ';', false);
+	bool supported = codecListContains((const char **)codecs, codec);
+	strlist_free(codecs);
+	return supported;
+}
+
+bool osn::EncoderUtils::recordingSupportsAttachedCodecs(obs_output_t *output)
+{
+	const char *videoCodecs = obs_output_get_supported_video_codecs(output);
+	obs_encoder_t *video = obs_output_get_video_encoder(output);
+	if (videoCodecs && video && !codecListContains(videoCodecs, obs_encoder_get_codec(video)))
+		return false;
+
+	const char *audioCodecs = obs_output_get_supported_audio_codecs(output);
+	if (audioCodecs) {
+		for (size_t i = 0; i < MAX_OUTPUT_AUDIO_ENCODERS; i++) {
+			obs_encoder_t *audio = obs_output_get_audio_encoder(output, i);
+			if (audio && !codecListContains(audioCodecs, obs_encoder_get_codec(audio)))
+				return false;
+		}
+	}
+	return true;
 }
 
 bool osn::EncoderUtils::isEncoderCompatible(std::string encoderName, obs_service_t *service, bool simpleMode, bool recording, const std::string &container,
@@ -430,6 +457,25 @@ std::string osn::EncoderUtils::getPublicEncoderTitle(const char *encoder)
 	return {};
 }
 
+const char *osn::EncoderUtils::getNvencFailureReason(int exitCode, const char *output, bool av1)
+{
+	ConfigFile caps;
+	if ((exitCode != 0 && exitCode != 1) || caps.OpenString(output) != CONFIG_SUCCESS)
+		return "unknown";
+
+	const std::string supported = utility::GetSafeString(config_get_string(caps, "general", "nvenc_supported"));
+	const std::string reason = utility::GetSafeString(config_get_string(caps, "general", "reason"));
+	if (exitCode == 1 && supported == "false" && reason == "outdated_driver")
+		return "outdated_driver";
+
+	// The probe initializes all codec flags to zero even when driver or device enumeration fails.
+	if (exitCode == 0 && supported == "true" && reason.empty() && av1 &&
+	    strcmp(utility::GetSafeString(config_get_string(caps, "av1", "codec_supported")), "0") == 0)
+		return "unsupported_av1";
+
+	return "unknown";
+}
+
 obs_data_t *osn::EncoderUtils::getSimpleStreamingEncoderSettings(const char *encoder)
 {
 	config_t *config = ConfigManager::getInstance().getBasic();
@@ -543,6 +589,8 @@ static bool isNvencAvailableForSimpleMode()
 
 static bool containerSupportsCodec(const std::string &container, const std::string &codec)
 {
+	if (container == "hybrid_mp4" || container == "hybrid_mov")
+		return codecListContains(obs_get_output_supported_video_codecs(osn::RecordingOutputId(container)), codec.c_str());
 	auto iter = osn::EncoderUtils::codecsForContainers.find(container);
 	if (iter == osn::EncoderUtils::codecsForContainers.end())
 		return false;

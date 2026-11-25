@@ -24,6 +24,7 @@
 #include <sstream>
 #include "osn-video.hpp"
 #include "osn-encoders.hpp"
+#include "osn-file-output.hpp"
 
 #ifdef WIN32
 #include <windows.h>
@@ -1058,7 +1059,7 @@ void OBS_settings::getAvailableAudioEncoders(std::vector<std::pair<std::string, 
 {
 	if (osn::EncoderUtils::isEncoderRegistered(SIMPLE_AUDIO_ENCODER_AAC))
 		encoders->push_back(std::make_pair("AAC (Default)", ipc::value(SIMPLE_AUDIO_ENCODER_AAC)));
-	if (recording && osn::EncoderUtils::isEncoderRegistered(SIMPLE_AUDIO_ENCODER_OPUS))
+	if (recording && container != "hybrid_mov" && osn::EncoderUtils::isEncoderRegistered(SIMPLE_AUDIO_ENCODER_OPUS))
 		encoders->push_back(std::make_pair("Opus", ipc::value(SIMPLE_AUDIO_ENCODER_OPUS)));
 }
 
@@ -1257,6 +1258,10 @@ void OBS_settings::getSimpleOutputSettings(std::vector<SubCategory> *outputSetti
 	recFormat.push_back({"mp4", ipc::value("mp4")});
 	recFormat.push_back({"flv", ipc::value("flv")});
 	recFormat.push_back({"mov", ipc::value("mov")});
+	if (osn::RecordingOutputAvailable("mp4_output"))
+		recFormat.push_back({"Hybrid MP4", ipc::value("hybrid_mp4")});
+	if (osn::RecordingOutputAvailable("mov_output"))
+		recFormat.push_back({"Hybrid MOV", ipc::value("hybrid_mov")});
 	recFormat.push_back({"mkv", ipc::value("mkv")});
 	recFormat.push_back({"mpegts", ipc::value("ts")});
 	entries.push_back(recFormat);
@@ -2035,6 +2040,10 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 	recFormatValues.push_back(std::make_pair("mp4", "mp4"));
 	recFormatValues.push_back(std::make_pair("flv", "flv"));
 	recFormatValues.push_back(std::make_pair("mov", "mov"));
+	if (osn::RecordingOutputAvailable("mp4_output"))
+		recFormatValues.emplace_back("Hybrid MP4", "hybrid_mp4");
+	if (osn::RecordingOutputAvailable("mov_output"))
+		recFormatValues.emplace_back("Hybrid MOV", "hybrid_mov");
 	recFormatValues.push_back(std::make_pair("mkv", "mkv"));
 	recFormatValues.push_back(std::make_pair("mpegts", "ts"));
 	recFormatValues.push_back(std::make_pair("hls", "m3u8"));
@@ -2782,6 +2791,16 @@ void OBS_settings::saveAdvancedOutputStreamingSettings(std::vector<SubCategory> 
 	}
 }
 
+static bool resetUnsupportedHybridAudio(config_t *config, const char *section)
+{
+	if (strcmp(utility::GetSafeString(config_get_string(config, section, "RecFormat")), "hybrid_mov") != 0 ||
+	    strcmp(utility::GetSafeString(config_get_string(config, section, "RecAEncoder")), SIMPLE_AUDIO_ENCODER_OPUS) != 0)
+		return false;
+
+	config_set_string(config, section, "RecAEncoder", SIMPLE_AUDIO_ENCODER_AAC);
+	return true;
+}
+
 void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> settings)
 {
 	int indexRecordingCategory = 2;
@@ -2957,6 +2976,8 @@ void OBS_settings::saveAdvancedOutputRecordingSettings(std::vector<SubCategory> 
 		}
 	}
 
+	if (resetUnsupportedHybridAudio(ConfigManager::getInstance().getBasic(), section.c_str()))
+		resetAudioTracks = true;
 	int ret = config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
 
 	if (recEncoderChanged) {
@@ -3978,6 +3999,8 @@ void OBS_settings::saveGenericSettings(std::vector<SubCategory> genericSettings,
 		}
 	}
 
+	if (section == "SimpleOutput")
+		resetUnsupportedHybridAudio(config, section.c_str());
 	config_save_safe(config, "tmp", nullptr);
 }
 

@@ -240,11 +240,8 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Simple recording reference is not valid.");
 	}
 
-	if (!recording->GetOutput())
-		recording->CreateOutput("ffmpeg_muxer", "recording");
-
-	if (!recording->GetOutput()) {
-		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Error while creating the recording output.");
+	if (const char *error = recording->PrepareOutput(RecordingOutputId(recording->format))) {
+		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, error);
 	}
 
 	recording->ClearAudioEncoders();
@@ -292,6 +289,10 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 
 	obs_output_set_video_encoder(recording->GetOutput(), recording->videoEncoder);
 
+	if (!EncoderUtils::recordingSupportsAttachedCodecs(recording->GetOutput())) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "The selected audio or video codec is not supported by the recording format.");
+	}
+
 	if (!recording->path.size()) {
 		PRETTY_ERROR_RETURN(ErrorCode::InvalidReference, "Invalid recording path.");
 	}
@@ -307,18 +308,16 @@ void osn::IAdvancedRecording::Start(void *data, const int64_t id, const std::vec
 	if (lastChar != '/' && lastChar != '\\')
 		path += "/";
 
-	path += GenerateSpecifiedFilename(recording->format, recording->noSpace, recording->DecoratedFileFormat(), recording->GetCanvas());
+	path += GenerateSpecifiedFilename(RecordingExtension(recording->format), recording->noSpace, recording->DecoratedFileFormat(), recording->GetCanvas());
 
 	FindBestFilename(path, recording->noSpace, recording, recording->overwrite);
 
 	obs_data_t *settings = obs_data_create();
 	obs_data_set_string(settings, "path", path.c_str());
 	obs_data_set_string(settings, "muxer_settings", recording->muxerSettings.c_str());
+	recording->ConfigureRecFileSplitting(settings);
 	obs_output_update(recording->GetOutput(), settings);
 	obs_data_release(settings);
-
-	if (recording->enableFileSplit)
-		recording->ConfigureRecFileSplitting();
 
 	blog(LOG_INFO, "Start Recording using %s encoder.", obs_encoder_get_id(recording->videoEncoder));
 
