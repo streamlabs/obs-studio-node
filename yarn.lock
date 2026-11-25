@@ -1423,7 +1423,7 @@ __metadata:
     chai-subset: "npm:^1.6.0"
     colors: "npm:^1.4.0"
     dotenv: "npm:^17.4.2"
-    electron: "npm:43.7.6"
+    electron: "npm:43.8.1"
     electron-mocha: "npm:^12.1.0"
     get-func-name: "npm:^3.0.0"
     mocha: "npm:^11.0.0"
@@ -2160,9 +2160,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"electron@npm:43.7.6":
-  version: 43.7.6
-  resolution: "electron@npm:43.7.6"
+"electron@npm:43.8.1":
+  version: 43.8.1
+  resolution: "electron@npm:43.8.1"
   dependencies:
     "@electron-internal/extract-zip": "npm:^1.0.1"
     "@electron/get": "npm:^5.0.0"
@@ -2170,7 +2170,7 @@ __metadata:
   bin:
     electron: cli.js
     install-electron: install.js
-  checksum: 10c0/3946bcba9fe7c5ea11af87ea05ec07e293869093b2155236bc235aaa52dcce3de0727dd841586554c06b129b2daabdeff0e89d8338dee9b80268a33dcf205a5f
+  checksum: 10c0/4ad8ace871a39fd00c903f0a09d752dad294db842a01924ce85099c09106d58fab440288d0299b92c7951f3f9703e7fbf6b57e2ab04914d5d7057243b274ae9c
   languageName: node
   linkType: hard
 
