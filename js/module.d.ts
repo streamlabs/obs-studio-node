@@ -819,6 +819,10 @@ export interface IAudioEncoderFactory {
     create(id: string, name: string): IAudioEncoder;
 }
 export interface IVideoEncoderFactory {
+    getMissingEncoderInfo(id: string): {
+        name: string;
+        reason: 'outdated_driver' | 'unsupported_av1' | 'unknown';
+    };
     types(): string[];
     types(filter: EVideoEncoderType): string[];
     create(id: string, name: string, settings?: ISettings): IVideoEncoder;

@@ -26,6 +26,30 @@ std::string readSimpleStreamingSettings()
 
 } // namespace
 
+TEST_CASE("Missing NVENC diagnoses require a completed probe with an explicit cause", "[encoder-diagnostic]")
+{
+	using osn::EncoderUtils::getNvencFailureReason;
+	const char *outdated = "[general]\nreason=outdated_driver\nnvenc_supported=false\n[av1]\ncodec_supported=0\n";
+	const char *noAv1 = "[general]\nnvenc_supported=true\n[av1]\ncodec_supported=0\n";
+	CHECK(std::string(getNvencFailureReason(1, outdated, true)) == "outdated_driver");
+	CHECK(std::string(getNvencFailureReason(0, noAv1, true)) == "unsupported_av1");
+	CHECK(std::string(getNvencFailureReason(0, noAv1, false)) == "unknown");
+	CHECK(std::string(getNvencFailureReason(2, outdated, true)) == "unknown");
+	CHECK(std::string(getNvencFailureReason(1, "[general]\nreason=no_devices\nnvenc_supported=false\n[av1]\ncodec_supported=0\n", true)) == "unknown");
+	CHECK(std::string(getNvencFailureReason(0, "[general]\nnvenc_supported=true\n", true)) == "unknown");
+	CHECK(std::string(getNvencFailureReason(0, "[general]\nnvenc_supported=true\n[av1]\ncodec_supported=1\n", true)) == "unknown");
+}
+
+TEST_CASE("Missing NVENC lookup before OBS startup returns a name without a diagnosis", "[encoder-diagnostic]")
+{
+	REQUIRE_FALSE(obs_initialized());
+	std::vector<ipc::value> response;
+	osn::VideoEncoder::GetMissingEncoderInfo(nullptr, 0, {ipc::value("obs_nvenc_av1_tex")}, response);
+	REQUIRE(response.size() == 3);
+	CHECK(response[1].value_str == "NVIDIA NVENC AV1");
+	CHECK(response[2].value_str == "unknown");
+}
+
 TEST_CASE("Encoder settings preserve native defaults during creation and replacement", "[encoder-settings]")
 {
 	osn::tests::ObsSetup setupOBS;

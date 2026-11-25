@@ -21,6 +21,7 @@
 #include <iostream>
 #include <ipc-server.hpp>
 #include <util/dstr.h>
+#include <util/util.hpp>
 #include "utility.hpp"
 #include "osn-streaming-helpers.hpp"
 #include "osn-file-output.hpp"
@@ -36,10 +37,10 @@ static void convert_nvenc_hevc_presets(obs_data_t *data);
 
 const std::vector<osn::EncoderUtils::EncoderSettings> osn::EncoderUtils::videoEncoderOptions = {
 	// Software x264
-	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, "", true, true, false, false, true, false,
+	{"Software (x264)", ADVANCED_ENCODER_X264, "Software (x264)", SIMPLE_ENCODER_X264, ADVANCED_ENCODER_X264, "", true, true, true, false, true, false,
 	 DEFAULT_PRESET, FAMILY_OBS},
 	// Software x264 low CPU (only for recording)
-	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, "", true, false, false, false,
+	{"", "", "Software (x264 low CPU usage preset, increases file size)", SIMPLE_ENCODER_X264_LOWCPU, ADVANCED_ENCODER_X264, "", true, false, true, false,
 	 true, false, DEFAULT_PRESET, FAMILY_OBS},
 	// QuickSync H.264 (v1, deprecated)
 	// This line left here for reference
@@ -454,6 +455,25 @@ std::string osn::EncoderUtils::getPublicEncoderTitle(const char *encoder)
 			return option.advanced_title.empty() ? option.simple_title : option.advanced_title;
 	}
 	return {};
+}
+
+const char *osn::EncoderUtils::getNvencFailureReason(int exitCode, const char *output, bool av1)
+{
+	ConfigFile caps;
+	if ((exitCode != 0 && exitCode != 1) || caps.OpenString(output) != CONFIG_SUCCESS)
+		return "unknown";
+
+	const std::string supported = utility::GetSafeString(config_get_string(caps, "general", "nvenc_supported"));
+	const std::string reason = utility::GetSafeString(config_get_string(caps, "general", "reason"));
+	if (exitCode == 1 && supported == "false" && reason == "outdated_driver")
+		return "outdated_driver";
+
+	// The probe initializes all codec flags to zero even when driver or device enumeration fails.
+	if (exitCode == 0 && supported == "true" && reason.empty() && av1 &&
+	    strcmp(utility::GetSafeString(config_get_string(caps, "av1", "codec_supported")), "0") == 0)
+		return "unsupported_av1";
+
+	return "unknown";
 }
 
 obs_data_t *osn::EncoderUtils::getSimpleStreamingEncoderSettings(const char *encoder)

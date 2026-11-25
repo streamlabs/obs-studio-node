@@ -1851,6 +1851,17 @@ export interface IAudioEncoderFactory {
 }
 
 export interface IVideoEncoderFactory {
+    /**
+     * Describes a saved video encoder after a device-level availability check finds it missing.
+     * @param id - Saved OBS encoder ID or Simple output alias.
+     * @returns A plain snapshot with the catalog name (or the original ID) and the confirmed cause.
+     * Windows can diagnose an outdated NVIDIA driver or unsupported NVENC AV1. Other platforms,
+     * registered encoders, an uninitialized OBS runtime and inconclusive probes return an unknown cause.
+     * No encoder is created.
+     * @throws {TypeError} If id is not a non-empty string.
+     * @throws {Error} If the server is disconnected or the IPC request fails.
+     */
+    getMissingEncoderInfo(id: string): { name: string; reason: 'outdated_driver' | 'unsupported_av1' | 'unknown' },
     types(): string[],
     types(filter: EVideoEncoderType): string[],
     create(id: string, name: string, settings?: ISettings): IVideoEncoder,

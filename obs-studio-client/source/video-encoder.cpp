@@ -30,6 +30,7 @@ Napi::Object osn::VideoEncoder::Init(Napi::Env env, Napi::Object exports)
 					  {
 						  StaticMethod("create", &osn::VideoEncoder::Create),
 						  StaticMethod("types", &osn::VideoEncoder::GetTypes),
+						  StaticMethod("getMissingEncoderInfo", &osn::VideoEncoder::GetMissingEncoderInfo),
 
 						  InstanceAccessor("name", &osn::VideoEncoder::GetName, &osn::VideoEncoder::SetName),
 						  InstanceAccessor("type", &osn::VideoEncoder::GetType, nullptr),
@@ -137,6 +138,32 @@ Napi::Value osn::VideoEncoder::GetTypes(const Napi::CallbackInfo &info)
 		types.Set(i - 1, Napi::String::New(info.Env(), response[i].value_str));
 
 	return types;
+}
+
+Napi::Value osn::VideoEncoder::GetMissingEncoderInfo(const Napi::CallbackInfo &info)
+{
+	auto env = info.Env();
+	const std::string id = info[0].IsString() ? info[0].As<Napi::String>().Utf8Value() : "";
+	if (id.empty()) {
+		Napi::TypeError::New(env, "Expected a non-empty encoder ID").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	auto conn = Controller::GetInstance().GetConnection();
+	if (!conn) {
+		Napi::Error::New(env, "Failed to obtain IPC connection.").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	auto response = conn->call_synchronous_helper("VideoEncoder", "GetMissingEncoderInfo", {ipc::value(id)});
+	if (!ValidateResponse(info, response))
+		return env.Undefined();
+	if (response.size() != 3 || response[1].type != ipc::type::String || response[2].type != ipc::type::String) {
+		Napi::Error::New(env, "Invalid encoder diagnostic response").ThrowAsJavaScriptException();
+		return env.Undefined();
+	}
+	auto result = Napi::Object::New(env);
+	result.Set("name", response[1].value_str);
+	result.Set("reason", response[2].value_str);
+	return result;
 }
 
 Napi::Value osn::VideoEncoder::GetName(const Napi::CallbackInfo &info)
